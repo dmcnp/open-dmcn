@@ -237,8 +237,8 @@ func (DMARCResult) EnumDescriptor() ([]byte, []int) {
 // See whitepaper Section 15.6.2.
 type BridgeClassificationRecord struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	BridgeAddress   string                 `protobuf:"bytes,1,opt,name=bridge_address,json=bridgeAddress,proto3" json:"bridge_address,omitempty"`         // DMCN address of the bridge operator
-	BridgePublicKey []byte                 `protobuf:"bytes,2,opt,name=bridge_public_key,json=bridgePublicKey,proto3" json:"bridge_public_key,omitempty"` // 32 bytes Ed25519 public key
+	BridgeAddress   string                 `protobuf:"bytes,1,opt,name=bridge_address,json=bridgeAddress,proto3" json:"bridge_address,omitempty"`         // the bridge's libp2p peer ID (informational; the bridge has no DMCN email address)
+	BridgePublicKey []byte                 `protobuf:"bytes,2,opt,name=bridge_public_key,json=bridgePublicKey,proto3" json:"bridge_public_key,omitempty"` // 32 bytes Ed25519 signer key == bridge_credential.subject == the peer ID's key
 	SmtpFrom        string                 `protobuf:"bytes,3,opt,name=smtp_from,json=smtpFrom,proto3" json:"smtp_from,omitempty"`                        // original SMTP From address
 	SmtpSenderIp    string                 `protobuf:"bytes,4,opt,name=smtp_sender_ip,json=smtpSenderIp,proto3" json:"smtp_sender_ip,omitempty"`          // sending server IP address
 	SpfResult       SPFResult              `protobuf:"varint,5,opt,name=spf_result,json=spfResult,proto3,enum=dmcn.bridge.SPFResult" json:"spf_result,omitempty"`
@@ -247,9 +247,16 @@ type BridgeClassificationRecord struct {
 	ReputationScore int32                  `protobuf:"varint,8,opt,name=reputation_score,json=reputationScore,proto3" json:"reputation_score,omitempty"` // -100 to +100; 0 = neutral
 	TrustTier       BridgeTrustTier        `protobuf:"varint,9,opt,name=trust_tier,json=trustTier,proto3,enum=dmcn.bridge.BridgeTrustTier" json:"trust_tier,omitempty"`
 	ClassifiedAt    int64                  `protobuf:"varint,10,opt,name=classified_at,json=classifiedAt,proto3" json:"classified_at,omitempty"`         // Unix seconds
-	BridgeSignature []byte                 `protobuf:"bytes,11,opt,name=bridge_signature,json=bridgeSignature,proto3" json:"bridge_signature,omitempty"` // 64 bytes Ed25519 sig over all preceding fields
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	BridgeSignature []byte                 `protobuf:"bytes,11,opt,name=bridge_signature,json=bridgeSignature,proto3" json:"bridge_signature,omitempty"` // 64 bytes Ed25519 sig over fields 1-10 (signer key == bridge_public_key)
+	// The bridge's operator-signed fleet credential (role "bridge"). Its subject == bridge_public_key,
+	// so a recipient verifies the credential against the fleet operator key and confirms the signer IS
+	// that bridge — replacing the old registry lookup + BridgeCapability directory anchor. The bridge is
+	// pure infrastructure (no DMCN email identity); bridge_address carries its peer ID for display. NOT
+	// covered by bridge_signature: it carries its own operator signature, the subject==signer binding
+	// defeats any swap, and the whole record rides inside the E2E-signed DMCN message that delivers it.
+	BridgeCredential *Credential `protobuf:"bytes,12,opt,name=bridge_credential,json=bridgeCredential,proto3" json:"bridge_credential,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *BridgeClassificationRecord) Reset() {
@@ -359,19 +366,30 @@ func (x *BridgeClassificationRecord) GetBridgeSignature() []byte {
 	return nil
 }
 
+func (x *BridgeClassificationRecord) GetBridgeCredential() *Credential {
+	if x != nil {
+		return x.BridgeCredential
+	}
+	return nil
+}
+
 // BridgeDeliveryReceipt is a signed receipt from the bridge confirming
 // outbound SMTP delivery of a DMCN message.
 type BridgeDeliveryReceipt struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	OriginalMessageId []byte                 `protobuf:"bytes,1,opt,name=original_message_id,json=originalMessageId,proto3" json:"original_message_id,omitempty"` // 16 bytes UUID of the original message
 	RecipientEmail    string                 `protobuf:"bytes,2,opt,name=recipient_email,json=recipientEmail,proto3" json:"recipient_email,omitempty"`            // legacy email address delivered to
-	BridgeAddress     string                 `protobuf:"bytes,3,opt,name=bridge_address,json=bridgeAddress,proto3" json:"bridge_address,omitempty"`               // DMCN address of the bridge operator
+	BridgeAddress     string                 `protobuf:"bytes,3,opt,name=bridge_address,json=bridgeAddress,proto3" json:"bridge_address,omitempty"`               // the bridge's libp2p peer ID (informational; no DMCN email address)
 	DeliveredAt       int64                  `protobuf:"varint,4,opt,name=delivered_at,json=deliveredAt,proto3" json:"delivered_at,omitempty"`                    // Unix seconds
 	Success           bool                   `protobuf:"varint,5,opt,name=success,proto3" json:"success,omitempty"`
 	ErrorDetail       string                 `protobuf:"bytes,6,opt,name=error_detail,json=errorDetail,proto3" json:"error_detail,omitempty"`             // empty on success
-	BridgeSignature   []byte                 `protobuf:"bytes,7,opt,name=bridge_signature,json=bridgeSignature,proto3" json:"bridge_signature,omitempty"` // 64 bytes Ed25519 sig over all preceding fields
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	BridgeSignature   []byte                 `protobuf:"bytes,7,opt,name=bridge_signature,json=bridgeSignature,proto3" json:"bridge_signature,omitempty"` // 64 bytes Ed25519 sig over fields 1-6 (signer key == bridge_credential.subject)
+	// The bridge's operator-signed fleet credential (role "bridge"), as in BridgeClassificationRecord —
+	// lets the DMCN sender verify the receipt against the fleet operator key. Subject == the signer.
+	// Not covered by bridge_signature (same rationale as BridgeClassificationRecord.bridge_credential).
+	BridgeCredential *Credential `protobuf:"bytes,8,opt,name=bridge_credential,json=bridgeCredential,proto3" json:"bridge_credential,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *BridgeDeliveryReceipt) Reset() {
@@ -453,11 +471,18 @@ func (x *BridgeDeliveryReceipt) GetBridgeSignature() []byte {
 	return nil
 }
 
+func (x *BridgeDeliveryReceipt) GetBridgeCredential() *Credential {
+	if x != nil {
+		return x.BridgeCredential
+	}
+	return nil
+}
+
 var File_bridge_proto protoreflect.FileDescriptor
 
 const file_bridge_proto_rawDesc = "" +
 	"\n" +
-	"\fbridge.proto\x12\vdmcn.bridge\"\x98\x04\n" +
+	"\fbridge.proto\x12\vdmcn.bridge\x1a\x0eidentity.proto\"\xe0\x04\n" +
 	"\x1aBridgeClassificationRecord\x12%\n" +
 	"\x0ebridge_address\x18\x01 \x01(\tR\rbridgeAddress\x12*\n" +
 	"\x11bridge_public_key\x18\x02 \x01(\fR\x0fbridgePublicKey\x12\x1b\n" +
@@ -473,7 +498,8 @@ const file_bridge_proto_rawDesc = "" +
 	"trust_tier\x18\t \x01(\x0e2\x1c.dmcn.bridge.BridgeTrustTierR\ttrustTier\x12#\n" +
 	"\rclassified_at\x18\n" +
 	" \x01(\x03R\fclassifiedAt\x12)\n" +
-	"\x10bridge_signature\x18\v \x01(\fR\x0fbridgeSignature\"\xa2\x02\n" +
+	"\x10bridge_signature\x18\v \x01(\fR\x0fbridgeSignature\x12F\n" +
+	"\x11bridge_credential\x18\f \x01(\v2\x19.dmcn.identity.CredentialR\x10bridgeCredential\"\xea\x02\n" +
 	"\x15BridgeDeliveryReceipt\x12.\n" +
 	"\x13original_message_id\x18\x01 \x01(\fR\x11originalMessageId\x12'\n" +
 	"\x0frecipient_email\x18\x02 \x01(\tR\x0erecipientEmail\x12%\n" +
@@ -481,7 +507,8 @@ const file_bridge_proto_rawDesc = "" +
 	"\fdelivered_at\x18\x04 \x01(\x03R\vdeliveredAt\x12\x18\n" +
 	"\asuccess\x18\x05 \x01(\bR\asuccess\x12!\n" +
 	"\ferror_detail\x18\x06 \x01(\tR\verrorDetail\x12)\n" +
-	"\x10bridge_signature\x18\a \x01(\fR\x0fbridgeSignature*\xa6\x01\n" +
+	"\x10bridge_signature\x18\a \x01(\fR\x0fbridgeSignature\x12F\n" +
+	"\x11bridge_credential\x18\b \x01(\v2\x19.dmcn.identity.CredentialR\x10bridgeCredential*\xa6\x01\n" +
 	"\x0fBridgeTrustTier\x12!\n" +
 	"\x1dBRIDGE_TRUST_TIER_UNSPECIFIED\x10\x00\x12%\n" +
 	"!BRIDGE_TRUST_TIER_VERIFIED_LEGACY\x10\x01\x12'\n" +
@@ -524,17 +551,20 @@ var file_bridge_proto_goTypes = []any{
 	(DMARCResult)(0),                   // 3: dmcn.bridge.DMARCResult
 	(*BridgeClassificationRecord)(nil), // 4: dmcn.bridge.BridgeClassificationRecord
 	(*BridgeDeliveryReceipt)(nil),      // 5: dmcn.bridge.BridgeDeliveryReceipt
+	(*Credential)(nil),                 // 6: dmcn.identity.Credential
 }
 var file_bridge_proto_depIdxs = []int32{
 	1, // 0: dmcn.bridge.BridgeClassificationRecord.spf_result:type_name -> dmcn.bridge.SPFResult
 	2, // 1: dmcn.bridge.BridgeClassificationRecord.dkim_result:type_name -> dmcn.bridge.DKIMResult
 	3, // 2: dmcn.bridge.BridgeClassificationRecord.dmarc_result:type_name -> dmcn.bridge.DMARCResult
 	0, // 3: dmcn.bridge.BridgeClassificationRecord.trust_tier:type_name -> dmcn.bridge.BridgeTrustTier
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 4: dmcn.bridge.BridgeClassificationRecord.bridge_credential:type_name -> dmcn.identity.Credential
+	6, // 5: dmcn.bridge.BridgeDeliveryReceipt.bridge_credential:type_name -> dmcn.identity.Credential
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_bridge_proto_init() }
@@ -542,6 +572,7 @@ func file_bridge_proto_init() {
 	if File_bridge_proto != nil {
 		return
 	}
+	file_identity_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

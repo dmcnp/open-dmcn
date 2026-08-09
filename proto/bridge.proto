@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package dmcn.bridge;
 
+import "identity.proto";
+
 option go_package = "github.com/mertenvg/open-dmcn/dmcnpb;dmcnpb";
 
 // BridgeTrustTier represents the trust classification assigned to an
@@ -41,8 +43,8 @@ enum DMARCResult {
 // describing the authentication outcome of an inbound legacy email.
 // See whitepaper Section 15.6.2.
 message BridgeClassificationRecord {
-  string bridge_address = 1;       // DMCN address of the bridge operator
-  bytes bridge_public_key = 2;     // 32 bytes Ed25519 public key
+  string bridge_address = 1;       // the bridge's libp2p peer ID (informational; the bridge has no DMCN email address)
+  bytes bridge_public_key = 2;     // 32 bytes Ed25519 signer key == bridge_credential.subject == the peer ID's key
   string smtp_from = 3;            // original SMTP From address
   string smtp_sender_ip = 4;       // sending server IP address
   SPFResult spf_result = 5;
@@ -51,7 +53,14 @@ message BridgeClassificationRecord {
   int32 reputation_score = 8;      // -100 to +100; 0 = neutral
   BridgeTrustTier trust_tier = 9;
   int64 classified_at = 10;        // Unix seconds
-  bytes bridge_signature = 11;     // 64 bytes Ed25519 sig over all preceding fields
+  bytes bridge_signature = 11;     // 64 bytes Ed25519 sig over fields 1-10 (signer key == bridge_public_key)
+  // The bridge's operator-signed fleet credential (role "bridge"). Its subject == bridge_public_key,
+  // so a recipient verifies the credential against the fleet operator key and confirms the signer IS
+  // that bridge — replacing the old registry lookup + BridgeCapability directory anchor. The bridge is
+  // pure infrastructure (no DMCN email identity); bridge_address carries its peer ID for display. NOT
+  // covered by bridge_signature: it carries its own operator signature, the subject==signer binding
+  // defeats any swap, and the whole record rides inside the E2E-signed DMCN message that delivers it.
+  dmcn.identity.Credential bridge_credential = 12;
 }
 
 // BridgeDeliveryReceipt is a signed receipt from the bridge confirming
@@ -59,9 +68,13 @@ message BridgeClassificationRecord {
 message BridgeDeliveryReceipt {
   bytes original_message_id = 1;   // 16 bytes UUID of the original message
   string recipient_email = 2;      // legacy email address delivered to
-  string bridge_address = 3;       // DMCN address of the bridge operator
+  string bridge_address = 3;       // the bridge's libp2p peer ID (informational; no DMCN email address)
   int64 delivered_at = 4;          // Unix seconds
   bool success = 5;
   string error_detail = 6;         // empty on success
-  bytes bridge_signature = 7;      // 64 bytes Ed25519 sig over all preceding fields
+  bytes bridge_signature = 7;      // 64 bytes Ed25519 sig over fields 1-6 (signer key == bridge_credential.subject)
+  // The bridge's operator-signed fleet credential (role "bridge"), as in BridgeClassificationRecord —
+  // lets the DMCN sender verify the receipt against the fleet operator key. Subject == the signer.
+  // Not covered by bridge_signature (same rationale as BridgeClassificationRecord.bridge_credential).
+  dmcn.identity.Credential bridge_credential = 8;
 }
