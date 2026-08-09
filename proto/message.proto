@@ -20,6 +20,8 @@ message AttachmentRecord {
   uint64 size_bytes = 4;
   bytes content_hash = 5;    // 32 bytes SHA-256 of plaintext content
   bytes content = 6;         // attachment content (encrypted separately)
+  string content_id = 7;     // bare MIME Content-ID (no <>), for inline parts referenced by <img src="cid:...">
+  string disposition = 8;    // "inline" or "attachment"; empty = attachment
 }
 
 // PlaintextMessage represents a composed message before signing or encryption.
@@ -36,6 +38,10 @@ message PlaintextMessage {
   MessageBody body = 9;
   repeated AttachmentRecord attachments = 10;
   bytes reply_to_id = 11;          // 16 bytes UUID; empty = not a reply
+  // Richer alternative renderings of `body` (multipart/alternative analog). `body`
+  // stays the primary text/plain fallback; `alternatives` carries e.g. a text/html
+  // part. Readers pick the richest they can render; text-only clients read `body`.
+  repeated MessageBody alternatives = 12;
 }
 
 // SignedMessage wraps a PlaintextMessage with the sender's Ed25519 signature.
@@ -95,6 +101,9 @@ message SignedHeader {
 message MessageContent {
   MessageBody body = 1;
   repeated AttachmentRecord attachments = 2;
+  // Richer alternative renderings of `body` (see PlaintextMessage.alternatives).
+  // Covered by MessageHeader.body_hash and the body content address like `body`.
+  repeated MessageBody alternatives = 3;
 }
 
 // RecipientRecord holds the wrapped CEK for a single recipient device.

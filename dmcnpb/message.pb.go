@@ -85,6 +85,8 @@ type AttachmentRecord struct {
 	SizeBytes     uint64                 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	ContentHash   []byte                 `protobuf:"bytes,5,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"` // 32 bytes SHA-256 of plaintext content
 	Content       []byte                 `protobuf:"bytes,6,opt,name=content,proto3" json:"content,omitempty"`                            // attachment content (encrypted separately)
+	ContentId     string                 `protobuf:"bytes,7,opt,name=content_id,json=contentId,proto3" json:"content_id,omitempty"`       // bare MIME Content-ID (no <>), for inline parts referenced by <img src="cid:...">
+	Disposition   string                 `protobuf:"bytes,8,opt,name=disposition,proto3" json:"disposition,omitempty"`                    // "inline" or "attachment"; empty = attachment
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -161,6 +163,20 @@ func (x *AttachmentRecord) GetContent() []byte {
 	return nil
 }
 
+func (x *AttachmentRecord) GetContentId() string {
+	if x != nil {
+		return x.ContentId
+	}
+	return ""
+}
+
+func (x *AttachmentRecord) GetDisposition() string {
+	if x != nil {
+		return x.Disposition
+	}
+	return ""
+}
+
 // PlaintextMessage represents a composed message before signing or encryption.
 // See whitepaper Section 15.3.1.
 type PlaintextMessage struct {
@@ -176,8 +192,12 @@ type PlaintextMessage struct {
 	Body             *MessageBody           `protobuf:"bytes,9,opt,name=body,proto3" json:"body,omitempty"`
 	Attachments      []*AttachmentRecord    `protobuf:"bytes,10,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	ReplyToId        []byte                 `protobuf:"bytes,11,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"` // 16 bytes UUID; empty = not a reply
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Richer alternative renderings of `body` (multipart/alternative analog). `body`
+	// stays the primary text/plain fallback; `alternatives` carries e.g. a text/html
+	// part. Readers pick the richest they can render; text-only clients read `body`.
+	Alternatives  []*MessageBody `protobuf:"bytes,12,rep,name=alternatives,proto3" json:"alternatives,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PlaintextMessage) Reset() {
@@ -283,6 +303,13 @@ func (x *PlaintextMessage) GetAttachments() []*AttachmentRecord {
 func (x *PlaintextMessage) GetReplyToId() []byte {
 	if x != nil {
 		return x.ReplyToId
+	}
+	return nil
+}
+
+func (x *PlaintextMessage) GetAlternatives() []*MessageBody {
+	if x != nil {
+		return x.Alternatives
 	}
 	return nil
 }
@@ -588,9 +615,12 @@ func (x *SignedHeader) GetSenderSignature() []byte {
 // MessageContent is the large part: body + attachments. Verified against
 // MessageHeader.body_hash when fetched.
 type MessageContent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Body          *MessageBody           `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
-	Attachments   []*AttachmentRecord    `protobuf:"bytes,2,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Body        *MessageBody           `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
+	Attachments []*AttachmentRecord    `protobuf:"bytes,2,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	// Richer alternative renderings of `body` (see PlaintextMessage.alternatives).
+	// Covered by MessageHeader.body_hash and the body content address like `body`.
+	Alternatives  []*MessageBody `protobuf:"bytes,3,rep,name=alternatives,proto3" json:"alternatives,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -635,6 +665,13 @@ func (x *MessageContent) GetBody() *MessageBody {
 func (x *MessageContent) GetAttachments() []*AttachmentRecord {
 	if x != nil {
 		return x.Attachments
+	}
+	return nil
+}
+
+func (x *MessageContent) GetAlternatives() []*MessageBody {
+	if x != nil {
+		return x.Alternatives
 	}
 	return nil
 }
@@ -921,7 +958,7 @@ const file_message_proto_rawDesc = "" +
 	"\rmessage.proto\x12\fdmcn.message\"J\n" +
 	"\vMessageBody\x12!\n" +
 	"\fcontent_type\x18\x01 \x01(\tR\vcontentType\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\"\xd2\x01\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"\x93\x02\n" +
 	"\x10AttachmentRecord\x12#\n" +
 	"\rattachment_id\x18\x01 \x01(\fR\fattachmentId\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12!\n" +
@@ -929,7 +966,10 @@ const file_message_proto_rawDesc = "" +
 	"\n" +
 	"size_bytes\x18\x04 \x01(\x04R\tsizeBytes\x12!\n" +
 	"\fcontent_hash\x18\x05 \x01(\fR\vcontentHash\x12\x18\n" +
-	"\acontent\x18\x06 \x01(\fR\acontent\"\xac\x03\n" +
+	"\acontent\x18\x06 \x01(\fR\acontent\x12\x1d\n" +
+	"\n" +
+	"content_id\x18\a \x01(\tR\tcontentId\x12 \n" +
+	"\vdisposition\x18\b \x01(\tR\vdisposition\"\xeb\x03\n" +
 	"\x10PlaintextMessage\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
@@ -943,7 +983,8 @@ const file_message_proto_rawDesc = "" +
 	"\x04body\x18\t \x01(\v2\x19.dmcn.message.MessageBodyR\x04body\x12@\n" +
 	"\vattachments\x18\n" +
 	" \x03(\v2\x1e.dmcn.message.AttachmentRecordR\vattachments\x12\x1e\n" +
-	"\vreply_to_id\x18\v \x01(\fR\treplyToId\"x\n" +
+	"\vreply_to_id\x18\v \x01(\fR\treplyToId\x12=\n" +
+	"\falternatives\x18\f \x03(\v2\x19.dmcn.message.MessageBodyR\falternatives\"x\n" +
 	"\rSignedMessage\x12<\n" +
 	"\tplaintext\x18\x01 \x01(\v2\x1e.dmcn.message.PlaintextMessageR\tplaintext\x12)\n" +
 	"\x10sender_signature\x18\x02 \x01(\fR\x0fsenderSignature\"\x9b\x04\n" +
@@ -969,10 +1010,11 @@ const file_message_proto_rawDesc = "" +
 	"\x03bcc\x18\x11 \x03(\tR\x03bcc\"n\n" +
 	"\fSignedHeader\x123\n" +
 	"\x06header\x18\x01 \x01(\v2\x1b.dmcn.message.MessageHeaderR\x06header\x12)\n" +
-	"\x10sender_signature\x18\x02 \x01(\fR\x0fsenderSignature\"\x81\x01\n" +
+	"\x10sender_signature\x18\x02 \x01(\fR\x0fsenderSignature\"\xc0\x01\n" +
 	"\x0eMessageContent\x12-\n" +
 	"\x04body\x18\x01 \x01(\v2\x19.dmcn.message.MessageBodyR\x04body\x12@\n" +
-	"\vattachments\x18\x02 \x03(\v2\x1e.dmcn.message.AttachmentRecordR\vattachments\"\xd5\x01\n" +
+	"\vattachments\x18\x02 \x03(\v2\x1e.dmcn.message.AttachmentRecordR\vattachments\x12=\n" +
+	"\falternatives\x18\x03 \x03(\v2\x19.dmcn.message.MessageBodyR\falternatives\"\xd5\x01\n" +
 	"\x0fRecipientRecord\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\fR\bdeviceId\x12&\n" +
 	"\x0frecipient_x_pub\x18\x02 \x01(\fR\rrecipientXPub\x12&\n" +
@@ -1036,16 +1078,18 @@ var file_message_proto_goTypes = []any{
 var file_message_proto_depIdxs = []int32{
 	0, // 0: dmcn.message.PlaintextMessage.body:type_name -> dmcn.message.MessageBody
 	1, // 1: dmcn.message.PlaintextMessage.attachments:type_name -> dmcn.message.AttachmentRecord
-	2, // 2: dmcn.message.SignedMessage.plaintext:type_name -> dmcn.message.PlaintextMessage
-	4, // 3: dmcn.message.SignedHeader.header:type_name -> dmcn.message.MessageHeader
-	0, // 4: dmcn.message.MessageContent.body:type_name -> dmcn.message.MessageBody
-	1, // 5: dmcn.message.MessageContent.attachments:type_name -> dmcn.message.AttachmentRecord
-	7, // 6: dmcn.message.EncryptedEnvelope.recipients:type_name -> dmcn.message.RecipientRecord
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	0, // 2: dmcn.message.PlaintextMessage.alternatives:type_name -> dmcn.message.MessageBody
+	2, // 3: dmcn.message.SignedMessage.plaintext:type_name -> dmcn.message.PlaintextMessage
+	4, // 4: dmcn.message.SignedHeader.header:type_name -> dmcn.message.MessageHeader
+	0, // 5: dmcn.message.MessageContent.body:type_name -> dmcn.message.MessageBody
+	1, // 6: dmcn.message.MessageContent.attachments:type_name -> dmcn.message.AttachmentRecord
+	0, // 7: dmcn.message.MessageContent.alternatives:type_name -> dmcn.message.MessageBody
+	7, // 8: dmcn.message.EncryptedEnvelope.recipients:type_name -> dmcn.message.RecipientRecord
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_message_proto_init() }
