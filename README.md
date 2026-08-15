@@ -115,6 +115,9 @@ proto/
 dmcnpb/            generated Go (committed; import github.com/mertenvg/open-dmcn/dmcnpb)
 SPEC.md            the protocol reference (a snapshot of the reference implementation)
 PORTING.md         provenance + deltas vs the upstream product core
+site/              dmcn.dev source: markdown content, templates, design system,
+                   and the generator (a SEPARATE Go module — see below)
+docs/              GENERATED dmcn.dev output, committed and published by Pages
 ```
 
 `bridge.proto` is an **optional capability** like onion routing: a conforming
@@ -139,7 +142,27 @@ make test         # go test ./...
 make proto        # regenerate dmcnpb/ from proto/ (requires buf + protoc-gen-go)
 make proto-web    # regenerate the browser protobuf bundle (cmd/dmcnd/web/src/lib/proto)
 make build-web    # rebuild the embedded SPA (needs Node 20+)
+make site         # render dmcn.dev into docs/
+make site-serve   # preview docs/ on localhost:8080 with production headers
 ```
+
+## The documentation site (`dmcn.dev`)
+
+[dmcn.dev](https://dmcn.dev) is the protocol's home — the specification, a quickstart and an
+FAQ — and it is also the **vanity import path** for this module.
+
+- `site/` holds the source and the generator. It is a **separate Go module**, so its markdown
+  renderer never enters this module's dependency graph and `site/` is excluded from the zip
+  that `go get` downloads. Run its tools with `GOWORK=off` (the Makefile does).
+- `docs/` holds the **generated** output and is committed on purpose, the same way
+  `cmd/dmcnd/web/dist` is: GitHub Pages publishes it straight from the branch, so the site
+  depends on no CI and survives a repository transfer untouched. `make site-check` (wired
+  into `make test`) fails if `docs/` is not exactly what `site/` generates, so stale output
+  cannot reach the published site.
+- The `/spec` page renders `SPEC.md` itself. There is no second copy to drift.
+- `site serve` publishes the identical directory with the CSP and hardening headers GitHub
+  Pages cannot send, so moving dmcn.dev behind our own TLS terminator is a DNS change rather
+  than a rewrite.
 
 ## Status
 

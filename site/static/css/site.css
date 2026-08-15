@@ -1,0 +1,90 @@
+/* ============================================================
+   dmcn.dev — base + interaction CSS
+   Trimmed from the DMCN marketing design system (cmd/dmcn-b2b in
+   the product tree) to what a documentation site actually uses:
+   the reset, icon sizing, link defaults, hover states, the header
+   hamburger, and the doc grid + TOC.
+
+   The product site's pricing-toggle and mesh-diagram rules are
+   deliberately absent, as is site.js — this site ships ZERO
+   JavaScript, so its CSP can say script-src 'none'. Every
+   disclosure here is a native <details>.
+   ============================================================ */
+
+html, body { margin: 0; background: var(--surface-page); }
+* { box-sizing: border-box; }
+body { font-family: var(--font-sans); }
+
+/* Inline Lucide SVGs size to the element's font-size and take its color. */
+svg.lucide {
+  width: 1em; height: 1em;
+  display: inline-block; vertical-align: middle;
+  stroke-width: 2; flex: none;
+}
+
+a { color: var(--text-link); text-decoration: none; }
+a:hover { color: var(--brand); }
+::selection { background: var(--brand-subtle-2); }
+
+/* ---- Hover utilities (replace the design's `style-hover`) ----
+   !important so the hover state wins over the element's inline base
+   style — an inline `style=` always beats a plain stylesheet rule. */
+.hov-brand:hover          { background: var(--brand-hover) !important; }
+.hov-surface:hover        { background: var(--surface-hover) !important; }
+.hov-border:hover         { border-color: var(--border-strong) !important; }
+.hov-surface-border:hover { background: var(--surface-hover) !important; border-color: var(--border-strong) !important; }
+.hov-link:hover           { color: var(--brand) !important; }
+
+/* ---- Header: responsive hamburger ----
+   The <header> sets container-type:inline-size, so these are container
+   queries (not viewport). Desktop nav shows above 760px; below, it
+   collapses into the <details data-mm> disclosure. */
+[data-mm] { display: none; margin-left: auto; position: relative; }
+[data-mm] > summary {
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; border-radius: 4px; color: var(--text-body);
+}
+[data-mm] > summary::-webkit-details-marker { display: none; }
+[data-mm][open] > summary { background: var(--surface-hover); }
+[data-mm-panel] {
+  position: absolute; right: 0; top: calc(100% + 10px);
+  width: min(280px, 82vw);
+  background: var(--surface-page); border: 1px solid var(--border-default);
+  border-radius: 6px; box-shadow: var(--shadow-md);
+  padding: 8px; display: flex; flex-direction: column; gap: 2px; z-index: 40;
+}
+@container (max-width: 760px) {
+  [data-desk] { display: none !important; }
+  [data-mm]   { display: block; }
+}
+
+/* ---- FAQ: native <details> accordion ---- */
+summary::-webkit-details-marker { display: none; }
+[data-faq] > summary { list-style: none; cursor: pointer; }
+.faq-chev { transition: transform var(--dur-fast) var(--ease-standard); }
+[data-faq][open] .faq-chev { transform: rotate(180deg); }
+
+/* ---- Doc layout: sticky TOC column + article ----
+   Desktop: a narrow fixed TOC + wide article. Below 880px (container
+   query — the wrapper sets container-type:inline-size) the sidebar
+   hides and a sticky "On this page" disclosure takes over, so the
+   article gets the full width. */
+[data-doc-grid] {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr);
+  gap: clamp(28px, 4vw, 56px); align-items: start;
+}
+[data-toc-desk] { position: sticky; top: 82px; min-width: 0; }
+[data-toc-mm] { display: none; }
+[data-toc-mm] > summary { list-style: none; cursor: pointer; }
+[data-toc-mm] > summary::-webkit-details-marker { display: none; }
+.toc-chev { transition: transform var(--dur-fast) var(--ease-standard); }
+[data-toc-mm][open] .toc-chev { transform: rotate(180deg); }
+@container (max-width: 880px) {
+  /* minmax(0, 1fr), not 1fr: a bare 1fr track refuses to shrink below its
+     content's min-content width, so a wide table or code block would push the
+     whole page sideways instead of scrolling inside its own container. */
+  [data-doc-grid] { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  [data-toc-desk] { display: none; }
+  [data-toc-mm] { display: block; position: sticky; top: 68px; z-index: 20; }
+}

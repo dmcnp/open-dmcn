@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+{{- if .Vanity }}
+
+  <!-- Go vanity import path. `go get {{ .Vanity.Module }}/…` fetches this page
+       with ?go-get=1 and reads these two tags; the module lives in git at
+       {{ .Vanity.Repo }}. Because the import path is dmcn.dev-anchored rather
+       than host-anchored, moving the repository between accounts, orgs or
+       forges never changes a single import line. -->
+  <meta name="go-import" content="{{ .Vanity.Module }} git {{ .Vanity.Repo }}">
+  <meta name="go-source" content="{{ .Vanity.Module }} {{ .Vanity.Repo }} {{ .Vanity.Repo }}/tree/{{ .Vanity.Branch }}{/dir} {{ .Vanity.Repo }}/blob/{{ .Vanity.Branch }}{/dir}/{file}#L{line}">
+{{- end }}
+
+  <title>{{ .Title }}</title>
+  <meta name="description" content="{{ .Description }}">
+  <link rel="canonical" href="{{ .Cfg.BaseURL }}{{ .Path }}">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ .Cfg.Domain }}">
+  <meta property="og:title" content="{{ .Title }}">
+  <meta property="og:description" content="{{ .Description }}">
+  <meta property="og:url" content="{{ .Cfg.BaseURL }}{{ .Path }}">
+
+  <!-- An SVG icon is enough for every browser that supports it, and declaring
+       it stops the automatic /favicon.ico request that would otherwise 404. -->
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/docs.css">
+</head>
+<body>
+  <!-- Theme "": follow the OS (tokens flip via prefers-color-scheme); set
+       data-theme="light"|"dark" to pin. This site ships no JavaScript, so
+       the theme is the OS's call and every disclosure is a <details>. -->
+  <div data-theme="" style="min-height:100vh;display:flex;flex-direction:column;background:var(--surface-page);color:var(--text-body);font-family:var(--font-sans);">
+    {{ template "header" . }}
+    <main style="flex:1;">
+      {{ block "content" . }}{{ end }}
+    </main>
+    {{ template "footer" . }}
+  </div>
+</body>
+</html>

@@ -1,0 +1,424 @@
+/* ============================================================
+   DMCN — webfonts (self-hosted)
+   Geist (sans) + Geist Mono (keys/code), SIL OFL, served from
+   /static/fonts. Replaces the design bundle's Google Fonts @import
+   so the marketing site makes ZERO third-party requests and the
+   strict same-origin CSP needs no external font-src/style-src host.
+   ============================================================ */
+@font-face{font-family:'Geist';font-style:normal;font-weight:300;font-display:swap;src:url('/static/fonts/geist-300.woff2') format('woff2');}
+@font-face{font-family:'Geist';font-style:normal;font-weight:400;font-display:swap;src:url('/static/fonts/geist-400.woff2') format('woff2');}
+@font-face{font-family:'Geist';font-style:normal;font-weight:500;font-display:swap;src:url('/static/fonts/geist-500.woff2') format('woff2');}
+@font-face{font-family:'Geist';font-style:normal;font-weight:600;font-display:swap;src:url('/static/fonts/geist-600.woff2') format('woff2');}
+@font-face{font-family:'Geist';font-style:normal;font-weight:700;font-display:swap;src:url('/static/fonts/geist-700.woff2') format('woff2');}
+@font-face{font-family:'Geist Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/static/fonts/geist-mono-400.woff2') format('woff2');}
+@font-face{font-family:'Geist Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/static/fonts/geist-mono-500.woff2') format('woff2');}
+@font-face{font-family:'Geist Mono';font-style:normal;font-weight:600;font-display:swap;src:url('/static/fonts/geist-mono-600.woff2') format('woff2');}
+
+/* ============================================================
+   DMCN — COLOR TOKENS
+   Base palette (theme-independent) + semantic aliases that flip
+   between light and dark. Privacy-first: cool neutrals, a single
+   confident teal accent, restrained semantic colors.
+   ============================================================ */
+
+:root {
+  /* ---- Base palette: Teal (brand / primary) ---- */
+  --teal-50:  #E7F7F2;
+  --teal-100: #C6ECE1;
+  --teal-200: #93DAC8;
+  --teal-300: #58C4AC;
+  --teal-400: #28AC90;
+  --teal-500: #0E9E86; /* brand */
+  --teal-600: #0A8270;
+  --teal-700: #0A685A;
+  --teal-800: #0A5249;
+  --teal-900: #08403A;
+
+  /* ---- Base palette: Neutral (cool-tinted slate) ---- */
+  --neutral-0:   #FFFFFF;
+  --neutral-25:  #FBFCFC;
+  --neutral-50:  #F5F7F7;
+  --neutral-100: #ECEFEF;
+  --neutral-150: #E2E6E6;
+  --neutral-200: #D5DBDB;
+  --neutral-300: #BAC2C2;
+  --neutral-400: #939D9D;
+  --neutral-500: #6C7676;
+  --neutral-600: #4E5757;
+  --neutral-700: #373F3F;
+  --neutral-800: #232A2A;
+  --neutral-900: #161B1B;
+  --neutral-950: #0C1010;
+
+  /* ---- Base palette: Semantic hues ---- */
+  --green-500:  #1F9D57;
+  --green-100:  #DAF1E2;
+  --amber-500:  #C7860B;
+  --amber-100:  #F8EBCB;
+  --red-500:    #D33C3C;
+  --red-600:    #BC2E2E;
+  --red-100:    #F8DADA;
+  --blue-500:   #2D7FF0;
+  --blue-100:   #DAE8FD;
+
+  /* ============================================================
+     SEMANTIC ALIASES — LIGHT (default)
+     ============================================================ */
+
+  /* Surfaces */
+  --surface-page:      var(--neutral-50);
+  --surface-card:      var(--neutral-0);
+  --surface-raised:    var(--neutral-0);
+  --surface-sunken:    var(--neutral-100);
+  --surface-inset:     var(--neutral-50);
+  --surface-hover:     var(--neutral-100);
+  --surface-active:    var(--neutral-150);
+  --surface-selected:  var(--teal-50);
+
+  /* Text */
+  --text-strong:   var(--neutral-900);
+  --text-body:     var(--neutral-800);
+  --text-muted:    var(--neutral-500);
+  --text-subtle:   var(--neutral-400);
+  --text-onbrand:  var(--neutral-0);
+  --text-link:     var(--teal-700);
+
+  /* Borders */
+  --border-subtle:  var(--neutral-150);
+  --border-default: var(--neutral-200);
+  --border-strong:  var(--neutral-300);
+  --border-focus:   var(--teal-500);
+
+  /* Brand / accent */
+  --brand:          var(--teal-500);
+  --brand-hover:    var(--teal-600);
+  --brand-active:   var(--teal-700);
+  --brand-subtle:   var(--teal-50);
+  --brand-subtle-2: var(--teal-100);
+  --brand-text:     var(--teal-700);
+
+  /* Semantic states */
+  --success:        var(--green-500);
+  --success-subtle: var(--green-100);
+  --warning:        var(--amber-500);
+  --warning-subtle: var(--amber-100);
+  --danger:         var(--red-500);
+  --danger-hover:   var(--red-600);
+  --danger-subtle:  var(--red-100);
+  --info:           var(--blue-500);
+  --info-subtle:    var(--blue-100);
+
+  /* Focus ring (accessibility) */
+  --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--teal-500);
+
+  color-scheme: light;
+}
+
+/* ============================================================
+   SEMANTIC ALIASES — DARK
+   Applied two ways: explicit [data-theme="dark"] override, OR
+   OS preference when the user hasn't pinned a light theme.
+   ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-page:      var(--neutral-950);
+    --surface-card:      var(--neutral-900);
+    --surface-raised:    var(--neutral-800);
+    --surface-sunken:    var(--neutral-950);
+    --surface-inset:     #111616;
+    --surface-hover:     var(--neutral-800);
+    --surface-active:    var(--neutral-700);
+    --surface-selected:  #0E2622;
+
+    --text-strong:   var(--neutral-25);
+    --text-body:     var(--neutral-150);
+    --text-muted:    var(--neutral-400);
+    --text-subtle:   var(--neutral-500);
+    --text-onbrand:  var(--neutral-950);
+    --text-link:     var(--teal-300);
+
+    --border-subtle:  var(--neutral-800);
+    --border-default: var(--neutral-700);
+    --border-strong:  var(--neutral-600);
+    --border-focus:   var(--teal-400);
+
+    --brand:          var(--teal-400);
+    --brand-hover:    var(--teal-300);
+    --brand-active:   var(--teal-200);
+    --brand-subtle:   #0E2622;
+    --brand-subtle-2: #103029;
+    --brand-text:     var(--teal-300);
+
+    --success:        #35B36B;
+    --success-subtle: #10271A;
+    --warning:        #E0A53A;
+    --warning-subtle: #2C2410;
+    --danger:         #E85D5D;
+    --danger-hover:   #F07070;
+    --danger-subtle:  #2C1414;
+    --info:           #589BF5;
+    --info-subtle:    #11203A;
+
+    --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--teal-400);
+
+    color-scheme: dark;
+  }
+}
+
+[data-theme="dark"] {
+  --surface-page:      var(--neutral-950);
+  --surface-card:      var(--neutral-900);
+  --surface-raised:    var(--neutral-800);
+  --surface-sunken:    var(--neutral-950);
+  --surface-inset:     #111616;
+  --surface-hover:     var(--neutral-800);
+  --surface-active:    var(--neutral-700);
+  --surface-selected:  #0E2622;
+
+  --text-strong:   var(--neutral-25);
+  --text-body:     var(--neutral-150);
+  --text-muted:    var(--neutral-400);
+  --text-subtle:   var(--neutral-500);
+  --text-onbrand:  var(--neutral-950);
+  --text-link:     var(--teal-300);
+
+  --border-subtle:  var(--neutral-800);
+  --border-default: var(--neutral-700);
+  --border-strong:  var(--neutral-600);
+  --border-focus:   var(--teal-400);
+
+  --brand:          var(--teal-400);
+  --brand-hover:    var(--teal-300);
+  --brand-active:   var(--teal-200);
+  --brand-subtle:   #0E2622;
+  --brand-subtle-2: #103029;
+  --brand-text:     var(--teal-300);
+
+  --success:        #35B36B;
+  --success-subtle: #10271A;
+  --warning:        #E0A53A;
+  --warning-subtle: #2C2410;
+  --danger:         #E85D5D;
+  --danger-hover:   #F07070;
+  --danger-subtle:  #2C1414;
+  --info:           #589BF5;
+  --info-subtle:    #11203A;
+
+  --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--teal-400);
+
+  color-scheme: dark;
+}
+
+/* ============================================================
+   SEMANTIC ALIASES — LIGHT (explicit pin)
+   Lets a user force light even when the OS prefers dark; declared
+   last so it wins over the prefers-color-scheme :root block above.
+   ============================================================ */
+
+[data-theme="light"] {
+  --surface-page:      var(--neutral-50);
+  --surface-card:      var(--neutral-0);
+  --surface-raised:    var(--neutral-0);
+  --surface-sunken:    var(--neutral-100);
+  --surface-inset:     var(--neutral-50);
+  --surface-hover:     var(--neutral-100);
+  --surface-active:    var(--neutral-150);
+  --surface-selected:  var(--teal-50);
+
+  --text-strong:   var(--neutral-900);
+  --text-body:     var(--neutral-800);
+  --text-muted:    var(--neutral-500);
+  --text-subtle:   var(--neutral-400);
+  --text-onbrand:  var(--neutral-0);
+  --text-link:     var(--teal-700);
+
+  --border-subtle:  var(--neutral-150);
+  --border-default: var(--neutral-200);
+  --border-strong:  var(--neutral-300);
+  --border-focus:   var(--teal-500);
+
+  --brand:          var(--teal-500);
+  --brand-hover:    var(--teal-600);
+  --brand-active:   var(--teal-700);
+  --brand-subtle:   var(--teal-50);
+  --brand-subtle-2: var(--teal-100);
+  --brand-text:     var(--teal-700);
+
+  --success:        var(--green-500);
+  --success-subtle: var(--green-100);
+  --warning:        var(--amber-500);
+  --warning-subtle: var(--amber-100);
+  --danger:         var(--red-500);
+  --danger-hover:   var(--red-600);
+  --danger-subtle:  var(--red-100);
+  --info:           var(--blue-500);
+  --info-subtle:    var(--blue-100);
+
+  --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--teal-500);
+
+  color-scheme: light;
+}
+/* ============================================================
+   DMCN — TYPOGRAPHY TOKENS
+   Geist for everything; Geist Mono for keys, fingerprints, code.
+   Type scale is tight and functional — built for dense mail UIs.
+   ============================================================ */
+
+:root {
+  /* Families */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+
+  /* Weights */
+  --weight-light:    300;
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* Font sizes (rem, 16px base) */
+  --text-2xs: 0.6875rem; /* 11px — meta, timestamps */
+  --text-xs:  0.75rem;   /* 12px — labels, badges */
+  --text-sm:  0.8125rem; /* 13px — dense list rows, secondary */
+  --text-md:  0.875rem;  /* 14px — default UI / body */
+  --text-base:0.9375rem; /* 15px — comfortable reading body */
+  --text-lg:  1.0625rem; /* 17px — subject lines, emphasis */
+  --text-xl:  1.3125rem; /* 21px — section titles */
+  --text-2xl: 1.625rem;  /* 26px — page titles */
+  --text-3xl: 2.0625rem; /* 33px — display */
+  --text-4xl: 2.625rem;  /* 42px — marketing hero */
+  --text-5xl: 3.5rem;    /* 56px — big marketing display */
+
+  /* Line heights */
+  --leading-tight:   1.15;
+  --leading-snug:    1.3;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.65;
+
+  /* Letter spacing */
+  --tracking-tight:  -0.02em;
+  --tracking-snug:   -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.02em;
+  --tracking-caps:   0.06em; /* uppercase eyebrows / overline */
+}
+/* ============================================================
+   DMCN — SPACING TOKENS
+   4px base grid. Compact and comfortable density both lean on
+   the same scale; the density toggle swaps a few row paddings.
+   ============================================================ */
+
+:root {
+  --space-0:  0;
+  --space-1:  0.25rem;  /* 4px  */
+  --space-2:  0.5rem;   /* 8px  */
+  --space-3:  0.75rem;  /* 12px */
+  --space-4:  1rem;     /* 16px */
+  --space-5:  1.25rem;  /* 20px */
+  --space-6:  1.5rem;   /* 24px */
+  --space-8:  2rem;     /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+  --space-20: 5rem;     /* 80px */
+  --space-24: 6rem;     /* 96px */
+
+  /* Density: mail list row vertical padding.
+     Override --density-row on a container (or [data-density]) to switch. */
+  --density-row: var(--space-3);          /* comfortable default */
+
+  /* Layout rails */
+  --rail-nav:     248px;  /* primary sidebar */
+  --rail-nav-min: 64px;   /* collapsed sidebar */
+  --content-max:  1200px; /* marketing content width */
+}
+
+[data-density="compact"] {
+  --density-row: var(--space-2);
+}
+
+[data-density="comfortable"] {
+  --density-row: var(--space-4);
+}
+/* ============================================================
+   DMCN — RADIUS TOKENS
+   Soft, restrained corners. A gentle 4px on interactive surfaces
+   (inputs, buttons, cards) reads as friendly and approachable
+   while staying crisp and precise. The scale steps proportionally
+   so nested elements nest cleanly.
+   ============================================================ */
+
+:root {
+  --radius-none: 0;
+  --radius-xs:   2px;  /* chips, small insets */
+  --radius-sm:   3px;  /* badges, tags, avatars, checkboxes */
+  --radius-md:   4px;  /* inputs, buttons, cards, menus */
+  --radius-lg:   6px;  /* dialogs, popovers, large surfaces */
+  --radius-pill: 999px; /* reserved: toggles, status pills only */
+  --radius-full: 999px; /* reserved: circular status dots only */
+}
+/* ============================================================
+   DMCN — ELEVATION TOKENS
+   Restrained, near-neutral shadows. Flat by default; elevation
+   is reserved for things that genuinely float (menus, dialogs,
+   compose window, toasts). Borders do most of the separating.
+   ============================================================ */
+
+:root {
+  --shadow-none: none;
+
+  /* Resting card lift — barely there */
+  --shadow-xs: 0 1px 2px rgba(12, 16, 16, 0.06);
+
+  /* Popovers, dropdown menus, selects */
+  --shadow-sm: 0 2px 4px rgba(12, 16, 16, 0.06),
+               0 4px 12px rgba(12, 16, 16, 0.08);
+
+  /* Compose window, floating panels */
+  --shadow-md: 0 4px 10px rgba(12, 16, 16, 0.08),
+               0 12px 28px rgba(12, 16, 16, 0.12);
+
+  /* Modal dialogs */
+  --shadow-lg: 0 8px 18px rgba(12, 16, 16, 0.10),
+               0 24px 56px rgba(12, 16, 16, 0.18);
+
+  /* Inset (pressed wells, search fields) */
+  --shadow-inset: inset 0 1px 2px rgba(12, 16, 16, 0.06);
+}
+
+[data-theme="dark"] {
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 8px 18px rgba(0, 0, 0, 0.55), 0 24px 56px rgba(0, 0, 0, 0.7);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.5), 0 12px 28px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 8px 18px rgba(0, 0, 0, 0.55), 0 24px 56px rgba(0, 0, 0, 0.7);
+    --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Explicit light pin — wins over the prefers-color-scheme block above. */
+[data-theme="light"] {
+  --shadow-xs: 0 1px 2px rgba(12, 16, 16, 0.06);
+  --shadow-sm: 0 2px 4px rgba(12, 16, 16, 0.06), 0 4px 12px rgba(12, 16, 16, 0.08);
+  --shadow-md: 0 4px 10px rgba(12, 16, 16, 0.08), 0 12px 28px rgba(12, 16, 16, 0.12);
+  --shadow-lg: 0 8px 18px rgba(12, 16, 16, 0.10), 0 24px 56px rgba(12, 16, 16, 0.18);
+  --shadow-inset: inset 0 1px 2px rgba(12, 16, 16, 0.06);
+}
+
+/* Motion tokens — quick, confident, no bounce */
+:root {
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --dur-fast:   120ms; /* @kind other */
+  --dur-normal: 180ms; /* @kind other */
+  --dur-slow:   260ms; /* @kind other */
+}

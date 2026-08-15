@@ -1,4 +1,5 @@
-.PHONY: build build-web build-daemon proto proto-web test test-cover lint vet clean tidy
+.PHONY: build build-web build-daemon proto proto-web test test-cover lint vet clean tidy \
+        site site-serve site-test site-check
 
 # Version string embedded at build time (best-effort git describe).
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -36,7 +37,45 @@ proto-web:
 proto:
 	buf generate
 
-test:
+# ----------------------------------------------------------------------------
+# dmcn.dev — the protocol's documentation site.
+#
+# site/ is a SEPARATE Go module (hence GOWORK=off), so its markdown renderer
+# never enters this module's dependency graph and site/ is excluded from the
+# module zip that `go get` downloads.
+#
+# The rendered output in docs/ is COMMITTED, and GitHub Pages publishes it
+# straight from the branch — publishing therefore depends on no CI at all, and
+# survives a repository transfer untouched. The cost of committing generated
+# files is that they can go stale, which is what site-check exists to prevent.
+# ----------------------------------------------------------------------------
+SITE := site
+
+# site renders the whole site into docs/. The spec page is rendered from
+# SPEC.md itself, so there is never a second copy to drift.
+site:
+	cd $(SITE) && GOWORK=off go run . build -out ../docs
+
+# site-serve previews docs/ locally with the same security headers the
+# self-hosted deployment would send. http://localhost:8080
+site-serve: site
+	cd $(SITE) && GOWORK=off go run . serve -dir ../docs -addr :8080 -dev
+
+site-test:
+	cd $(SITE) && GOWORK=off go test ./... -timeout 60s
+
+# site-check fails if docs/ is not exactly what site/ generates right now —
+# i.e. if someone edited content or templates and forgot to re-render, or
+# edited the generated HTML by hand. Wired into `test` so stale output cannot
+# reach the published site.
+site-check: site site-test
+	@if [ -n "$$(git status --porcelain -- docs)" ]; then \
+		echo "docs/ is out of date — run 'make site' and commit the result:"; \
+		git --no-pager status --short -- docs; \
+		exit 1; \
+	fi
+
+test: site-check
 	go test ./... -timeout 120s
 
 test-cover:

@@ -1,0 +1,37 @@
+{{ define "content" }}
+<div style="max-width:1120px;margin:0 auto;padding:clamp(28px,5vw,52px) clamp(18px,5vw,40px);container-type:inline-size;">
+
+  <!-- Mobile TOC: a sticky disclosure that replaces the sidebar below 880px. -->
+  {{ if .TOC }}
+  <details data-toc-mm>
+    <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;margin-bottom:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:var(--text-strong);">
+      On this page {{ icon "chevron-down" "font-size:16px;color:var(--text-muted);" }}
+    </summary>
+    <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
+      {{ range .TOC }}<a href="#{{ .ID }}">{{ .Text }}</a>{{ end }}
+    </div>
+  </details>
+  {{ end }}
+
+  <div data-doc-grid>
+    <aside data-toc-desk>
+      {{ if .TOC }}
+      <div class="toc-label">On this page</div>
+      <nav class="toc-list">
+        {{ range .TOC }}<a href="#{{ .ID }}">{{ .Text }}</a>{{ end }}
+      </nav>
+      {{ end }}
+    </aside>
+
+    <article class="prose">
+      {{ if .Note }}
+      <div class="note">
+        {{ icon "info" "font-size:17px;color:var(--brand);margin-top:1px;" }}
+        <div>{{ .Note }}</div>
+      </div>
+      {{ end }}
+      {{ .Body }}
+    </article>
+  </div>
+</div>
+{{ end }}

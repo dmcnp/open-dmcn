@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="DMCN">
+  <!-- The wordmark's mark: the brand square, reversed out at favicon scale.
+       Deliberately geometric rather than lettered so it stays legible at 16px. -->
+  <rect width="32" height="32" rx="7" fill="#0E9E86"/>
+  <rect x="8" y="8" width="9" height="9" rx="1.5" fill="#FFFFFF"/>
+  <rect x="19" y="19" width="5" height="5" rx="1" fill="#FFFFFF" opacity="0.75"/>
+</svg>
