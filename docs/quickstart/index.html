@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Quickstart · dmcn.dev</title>
+  <meta name="description" content="Build and run dmcnd, the single-binary DMCNP reference daemon — a serving node, webmail, an optional SMTP bridge and onion transport in one process for one domain.">
+  <link rel="canonical" href="https://dmcn.dev/quickstart/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="dmcn.dev">
+  <meta property="og:title" content="Quickstart · dmcn.dev">
+  <meta property="og:description" content="Build and run dmcnd, the single-binary DMCNP reference daemon — a serving node, webmail, an optional SMTP bridge and onion transport in one process for one domain.">
+  <meta property="og:url" content="https://dmcn.dev/quickstart/">
+
+  
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/docs.css">
+</head>
+<body>
+  
+  <div data-theme="" style="min-height:100vh;display:flex;flex-direction:column;background:var(--surface-page);color:var(--text-body);font-family:var(--font-sans);">
+    
+<header style="position:sticky;top:0;z-index:30;background:var(--surface-page);border-bottom:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div style="max-width:1120px;margin:0 auto;padding:13px clamp(18px,5vw,40px);display:flex;align-items:center;gap:clamp(14px,3vw,30px);">
+    <a href="/" style="display:inline-flex;align-items:flex-end;gap:8px;text-decoration:none;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:23px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:7px;height:7px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">protocol</span>
+    </a>
+    <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
+      <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Quickstart</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
+      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Go module</a>
+    </nav>
+    <a data-desk href="https://github.com/mertenvg/open-dmcn" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
+
+    <details data-mm>
+      <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
+      <div data-mm-panel>
+        <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+        <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
+        <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
+        <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>
+        <a href="https://github.com/mertenvg/open-dmcn" class="hov-surface" style="display:flex;align-items:center;gap:5px;padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-muted);text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </div>
+    </details>
+  </div>
+</header>
+
+    <main style="flex:1;">
+      
+<div style="max-width:1120px;margin:0 auto;padding:clamp(28px,5vw,52px) clamp(18px,5vw,40px);container-type:inline-size;">
+
+  
+  
+  <details data-toc-mm>
+    <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;margin-bottom:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:var(--text-strong);">
+      On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+    <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
+      <a href="#build-it">Build it</a><a href="#run-it-locally">Run it locally</a><a href="#configuration">Configuration</a><a href="#put-your-domain-on-the-network">Put your domain on the network</a><a href="#federate-with-another-domain">Federate with another domain</a><a href="#turn-on-the-smtp-bridge">Turn on the SMTP bridge</a><a href="#what-this-is-not">What this is not</a>
+    </div>
+  </details>
+  
+
+  <div data-doc-grid>
+    <aside data-toc-desk>
+      
+      <div class="toc-label">On this page</div>
+      <nav class="toc-list">
+        <a href="#build-it">Build it</a><a href="#run-it-locally">Run it locally</a><a href="#configuration">Configuration</a><a href="#put-your-domain-on-the-network">Put your domain on the network</a><a href="#federate-with-another-domain">Federate with another domain</a><a href="#turn-on-the-smtp-bridge">Turn on the SMTP bridge</a><a href="#what-this-is-not">What this is not</a>
+      </nav>
+      
+    </aside>
+
+    <article class="prose">
+      
+      <h1 id="quickstart">Quickstart</h1>
+<p><code>dmcnd</code> is the reference implementation of the whole core protocol as <strong>one process for one
+domain</strong>. Where a production deployment splits into a relay fleet, a stateless web client
+and a bridge, <code>dmcnd</code> folds the serving node, the webmail, the SMTP bridge and the onion
+transport into a single self-hostable binary.</p>
+<p>It stays zero-knowledge throughout: the browser holds the keys and signs every operation,
+and the server holds no user private key — not even an encrypted one.</p>
+<h2 id="build-it">Build it<a class="hash" href="#build-it" aria-label="Link to this section">#</a></h2>
+<p>You need <strong>Go 1.25+</strong>. Node is only required if you want to rebuild the embedded web UI;
+<code>cmd/dmcnd/web/dist</code> is committed precisely so a fresh clone builds without it.</p>
+<pre><code class="language-bash">git clone https://github.com/mertenvg/open-dmcn
+cd open-dmcn
+
+make build                          # embedded SPA + bin/dmcnd (needs Node 20+)
+go build -o bin/dmcnd ./cmd/dmcnd   # or just this, using the committed dist/
+</code></pre>
+<h2 id="run-it-locally">Run it locally<a class="hash" href="#run-it-locally" aria-label="Link to this section">#</a></h2>
+<p>Dev mode serves plain HTTP on localhost — which is still a secure context, so Web Crypto
+works — stubs the DNS anchoring, and mints throwaway accounts so you can send a message to
+yourself within a minute of cloning.</p>
+<pre><code class="language-bash">DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob ./bin/dmcnd
+</code></pre>
+<p>Open <code>http://localhost:8443</code>, import one of the seeded keys, and send <code>alice → bob</code>. The
+seed keystore is encrypted with <code>DMCND_SEED_PASSPHRASE</code> (default <code>dmcnd-dev-seed</code>).</p>
+<h2 id="configuration">Configuration<a class="hash" href="#configuration" aria-label="Link to this section">#</a></h2>
+<p>Everything is environment-driven. The defaults are chosen for a single-domain deployment.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DMCND_DOMAIN</code></td>
+<td><code>localhost</code></td>
+<td>the DMCN domain this daemon serves</td>
+</tr>
+<tr>
+<td><code>DMCND_LISTEN</code></td>
+<td><code>:8443</code></td>
+<td>webmail HTTPS listen address</td>
+</tr>
+<tr>
+<td><code>DMCND_NODE_LISTEN</code></td>
+<td><code>/ip4/0.0.0.0/tcp/0</code></td>
+<td>libp2p listen multiaddr</td>
+</tr>
+<tr>
+<td><code>DMCND_DATA_DIR</code></td>
+<td><code>data</code></td>
+<td>mailbox/record store, sessions, seed keystore</td>
+</tr>
+<tr>
+<td><code>DMCND_IDENTITY</code></td>
+<td>—</td>
+<td>persistent libp2p identity key (stable peer ID)</td>
+</tr>
+<tr>
+<td><code>DMCND_TLS_CERT</code> / <code>DMCND_TLS_KEY</code></td>
+<td>—</td>
+<td>TLS cert/key; absent and not dev ⇒ autocert</td>
+</tr>
+<tr>
+<td><code>DMCND_DEV</code></td>
+<td><code>false</code></td>
+<td>plain HTTP on localhost + stub DAR DNS anchoring</td>
+</tr>
+<tr>
+<td><code>DMCND_PEERS</code></td>
+<td>—</td>
+<td>bootstrap/discovery peer multiaddrs (federation)</td>
+</tr>
+<tr>
+<td><code>DMCND_ALLOWED_PEERS</code></td>
+<td><code>*</code> in dev, else deny</td>
+<td>libp2p federation allow-set (<code>*</code> = open)</td>
+</tr>
+<tr>
+<td><code>DMCND_STATIC_DNS</code></td>
+<td>—</td>
+<td>static <code>_dmcn</code> pins for peer domains (DNS-free federation)</td>
+</tr>
+<tr>
+<td><code>DMCND_POLL_INTERVAL</code></td>
+<td><code>10s</code></td>
+<td>webmail mailbox poll cadence</td>
+</tr>
+<tr>
+<td><code>DMCND_SEED_IDENTITIES</code></td>
+<td>—</td>
+<td><strong>dev only</strong>: comma-separated local-parts to mint</td>
+</tr>
+<tr>
+<td><code>DMCND_SEED_PASSPHRASE</code></td>
+<td><code>dmcnd-dev-seed</code></td>
+<td>encrypts the seed keystore</td>
+</tr>
+<tr>
+<td><code>DMCND_BRIDGE_ENABLED</code></td>
+<td><code>false</code></td>
+<td>fold in the SMTP bridge</td>
+</tr>
+<tr>
+<td><code>DMCND_BRIDGE_SMTP_LISTEN</code></td>
+<td><code>:2525</code></td>
+<td>bridge SMTP listen address</td>
+</tr>
+<tr>
+<td><code>DMCND_BRIDGE_ADDRESS</code></td>
+<td><code>bridge@&lt;domain&gt;</code></td>
+<td>the bridge's own DMCN address</td>
+</tr>
+<tr>
+<td><code>DMCND_BRIDGE_DOMAIN</code></td>
+<td><code>&lt;domain&gt;</code></td>
+<td>the legacy SMTP domain the bridge represents</td>
+</tr>
+<tr>
+<td><code>DMCND_BRIDGE_AUDIT_LOG</code></td>
+<td>—</td>
+<td>append-only JSON audit log path</td>
+</tr>
+</tbody>
+</table></div>
+<p>Note the federation default: <strong>deny</strong>. A node that is not in dev mode admits no peers until
+you say so, either by allowlisting peer IDs or by presenting a valid credential.</p>
+<h2 id="put-your-domain-on-the-network">Put your domain on the network<a class="hash" href="#put-your-domain-on-the-network" aria-label="Link to this section">#</a></h2>
+<p>Other domains find yours through DNS. The operator CLI prints the exact record to publish,
+including the fingerprint of your domain's root key and a seed multiaddr built from your
+node's peer ID:</p>
+<pre><code class="language-bash">dmcndcli dns --domain mesh.example --data-dir data \
+  --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/$(dmcndcli peer-id --identity data/node.key)
+</code></pre>
+<pre><code>_dmcn.mesh.example.  TXT  &quot;dmcn-verification=v1; fp=&lt;40-hex&gt;; seed=/ip4/…/p2p/…&quot;
+</code></pre>
+<p><code>fp=</code> is the trust anchor — the first 20 bytes of <code>SHA-256(ed25519_pub ‖ x25519_pub)</code> of
+your domain's root key. Anyone resolving an address on your domain verifies what your fleet
+serves against that fingerprint, so the fleet never has to be trusted.</p>
+<h2 id="federate-with-another-domain">Federate with another domain<a class="hash" href="#federate-with-another-domain" aria-label="Link to this section">#</a></h2>
+<p>Two daemons on different domains interoperate the way email does. Each publishes its
+<code>_dmcn</code> record; a sender resolves the recipient's domain, dials a seed, fetches the signed
+record and stores the sealed envelope to the recipient's relay.</p>
+<p>For a local cluster with no live DNS, list the peer domains' anchors in a
+<code>DMCND_STATIC_DNS</code> file instead — the resolver consults it before real DNS, so you can
+exercise the whole path offline.</p>
+<h2 id="turn-on-the-smtp-bridge">Turn on the SMTP bridge<a class="hash" href="#turn-on-the-smtp-bridge" aria-label="Link to this section">#</a></h2>
+<pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_SMTP_LISTEN=:2525 ./bin/dmcnd
+</code></pre>
+<p>Inbound legacy mail is authenticated with SPF/DKIM/DMARC at the bridge, and the verdict
+travels as a signed <code>BridgeClassificationRecord</code> attachment <em>inside</em> the sealed envelope —
+so the recipient's client verifies the bridge's attestation against the bridge's published
+identity rather than trusting the relay that carried it.</p>
+<p><strong>The honest caveat:</strong> mail crossing a bridge is TLS-in-transit on the legacy side, not
+end-to-end encrypted. A bridge is an interoperability affordance, not a security boundary.
+Mail that stays inside DMCN never leaves the sender's device unsealed.</p>
+<h2 id="what-this-is-not">What this is not<a class="hash" href="#what-this-is-not" aria-label="Link to this section">#</a></h2>
+<p><code>dmcnd</code> is a proof of concept: embedded stores, dev-oriented defaults, no operational
+hardening. Onion routing is inherited from the protocol and stays inert until a mesh has at
+least three relays. Treat it as the executable half of the specification — the thing you
+read alongside <code>SPEC.md</code> when the prose is ambiguous — rather than as something to put in
+front of real users today.</p>
+
+    </article>
+  </div>
+</div>
+
+    </main>
+    
+<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);">
+  <div style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);display:flex;gap:clamp(32px,6vw,64px);flex-wrap:wrap;">
+    <div style="flex:1;min-width:240px;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol — an open, end-to-end-encrypted mail protocol in which cryptographic identity replaces SMTP-style trust.</p>
+      <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Protocol</div>
+      <a href="/spec" style="font-size:14px;color:var(--text-body);text-decoration:none;">Specification</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);text-decoration:none;">FAQ</a>
+      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Go module</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Source</div>
+      <a href="https://github.com/mertenvg/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Repository</a>
+      <a href="https://github.com/mertenvg/open-dmcn/releases" style="font-size:14px;color:var(--text-body);text-decoration:none;">Releases</a>
+      <a href="https://github.com/mertenvg/open-dmcn/issues" style="font-size:14px;color:var(--text-body);text-decoration:none;">Issues</a>
+      <a href="https://github.com/mertenvg/open-dmcn/blob/main/LICENSE" style="font-size:14px;color:var(--text-body);text-decoration:none;">License</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Run by DMCN</div>
+      <a href="https://get.dmcn.email" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      <a href="https://get.dmcnmail.com" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    </div>
+  </div>
+  <div style="border-top:1px solid var(--border-subtle);padding:20px clamp(18px,5vw,40px);max-width:1120px;margin:0 auto;font-size:12px;line-height:1.6;color:var(--text-subtle);">
+    © 2026 DMCN · dmcn.dev · The Apache-2.0 license covers the code and schema; it does not grant rights to the names <strong style="color:var(--text-muted);font-weight:600;">DMCN</strong> or <strong style="color:var(--text-muted);font-weight:600;">DMCN&nbsp;Protocol</strong>. You may implement the protocol under any name of your own.
+  </div>
+</footer>
+
+  </div>
+</body>
+</html>

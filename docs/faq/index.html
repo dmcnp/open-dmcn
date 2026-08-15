@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>FAQ · dmcn.dev</title>
+  <meta name="description" content="Common questions about the DMCN Protocol — how it differs from encrypted email, why there is no DHT, what a relay operator can and cannot do, and what is core versus extension.">
+  <link rel="canonical" href="https://dmcn.dev/faq/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="dmcn.dev">
+  <meta property="og:title" content="FAQ · dmcn.dev">
+  <meta property="og:description" content="Common questions about the DMCN Protocol — how it differs from encrypted email, why there is no DHT, what a relay operator can and cannot do, and what is core versus extension.">
+  <meta property="og:url" content="https://dmcn.dev/faq/">
+
+  
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/docs.css">
+</head>
+<body>
+  
+  <div data-theme="" style="min-height:100vh;display:flex;flex-direction:column;background:var(--surface-page);color:var(--text-body);font-family:var(--font-sans);">
+    
+<header style="position:sticky;top:0;z-index:30;background:var(--surface-page);border-bottom:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div style="max-width:1120px;margin:0 auto;padding:13px clamp(18px,5vw,40px);display:flex;align-items:center;gap:clamp(14px,3vw,30px);">
+    <a href="/" style="display:inline-flex;align-items:flex-end;gap:8px;text-decoration:none;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:23px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:7px;height:7px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">protocol</span>
+    </a>
+    <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
+      <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Quickstart</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
+      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Go module</a>
+    </nav>
+    <a data-desk href="https://github.com/mertenvg/open-dmcn" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
+
+    <details data-mm>
+      <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
+      <div data-mm-panel>
+        <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+        <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
+        <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
+        <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>
+        <a href="https://github.com/mertenvg/open-dmcn" class="hov-surface" style="display:flex;align-items:center;gap:5px;padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-muted);text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </div>
+    </details>
+  </div>
+</header>
+
+    <main style="flex:1;">
+      
+<div style="max-width:1120px;margin:0 auto;padding:clamp(28px,5vw,52px) clamp(18px,5vw,40px);container-type:inline-size;">
+
+  
+  
+  <details data-toc-mm>
+    <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;margin-bottom:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:var(--text-strong);">
+      On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+    <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
+      <a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-fleet-lies-about-a-record">What if a domain&#39;s fleet lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#what-is-core-and-what-is-an-extension">What is &#34;core&#34; and what is an &#34;extension&#34;?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#how-do-i-implement-dmcnp-in-another-language">How do I implement DMCNP in another language?</a><a href="#is-it-decentralized-if-domains-still-have-operators">Is it decentralized if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
+    </div>
+  </details>
+  
+
+  <div data-doc-grid>
+    <aside data-toc-desk>
+      
+      <div class="toc-label">On this page</div>
+      <nav class="toc-list">
+        <a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-fleet-lies-about-a-record">What if a domain&#39;s fleet lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#what-is-core-and-what-is-an-extension">What is &#34;core&#34; and what is an &#34;extension&#34;?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#how-do-i-implement-dmcnp-in-another-language">How do I implement DMCNP in another language?</a><a href="#is-it-decentralized-if-domains-still-have-operators">Is it decentralized if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
+      </nav>
+      
+    </aside>
+
+    <article class="prose">
+      
+      <h1 id="frequently-asked-questions">Frequently asked questions</h1>
+<h2 id="how-is-this-different-from-encrypting-email">How is this different from encrypting email?<a class="hash" href="#how-is-this-different-from-encrypting-email" aria-label="Link to this section">#</a></h2>
+<p>PGP and S/MIME encrypt the <em>body</em> of a message that still travels over SMTP, so they
+inherit SMTP's trust model: the addressing layer stays unauthenticated, metadata stays in
+the clear, and whether a message is trustworthy is decided by filters and reputation after
+the fact.</p>
+<p>DMCNP moves the cryptography down a layer. The address <em>is</em> a keypair, so authenticity is a
+property of the identity rather than a verdict about a message. There is no unauthenticated
+addressing layer left to spoof, and both the header and the body travel sealed.</p>
+<h2 id="is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?<a class="hash" href="#is-there-a-blockchain-a-dht-or-a-global-directory" aria-label="Link to this section">#</a></h2>
+<p>No — and the absence of one is a deliberate design decision rather than an omission.</p>
+<p>An earlier iteration did resolve identities through a Kademlia DHT. It was removed because a
+sufficiently resourced hostile majority in a global overlay can withhold or censor records.
+For a system meant to replace email, that is an availability flaw serious enough to
+disqualify the design.</p>
+<p>Resolution is now per-domain and DNS-seeded: read <code>_dmcn.&lt;domain&gt;</code>, dial that domain's own
+fleet, verify what comes back against the fingerprint from DNS. A domain is served only by
+its own fleet, never by a global overlay a foreign majority could block.</p>
+<h2 id="what-if-a-domains-fleet-lies-about-a-record">What if a domain's fleet lies about a record?<a class="hash" href="#what-if-a-domains-fleet-lies-about-a-record" aria-label="Link to this section">#</a></h2>
+<p>It cannot, in the sense that matters. Records are <strong>self-certifying</strong> — signed by the
+identity's own key and chained to a domain authority anchored by the fingerprint in DNS. A
+hostile or simply wrong fleet can refuse to answer, or answer with something that fails
+verification, and both outcomes are denial of service. Neither is forgery.</p>
+<p>This is why the trust anchor lives in DNS and the records live with the domain: the two
+failure modes stay separate, and the dangerous one is unavailable.</p>
+<h2 id="can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?<a class="hash" href="#can-my-provider-move-my-mailbox-without-asking-me" aria-label="Link to this section">#</a></h2>
+<p>Yes — deliberately. The <code>RelayHints</code> that say which relays hold your mailbox sit <em>outside</em>
+your self-signature, carried in an operator-signed routing credential. An operator can
+re-point them to rebalance load or drain a machine without ever touching your key.</p>
+<p>What an operator cannot do is change who you are. The identity core — your address, your
+keys, your validity window — is covered by your own signature, so re-pointing routing moves
+the mailbox without moving the identity. Your address never changes, which is also what
+makes portability work.</p>
+<h2 id="who-can-read-my-mail">Who can read my mail?<a class="hash" href="#who-can-read-my-mail" aria-label="Link to this section">#</a></h2>
+<p>All cryptography is client-side. Relays only ever handle sealed envelopes: a per-message
+AES-256-GCM content key, wrapped to each recipient device over X25519, with the header and
+body sealed separately so that listing an inbox never touches a body.</p>
+<p>Two honest limits. Mail that crosses the <strong>SMTP bridge</strong> is TLS-in-transit on the legacy
+side, not end-to-end encrypted — a bridge is an interoperability affordance, not a security
+boundary. And relays necessarily see routing metadata: which mailbox is receiving something,
+and roughly when. Payloads are padded to size-class buckets to blunt traffic analysis, and
+onion routing exists for senders who need the path itself concealed.</p>
+<h2 id="what-is-core-and-what-is-an-extension">What is &quot;core&quot; and what is an &quot;extension&quot;?<a class="hash" href="#what-is-core-and-what-is-an-extension" aria-label="Link to this section">#</a></h2>
+<p>The core is what an independent implementation needs in order to interoperate: resolve,
+verify, send, receive. Everything else — fleet administration, hosting permits,
+provisioning, entitlements, relay-assisted client conveniences — is an extension.</p>
+<p>Extensions attach through surfaces the core designs for them: separate libp2p protocol IDs,
+operator-attached credentials, and <code>ext.</code>-prefixed credential attributes. They never attach
+through new core fields. The rule that makes the split meaningful is that <strong>an
+implementation which ignores every extension still interoperates fully</strong> — extensions may
+add operator capability, never an interop requirement.</p>
+<h2 id="why-are-some-field-numbers-reserved">Why are some field numbers reserved?<a class="hash" href="#why-are-some-field-numbers-reserved" aria-label="Link to this section">#</a></h2>
+<p>Because they were used once. Vacated field and arm numbers carry <code>reserved</code> declarations
+with gravestone comments, and they are never reused. Several belonged to operator surfaces
+that moved out of the core when the extension boundary was drawn.</p>
+<p>Reusing a number would silently mis-decode messages from an older peer, so the history is
+part of the schema.</p>
+<h2 id="how-do-i-implement-dmcnp-in-another-language">How do I implement DMCNP in another language?<a class="hash" href="#how-do-i-implement-dmcnp-in-another-language" aria-label="Link to this section">#</a></h2>
+<p>Start from <a href="/spec">the specification</a>, and treat <code>proto/</code> in the reference implementation as
+the authoritative schema — the spec is prose about those files, and where they disagree the
+schema and the implementation win.</p>
+<p>The parts worth reading closely first are the signing convention (every signature is over
+deterministic protobuf with the signature field cleared, under a per-type context tag), the
+resolution flow, and the challenge-response that authorizes a fetch. Optional capabilities —
+onion routing and the SMTP bridge — can be left out entirely without affecting interop.</p>
+<h2 id="is-it-decentralized-if-domains-still-have-operators">Is it decentralized if domains still have operators?<a class="hash" href="#is-it-decentralized-if-domains-still-have-operators" aria-label="Link to this section">#</a></h2>
+<p>It is federated, and it is worth being precise about what that does and does not give you.
+Operators run relays, hold routing, and may attest addresses on their domain — that is real
+power over availability and over routing.</p>
+<p>What they never hold is the ability to read your mail or to impersonate you, because the
+keys that would let them do either never leave your device. The design goal is not the
+absence of operators; it is that choosing one grants them the smallest possible amount of
+authority, and that leaving takes nothing away from you but a routing change.</p>
+<h2 id="is-it-production-ready">Is it production ready?<a class="hash" href="#is-it-production-ready" aria-label="Link to this section">#</a></h2>
+<p>No. The reference daemon is a proof of concept — embedded stores, dev-oriented defaults, no
+operational hardening — and the specification is a snapshot versioned with it rather than a
+frozen standard. It is complete enough to interoperate against and to read as the executable
+half of the spec; it is not something to put in front of real users today.</p>
+<h2 id="what-does-the-license-allow">What does the license allow?<a class="hash" href="#what-does-the-license-allow" aria-label="Link to this section">#</a></h2>
+<p>Apache-2.0, including an express patent grant with defensive termination: you may implement
+this protocol without fear of patent assertion by its authors, and that grant terminates for
+anyone who initiates patent litigation over it.</p>
+<p>The license covers the code and the schema. It does not grant rights to the names <strong>DMCN</strong>
+or <strong>DMCN Protocol</strong>, so implement freely under a name of your own — and describe something
+as speaking DMCNP only when it genuinely conforms.</p>
+
+    </article>
+  </div>
+</div>
+
+    </main>
+    
+<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);">
+  <div style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);display:flex;gap:clamp(32px,6vw,64px);flex-wrap:wrap;">
+    <div style="flex:1;min-width:240px;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol — an open, end-to-end-encrypted mail protocol in which cryptographic identity replaces SMTP-style trust.</p>
+      <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Protocol</div>
+      <a href="/spec" style="font-size:14px;color:var(--text-body);text-decoration:none;">Specification</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);text-decoration:none;">FAQ</a>
+      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Go module</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Source</div>
+      <a href="https://github.com/mertenvg/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Repository</a>
+      <a href="https://github.com/mertenvg/open-dmcn/releases" style="font-size:14px;color:var(--text-body);text-decoration:none;">Releases</a>
+      <a href="https://github.com/mertenvg/open-dmcn/issues" style="font-size:14px;color:var(--text-body);text-decoration:none;">Issues</a>
+      <a href="https://github.com/mertenvg/open-dmcn/blob/main/LICENSE" style="font-size:14px;color:var(--text-body);text-decoration:none;">License</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Run by DMCN</div>
+      <a href="https://get.dmcn.email" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      <a href="https://get.dmcnmail.com" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    </div>
+  </div>
+  <div style="border-top:1px solid var(--border-subtle);padding:20px clamp(18px,5vw,40px);max-width:1120px;margin:0 auto;font-size:12px;line-height:1.6;color:var(--text-subtle);">
+    © 2026 DMCN · dmcn.dev · The Apache-2.0 license covers the code and schema; it does not grant rights to the names <strong style="color:var(--text-muted);font-weight:600;">DMCN</strong> or <strong style="color:var(--text-muted);font-weight:600;">DMCN&nbsp;Protocol</strong>. You may implement the protocol under any name of your own.
+  </div>
+</footer>
+
+  </div>
+</body>
+</html>

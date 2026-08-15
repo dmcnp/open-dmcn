@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <meta name="go-import" content="dmcn.dev/open-dmcn git https://github.com/mertenvg/open-dmcn">
+  <meta name="go-source" content="dmcn.dev/open-dmcn https://github.com/mertenvg/open-dmcn https://github.com/mertenvg/open-dmcn/tree/main{/dir} https://github.com/mertenvg/open-dmcn/blob/main{/dir}/{file}#L{line}">
+
+  <title>Go module · dmcn.dev</title>
+  <meta name="description" content="dmcn.dev/open-dmcn is the canonical Go import path for the DMCN Protocol reference implementation and its generated protobuf package.">
+  <link rel="canonical" href="https://dmcn.dev/open-dmcn/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="dmcn.dev">
+  <meta property="og:title" content="Go module · dmcn.dev">
+  <meta property="og:description" content="dmcn.dev/open-dmcn is the canonical Go import path for the DMCN Protocol reference implementation and its generated protobuf package.">
+  <meta property="og:url" content="https://dmcn.dev/open-dmcn/">
+
+  
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/docs.css">
+</head>
+<body>
+  
+  <div data-theme="" style="min-height:100vh;display:flex;flex-direction:column;background:var(--surface-page);color:var(--text-body);font-family:var(--font-sans);">
+    
+<header style="position:sticky;top:0;z-index:30;background:var(--surface-page);border-bottom:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div style="max-width:1120px;margin:0 auto;padding:13px clamp(18px,5vw,40px);display:flex;align-items:center;gap:clamp(14px,3vw,30px);">
+    <a href="/" style="display:inline-flex;align-items:flex-end;gap:8px;text-decoration:none;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:23px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:7px;height:7px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">protocol</span>
+    </a>
+    <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
+      <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Quickstart</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
+      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Go module</a>
+    </nav>
+    <a data-desk href="https://github.com/mertenvg/open-dmcn" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
+
+    <details data-mm>
+      <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
+      <div data-mm-panel>
+        <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+        <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
+        <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
+        <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>
+        <a href="https://github.com/mertenvg/open-dmcn" class="hov-surface" style="display:flex;align-items:center;gap:5px;padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-muted);text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </div>
+    </details>
+  </div>
+</header>
+
+    <main style="flex:1;">
+      
+<div style="max-width:1120px;margin:0 auto;padding:clamp(28px,5vw,52px) clamp(18px,5vw,40px);container-type:inline-size;">
+
+  
+  
+  <details data-toc-mm>
+    <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;margin-bottom:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:var(--text-strong);">
+      On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+    <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
+      <a href="#why-an-import-path-on-this-domain">Why an import path on this domain</a><a href="#what-is-in-it">What is in it</a><a href="#documentation">Documentation</a>
+    </div>
+  </details>
+  
+
+  <div data-doc-grid>
+    <aside data-toc-desk>
+      
+      <div class="toc-label">On this page</div>
+      <nav class="toc-list">
+        <a href="#why-an-import-path-on-this-domain">Why an import path on this domain</a><a href="#what-is-in-it">What is in it</a><a href="#documentation">Documentation</a>
+      </nav>
+      
+    </aside>
+
+    <article class="prose">
+      
+      <div class="note">
+        <svg class="lucide lucide-info" style="font-size:17px;color:var(--brand);margin-top:1px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+        <div><p><strong>Not active yet.</strong> This page already serves the <code>go-import</code> meta tag, but the module still declares <code>github.com/mertenvg/open-dmcn</code> in its <code>go.mod</code>, so <code>go get</code> on the vanity path will fail until the two agree. Use <code>github.com/mertenvg/open-dmcn</code> until this note disappears.</p></div>
+      </div>
+      
+      <h1 id="the-go-module">The Go module</h1>
+<p>The reference implementation is a Go module published under a <strong>vanity import path</strong> on this
+domain:</p>
+<pre><code>dmcn.dev/open-dmcn
+</code></pre>
+<pre><code class="language-bash">go get dmcn.dev/open-dmcn
+</code></pre>
+<pre><code class="language-go">import &quot;dmcn.dev/open-dmcn/dmcnpb&quot;
+</code></pre>
+<h2 id="why-an-import-path-on-this-domain">Why an import path on this domain<a class="hash" href="#why-an-import-path-on-this-domain" aria-label="Link to this section">#</a></h2>
+<p>An import path is a promise about where something lives, and hosting a promise on someone
+else's namespace makes it theirs to break. <code>github.com/&lt;account&gt;/open-dmcn</code> binds every
+consumer's source code to one account on one forge: moving the repository between accounts,
+transferring it to an organisation, or leaving GitHub entirely would invalidate every import
+line in every downstream project.</p>
+<p>Anchoring the path to <code>dmcn.dev</code> removes that coupling. This page serves the <code>go-import</code> meta
+tag that tells the Go toolchain where the source currently is, so relocating the repository
+is a one-line change here and a no-op everywhere else. The protocol's identity is the
+domain; the forge is an implementation detail.</p>
+<h2 id="what-is-in-it">What is in it<a class="hash" href="#what-is-in-it" aria-label="Link to this section">#</a></h2>
+<p>The module's public surface is deliberately narrow.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Stability</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dmcnpb</code></td>
+<td>the compatibility contract</td>
+<td>generated protobuf types for <code>dmcn.identity</code>, <code>dmcn.message</code>, <code>dmcn.relay</code> and <code>dmcn.bridge</code></td>
+</tr>
+<tr>
+<td><code>internal/…</code></td>
+<td><strong>no API-stability promise</strong></td>
+<td>the reference implementation itself</td>
+</tr>
+<tr>
+<td><code>cmd/dmcnd</code></td>
+<td>binary</td>
+<td>the single-binary reference daemon</td>
+</tr>
+<tr>
+<td><code>cmd/dmcndcli</code></td>
+<td>binary</td>
+<td>the operator CLI</td>
+</tr>
+</tbody>
+</table></div>
+<p>The wire schema is what compatibility is measured against — not the Go API. <code>internal/</code>
+packages are visible in the repository so the implementation can be read alongside the
+<a href="/spec">specification</a>, but they are not importable and carry no stability guarantee.
+Breaking checks run at package level, and the proto package names are load-bearing for
+reflection-based consumers, so they never change.</p>
+<h2 id="documentation">Documentation<a class="hash" href="#documentation" aria-label="Link to this section">#</a></h2>
+<p>Package documentation is published on
+<a href="https://pkg.go.dev/dmcn.dev/open-dmcn">pkg.go.dev</a>, and the <code>go-source</code> meta tag on this
+page wires its source links back to the repository at the right revision.</p>
+
+    </article>
+  </div>
+</div>
+
+    </main>
+    
+<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);">
+  <div style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);display:flex;gap:clamp(32px,6vw,64px);flex-wrap:wrap;">
+    <div style="flex:1;min-width:240px;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol — an open, end-to-end-encrypted mail protocol in which cryptographic identity replaces SMTP-style trust.</p>
+      <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Protocol</div>
+      <a href="/spec" style="font-size:14px;color:var(--text-body);text-decoration:none;">Specification</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);text-decoration:none;">FAQ</a>
+      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Go module</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Source</div>
+      <a href="https://github.com/mertenvg/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Repository</a>
+      <a href="https://github.com/mertenvg/open-dmcn/releases" style="font-size:14px;color:var(--text-body);text-decoration:none;">Releases</a>
+      <a href="https://github.com/mertenvg/open-dmcn/issues" style="font-size:14px;color:var(--text-body);text-decoration:none;">Issues</a>
+      <a href="https://github.com/mertenvg/open-dmcn/blob/main/LICENSE" style="font-size:14px;color:var(--text-body);text-decoration:none;">License</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Run by DMCN</div>
+      <a href="https://get.dmcn.email" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      <a href="https://get.dmcnmail.com" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    </div>
+  </div>
+  <div style="border-top:1px solid var(--border-subtle);padding:20px clamp(18px,5vw,40px);max-width:1120px;margin:0 auto;font-size:12px;line-height:1.6;color:var(--text-subtle);">
+    © 2026 DMCN · dmcn.dev · The Apache-2.0 license covers the code and schema; it does not grant rights to the names <strong style="color:var(--text-muted);font-weight:600;">DMCN</strong> or <strong style="color:var(--text-muted);font-weight:600;">DMCN&nbsp;Protocol</strong>. You may implement the protocol under any name of your own.
+  </div>
+</footer>
+
+  </div>
+</body>
+</html>
