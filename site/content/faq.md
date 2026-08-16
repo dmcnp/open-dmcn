@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Common questions about the DMCN Protocol — how it differs from encrypted email, why there's no DHT, what a relay operator can and can't do, and what counts as core.
+description: Common questions about the DMCN Protocol — how it differs from encrypted email and from SPF/DKIM/DMARC, why there's no DHT, what a relay operator can and can't do, and what counts as core.
 ---
 
 # Questions
@@ -24,6 +24,38 @@ whether a message is trustworthy gets decided after the fact by filters and repu
 DMCNP moves the crypto down a layer. The address *is* a keypair, so authenticity is a
 property of the identity rather than a verdict about a message. There's no unauthenticated
 addressing layer left to spoof, and the header travels sealed alongside the body.
+
+## What about DKIM, SPF and DMARC?
+
+They're the best answer SMTP has, they genuinely help, and DMCNP is not pretending otherwise.
+
+What they do: SPF says which servers may send for a domain. DKIM signs a message with a
+domain's key. DMARC ties the From address you actually see to one of those two, and tells
+receivers what to do when they don't line up.
+
+Three things that leaves open.
+
+**They authenticate a domain, not a person.** A valid DKIM signature says "a server
+authorised by example.com sent this". It doesn't say which account, and it can't — the
+signing key belongs to the provider, not to you. Anyone who can send through that provider
+inherits the same signature.
+
+**Enforcement is the receiver's choice.** DMARC is a request, not a rule. A domain can
+publish `p=reject` and a receiver can deliver the mail anyway — plenty do, because strict
+enforcement breaks forwarding and mailing lists. The guess doesn't disappear; it moves.
+
+**They say nothing about the contents.** These are authentication, not confidentiality. The
+message is still readable by every server that handles it, and sits in the clear at both
+ends.
+
+DMCNP moves the key to the person. Your signature is made on your device, with a key your
+provider never holds, so who sent a message is settled by the message itself rather than by
+a policy the receiving side may or may not honour. The same key is what lets the mail be
+sealed so the servers in between can't read it either.
+
+None of which makes the old three useless. DMCNP's [SMTP bridge](/quickstart) runs all of
+them on inbound legacy mail and passes the verdict on as a signed attestation inside the
+sealed envelope — for mail that starts in the old world, they're the best signal there is.
 
 ## Is there a blockchain, a DHT, or a global directory?
 

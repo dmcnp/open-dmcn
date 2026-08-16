@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>FAQ · dmcn.dev</title>
-  <meta name="description" content="Common questions about the DMCN Protocol — how it differs from encrypted email, why there&#39;s no DHT, what a relay operator can and can&#39;t do, and what counts as core.">
+  <meta name="description" content="Common questions about the DMCN Protocol — how it differs from encrypted email and from SPF/DKIM/DMARC, why there&#39;s no DHT, what a relay operator can and can&#39;t do, and what counts as core.">
   <link rel="canonical" href="https://dmcn.dev/faq/">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="dmcn.dev">
   <meta property="og:title" content="FAQ · dmcn.dev">
-  <meta property="og:description" content="Common questions about the DMCN Protocol — how it differs from encrypted email, why there&#39;s no DHT, what a relay operator can and can&#39;t do, and what counts as core.">
+  <meta property="og:description" content="Common questions about the DMCN Protocol — how it differs from encrypted email and from SPF/DKIM/DMARC, why there&#39;s no DHT, what a relay operator can and can&#39;t do, and what counts as core.">
   <meta property="og:url" content="https://dmcn.dev/faq/">
 
   
@@ -64,7 +64,7 @@
       On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </summary>
     <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
-      <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
+      <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
     </div>
   </details>
   
@@ -74,7 +74,7 @@
       
       <div class="toc-label">On this page</div>
       <nav class="toc-list">
-        <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
+        <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
       </nav>
       
     </aside>
@@ -95,6 +95,29 @@ whether a message is trustworthy gets decided after the fact by filters and repu
 <p>DMCNP moves the crypto down a layer. The address <em>is</em> a keypair, so authenticity is a
 property of the identity rather than a verdict about a message. There's no unauthenticated
 addressing layer left to spoof, and the header travels sealed alongside the body.</p>
+<h2 id="what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?<a class="hash" href="#what-about-dkim-spf-and-dmarc" aria-label="Link to this section">#</a></h2>
+<p>They're the best answer SMTP has, they genuinely help, and DMCNP is not pretending otherwise.</p>
+<p>What they do: SPF says which servers may send for a domain. DKIM signs a message with a
+domain's key. DMARC ties the From address you actually see to one of those two, and tells
+receivers what to do when they don't line up.</p>
+<p>Three things that leaves open.</p>
+<p><strong>They authenticate a domain, not a person.</strong> A valid DKIM signature says &quot;a server
+authorised by example.com sent this&quot;. It doesn't say which account, and it can't — the
+signing key belongs to the provider, not to you. Anyone who can send through that provider
+inherits the same signature.</p>
+<p><strong>Enforcement is the receiver's choice.</strong> DMARC is a request, not a rule. A domain can
+publish <code>p=reject</code> and a receiver can deliver the mail anyway — plenty do, because strict
+enforcement breaks forwarding and mailing lists. The guess doesn't disappear; it moves.</p>
+<p><strong>They say nothing about the contents.</strong> These are authentication, not confidentiality. The
+message is still readable by every server that handles it, and sits in the clear at both
+ends.</p>
+<p>DMCNP moves the key to the person. Your signature is made on your device, with a key your
+provider never holds, so who sent a message is settled by the message itself rather than by
+a policy the receiving side may or may not honour. The same key is what lets the mail be
+sealed so the servers in between can't read it either.</p>
+<p>None of which makes the old three useless. DMCNP's <a href="/quickstart">SMTP bridge</a> runs all of
+them on inbound legacy mail and passes the verdict on as a signed attestation inside the
+sealed envelope — for mail that starts in the old world, they're the best signal there is.</p>
 <h2 id="is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?<a class="hash" href="#is-there-a-blockchain-a-dht-or-a-global-directory" aria-label="Link to this section">#</a></h2>
 <p>No, and that's deliberate.</p>
 <p>An earlier version did resolve identities through a Kademlia DHT. It came out because a big
