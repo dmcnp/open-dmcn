@@ -36,7 +36,7 @@ const (
 	// change when open-dmcn moves from a personal account to the dmcnp org — the
 	// import path stays dmcn.dev/open-dmcn either way, which is the entire point
 	// of a vanity path: consumers never edit an import because we moved hosts.
-	repoURL = "https://github.com/mertenvg/open-dmcn"
+	repoURL = "https://github.com/dmcnp/open-dmcn"
 
 	// repoBranch backs the go-source line-number links used by pkg.go.dev.
 	repoBranch = "main"

@@ -65,6 +65,31 @@ func TestModuleNameMatchesPath(t *testing.T) {
 	}
 }
 
+// TestNoHardcodedRepo keeps the promise that moving the repository is a one-line
+// change. Authored content must reference the repo through {{repo}}, never by
+// spelling out a forge URL that would survive the move and send readers to the
+// wrong place.
+func TestNoHardcodedRepo(t *testing.T) {
+	for _, dir := range []string{"content", "templates"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, forge := range []string{"github.com/mertenvg", "github.com/dmcnp"} {
+				if strings.Contains(string(b), forge) {
+					t.Errorf("%s/%s hardcodes %q — use {{repo}} (content) or .Cfg.RepoURL (templates)",
+						dir, e.Name(), forge)
+				}
+			}
+		}
+	}
+}
+
 // buildInto renders the site to a temp dir and returns a reader for its files.
 func buildInto(t *testing.T) (string, func(string) string) {
 	t.Helper()

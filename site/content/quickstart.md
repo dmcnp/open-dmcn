@@ -19,7 +19,7 @@ You need **Go 1.25+**. Node is only required if you want to rebuild the embedded
 `cmd/dmcnd/web/dist` is committed precisely so a fresh clone builds without it.
 
 ```bash
-git clone https://github.com/mertenvg/open-dmcn
+git clone {{repo}}
 cd open-dmcn
 
 make build                          # embedded SPA + bin/dmcnd (needs Node 20+)

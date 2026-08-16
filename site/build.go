@@ -152,6 +152,23 @@ func build(cfg SiteConfig, outDir, specPath string) error {
 	return writeExtras(cfg, outDir, rendered)
 }
 
+// expand substitutes the deploy constants into authored text — markdown content
+// and the note callouts alike.
+//
+// It exists so that NOTHING outside main.go's constants names the repository.
+// A hardcoded `git clone https://github.com/…` in a markdown file would survive
+// a repository move and quietly send readers to the wrong place, which is
+// exactly the coupling the vanity import path exists to remove.
+// TestNoHardcodedRepo enforces it.
+func expand(cfg SiteConfig, s string) string {
+	return strings.NewReplacer(
+		"{{repo}}", cfg.RepoURL,
+		"{{repo-path}}", strings.TrimPrefix(cfg.RepoURL, "https://"),
+		"{{branch}}", cfg.Branch,
+		"{{module}}", cfg.ModulePath,
+	).Replace(s)
+}
+
 // renderPage assembles the data for one page.
 func renderPage(cfg SiteConfig, p pageSpec, specPath string, vanity *Vanity) (*pageData, error) {
 	var (
@@ -168,7 +185,7 @@ func renderPage(cfg SiteConfig, p pageSpec, specPath string, vanity *Vanity) (*p
 		return nil, err
 	}
 
-	doc, err := renderMarkdown(src)
+	doc, err := renderMarkdown([]byte(expand(cfg, string(src))))
 	if err != nil {
 		return nil, err
 	}
@@ -197,11 +214,7 @@ func renderPage(cfg SiteConfig, p pageSpec, specPath string, vanity *Vanity) (*p
 		data.Vanity = vanity
 	}
 	if p.note != "" {
-		data.Note = template.HTML(strings.NewReplacer(
-			"{{repo}}", cfg.RepoURL,
-			"{{branch}}", cfg.Branch,
-			"{{repo-path}}", strings.TrimPrefix(cfg.RepoURL, "https://"),
-		).Replace(p.note))
+		data.Note = template.HTML(expand(cfg, p.note))
 	}
 	return data, nil
 }
