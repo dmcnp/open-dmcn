@@ -9,13 +9,13 @@
   <meta name="go-source" content="dmcn.dev/open-dmcn https://github.com/dmcnp/open-dmcn https://github.com/dmcnp/open-dmcn/tree/main{/dir} https://github.com/dmcnp/open-dmcn/blob/main{/dir}/{file}#L{line}">
 
   <title>Go module · dmcn.dev</title>
-  <meta name="description" content="dmcn.dev/open-dmcn is the canonical Go import path for the DMCN Protocol reference implementation and its generated protobuf package.">
+  <meta name="description" content="dmcn.dev/open-dmcn is the import path for the Go reference implementation and its generated protobuf types.">
   <link rel="canonical" href="https://dmcn.dev/open-dmcn/">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="dmcn.dev">
   <meta property="og:title" content="Go module · dmcn.dev">
-  <meta property="og:description" content="dmcn.dev/open-dmcn is the canonical Go import path for the DMCN Protocol reference implementation and its generated protobuf package.">
+  <meta property="og:description" content="dmcn.dev/open-dmcn is the import path for the Go reference implementation and its generated protobuf types.">
   <meta property="og:url" content="https://dmcn.dev/open-dmcn/">
 
   
@@ -37,9 +37,8 @@
     </a>
     <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
       <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
-      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Quickstart</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
       <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
-      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Go module</a>
     </nav>
     <a data-desk href="https://github.com/dmcnp/open-dmcn" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
     <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
@@ -48,7 +47,7 @@
       <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
       <div data-mm-panel>
         <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
-        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
         <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
         <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
         <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>
@@ -69,7 +68,7 @@
       On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </summary>
     <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
-      <a href="#why-an-import-path-on-this-domain">Why an import path on this domain</a><a href="#what-is-in-it">What is in it</a><a href="#documentation">Documentation</a>
+      <a href="#why-the-import-path-lives-here">Why the import path lives here</a><a href="#whats-in-it">What&#39;s in it</a>
     </div>
   </details>
   
@@ -79,7 +78,7 @@
       
       <div class="toc-label">On this page</div>
       <nav class="toc-list">
-        <a href="#why-an-import-path-on-this-domain">Why an import path on this domain</a><a href="#what-is-in-it">What is in it</a><a href="#documentation">Documentation</a>
+        <a href="#why-the-import-path-lives-here">Why the import path lives here</a><a href="#whats-in-it">What&#39;s in it</a>
       </nav>
       
     </aside>
@@ -87,26 +86,22 @@
     <article class="prose">
       
       <h1 id="the-go-module">The Go module</h1>
-<p>The reference implementation is a Go module published under a <strong>vanity import path</strong> on this
-domain:</p>
+<p>The reference implementation happens to be written in Go. If you're implementing DMCNP in
+something else, you want <a href="/spec">the spec</a> and <code>proto/</code> — not this page.</p>
 <pre><code>dmcn.dev/open-dmcn
 </code></pre>
 <pre><code class="language-bash">go get dmcn.dev/open-dmcn
 </code></pre>
 <pre><code class="language-go">import &quot;dmcn.dev/open-dmcn/dmcnpb&quot;
 </code></pre>
-<h2 id="why-an-import-path-on-this-domain">Why an import path on this domain<a class="hash" href="#why-an-import-path-on-this-domain" aria-label="Link to this section">#</a></h2>
-<p>An import path is a promise about where something lives, and hosting a promise on someone
-else's namespace makes it theirs to break. <code>github.com/&lt;account&gt;/open-dmcn</code> binds every
-consumer's source code to one account on one forge: moving the repository between accounts,
-transferring it to an organisation, or leaving GitHub entirely would invalidate every import
-line in every downstream project.</p>
-<p>Anchoring the path to <code>dmcn.dev</code> removes that coupling. This page serves the <code>go-import</code> meta
-tag that tells the Go toolchain where the source currently is, so relocating the repository
-is a one-line change here and a no-op everywhere else. The protocol's identity is the
-domain; the forge is an implementation detail.</p>
-<h2 id="what-is-in-it">What is in it<a class="hash" href="#what-is-in-it" aria-label="Link to this section">#</a></h2>
-<p>The module's public surface is deliberately narrow.</p>
+<h2 id="why-the-import-path-lives-here">Why the import path lives here<a class="hash" href="#why-the-import-path-lives-here" aria-label="Link to this section">#</a></h2>
+<p>An import path says where something lives, and putting that on someone else's namespace makes
+it theirs to break. <code>github.com/&lt;account&gt;/open-dmcn</code> ties every downstream project to one
+account on one host — move the repo, and every import line is wrong.</p>
+<p>Anchoring it to <code>dmcn.dev</code> fixes that. This page serves the <code>go-import</code> meta tag telling the
+Go toolchain where the source is right now, so moving the repository is a one-line change
+here and nothing anywhere else.</p>
+<h2 id="whats-in-it">What's in it<a class="hash" href="#whats-in-it" aria-label="Link to this section">#</a></h2>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -119,34 +114,30 @@ domain; the forge is an implementation detail.</p>
 <tr>
 <td><code>dmcnpb</code></td>
 <td>the compatibility contract</td>
-<td>generated protobuf types for <code>dmcn.identity</code>, <code>dmcn.message</code>, <code>dmcn.relay</code> and <code>dmcn.bridge</code></td>
+<td>generated types for <code>dmcn.identity</code>, <code>dmcn.message</code>, <code>dmcn.relay</code>, <code>dmcn.bridge</code></td>
 </tr>
 <tr>
 <td><code>internal/…</code></td>
-<td><strong>no API-stability promise</strong></td>
-<td>the reference implementation itself</td>
+<td><strong>no stability promise</strong></td>
+<td>how this implementation happens to work</td>
 </tr>
 <tr>
 <td><code>cmd/dmcnd</code></td>
 <td>binary</td>
-<td>the single-binary reference daemon</td>
+<td>the reference server</td>
 </tr>
 <tr>
 <td><code>cmd/dmcndcli</code></td>
 <td>binary</td>
-<td>the operator CLI</td>
+<td>its operator CLI</td>
 </tr>
 </tbody>
 </table></div>
-<p>The wire schema is what compatibility is measured against — not the Go API. <code>internal/</code>
-packages are visible in the repository so the implementation can be read alongside the
-<a href="/spec">specification</a>, but they are not importable and carry no stability guarantee.
-Breaking checks run at package level, and the proto package names are load-bearing for
-reflection-based consumers, so they never change.</p>
-<h2 id="documentation">Documentation<a class="hash" href="#documentation" aria-label="Link to this section">#</a></h2>
-<p>Package documentation is published on
-<a href="https://pkg.go.dev/dmcn.dev/open-dmcn">pkg.go.dev</a>, and the <code>go-source</code> meta tag on this
-page wires its source links back to the repository at the right revision.</p>
+<p>Compatibility is measured against the wire schema, not the Go API. The <code>internal/</code> packages
+are readable so you can check the implementation against the spec, but they aren't importable
+and they'll change without warning.</p>
+<p>Docs are on <a href="https://pkg.go.dev/dmcn.dev/open-dmcn">pkg.go.dev</a>, and the <code>go-source</code> meta tag on this page wires
+its source links back to the right revision.</p>
 
     </article>
   </div>
@@ -158,25 +149,26 @@ page wires its source links back to the repository at the right revision.</p>
   <div style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);display:flex;gap:clamp(32px,6vw,64px);flex-wrap:wrap;">
     <div style="flex:1;min-width:240px;">
       <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
-      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol — an open, end-to-end-encrypted mail protocol in which cryptographic identity replaces SMTP-style trust.</p>
+      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol. An open mail protocol where the address is a keypair, not a name a server vouches for.</p>
       <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
     </div>
     <div style="display:flex;flex-direction:column;gap:12px;">
       <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Protocol</div>
       <a href="/spec" style="font-size:14px;color:var(--text-body);text-decoration:none;">Specification</a>
-      <a href="/quickstart" style="font-size:14px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);text-decoration:none;">Try it</a>
       <a href="/faq" style="font-size:14px;color:var(--text-body);text-decoration:none;">FAQ</a>
       <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Go module</a>
     </div>
     <div style="display:flex;flex-direction:column;gap:12px;">
       <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Source</div>
+      <a href="https://github.com/dmcnp/open-dmcn/tree/main/proto" style="font-size:14px;color:var(--text-body);text-decoration:none;">Schema</a>
       <a href="https://github.com/dmcnp/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Repository</a>
       <a href="https://github.com/dmcnp/open-dmcn/releases" style="font-size:14px;color:var(--text-body);text-decoration:none;">Releases</a>
       <a href="https://github.com/dmcnp/open-dmcn/issues" style="font-size:14px;color:var(--text-body);text-decoration:none;">Issues</a>
       <a href="https://github.com/dmcnp/open-dmcn/blob/main/LICENSE" style="font-size:14px;color:var(--text-body);text-decoration:none;">License</a>
     </div>
     <div style="display:flex;flex-direction:column;gap:12px;">
-      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Run by DMCN</div>
+      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Built on DMCNP</div>
       <a href="https://get.dmcn.email" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
       <a href="https://get.dmcnmail.com" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
     </div>

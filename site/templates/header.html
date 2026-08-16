@@ -7,9 +7,8 @@
     </a>
     <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
       <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
-      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Quickstart</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
       <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
-      <a href="/{{ .Cfg.ModuleName }}" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Go module</a>
     </nav>
     <a data-desk href="{{ .Cfg.RepoURL }}" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub {{ icon "arrow-up-right" "font-size:13px;" }}</a>
     <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
@@ -18,7 +17,7 @@
       <summary aria-label="Menu">{{ icon "menu" "font-size:22px;" }}</summary>
       <div data-mm-panel>
         <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
-        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Quickstart</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
         <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
         <a href="/{{ .Cfg.ModuleName }}" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
         <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>

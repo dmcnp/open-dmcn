@@ -37,13 +37,13 @@ type layer struct {
 }
 
 var layers = []layer{
-	{"User identity", "An Ed25519 signing key plus an X25519 key-exchange key. The address is <code>local@domain</code>, and its self-certifying IdentityRecord is served by that domain's own fleet."},
-	{"Resolution", "DNS <code>_dmcn.&lt;domain&gt;</code> carries a fingerprint anchor and seed multiaddrs. Signed records are fetched from the domain's fleet over libp2p and verified against the anchor — no global directory to censor."},
-	{"Message model", "PlaintextMessage → SignedMessage → EncryptedEnvelope. A per-message AES-256-GCM content key, X25519-wrapped per recipient, split into a listable header and a body, padded to size-class buckets."},
-	{"Routing", "Operator-signed RelayHints name the relays holding a mailbox. Because they sit outside the owner's self-signature, an operator can re-point routing without the owner's key — and the address never changes."},
-	{"Relay service", "<code>/dmcn/relay/1.0.0</code> — store, fetch, mailbox operations, record resolution and publication, onion forwarding. Length-prefixed protobuf over libp2p streams."},
-	{"Trust & federation", "A credential PKI anchored in DNS. Each domain has a DomainAuthorityRecord delegating to issuers under a monotone grants calculus; peers exchange and verify credentials at <code>/dmcn/join</code>."},
-	{"Transport", "libp2p streams. Discovery is DNS-seeded — there is deliberately no DHT, because a resourced hostile majority in a global overlay could withhold records."},
+	{"User identity", "An Ed25519 signing key and an X25519 key-exchange key. The address is <code>local@domain</code>, and its record signs itself."},
+	{"Resolution", "A <code>_dmcn.&lt;domain&gt;</code> TXT record gives you a fingerprint to trust and a few nodes to dial. You fetch signed records from that domain's own nodes and check them against the fingerprint."},
+	{"Message model", "PlaintextMessage → SignedMessage → EncryptedEnvelope. One AES-256-GCM key per message, wrapped to each recipient over X25519. Header and body seal separately, and both get padded to fixed size classes."},
+	{"Routing", "RelayHints say which relays hold a mailbox. They sit outside the owner's signature, so an operator can move a mailbox without the owner's key — and the address never changes."},
+	{"Relay service", "<code>/dmcn/relay/1.0.0</code> — store, fetch, mailbox operations, record lookups, onion forwarding. Length-prefixed protobuf over libp2p."},
+	{"Trust &amp; federation", "Each domain has an authority record, anchored in DNS, that delegates to issuers. Peers swap and verify credentials at <code>/dmcn/join</code> before they federate."},
+	{"Transport", "libp2p streams. Discovery is DNS-seeded — no DHT, on purpose."},
 }
 
 // pageSpec declares one output page.
@@ -166,6 +166,7 @@ func expand(cfg SiteConfig, s string) string {
 		"{{repo-path}}", strings.TrimPrefix(cfg.RepoURL, "https://"),
 		"{{branch}}", cfg.Branch,
 		"{{module}}", cfg.ModulePath,
+		"{{module-docs}}", "https://pkg.go.dev/"+cfg.ModulePath,
 	).Replace(s)
 }
 
