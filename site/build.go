@@ -42,7 +42,8 @@ var layers = []layer{
 	{"Message model", "PlaintextMessage → SignedMessage → EncryptedEnvelope. One AES-256-GCM key per message, wrapped to each recipient over X25519. Header and body seal separately, and both get padded to fixed size classes."},
 	{"Routing", "RelayHints say which relays hold a mailbox. They sit outside the owner's signature, so an operator can move a mailbox without the owner's key — and the address never changes."},
 	{"Relay service", "<code>/dmcn/relay/1.0.0</code> — store, fetch, mailbox operations, record lookups, onion forwarding. Length-prefixed protobuf over libp2p."},
-	{"Trust &amp; federation", "Each domain has an authority record, anchored in DNS, that delegates to issuers. Peers swap and verify credentials at <code>/dmcn/join</code> before they federate."},
+	// Name is a plain string, so html/template escapes it — write literal "&", not "&amp;".
+	{"Trust & federation", "Each domain has an authority record, anchored in DNS, that delegates to issuers. Peers swap and verify credentials at <code>/dmcn/join</code> before they federate."},
 	{"Transport", "libp2p streams. Discovery is DNS-seeded — no DHT, on purpose."},
 }
 

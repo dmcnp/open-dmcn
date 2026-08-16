@@ -93,11 +93,14 @@ real users. Do read it alongside <a href="/spec">the spec</a> when the prose is 
 no Node step.</p>
 <pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
 
-DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob dmcnd
+DMCND_DEV=true dmcnd
 </code></pre>
-<p>Open <code>http://localhost:8443</code>, import one of the seeded keys, and send alice → bob. Dev mode
-serves plain HTTP on localhost — still a secure context, so Web Crypto works — and stubs the
-DNS anchoring, so you don't need real records to poke at it.</p>
+<p>Open <code>http://localhost:8443</code> and register an account. Dev mode serves plain HTTP on localhost
+— still a secure context, so Web Crypto works — and stubs the DNS anchoring, so you don't
+need real records to poke at it.</p>
+<p>To watch mail move between two accounts, register a second one in a private window: keys live
+in browser storage, so a separate profile is a separate account. Or just send to yourself —
+the round trip is the same.</p>
 <p>If <code>dmcnd</code> isn't found, <code>go install</code> put it in <code>$(go env GOPATH)/bin</code>, which isn't on your
 <code>PATH</code> yet.</p>
 <p>Want to read the code alongside <a href="/spec">the spec</a>? Clone it instead:</p>
@@ -106,10 +109,13 @@ go build -o bin/dmcnd ./cmd/dmcnd
 </code></pre>
 <h2 id="what-to-watch">What to watch<a class="hash" href="#what-to-watch" aria-label="Link to this section">#</a></h2>
 <p>The interesting part isn't the UI, it's what the server never sees.</p>
-<p>Keys are generated in the browser and stay there. Every operation is signed client-side. The
-server holds no private key for any account — not even an encrypted one — so a fetch is
-authorised by answering a 32-byte challenge with a signature, not by presenting a password
-the server could store.</p>
+<p>Your keys are generated in the browser and stay there. The browser self-signs its identity
+record, and only the signed <em>public</em> record reaches the server. Every operation is signed
+client-side, so a fetch is authorised by answering a 32-byte challenge with a signature — not
+by presenting a password the server could store.</p>
+<p>The daemon holds no account private key. Not an encrypted one, not a recoverable one, none.
+The only keys it mints are the domain's own — the root key behind its authority record, and
+the SMTP bridge's identity if you turn the bridge on. Neither can read anyone's mail.</p>
 <p>Put a proxy in front of it and watch the traffic: sealed envelopes, padded to fixed size
 classes, and a header you can list without touching a body.</p>
 <h2 id="point-a-real-domain-at-it">Point a real domain at it<a class="hash" href="#point-a-real-domain-at-it" aria-label="Link to this section">#</a></h2>
@@ -164,11 +170,6 @@ the resolver checks it before DNS, so you can exercise the whole path offline.</
 <td>peers to bootstrap from</td>
 </tr>
 <tr>
-<td><code>DMCND_SEED_IDENTITIES</code></td>
-<td>—</td>
-<td><strong>dev only</strong>: accounts to mint at boot</td>
-</tr>
-<tr>
 <td><code>DMCND_BRIDGE_ENABLED</code></td>
 <td><code>false</code></td>
 <td>turn on the SMTP bridge</td>
@@ -180,7 +181,7 @@ the <a href="https://github.com/dmcnp/open-dmcn#configuration-dmcnd_-environment
 <p>Note the federation default: <strong>deny</strong>. Outside dev mode a node admits no peers until you
 either allowlist them or hand them a valid credential.</p>
 <h2 id="the-smtp-bridge">The SMTP bridge<a class="hash" href="#the-smtp-bridge" aria-label="Link to this section">#</a></h2>
-<pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true ./bin/dmcnd
+<pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true dmcnd
 </code></pre>
 <p>Inbound legacy mail gets checked with SPF/DKIM/DMARC at the bridge, and the verdict travels
 as a signed attachment <em>inside</em> the sealed envelope. So the recipient's client verifies the

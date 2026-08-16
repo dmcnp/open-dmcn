@@ -18,9 +18,13 @@ libp2p protocols and a generic, signature-covered extension surface — see SPEC
 `cmd/dmcnd` is the reference implementation of the whole core protocol as **one process
 for one domain** — where the product splits into a relay fleet, a separate stateless web
 client, a provider funnel and a bridge, `dmcnd` folds the serving node, the webmail, the
-SMTP bridge and the onion transport into a single self-hostable binary. It stays
-**zero-knowledge**: the browser holds the keys and signs every operation; the server holds
-no user private key, not even encrypted.
+SMTP bridge and the onion transport into a single self-hostable binary.
+
+It is **zero-knowledge**: the browser generates the keypair, self-signs its identity record
+and signs every operation, and only the signed *public* record ever reaches the server. The
+daemon holds no account private key — not even an encrypted one. The only keys it mints are
+the domain's own: the root key behind its authority record, and the SMTP bridge's identity
+when the bridge is enabled.
 
 What it is:
 
@@ -42,10 +46,10 @@ The quickest way in — no clone, no Node, because the SPA is embedded in the bi
 go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
 go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest   # operator CLI
 
-# Dev: plain HTTP on localhost (a secure context for Web Crypto), DNS anchoring stubbed,
-# and two throwaway accounts seeded so you can log in immediately.
-DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob dmcnd
-# → open https://localhost:8443 (http in dev), import the seeded keys, send alice→bob.
+# Dev: plain HTTP on localhost (a secure context for Web Crypto) and DNS anchoring stubbed,
+# so a throwaway domain works without publishing real records.
+DMCND_DEV=true dmcnd
+# → open https://localhost:8443 (http in dev) and register an account at /register.
 ```
 
 From a clone:
@@ -76,8 +80,7 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_ALLOWED_PEERS` | `*` in dev, else deny | libp2p federation allow-set (`*` = open) |
 | `DMCND_STATIC_DNS` | — | static `_dmcn` pins for peer domains (DNS-free federation / seed-pin) |
 | `DMCND_POLL_INTERVAL` | `10s` | webmail mailbox poll cadence |
-| `DMCND_SEED_IDENTITIES` | — | **dev only**: comma-separated local-parts to mint + persist |
-| `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the seed keystore |
+| `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the keystore holding the domain root + bridge keys |
 | `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge |
 | `DMCND_BRIDGE_SMTP_LISTEN` | `:2525` | bridge SMTP listen address |
 | `DMCND_BRIDGE_ADDRESS` | `bridge@<domain>` | the bridge's own DMCN address |

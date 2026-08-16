@@ -90,22 +90,15 @@ func main() {
 	defer n.Close()
 	log.Infof("node up: peer ID %s, serving domain %s", n.PeerID(), cfg.domain)
 
-	// Seed the domain (root key + DAR + static _dmcn anchor) and any dev-seeded identities.
+	// Seed the domain: root key + DAR + the static _dmcn anchor pointing the resolver here.
+	// ONLY the domain's own operator keys are minted here. Accounts are created in the
+	// browser at /register, which generates the keypair client-side and sends only the
+	// signed public record — so the daemon never holds an account private key.
 	seeds := newSeedStore(cfg.dataDir, cfg.seedPassphrase)
 	now := time.Now()
 	rootKP, err := seeds.seedDomain(ctx, n, cfg.domain, now)
 	if err != nil {
 		fatalf("seed domain %s: %v", cfg.domain, err)
-	}
-	for _, local := range cfg.seedIdentities {
-		addr := local + "@" + cfg.domain
-		if _, err := seeds.seedIdentity(ctx, n, rootKP, addr, now); err != nil {
-			fatalf("seed identity %s: %v", addr, err)
-		}
-	}
-	if len(cfg.seedIdentities) > 0 {
-		log.Warnf("dev-seeded %d identities into %s — import their keys to log in; not for production",
-			len(cfg.seedIdentities), filepath.Join(cfg.dataDir, "seed-keystore.json"))
 	}
 
 	// Optional SMTP bridge, folded onto the shared node. The daemon provisions the bridge's DMCN
@@ -260,7 +253,6 @@ type config struct {
 	pollInterval    time.Duration
 	peers           []string
 	allowedPeers    []string
-	seedIdentities  []string
 	seedPassphrase  string
 
 	// SMTP bridge (opt-in). When enabled, the daemon folds an SMTP↔DMCN bridge onto its shared
@@ -285,7 +277,6 @@ func loadConfig() config {
 		devMode:          devMode,
 		peers:            splitList(os.Getenv("DMCND_PEERS")),
 		allowedPeers:     splitList(os.Getenv("DMCND_ALLOWED_PEERS")),
-		seedIdentities:   splitList(os.Getenv("DMCND_SEED_IDENTITIES")),
 		seedPassphrase:   envOr("DMCND_SEED_PASSPHRASE", "dmcnd-dev-seed"),
 		bridgeEnabled:    envBool("DMCND_BRIDGE_ENABLED"),
 		bridgeSMTPListen: envOr("DMCND_BRIDGE_SMTP_LISTEN", ":2525"),

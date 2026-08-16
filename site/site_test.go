@@ -207,6 +207,38 @@ func TestNoThirdPartySubresources(t *testing.T) {
 	}
 }
 
+// TestNoDoubleEscaping catches text that was HTML-escaped by hand and then escaped
+// again by html/template — "&amp;" authored in a plain string field renders to the
+// reader as a literal "&amp;". It is an easy mistake to make twice, because the Go
+// source looks like correct HTML.
+//
+// The fix is always the same: plain string fields take literal characters ("&", "<");
+// only template.HTML fields take markup.
+func TestNoDoubleEscaping(t *testing.T) {
+	out, _ := buildInto(t)
+
+	err := filepath.Walk(out, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || filepath.Ext(path) != ".html" {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(out, path)
+		for _, bad := range []string{"&amp;amp;", "&amp;lt;", "&amp;gt;", "&amp;quot;", "&amp;#39;"} {
+			if strings.Contains(string(b), bad) {
+				t.Errorf("%s contains %q — a pre-escaped entity got escaped again; "+
+					"use the literal character in plain string fields", rel, bad)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestOutputGuard makes sure the generator refuses to clobber a directory that
 // is not its own output — `-out` is a flag, and a typo should not be fatal.
 func TestOutputGuard(t *testing.T) {

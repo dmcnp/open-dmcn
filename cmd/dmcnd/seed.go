@@ -14,15 +14,16 @@ import (
 )
 
 // seed.go bootstraps a single self-hosted domain for the reference daemon: a stable domain
-// root key, its signed DAR, a static _dmcn anchor pointing the resolver at this node, and
-// (optionally, for dev) a set of pre-provisioned identities.
+// root key, its signed DAR, and a static _dmcn anchor pointing the resolver at this node.
 //
-// Real provisioning — a browser generates the keys, an admin UI registers the record — is a
-// later phase. This seed exists so a fresh daemon serves mail for its domain out of the box
-// and so the reference implementation is exercisable end-to-end. It is the ONLY place the
-// daemon touches user private keys: they are minted here, self-sign their record, and are
-// persisted (encrypted) purely so a human can import them into a browser; serving auth is the
-// browser's per-op nonce signature, so the daemon never needs them at rest to run.
+// The keys minted here are the DOMAIN's, not anybody's account: the root key that signs the
+// domain authority record, and — when the SMTP bridge is enabled — the bridge's own identity.
+// Both are infrastructure the operator legitimately holds.
+//
+// Accounts are NOT created here. A browser generates its own keypair at /register, self-signs
+// its identity record, and sends only the signed public record; the daemon attaches a routing
+// credential and publishes it. Serving auth is the browser's per-operation nonce signature, so
+// the daemon never needs an account private key at rest — and never has one.
 
 // seedStore holds the domain root key and any dev-seeded identity keys, encrypted at rest.
 type seedStore struct{ ks *keystore.Keystore }
@@ -100,7 +101,13 @@ func (s *seedStore) seedDomain(ctx context.Context, n *node.Node, domain string,
 
 // seedIdentity load-or-creates the keypair for address, self-signs its record, attaches an
 // operator routing credential (RelayHints = this node, signed by the domain root), and
-// publishes it. The returned keypair is the one a browser would import to log in as address.
+// publishes it.
+//
+// TEST-ONLY. It mints an account keypair server-side, which is exactly what the daemon does
+// not do in normal operation — accounts come from the browser at /register. It survives here
+// because the end-to-end tests need to stand up two accounts without driving a browser. Do
+// not wire it to a flag, an env var or a CLI command: that would put account private keys
+// back on the server and make the daemon's zero-knowledge claim untrue again.
 func (s *seedStore) seedIdentity(ctx context.Context, n *node.Node, rootKP *identity.IdentityKeyPair, address string, at time.Time) (*identity.IdentityKeyPair, error) {
 	kp, created, err := s.loadOrCreate(address)
 	if err != nil {

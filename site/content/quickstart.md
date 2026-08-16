@@ -21,12 +21,16 @@ no Node step.
 ```bash
 go install {{module}}/cmd/dmcnd@latest
 
-DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob dmcnd
+DMCND_DEV=true dmcnd
 ```
 
-Open `http://localhost:8443`, import one of the seeded keys, and send alice → bob. Dev mode
-serves plain HTTP on localhost — still a secure context, so Web Crypto works — and stubs the
-DNS anchoring, so you don't need real records to poke at it.
+Open `http://localhost:8443` and register an account. Dev mode serves plain HTTP on localhost
+— still a secure context, so Web Crypto works — and stubs the DNS anchoring, so you don't
+need real records to poke at it.
+
+To watch mail move between two accounts, register a second one in a private window: keys live
+in browser storage, so a separate profile is a separate account. Or just send to yourself —
+the round trip is the same.
 
 If `dmcnd` isn't found, `go install` put it in `$(go env GOPATH)/bin`, which isn't on your
 `PATH` yet.
@@ -42,10 +46,14 @@ go build -o bin/dmcnd ./cmd/dmcnd
 
 The interesting part isn't the UI, it's what the server never sees.
 
-Keys are generated in the browser and stay there. Every operation is signed client-side. The
-server holds no private key for any account — not even an encrypted one — so a fetch is
-authorised by answering a 32-byte challenge with a signature, not by presenting a password
-the server could store.
+Your keys are generated in the browser and stay there. The browser self-signs its identity
+record, and only the signed *public* record reaches the server. Every operation is signed
+client-side, so a fetch is authorised by answering a 32-byte challenge with a signature — not
+by presenting a password the server could store.
+
+The daemon holds no account private key. Not an encrypted one, not a recoverable one, none.
+The only keys it mints are the domain's own — the root key behind its authority record, and
+the SMTP bridge's identity if you turn the bridge on. Neither can read anyone's mail.
 
 Put a proxy in front of it and watch the traffic: sealed envelopes, padded to fixed size
 classes, and a header you can list without touching a body.
@@ -85,7 +93,6 @@ Everything is environment-driven. These are the ones you'll actually touch:
 | `DMCND_DATA_DIR` | `data` | mailboxes, records, keys |
 | `DMCND_DEV` | `false` | plain HTTP on localhost, stubbed DNS anchoring |
 | `DMCND_PEERS` | — | peers to bootstrap from |
-| `DMCND_SEED_IDENTITIES` | — | **dev only**: accounts to mint at boot |
 | `DMCND_BRIDGE_ENABLED` | `false` | turn on the SMTP bridge |
 
 The full list — TLS, libp2p listen addresses, federation allow-sets, bridge options — is in
@@ -97,7 +104,7 @@ either allowlist them or hand them a valid credential.
 ## The SMTP bridge
 
 ```bash
-DMCND_BRIDGE_ENABLED=true ./bin/dmcnd
+DMCND_BRIDGE_ENABLED=true dmcnd
 ```
 
 Inbound legacy mail gets checked with SPF/DKIM/DMARC at the bridge, and the verdict travels
