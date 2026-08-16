@@ -204,6 +204,6 @@ You are free to implement the protocol under any name of your own. Describing an
 implementation or service as speaking the "DMCN Protocol" (or "DMCNP", or confusingly
 similar) requires that it genuinely conform to the protocol specified here; describing
 it as part of "DMCN" additionally means it actually interoperates with the network.
-Names implying endorsement by or affiliation with the DMCN project require permission.
+Names implying endorsement by or affiliation with DMCN LLC require permission.
 This keeps both names meaning what users think they mean: DMCNP is the protocol, and
 DMCN is the network of things that truly speak it.
