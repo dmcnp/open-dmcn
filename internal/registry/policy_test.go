@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestAddressUsablePolicy exercises the relay FETCH-path validity gate: on a

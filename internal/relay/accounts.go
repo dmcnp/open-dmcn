@@ -8,7 +8,7 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	dsquery "github.com/ipfs/go-datastore/query"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 // accountPrefix namespaces the node's account list in the datastore.

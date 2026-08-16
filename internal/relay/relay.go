@@ -19,13 +19,13 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/mailfilter"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/peerpolicy"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
-	"github.com/mertenvg/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/mailfilter"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/peerpolicy"
+	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // Clients (the web backend, the CLI commands) and server nodes deliberately

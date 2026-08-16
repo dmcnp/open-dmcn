@@ -9,11 +9,11 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // TestFederation proves the reference daemon federates across domains — the protocol's whole point.

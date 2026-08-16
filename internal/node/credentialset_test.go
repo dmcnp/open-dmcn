@@ -3,7 +3,7 @@ package node
 import (
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestCredentialSetRolesAndGrants verifies the credentialSet keeps the whole credential per

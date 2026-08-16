@@ -12,7 +12,7 @@ import (
 
 	"github.com/emersion/go-smtp"
 
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // plainMsg builds a minimal text/plain DMCN message for SMTPSender.Deliver tests.

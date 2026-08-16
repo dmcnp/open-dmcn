@@ -7,8 +7,8 @@ import (
 
 	ds "github.com/ipfs/go-datastore"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // accessPrefix namespaces the node's per-account ACCESS assertions in the datastore, keyed by

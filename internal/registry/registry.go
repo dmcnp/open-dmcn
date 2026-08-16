@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // DNSVerifier checks that _dmcn.<domain> publishes a verification record carrying

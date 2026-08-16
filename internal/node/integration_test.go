@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
-	"github.com/mertenvg/open-dmcn/internal/relay"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // TestEndToEndAliceBob is the PRD-mandated end-to-end integration test.

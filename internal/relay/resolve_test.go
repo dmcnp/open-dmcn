@@ -8,8 +8,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 func newRecords(t *testing.T) *RecordStore {

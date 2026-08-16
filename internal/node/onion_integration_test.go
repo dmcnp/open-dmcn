@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // TestSendOnionDeliversToMailbox is the B3 proof-of-concept on real nodes: a

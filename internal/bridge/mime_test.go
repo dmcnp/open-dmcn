@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 var fixedTime = time.Unix(1_700_000_000, 0).UTC()

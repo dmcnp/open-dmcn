@@ -7,8 +7,8 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // IdentityHandler handles DHT identity lookup requests.

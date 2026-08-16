@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dmcn.identity;
 
-option go_package = "github.com/mertenvg/open-dmcn/dmcnpb;dmcnpb";
+option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
 
 // VerificationTier represents the level of identity verification.
 // See whitepaper Section 15.2.2.

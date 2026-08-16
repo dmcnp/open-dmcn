@@ -6,8 +6,8 @@ import (
 	leveldbds "github.com/ipfs/go-ds-leveldb"
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // testEnvelope builds a real encrypted envelope for a fresh recipient.

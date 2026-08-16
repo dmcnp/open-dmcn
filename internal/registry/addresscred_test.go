@@ -6,7 +6,7 @@ import (
 	"time"
 
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestAddressCredentialManagedIdentity exercises the S3 address-credential path: a user

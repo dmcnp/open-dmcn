@@ -8,9 +8,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // LoadStaticDNS reads a static _dmcn config file — a JSON object mapping domain →

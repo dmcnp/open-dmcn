@@ -9,7 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	multiaddr "github.com/multiformats/go-multiaddr"
 
-	"github.com/mertenvg/open-dmcn/internal/peerpolicy"
+	"dmcn.dev/open-dmcn/internal/peerpolicy"
 )
 
 type fixedReader []byte

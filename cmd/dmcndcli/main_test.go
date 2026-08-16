@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/keystore"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/keystore"
 )
 
 func TestDmcnTXT(t *testing.T) {

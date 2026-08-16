@@ -9,7 +9,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestRelayCredentialValidAcceptsFleetCred guards the placement fix: a relay advertising an

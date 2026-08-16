@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
-	"github.com/mertenvg/open-dmcn/internal/relay"
-	webapi "github.com/mertenvg/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/relay"
+	webapi "dmcn.dev/open-dmcn/internal/web/api"
 )
 
 // relayadapter.go bridges the webmail backend to the daemon's OWN node, in-process. The

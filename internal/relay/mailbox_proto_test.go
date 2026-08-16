@@ -8,10 +8,10 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
-	"github.com/mertenvg/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // TestMailboxProtocolEndToEnd exercises the durable mailbox over real libp2p

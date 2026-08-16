@@ -13,8 +13,8 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/web/api"
 )
 
 // signedRecordB64 builds a browser-equivalent self-signed IdentityRecord and returns its keypair

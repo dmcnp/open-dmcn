@@ -14,8 +14,8 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/encoding/protodelim"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // JoinProtocol is the credential-presentation handshake (Credential PKI). On connect, a

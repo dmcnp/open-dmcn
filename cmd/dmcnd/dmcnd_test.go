@@ -9,10 +9,10 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // TestDaemonInProcessRoundTrip exercises the daemon's in-process wiring end-to-end without a

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // credNode starts a credential-mode node: it loads/creates a libp2p identity key, issues

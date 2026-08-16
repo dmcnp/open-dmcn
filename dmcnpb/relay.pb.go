@@ -3275,7 +3275,7 @@ const file_relay_proto_rawDesc = "" +
 	"\x0fRECORD_KIND_DAR\x10\x02\x12\x16\n" +
 	"\x12RECORD_KIND_ROSTER\x10\x03\x12\x17\n" +
 	"\x13RECORD_KIND_REMOVAL\x10\x04\x12\x19\n" +
-	"\x15RECORD_KIND_BLOCKLIST\x10\x05B-Z+github.com/mertenvg/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
+	"\x15RECORD_KIND_BLOCKLIST\x10\x05B\"Z dmcn.dev/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
 
 var (
 	file_relay_proto_rawDescOnce sync.Once

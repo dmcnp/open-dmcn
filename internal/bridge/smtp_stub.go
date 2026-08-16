@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // DeliveredMessage records a message captured by StubSMTPDeliverer.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 func TestPayloadPaddingRoundTripAtBoundaries(t *testing.T) {

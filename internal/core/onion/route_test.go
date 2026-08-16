@@ -3,7 +3,7 @@ package onion
 import (
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 func desc(peerID, ip string) identity.RelayDescriptor {

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // memSource is an in-memory RecordSource for tests: the DHT is gone, so verification reads its

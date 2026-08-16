@@ -12,8 +12,8 @@ import (
 	_ "github.com/emersion/go-message/charset" // register common charsets for inbound decoding
 	"github.com/emersion/go-message/mail"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // This file maps between DMCN's PlaintextMessage model and RFC 5322 MIME so the bridge preserves

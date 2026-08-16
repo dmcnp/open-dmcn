@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
 )
 
 // QuotaAttr is the Credential.Attributes key holding an account's personal-storage

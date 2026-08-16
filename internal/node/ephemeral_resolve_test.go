@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/pairing"
-	"github.com/mertenvg/open-dmcn/internal/node"
-	"github.com/mertenvg/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/core/pairing"
+	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // TestResolveEphemeralNoDNS verifies that a throwaway device-pairing record on the synthetic

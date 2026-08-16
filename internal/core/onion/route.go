@@ -8,7 +8,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // DefaultHops is the fixed onion route length (see whitepaper §15.4): entry knows

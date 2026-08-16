@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // CredentialBlock is one timestamped, root-signed revocation entry for a key. A block

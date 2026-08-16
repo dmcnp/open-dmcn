@@ -6,7 +6,7 @@ import (
 	"time"
 
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // RequiresOnion is the effective policy: the mailbox's own flag OR its domain's

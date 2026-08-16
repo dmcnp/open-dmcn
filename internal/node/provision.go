@@ -7,8 +7,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // NOTE (open-dmcn reference implementation): the remote node-provisioning protocol

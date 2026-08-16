@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/webcore"
+	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
 // --- Context ---

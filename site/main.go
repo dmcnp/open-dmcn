@@ -52,7 +52,7 @@ const (
 	//
 	// Flip it to true in the same commit that changes ../go.mod. TestVanityPath
 	// fails if the two ever disagree in either direction.
-	vanityActive = false
+	vanityActive = true
 
 	// The two DMCN-operated services the footer points at. dmcn.dev is the
 	// protocol; these are one operator's products built on it.

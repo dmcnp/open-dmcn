@@ -15,10 +15,10 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/registry"
-	"github.com/mertenvg/open-dmcn/internal/webcore"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
 // AuthHandler handles login, logout, and identity import. It keeps NO user

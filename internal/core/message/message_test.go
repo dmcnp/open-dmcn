@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"google.golang.org/protobuf/proto"
 )
 

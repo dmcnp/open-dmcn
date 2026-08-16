@@ -9,9 +9,9 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // Record-store datastore prefixes. These hold the self-authenticating records a fleet node

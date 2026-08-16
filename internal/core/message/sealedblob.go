@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 // SealedBlob is arbitrary plaintext encrypted under a random CEK (AES-256-GCM),

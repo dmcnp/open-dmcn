@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/bridge"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/bridge"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // msgWithReceived builds a raw message carrying n Received header fields.

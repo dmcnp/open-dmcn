@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
 )
 
 // AccessModeAttr is the Credential.Attributes key on a RoleAccess credential naming which

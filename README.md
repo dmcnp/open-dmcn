@@ -112,7 +112,7 @@ proto/
   message.proto    dmcn.message  — the three-layer message model + encrypted envelope
   relay.proto      dmcn.relay    — the /dmcn/relay/1.0.0 wire protocol (mail interop)
   bridge.proto     dmcn.bridge   — OPTIONAL capability: SMTP-bridge attestation payloads
-dmcnpb/            generated Go (committed; import github.com/mertenvg/open-dmcn/dmcnpb)
+dmcnpb/            generated Go (committed; import dmcn.dev/open-dmcn/dmcnpb)
 SPEC.md            the protocol reference (a snapshot of the reference implementation)
 PORTING.md         provenance + deltas vs the upstream product core
 site/              dmcn.dev source: markdown content, templates, design system,

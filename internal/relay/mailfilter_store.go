@@ -8,7 +8,7 @@ import (
 
 	ds "github.com/ipfs/go-datastore"
 
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // mailFilterPrefix namespaces recipient filter blobs in the datastore, keyed by

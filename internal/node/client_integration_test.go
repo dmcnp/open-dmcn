@@ -7,8 +7,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // TestClientOnlyNode verifies a client-only node: it can register and look up

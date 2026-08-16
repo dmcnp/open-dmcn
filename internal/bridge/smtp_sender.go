@@ -14,7 +14,7 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // defaultSMTPPort is the well-known inter-MTA SMTP port.

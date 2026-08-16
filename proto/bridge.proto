@@ -4,7 +4,7 @@ package dmcn.bridge;
 
 import "identity.proto";
 
-option go_package = "github.com/mertenvg/open-dmcn/dmcnpb;dmcnpb";
+option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
 
 // BridgeTrustTier represents the trust classification assigned to an
 // inbound legacy email message by the bridge node.

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"google.golang.org/protobuf/proto"
 )
 

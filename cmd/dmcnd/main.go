@@ -24,14 +24,14 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/bridge"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
-	"github.com/mertenvg/open-dmcn/internal/p2plog"
-	webapi "github.com/mertenvg/open-dmcn/internal/web/api"
-	"github.com/mertenvg/open-dmcn/internal/web/server"
-	"github.com/mertenvg/open-dmcn/internal/webcore"
+	"dmcn.dev/open-dmcn/internal/bridge"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/p2plog"
+	webapi "dmcn.dev/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/web/server"
+	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
 //go:embed web/dist

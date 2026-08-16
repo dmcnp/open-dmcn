@@ -14,8 +14,8 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
-	"github.com/mertenvg/open-dmcn/internal/webcore"
+	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
 // NOTE (open-dmcn reference implementation): the mail-filter and personal-KV ops

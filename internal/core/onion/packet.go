@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // DeliverHop is the sentinel next_hop value at the innermost layer, telling the

@@ -7,7 +7,7 @@ import (
 	"time"
 
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestAddressReserved checks the web registration gate resolver: true only when the address's

@@ -8,9 +8,9 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/node"
-	webapi "github.com/mertenvg/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/node"
+	webapi "dmcn.dev/open-dmcn/internal/web/api"
 )
 
 // TestSelfRegistration exercises the operator-side registration path (provisionIdentity): a

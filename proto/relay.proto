@@ -4,7 +4,7 @@ package dmcn.relay;
 
 import "message.proto";
 
-option go_package = "github.com/mertenvg/open-dmcn/dmcnpb;dmcnpb";
+option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
 
 // RelayRequest is the top-level request wrapper for relay protocol operations.
 // Sent over libp2p streams using length-prefixed protobuf encoding.

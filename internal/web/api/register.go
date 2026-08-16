@@ -10,7 +10,7 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // register.go is the reference daemon's self-service registration. In the DMCN PRODUCT this

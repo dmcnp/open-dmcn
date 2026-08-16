@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/node"
-	webapi "github.com/mertenvg/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/node"
+	webapi "dmcn.dev/open-dmcn/internal/web/api"
 )
 
 // provisionIdentity is the operator-side half of self-service registration: given a verified,

@@ -3,7 +3,7 @@ package bridge
 import (
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 func TestClassificationRecordSignVerify(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/bridge"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/bridge"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // newOutboundAuthz builds an outbound handler with explicit relay-authorization

@@ -8,7 +8,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/multiformats/go-multihash"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 // ErrBodyAddressMismatch means a decrypted body does not match the content

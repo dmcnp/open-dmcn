@@ -6,7 +6,7 @@ import (
 	"time"
 
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestRoutingCredentialManagedIdentity exercises the operator-owned routing path: a record

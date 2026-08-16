@@ -19,9 +19,9 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/keystore"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/keystore"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 func main() {

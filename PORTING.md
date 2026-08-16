@@ -1,7 +1,7 @@
 # Porting notes — open-dmcn core ← dmcn (product)
 
 open-dmcn's `internal/` core is a **copy** of the DMCN product's core Go, stripped of
-product/operator surfaces and retargeted onto `github.com/mertenvg/open-dmcn`. The two
+product/operator surfaces and retargeted onto `dmcn.dev/open-dmcn`. The two
 codebases evolve independently; **wire compatibility is guaranteed by the shared proto**
 (`open-dmcn/proto` ↔ the product's `proto/core`, both generating `dmcnpb`), not by shared
 Go code.
@@ -18,7 +18,7 @@ Go code.
 
 - **Ported from:** `github.com/mertenvg/dmcn` @ `ca1be4793e8c2b9eb73f2bdb354c189052866981`
 - **Mechanical retarget (whole tree):** `github.com/mertenvg/dmcn/internal/...` →
-  `github.com/mertenvg/open-dmcn/internal/...`; every `.../internal/proto/dmcnextpb` import
+  `dmcn.dev/open-dmcn/internal/...`; every `.../internal/proto/dmcnextpb` import
   **removed** (those symbols do not exist here); `open-dmcn/dmcnpb` unchanged.
 
 ## Copied as-is (retarget only)

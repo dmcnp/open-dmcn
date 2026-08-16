@@ -24,13 +24,13 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"github.com/multiformats/go-multiaddr"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/keystore"
-	"github.com/mertenvg/open-dmcn/internal/peerpolicy"
-	"github.com/mertenvg/open-dmcn/internal/registry"
-	"github.com/mertenvg/open-dmcn/internal/relay"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/keystore"
+	"dmcn.dev/open-dmcn/internal/peerpolicy"
+	"dmcn.dev/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // Config holds configuration for a DMCN node.

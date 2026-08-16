@@ -10,10 +10,10 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/mertenvg/open-dmcn/internal/core/domainverify"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/pairing"
-	"github.com/mertenvg/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/pairing"
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // ErrNotFound is returned when an address has no record on its authoritative fleet. It aliases

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 // TestBodyContentAddressLayout pins the on-wire content address for a fixed blob:

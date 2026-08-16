@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // TestParityGolden pins the canonical wire encoding of the signed split-message

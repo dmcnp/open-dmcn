@@ -1,4 +1,4 @@
-module github.com/mertenvg/open-dmcn
+module dmcn.dev/open-dmcn
 
 go 1.25.0
 

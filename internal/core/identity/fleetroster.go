@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // FleetNode is one node/relay in a fleet roster: its peer ID, dial addresses, and

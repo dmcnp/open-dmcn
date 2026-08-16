@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"google.golang.org/protobuf/proto"
 )
 

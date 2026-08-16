@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	corecrypto "github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/relay"
+	corecrypto "dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // IssuerKeyPair returns an identity.IdentityKeyPair backed by the node's single libp2p

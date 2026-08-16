@@ -17,8 +17,8 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"golang.org/x/crypto/acme/autocert"
 
-	"github.com/mertenvg/open-dmcn/internal/web/api"
-	"github.com/mertenvg/open-dmcn/internal/webcore"
+	"dmcn.dev/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
 // FrontendConfig holds non-secret, deploy-specific values rendered into the SPA

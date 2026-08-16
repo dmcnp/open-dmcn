@@ -6,7 +6,7 @@ import (
 	"time"
 
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestVerifyRouting exercises the sender-side routing-integrity gate. On a domain with a DAR,

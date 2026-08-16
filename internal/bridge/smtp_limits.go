@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mertenvg/open-dmcn/internal/relay"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // Default inbound abuse-control limits. All are per the bridge's own SMTP

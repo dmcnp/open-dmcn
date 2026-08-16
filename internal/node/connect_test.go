@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // TestConnectPeerSelfIsNoOp verifies that dialing this node's own multiaddr — e.g. a

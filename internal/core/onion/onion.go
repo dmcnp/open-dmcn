@@ -8,7 +8,7 @@ package onion
 import (
 	"fmt"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
 // layerHKDFInfo domain-separates onion-layer key derivation from every other

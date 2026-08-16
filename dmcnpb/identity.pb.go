@@ -2048,7 +2048,7 @@ const file_identity_proto_rawDesc = "" +
 	"\x1aATTESTATION_TYPE_IN_PERSON\x10\x01\x12 \n" +
 	"\x1cATTESTATION_TYPE_FINGERPRINT\x10\x02\x12\x1c\n" +
 	"\x18ATTESTATION_TYPE_NETWORK\x10\x03\x12#\n" +
-	"\x1fATTESTATION_TYPE_ORGANISATIONAL\x10\x04B-Z+github.com/mertenvg/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
+	"\x1fATTESTATION_TYPE_ORGANISATIONAL\x10\x04B\"Z dmcn.dev/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
 
 var (
 	file_identity_proto_rawDescOnce sync.Once

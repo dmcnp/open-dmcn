@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mertenvg/open-dmcn/internal/bridge"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/bridge"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // capturingAudit collects events in memory.

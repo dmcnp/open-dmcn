@@ -11,7 +11,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 func TestLoadOrCreateIdentityKeyCreateAndReload(t *testing.T) {

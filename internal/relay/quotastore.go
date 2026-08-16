@@ -7,8 +7,8 @@ import (
 
 	ds "github.com/ipfs/go-datastore"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // quotaPrefix namespaces the node's per-owner quota grants in the datastore, keyed by

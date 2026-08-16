@@ -8,11 +8,11 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/mertenvg/open-dmcn/internal/core/crypto"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/peerpolicy"
-	"github.com/mertenvg/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/peerpolicy"
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // TestStoreRejectsUnvouchedSender verifies the STORE sender-authority gate (P4): the sender

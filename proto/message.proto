@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dmcn.message;
 
-option go_package = "github.com/mertenvg/open-dmcn/dmcnpb;dmcnpb";
+option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
 
 // MessageBody holds the content of a message.
 // See whitepaper Section 15.3.1.

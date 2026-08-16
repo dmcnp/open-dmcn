@@ -1049,7 +1049,7 @@ const file_message_proto_rawDesc = "" +
 	"body_nonce\x18\x0f \x01(\fR\tbodyNonce\x12\x19\n" +
 	"\bbody_tag\x18\x10 \x01(\fR\abodyTag\x12&\n" +
 	"\x0fbody_size_class\x18\x11 \x01(\rR\rbodySizeClass\x120\n" +
-	"\x14body_content_address\x18\x12 \x01(\fR\x12bodyContentAddressB-Z+github.com/mertenvg/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
+	"\x14body_content_address\x18\x12 \x01(\fR\x12bodyContentAddressB\"Z dmcn.dev/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
 
 var (
 	file_message_proto_rawDescOnce sync.Once

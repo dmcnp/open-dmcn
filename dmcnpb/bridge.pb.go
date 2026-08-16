@@ -528,7 +528,7 @@ const file_bridge_proto_rawDesc = "" +
 	"\vDMARCResult\x12\x1c\n" +
 	"\x18DMARC_RESULT_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11DMARC_RESULT_PASS\x10\x01\x12\x15\n" +
-	"\x11DMARC_RESULT_FAIL\x10\x02B-Z+github.com/mertenvg/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
+	"\x11DMARC_RESULT_FAIL\x10\x02B\"Z dmcn.dev/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
 
 var (
 	file_bridge_proto_rawDescOnce sync.Once

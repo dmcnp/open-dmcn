@@ -8,8 +8,8 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"github.com/mertenvg/open-dmcn/internal/bridge"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/bridge"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // TestBridgeFold proves the P4 fold: the SMTP bridge shares the daemon's node, and an inbound

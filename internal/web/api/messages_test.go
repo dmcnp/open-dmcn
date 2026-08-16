@@ -13,10 +13,10 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/mertenvg/open-dmcn/internal/web/api"
-	"github.com/mertenvg/open-dmcn/internal/webcore"
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/webcore"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // fakeRelayRouter records which delivery path HandleSend took (direct STORE vs onion).

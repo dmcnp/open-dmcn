@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // TestCredentialModeRelayDirectory proves S4 relay trust: credential-mode relays publish

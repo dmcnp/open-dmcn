@@ -9,9 +9,9 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"github.com/pires/go-proxyproto"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/core/message"
-	"github.com/mertenvg/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // Config holds configuration for the SMTP bridge. In the reference daemon the bridge SHARES the

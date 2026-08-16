@@ -8,8 +8,8 @@ import (
 
 	leveldbds "github.com/ipfs/go-ds-leveldb"
 
-	"github.com/mertenvg/open-dmcn/internal/core/identity"
-	"github.com/mertenvg/open-dmcn/internal/relay"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // The split (v2) envelope the bridge now produces is accepted by the durable

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mertenvg/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 func hop(t *testing.T) (Hop, [32]byte) {
