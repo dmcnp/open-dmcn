@@ -155,7 +155,7 @@ func TestCORSMiddleware_Options(t *testing.T) {
 }
 
 func TestCSPMiddleware(t *testing.T) {
-	handler := webcore.CSPMiddleware(webcore.CSPConfig{Stripe: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := webcore.CSPMiddleware(webcore.CSPConfig{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -176,7 +176,7 @@ func TestCSPMiddleware(t *testing.T) {
 		t.Fatalf("did not expect wss in CSP, got %q", csp)
 	}
 	// Tightened directives + companion hardening headers.
-	for _, want := range []string{"object-src 'none'", "base-uri 'self'", "frame-ancestors 'none'", "form-action 'self'", "https://js.stripe.com"} {
+	for _, want := range []string{"object-src 'none'", "base-uri 'self'", "frame-ancestors 'none'", "form-action 'self'"} {
 		if !strings.Contains(csp, want) {
 			t.Fatalf("expected %q in CSP, got %q", want, csp)
 		}
@@ -196,7 +196,7 @@ func TestCSPMiddleware(t *testing.T) {
 	}
 }
 
-func TestCSPMiddleware_NoStripeExtraConnect(t *testing.T) {
+func TestCSPMiddleware_SameOriginOnly(t *testing.T) {
 	handler := webcore.CSPMiddleware(webcore.CSPConfig{ExtraConnectSrc: []string{"https://get.dmcn.email/"}})(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
 
@@ -206,13 +206,13 @@ func TestCSPMiddleware_NoStripeExtraConnect(t *testing.T) {
 
 	csp := rr.Header().Get("Content-Security-Policy")
 	if strings.Contains(csp, "stripe.com") {
-		t.Fatalf("expected no Stripe hosts without the Stripe flag, got %q", csp)
+		t.Fatalf("CSP must stay same-origin: no third-party hosts, got %q", csp)
 	}
 	if !strings.Contains(csp, "connect-src 'self' https://get.dmcn.email;") {
 		t.Fatalf("expected the extra connect-src origin (trailing slash trimmed), got %q", csp)
 	}
 	if !strings.Contains(csp, "frame-src 'none'") {
-		t.Fatalf("expected frame-src 'none' without Stripe, got %q", csp)
+		t.Fatalf("expected frame-src 'none', got %q", csp)
 	}
 }
 

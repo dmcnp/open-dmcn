@@ -114,7 +114,6 @@ proto/
   bridge.proto     dmcn.bridge   — OPTIONAL capability: SMTP-bridge attestation payloads
 dmcnpb/            generated Go (committed; import dmcn.dev/open-dmcn/dmcnpb)
 SPEC.md            the protocol reference (a snapshot of the reference implementation)
-PORTING.md         provenance + deltas vs the upstream product core
 site/              dmcn.dev source: markdown content, templates, design system,
                    and the generator (a SEPARATE Go module — see below)
 docs/              GENERATED dmcn.dev output, committed and published by Pages

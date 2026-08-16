@@ -27,12 +27,9 @@ var ErrInvalidDomain = errors.New("identity: invalid domain")
 //
 //   - PolicyRequireCountersign — an address on this domain is not usable until it
 //     carries a valid domain countersignature (enforced at the relay FETCH path).
-//   - PolicyAllowRequests — users may submit countersign requests for the domain
-//     authority to review. Only meaningful together with PolicyRequireCountersign;
-//     when unset the self-service request channel is closed.
 const (
 	PolicyRequireCountersign uint32 = 1 << 0
-	PolicyAllowRequests      uint32 = 1 << 1
+	// Bit 1 is reserved for extensions (see SPEC.md §8).
 	// PolicyRequireOnion: all addresses under the domain must receive mail via
 	// onion routing (the relay rejects direct STOREs). See whitepaper Section 15.4.
 	PolicyRequireOnion uint32 = 1 << 2
@@ -41,13 +38,7 @@ const (
 	// set, senders STORE to every reachable relay hint (FETCH already merges + dedups).
 	// Default off (failover).
 	PolicyReplicateMailbox uint32 = 1 << 3
-	// PolicyAdminKeyCustody declares the domain admin the PRIMARY custodian of account
-	// keys: the admin generates keypairs offline (ceremony keystore), registers and
-	// countersigns identities, and onboards/recovers users via device pairing with the
-	// admin as responder. Self-service browser registration is refused on such domains
-	// (enforced at the web register path); the hosting provider stays zero-access.
-	// See whitepaper Section 13.10.
-	PolicyAdminKeyCustody uint32 = 1 << 4
+	// Bits 4 and above are reserved for extensions (see SPEC.md §8).
 )
 
 // DefaultReservedLocalParts is the reserved set written into a NEW domain's DAR at genesis
@@ -152,24 +143,11 @@ func (d *DomainAuthorityRecord) RequiresOnion() bool {
 	return d.PolicyFlags&PolicyRequireOnion != 0
 }
 
-// AllowsRequests reports whether users may submit countersign requests for this
-// domain (only meaningful when RequiresCountersign is also set).
-func (d *DomainAuthorityRecord) AllowsRequests() bool {
-	return d.PolicyFlags&PolicyAllowRequests != 0
-}
-
 // ReplicatesMailbox reports whether the domain declares mailbox replication across an
 // address's top-k routing relays: senders STORE to every reachable relay hint (success if
 // ≥1) rather than the first reachable. Default off (failover).
 func (d *DomainAuthorityRecord) ReplicatesMailbox() bool {
 	return d.PolicyFlags&PolicyReplicateMailbox != 0
-}
-
-// AdminKeyCustody reports whether the domain admin is the primary custodian of account
-// keys: self-service browser registration is refused and users onboard/recover via
-// device pairing against the admin-held ceremony keystore. Default off.
-func (d *DomainAuthorityRecord) AdminKeyCustody() bool {
-	return d.PolicyFlags&PolicyAdminKeyCustody != 0
 }
 
 // DefersToFleet reports the fleet domain this domain defers hosting to, and whether a deferral is

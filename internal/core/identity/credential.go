@@ -26,42 +26,23 @@ const (
 	// authoritative RelayHints for an address; the domain authority/sub-authority issues
 	// it (and re-issues it on rebalance) so routing is operator-owned, not owner-signed.
 	RoleRouting = "routing"
-	// RoleQuota marks an operator-signed per-account storage-quota credential (carries a
-	// quota_bytes attribute; see quota.go). Like routing, it is operator-owned per-account
-	// metadata, DAR-verified, and re-issuable without the mailbox owner's key — issued by a
-	// domain key holding the 'quota' grant (e.g. the web's online issuer key on payment), so
-	// no fleet operator key is ever needed to raise a quota.
-	RoleQuota = "quota"
-	// RoleAccess marks an operator-signed per-account ACCESS entitlement (carries an
-	// access_mode attribute + a validity window; see access.go). Like routing/quota it is
-	// operator-owned per-account metadata: a domain key holding the 'access' grant (e.g. the
-	// b2c online issuer key) signs it, the relay installs it per mailbox and enforces it at
-	// FETCH/STORE. An account's access mode (open/suspended/closed) is derived from which
-	// assertion's [EffectiveFrom, NotAfter] window contains now; absence ⇒ open (default).
-	RoleAccess = "access"
 	// GrantDelegate, in a Credential's Grants, additionally permits issuing credentials
 	// that themselves carry Grants (i.e. creating sub-authorities). Without it a subject
 	// may only issue plain leaves for the roles it was granted.
 	GrantDelegate = "grant"
-	// GrantAdmin permits operator/decommission ops (drain, mailbox handoff, account
-	// export). It is a capability only — never a role.
-	GrantAdmin = "admin"
-	// GrantRouting / GrantAddress / GrantQuota are the issuance grants for the routing/
-	// address/quota roles. A grant string equals the role string it authorises issuing, so
-	// these alias the role constants; they exist to read intent at op-gating / issuance sites.
+	// GrantRouting / GrantAddress are the issuance grants for the routing/address roles.
+	// A grant string equals the role string it authorises issuing, so these alias the role
+	// constants; they exist to read intent at op-gating / issuance sites.
 	GrantRouting = RoleRouting
 	GrantAddress = RoleAddress
-	GrantQuota   = RoleQuota
-	// GrantAccess is the issuance grant for the access role (aliases it, like the others).
-	GrantAccess = RoleAccess
 )
 
 // allGrants is the grant universe of the DNS-anchored root: the leaf-role issuance grants
-// plus the delegation and admin capabilities. It is NOT a credential's role set — no
+// plus the delegation capability. It is NOT a credential's role set — no
 // credential ever carries every role. "authority"/"sub-authority" are intentionally
 // absent: creating authorities is governed by GrantDelegate (see authorizes), and no
 // credential carries them in its Grants.
-var allGrants = []string{RoleNode, RoleBridge, RoleClient, RoleAddress, RoleRouting, RoleQuota, RoleAccess, GrantDelegate, GrantAdmin}
+var allGrants = []string{RoleNode, RoleBridge, RoleClient, RoleAddress, RoleRouting, GrantDelegate}
 
 // rootGrants returns the implicit grants of the DNS-anchored root (a copy of allGrants).
 func rootGrants() []string { return append([]string{}, allGrants...) }

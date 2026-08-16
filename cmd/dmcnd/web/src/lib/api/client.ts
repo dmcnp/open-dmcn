@@ -38,7 +38,7 @@ interface RequestOpts {
 }
 
 // ApiError carries the HTTP status and the server's optional machine-readable
-// error code (e.g. "admin_key_custody") so callers can branch on the cause;
+// error code so callers can branch on the cause;
 // err.message still holds the human-readable error for existing consumers.
 export class ApiError extends Error {
   status: number;
@@ -196,7 +196,6 @@ export interface IdentityLookupResponse {
   require_onion?: boolean;
   // True when the address's domain declares admin key custody (DAR policy): the
   // domain admin holds the account keys — shown as the managed-account badge.
-  admin_key_custody?: boolean;
 }
 
 export function lookupIdentity(address: string): Promise<IdentityLookupResponse> {

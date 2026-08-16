@@ -23,10 +23,10 @@ func TestPolicyFlagsRoundTripAndSigned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dar.RequiresCountersign() || dar.AllowsRequests() {
+	if dar.RequiresCountersign() || dar.ReplicatesMailbox() {
 		t.Fatal("fresh DAR should have no policy bits")
 	}
-	dar.PolicyFlags |= PolicyRequireCountersign | PolicyAllowRequests
+	dar.PolicyFlags |= PolicyRequireCountersign | PolicyReplicateMailbox
 	if err := dar.Sign(root); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestPolicyFlagsRoundTripAndSigned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.RequiresCountersign() || !got.AllowsRequests() {
+	if !got.RequiresCountersign() || !got.ReplicatesMailbox() {
 		t.Fatalf("policy bits lost in round-trip: flags=%d", got.PolicyFlags)
 	}
 	if err := got.Verify(); err != nil {
@@ -43,7 +43,7 @@ func TestPolicyFlagsRoundTripAndSigned(t *testing.T) {
 	}
 
 	// Flipping a policy bit after signing must invalidate the self-signature.
-	got.PolicyFlags &^= PolicyAllowRequests
+	got.PolicyFlags &^= PolicyReplicateMailbox
 	if err := got.Verify(); err == nil {
 		t.Fatal("expected tampered PolicyFlags to break the DAR self-signature")
 	}

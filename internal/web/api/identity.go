@@ -7,7 +7,6 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
@@ -17,7 +16,6 @@ type IdentityHandler struct {
 	verifyManaged func(ctx context.Context, rec *identity.IdentityRecord) (identity.VerificationTier, error)
 	requiresOnion func(ctx context.Context, rec *identity.IdentityRecord) bool
 	relayHints    func(ctx context.Context, address string) ([]string, error)
-	adminCustody  func(ctx context.Context, domain string) bool
 	log           logr.Logger
 }
 
@@ -35,7 +33,6 @@ func NewIdentityHandler(
 	verifyManaged func(ctx context.Context, rec *identity.IdentityRecord) (identity.VerificationTier, error),
 	requiresOnion func(ctx context.Context, rec *identity.IdentityRecord) bool,
 	relayHints func(ctx context.Context, address string) ([]string, error),
-	adminCustody func(ctx context.Context, domain string) bool,
 	log logr.Logger,
 ) *IdentityHandler {
 	return &IdentityHandler{
@@ -43,7 +40,6 @@ func NewIdentityHandler(
 		verifyManaged: verifyManaged,
 		requiresOnion: requiresOnion,
 		relayHints:    relayHints,
-		adminCustody:  adminCustody,
 		log:           log,
 	}
 }
@@ -113,13 +109,6 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		requireOnion = h.requiresOnion(r.Context(), rec)
 	}
 
-	// admin_key_custody surfaces the domain's custody policy bit so the client can
-	// show the managed-account indicator (whitepaper §13.8-style disclosure).
-	adminCustody := false
-	if h.adminCustody != nil {
-		adminCustody = h.adminCustody(r.Context(), domainverify.DomainOf(rec.Address))
-	}
-
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"address":               rec.Address,
 		"ed25519_pub":           base64.StdEncoding.EncodeToString(rec.Ed25519Public),
@@ -132,6 +121,5 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		// is a registered bridge before trusting its legacy-auth verdict (gap #6).
 		"bridge_capability": rec.BridgeCapability,
 		"require_onion":     requireOnion,
-		"admin_key_custody": adminCustody,
 	})
 }

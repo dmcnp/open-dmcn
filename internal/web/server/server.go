@@ -79,9 +79,8 @@ func New(cfg Config, logger logr.Logger) *Server {
 	if cfg.AccountURL != "" {
 		extraConnect = []string{cfg.AccountURL}
 	}
-	// The reference client is self-contained: no Stripe billing and no cross-origin
-	// account service, so the CSP stays strict same-origin (Stripe exception off).
-	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, Stripe: false, ExtraConnectSrc: extraConnect})
+	// The reference client is self-contained, so the CSP stays strict same-origin.
+	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, ExtraConnectSrc: extraConnect})
 	handler := csp(webcore.CORSMiddleware(cfg.DevMode, origins)(mux))
 	return &Server{
 		httpServer: &http.Server{

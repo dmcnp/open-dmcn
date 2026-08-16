@@ -166,10 +166,6 @@ func main() {
 	replicates := func(ctx context.Context, address string) bool {
 		return n.Registry().ReplicatesMailbox(ctx, address)
 	}
-	custodyBadge := func(ctx context.Context, domain string) bool {
-		dar, err := n.LookupDAR(ctx, domain)
-		return err == nil && dar.AdminKeyCustody()
-	}
 	// Fallback STORE (no explicit recipient hint): store into this node's own mailbox in-process.
 	storeLocal := func(ctx context.Context, senderAddr string, signature []byte, env *message.EncryptedEnvelope) ([32]byte, error) {
 		return n.Relay().StoreLocal(ctx, senderAddr, signature, env)
@@ -188,7 +184,7 @@ func main() {
 	// own routing credential (with the domain root), so there is no third party to verify against.
 	authHandler := webapi.NewAuthHandler(sessionStore, registryLookup, log)
 	msgHandler := webapi.NewMessageHandler(storeLocal, registryLookup, newInProcRouter(n), replicates, nil, log)
-	identHandler := webapi.NewIdentityHandler(registryLookup, verifyManaged, requiresOnion, relayHints, custodyBadge, log)
+	identHandler := webapi.NewIdentityHandler(registryLookup, verifyManaged, requiresOnion, relayHints, log)
 	mailboxHandler := webapi.NewMailboxHandler(newInProcRelay(n, registryLookup), log)
 	regHandler := webapi.NewRegisterHandler(provision, log)
 

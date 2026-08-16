@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
-import { logout as apiLogout, lookupIdentity } from '../lib/api/client';
+import { logout as apiLogout } from '../lib/api/client';
 import { toHex, keyPairToPayloadJSON } from '../lib/crypto/keys';
 import { unlockBackupBytes } from '../lib/crypto/reauth';
 import { buildPasswordExport, buildPasskeyExport, triggerDownload, type ExportAuth } from '../lib/crypto/exportFile';
@@ -129,19 +129,6 @@ export function Settings() {
   // keystore is the only at-rest copy, a non-persisted origin risks losing it.
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [staySignedIn, setStay] = useState(isStaySignedIn());
-  // Managed-account disclosure (whitepaper §13.8): true when the domain's DAR
-  // declares admin key custody — the org admin holds this account's keys.
-  const [managedDomain, setManagedDomain] = useState(false);
-
-  useEffect(() => {
-    if (!address) return;
-    let cancelled = false;
-    lookupIdentity(address)
-      .then(r => { if (!cancelled) setManagedDomain(!!r.admin_key_custody); })
-      .catch(() => { /* display-only badge; stay hidden on lookup failure */ });
-    return () => { cancelled = true; };
-  }, [address]);
-
   // Backup download button label. Exporting needs the raw key bytes, which the
   // non-extractable session handles can't yield, so it re-unlocks the at-rest
   // keystore first — a passkey account taps their passkey, and a password account
@@ -455,11 +442,6 @@ export function Settings() {
             <Row title="Signed in as">
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>{address}</span>
             </Row>
-            {managedDomain && (
-              <Row title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing).">
-                <Badge variant="neutral"><Icon name="shield-check" size={13} /> Managed</Badge>
-              </Row>
-            )}
             <Row title="Switch or add account" desc="Use another identity (work, personal) in this tab, or add a new one.">
               <Button variant="secondary" size="sm" leftIcon={<Icon name="users" size={15} />} onClick={() => navigate('/login')}>Switch account</Button>
             </Row>

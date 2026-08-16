@@ -32,8 +32,8 @@ func TestCredentialSetRolesAndGrants(t *testing.T) {
 	if !s.hasGrant(web, identity.GrantRouting, "d.test") || !s.hasGrant(web, identity.GrantAddress, "d.test") {
 		t.Fatal("hasGrant(web, routing/address, d.test) = false, want true")
 	}
-	if s.hasGrant(web, identity.GrantAdmin, "d.test") {
-		t.Fatal("hasGrant(web, admin, d.test) = true, want false (not granted)")
+	if s.hasGrant(web, identity.GrantDelegate, "d.test") {
+		t.Fatal("hasGrant(web, grant, d.test) = true, want false (not granted)")
 	}
 	// Domain scoping: a grant for d.test does NOT cover a different domain.
 	if s.hasGrant(web, identity.GrantRouting, "other.test") {
@@ -105,27 +105,27 @@ func TestCredentialSetFleetVsDomainSeparation(t *testing.T) {
 	domainPeer := testPeerID(t, 1)
 	fleetPeer := testPeerID(t, 2)
 
-	// A DOMAIN credential carrying admin + routing (e.g. a customer domain's admin).
-	s.add(domainPeer, &identity.Credential{Domain: "customer.com", Roles: []string{identity.RoleClient}, Grants: []string{identity.GrantAdmin, identity.GrantRouting}})
-	if !s.hasGrant(domainPeer, identity.GrantAdmin, "customer.com") {
-		t.Fatal("domain admin grant should satisfy the domain-scoped check for its own domain")
+	// A DOMAIN credential carrying address + routing (e.g. a customer domain's issuer).
+	s.add(domainPeer, &identity.Credential{Domain: "customer.com", Roles: []string{identity.RoleClient}, Grants: []string{identity.GrantAddress, identity.GrantRouting}})
+	if !s.hasGrant(domainPeer, identity.GrantAddress, "customer.com") {
+		t.Fatal("domain grant should satisfy the domain-scoped check for its own domain")
 	}
-	if s.hasFleetGrant(domainPeer, identity.GrantAdmin) || s.hasFleetGrant(domainPeer, identity.GrantRouting) {
+	if s.hasFleetGrant(domainPeer, identity.GrantAddress) || s.hasFleetGrant(domainPeer, identity.GrantRouting) {
 		t.Fatal("a DOMAIN credential's grant must NEVER authorize a fleet op (confused-deputy guard)")
 	}
 	if s.hasFleetRole(domainPeer, identity.RoleClient) {
 		t.Fatal("a DOMAIN credential's role must not register as a fleet role")
 	}
 
-	// An operator-rooted FLEET credential carrying admin + routing.
-	s.addFleet(fleetPeer, &identity.Credential{Roles: []string{identity.RoleNode}, Grants: []string{identity.GrantAdmin, identity.GrantRouting}})
-	if !s.hasFleetGrant(fleetPeer, identity.GrantAdmin) || !s.hasFleetGrant(fleetPeer, identity.GrantRouting) {
+	// An operator-rooted FLEET credential carrying address + routing.
+	s.addFleet(fleetPeer, &identity.Credential{Roles: []string{identity.RoleNode}, Grants: []string{identity.GrantAddress, identity.GrantRouting}})
+	if !s.hasFleetGrant(fleetPeer, identity.GrantAddress) || !s.hasFleetGrant(fleetPeer, identity.GrantRouting) {
 		t.Fatal("a fleet credential's grants must satisfy hasFleetGrant")
 	}
 	if !s.hasFleetRole(fleetPeer, identity.RoleNode) {
 		t.Fatal("a fleet credential's role must satisfy hasFleetRole")
 	}
-	if s.hasGrant(fleetPeer, identity.GrantAdmin, "customer.com") {
+	if s.hasGrant(fleetPeer, identity.GrantAddress, "customer.com") {
 		t.Fatal("a FLEET credential (no domain authority) must not satisfy a domain-scoped grant check")
 	}
 
@@ -133,7 +133,7 @@ func TestCredentialSetFleetVsDomainSeparation(t *testing.T) {
 		t.Fatal("has() must be true for a peer with either a domain or a fleet credential")
 	}
 	s.remove(fleetPeer)
-	if s.has(fleetPeer) || s.hasFleetGrant(fleetPeer, identity.GrantAdmin) {
+	if s.has(fleetPeer) || s.hasFleetGrant(fleetPeer, identity.GrantAddress) {
 		t.Fatal("after remove, the fleet peer must report nothing")
 	}
 }

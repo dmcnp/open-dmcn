@@ -110,12 +110,7 @@ func generateNonce() string {
 type CSPConfig struct {
 	// DevMode skips HSTS (avoid pinning localhost).
 	DevMode bool
-	// Stripe enables the Stripe.js script/frame/connect/img exceptions. Only the
-	// mail client needs them (it mounts Embedded Checkout); other services stay
-	// fully same-origin.
-	Stripe bool
-	// ExtraConnectSrc are additional origins allowed in connect-src — e.g. the
-	// funnel/account service the mail client's SPA calls cross-origin.
+	// ExtraConnectSrc are additional origins allowed in connect-src.
 	ExtraConnectSrc []string
 }
 
@@ -137,18 +132,9 @@ func CSPMiddleware(cfg CSPConfig) func(http.Handler) http.Handler {
 	// <style> tags, a much lower risk than script execution. object/base-uri/
 	// frame-ancestors/form-action are locked down to blunt injection + clickjacking.
 	//
-	// Stripe exception (storage-upgrade billing): Embedded Checkout can't be
-	// self-hosted — Stripe.js must load from js.stripe.com and renders the card
-	// form in Stripe-owned iframes. So we allow exactly the Stripe hosts (per
-	// docs.stripe.com/security/guide) in script-src/frame-src/connect-src/img-src,
-	// and nothing wider. Everything else stays same-origin + nonce.
+	// The reference daemon is entirely self-hosted, so every fetch directive stays
+	// same-origin. There is no third-party payment or account service to carve out.
 	scriptExtra, frameSrc, connectExtra, imgExtra := "", "'none'", "", ""
-	if cfg.Stripe {
-		scriptExtra = " https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com"
-		frameSrc = "https://js.stripe.com https://*.js.stripe.com https://checkout.stripe.com https://hooks.stripe.com"
-		connectExtra = " https://api.stripe.com https://checkout.stripe.com"
-		imgExtra = " https://*.stripe.com"
-	}
 	for _, o := range cfg.ExtraConnectSrc {
 		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" {
 			connectExtra += " " + o

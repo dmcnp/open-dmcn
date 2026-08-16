@@ -133,21 +133,6 @@ type Relay struct {
 	// raises it per account (see effectiveQuota). Enforced on both the mail STORE and the
 	// KV PUT path so the settled storage tiers (4/25/100 GiB) are one honest total.
 	storageQuota uint64
-	// quotas holds per-account RoleQuota credentials (keyed by recipient X25519 hex),
-	// installed via SetQuota and consulted by effectiveQuota to raise an owner's cap above
-	// storageQuota. nil ⇒ no per-account upgrades. quotaAuthorize reports whether a
-	// credential's issuer key holds the operator-delegated 'quota' FLEET grant — so quota is
-	// an OPERATOR concern (air-gapped operator delegates it to the web's fleet credential),
-	// never a domain-owner one. A domain owner can't self-grant fleet storage.
-	quotas         *QuotaStore
-	quotaAuthorize func(issuerPub []byte) bool
-	// access holds per-account RoleAccess assertions (open/suspended, keyed by recipient X25519
-	// hex + mode), installed via SetAccess and consulted at the FETCH + STORE-inbound gates.
-	// accessAuthorize reports whether a credential's issuer key holds the operator-delegated
-	// 'access' FLEET grant (same operator-anchored model as quota). nil access ⇒ enforcement off
-	// (every account is open — default-open).
-	access          *AccessStore
-	accessAuthorize func(issuerPub []byte) bool
 	// replicates reports whether an owner's domain opts into mailbox replication
 	// (PolicyReplicateMailbox). When true, an accepted KV write/delete is fanned out
 	// to the owner's other RelayHints via MailboxKvInject. nil ⇒ no replication.
@@ -261,10 +246,6 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 
 		personalKv:      cfg.personalKv,
 		storageQuota:    cfg.storageQuota,
-		quotas:          cfg.quotas,
-		quotaAuthorize:  cfg.quotaAuthorize,
-		access:          cfg.access,
-		accessAuthorize: cfg.accessAuthorize,
 		replicates:      cfg.replicates,
 		records:         cfg.records,
 	}
@@ -297,10 +278,6 @@ type relayOptions struct {
 
 	personalKv      *PersistentKvStore
 	storageQuota    uint64
-	quotas          *QuotaStore
-	quotaAuthorize  func(issuerPub []byte) bool
-	access          *AccessStore
-	accessAuthorize func(issuerPub []byte) bool
 	replicates      func(context.Context, string) bool
 	records         *RecordStore
 }
@@ -446,46 +423,6 @@ func WithMailbox(m *MailboxStore) Option {
 func WithAccountStore(a *AccountStore) Option {
 	return func(o *relayOptions) {
 		o.accounts = a
-	}
-}
-
-// WithQuotaStore wires the node-local self-encrypted per-account quota-credential store,
-// populated via the SetQuota op and consulted by effectiveQuota to raise an owner's
-// personal-storage cap above the node default. Mailbox-role nodes only.
-func WithQuotaStore(q *QuotaStore) Option {
-	return func(o *relayOptions) {
-		o.quotas = q
-	}
-}
-
-// WithQuotaAuthorize wires the predicate a SetQuota install uses to confirm a RoleQuota
-// credential's ISSUER key holds the operator-delegated 'quota' FLEET grant (typically
-// node.credentialSet.hasFleetGrantForKey). This anchors quota to the air-gapped operator —
-// only a key the operator delegated to may mint quotas. Without it the relay rejects all
-// direct installs (handoff re-pushes from a node peer are still accepted).
-func WithQuotaAuthorize(fn func(issuerPub []byte) bool) Option {
-	return func(o *relayOptions) {
-		o.quotaAuthorize = fn
-	}
-}
-
-// WithAccessStore wires the node-local self-encrypted per-account access-assertion store,
-// populated via the SetAccess op and consulted at the FETCH + STORE-inbound gates to enforce
-// open/suspended/closed. Mailbox-role nodes only; nil ⇒ default-open (no enforcement).
-func WithAccessStore(a *AccessStore) Option {
-	return func(o *relayOptions) {
-		o.access = a
-	}
-}
-
-// WithAccessAuthorize wires the predicate a SetAccess install uses to confirm a RoleAccess
-// credential's ISSUER key holds the operator-delegated 'access' FLEET grant (typically
-// node.credentialSet.hasFleetGrantForKey). Same operator-anchored model as WithQuotaAuthorize:
-// only a key the operator delegated to may suspend/close accounts. Without it the relay rejects
-// direct installs (handoff re-pushes from a node peer are still accepted).
-func WithAccessAuthorize(fn func(issuerPub []byte) bool) Option {
-	return func(o *relayOptions) {
-		o.accessAuthorize = fn
 	}
 }
 
@@ -834,18 +771,6 @@ func (r *Relay) acceptEnvelope(ctx context.Context, senderAddr string, senderSig
 	stored := 0
 	for _, rec := range env.Recipients {
 		addr := fmt.Sprintf("%x", rec.RecipientXPub[:])
-		// Access-entitlement gate: a closed account rejects inbound (skip this recipient, like
-		// the free-ride guard). open/suspended still accept inbound — grace keeps storing mail
-		// the owner reads once reactivated. Fail-OPEN on a store error: a transient fault must
-		// never lose legitimate mail.
-		if r.access != nil {
-			if mode, aerr := r.effectiveAccessMode(ctx, addr); aerr != nil {
-				r.log.Errorf("STORE access check failed for recipient %s…: %v", addr[:min(8, len(addr))], aerr)
-			} else if mode == identity.AccessClosed {
-				r.log.Debugf("STORE skipped for closed recipient %s…", addr[:min(8, len(addr))])
-				continue
-			}
-		}
 		// Recipient filtering: silently drop (no store, but the sender still gets a
 		// normal ACK) when this recipient's block/allow policy rejects the
 		// authenticated sender. Fail-open on any decode/read error — a filter problem
@@ -976,28 +901,6 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 		}
 	}
 
-	// 1b. Access-entitlement gate (single pre-challenge chokepoint covering LIST/BODY/DELETE
-	// and every KV op, which all arrive only after this challenge). A suspended or closed
-	// account cannot read its mailbox — inbound STORE is unaffected (grace still accepts). A
-	// store error fails closed (deny reads). Default-open: an unmanaged account is AccessOpen.
-	if r.access != nil {
-		mode, aerr := r.effectiveAccessMode(ctx, fmt.Sprintf("%x", rec.X25519Public[:]))
-		if aerr != nil {
-			r.log.Errorf("FETCH access check failed for %s: %v", init.Address, aerr)
-			writeResponse(s, errorResponse("STORAGE_FAILED", "access check failed"))
-			return
-		}
-		switch mode {
-		case identity.AccessSuspended:
-			r.log.Debugf("FETCH denied: %s account suspended", init.Address)
-			writeResponse(s, errorResponse("ACCESS_SUSPENDED", "account access is suspended"))
-			return
-		case identity.AccessClosed:
-			r.log.Debugf("FETCH denied: %s account closed", init.Address)
-			writeResponse(s, errorResponse("ACCESS_CLOSED", "account access is closed"))
-			return
-		}
-	}
 
 	// 2. Generate challenge nonce
 	nonce, err := crypto.RandomBytes(32)
@@ -1155,19 +1058,11 @@ func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, ad
 }
 
 // effectiveQuota is the TOTAL durable-storage byte cap that applies to one account
-// (keyed by recipient X25519 hex) — mail (MailboxStore) + personal-KV together: the
-// node-global default, raised by any currently-valid operator-signed RoleQuota grant on
-// file for this owner. 0 means unbounded — and an unbounded default stays unbounded (a
-// finite grant never *lowers* an unlimited cap).
-func (r *Relay) effectiveQuota(ctx context.Context, rxHex string) uint64 {
-	if r.storageQuota == 0 {
-		return 0 // node default is unbounded; nothing to raise
-	}
-	if r.quotas != nil {
-		if q, ok := r.quotas.EffectiveQuota(ctx, rxHex, time.Now()); ok && q > r.storageQuota {
-			return q
-		}
-	}
+// (keyed by recipient X25519 hex) — mail (MailboxStore) + personal-KV together. A
+// self-hosting operator sets one node-wide default for every account it serves; 0 means
+// unbounded. Per-account entitlements are an extension concern and are deliberately not
+// part of the core protocol (see SPEC.md §8).
+func (r *Relay) effectiveQuota(_ context.Context, _ string) uint64 {
 	return r.storageQuota
 }
 
@@ -1229,21 +1124,6 @@ func (r *Relay) SetDraining(v bool) { r.draining.Store(v) }
 
 // Draining reports whether the relay is in drain mode.
 func (r *Relay) Draining() bool { return r.draining.Load() }
-
-// effectiveAccessMode resolves an account's live access mode (open/suspended/closed) for the
-// relay's transactional gates. It returns AccessOpen when access enforcement is off (no store)
-// or the account is unmanaged. A store error fails CLOSED to suspended-equivalent handling is
-// the caller's choice; here we surface it so the caller can decide (FETCH denies, STORE skips).
-func (r *Relay) effectiveAccessMode(ctx context.Context, rxHex string) (string, error) {
-	if r.access == nil {
-		return identity.AccessOpen, nil
-	}
-	mode, _, err := r.access.EffectiveAccess(ctx, rxHex, time.Now())
-	if err != nil {
-		return "", err
-	}
-	return mode, nil
-}
 
 // --- Client methods ---
 

@@ -26,7 +26,6 @@ import (
 
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
-	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/keystore"
 	"dmcn.dev/open-dmcn/internal/peerpolicy"
 	"dmcn.dev/open-dmcn/internal/registry"
@@ -278,27 +277,6 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		relay.WithPeers(cfg.Peers),
 		// Enforce per-domain policy (require-countersign) on mailbox reads.
 		relay.WithFetchPolicy(reg.AddressUsable),
-		// Countersign-request bootstrap: a pending (un-vouched) sender may STORE
-		// only to its OWN domain's countersign inbox — the petition that earns it
-		// the vouch — and only where the DAR opens the request channel
-		// (PolicyAllowRequests). Every envelope recipient must be that inbox's
-		// current X25519 key, so the exemption can't smuggle mail to anyone else.
-		relay.WithStoreVouchExemption(func(ctx context.Context, senderRec *identity.IdentityRecord, env *message.EncryptedEnvelope) bool {
-			domain := domainverify.DomainOf(senderRec.Address)
-			if domain == "" || !reg.AllowsRequests(ctx, domain) {
-				return false
-			}
-			inboxRec, err := reg.Lookup(ctx, "countersign@"+domain)
-			if err != nil || len(env.Recipients) == 0 {
-				return false
-			}
-			for _, rcp := range env.Recipients {
-				if rcp.RecipientXPub != inboxRec.X25519Public {
-					return false
-				}
-			}
-			return true
-		}),
 		// Learn each hosted mailbox's effective onion policy (mailbox OR domain) at FETCH.
 		relay.WithOnionPolicy(reg.RequiresOnion),
 		// Defense-in-depth: drop relay/org streams from non-federated peers.
@@ -359,38 +337,11 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		}
 		relayOpts = append(relayOpts, relay.WithAccountStore(accStore))
 
-		// Node-local self-encrypted per-account quota-grant store (operator-signed
-		// AccountQuotaGrants installed via SetQuota), sealed with the same node secret.
-		quotaStore, qErr := relay.NewQuotaStore(store, relayPriv[:])
-		if qErr != nil {
-			reg.Close()
-			h.Close()
-			cancel()
-			return nil, fmt.Errorf("node: quota store: %w", qErr)
-		}
-		relayOpts = append(relayOpts, relay.WithQuotaStore(quotaStore))
-		// Quota is operator-rooted: a RoleQuota credential is authorized when its issuer key
-		// holds the operator-delegated 'quota' FLEET grant (verified at /dmcn/join against the
-		// air-gapped operator pubkey). So a domain owner can't self-grant fleet storage.
-		relayOpts = append(relayOpts, relay.WithQuotaAuthorize(func(issuerPub []byte) bool {
-			return credentials.hasFleetGrantForKey(issuerPub, identity.GrantQuota)
-		}))
-
-		// Node-local self-encrypted per-account ACCESS store (operator-signed RoleAccess
-		// assertions installed via SetAccess), sealed with the same node secret. Enforced at
-		// the relay's FETCH + STORE-inbound gates. Same operator-rooted authorization as quota:
-		// a RoleAccess credential is authorized only when its issuer holds the 'access' grant.
-		accessStore, aErr := relay.NewAccessStore(store, relayPriv[:])
-		if aErr != nil {
-			reg.Close()
-			h.Close()
-			cancel()
-			return nil, fmt.Errorf("node: access store: %w", aErr)
-		}
-		relayOpts = append(relayOpts, relay.WithAccessStore(accessStore))
-		relayOpts = append(relayOpts, relay.WithAccessAuthorize(func(issuerPub []byte) bool {
-			return credentials.hasFleetGrantForKey(issuerPub, identity.GrantAccess)
-		}))
+			// NOTE (open-dmcn): the per-account quota and access-assertion stores are
+			// omitted. Per-account entitlements (storage grants, suspend/close assertions)
+			// are an operator concern outside the core protocol — see SPEC.md §8. A
+			// self-hosting operator sets one node-wide cap via WithStorageQuota and is its
+			// own authority over the accounts it serves; there is nobody to sell an upgrade to.
 
 		// NOTE (open-dmcn): the per-account OUTBOUND send-counter store is omitted — the ops
 		// that fed it (the operate.go ConsumeSendInject + the bridge send-cap) are extension

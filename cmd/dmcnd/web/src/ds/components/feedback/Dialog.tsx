@@ -19,7 +19,7 @@ function ensureDialogStyles(): void {
   font-family:var(--font-sans);animation:dmcnRise var(--dur-normal) var(--ease-out);
   /* Never taller than the viewport (dvh accounts for mobile browser chrome), and lay the
      head/body/footer out as a column so the body scrolls while the head+footer stay pinned —
-     otherwise a tall form (e.g. Stripe checkout) clips off-screen on short/landscape phones. */
+     otherwise a tall form clips off-screen on short/landscape phones. */
   max-height:calc(100vh - var(--space-4) - var(--space-4));
   max-height:calc(100dvh - var(--space-4) - var(--space-4));
   display:flex;flex-direction:column;overflow:hidden;

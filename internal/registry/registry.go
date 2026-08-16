@@ -344,13 +344,6 @@ func (r *Registry) ReplicatesMailbox(ctx context.Context, address string) bool {
 	return dar != nil && dar.ReplicatesMailbox()
 }
 
-// AllowsRequests reports whether a domain opens the self-service countersign request channel (DAR
-// PolicyAllowRequests).
-func (r *Registry) AllowsRequests(ctx context.Context, domain string) bool {
-	dar := r.cachedLookupDAR(ctx, domain)
-	return dar != nil && dar.AllowsRequests()
-}
-
 // AddressReserved reports whether an address's local-part is reserved on its domain (requires the
 // domain authority's countersignature). Unmanaged domains (no DAR) reserve nothing.
 func (r *Registry) AddressReserved(ctx context.Context, address string) bool {
