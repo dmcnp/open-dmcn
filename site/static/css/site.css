@@ -71,6 +71,42 @@ code, pre, kbd, samp {
   [data-mm]   { display: block; }
 }
 
+/* ---- Footer ----
+   Wide: the brand block and the link-column group sit side by side. Narrow: the
+   brand stacks above, and the columns become an even auto-fit grid.
+
+   The previous version was one flex row of four children with flex-wrap, which
+   let each column pick its own break point — on a phone that put one column
+   beside the brand and the other two on a second row with dead space to the
+   right. Grouping the columns means they wrap together, evenly. */
+[data-foot] { display: flex; gap: clamp(32px, 6vw, 64px); align-items: flex-start; }
+[data-foot-brand] { flex: 1 1 260px; min-width: 0; }
+/* Doesn't grow: the brand block absorbs the slack, so the column group stays
+   flush with the right edge instead of trailing dead space beside it. */
+[data-foot-cols] {
+  display: flex; gap: clamp(28px, 5vw, 56px);
+  flex: 0 0 auto; min-width: 0;
+}
+[data-foot-cols] nav { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+[data-foot-cols] a { font-size: 14px; color: var(--text-body); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+[data-foot-cols] a:hover { color: var(--brand); }
+.foot-label {
+  font-size: 11px; letter-spacing: var(--tracking-caps); text-transform: uppercase;
+  color: var(--text-subtle); font-weight: 600;
+}
+@container (max-width: 720px) {
+  /* Flipping to column re-points the flex axes: flex-basis becomes a HEIGHT and
+     align-items controls WIDTH. The row-direction values above would leave a
+     260px void under the brand and shrink the columns to their content, so both
+     are reset here rather than carried over. */
+  [data-foot] { flex-direction: column; gap: 36px; align-items: stretch; }
+  [data-foot-brand] { flex: 0 0 auto; }
+  [data-foot-cols] {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 32px 20px; flex: 0 0 auto;
+  }
+}
+
 /* ---- FAQ: native <details> accordion ---- */
 summary::-webkit-details-marker { display: none; }
 [data-faq] > summary { list-style: none; cursor: pointer; }

@@ -166,34 +166,40 @@ conforms.</p>
 
     </main>
     
-<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);">
-  <div style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);display:flex;gap:clamp(32px,6vw,64px);flex-wrap:wrap;">
-    <div style="flex:1;min-width:240px;">
+
+<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div data-foot style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);">
+    <div data-foot-brand>
       <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
       <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol. An open mail protocol where the address is a keypair, not a name a server vouches for.</p>
       <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
     </div>
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Protocol</div>
-      <a href="/spec" style="font-size:14px;color:var(--text-body);text-decoration:none;">Specification</a>
-      <a href="/quickstart" style="font-size:14px;color:var(--text-body);text-decoration:none;">Try it</a>
-      <a href="/faq" style="font-size:14px;color:var(--text-body);text-decoration:none;">FAQ</a>
-      <a href="/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Go module</a>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Source</div>
-      <a href="https://github.com/dmcnp/open-dmcn/tree/main/proto" style="font-size:14px;color:var(--text-body);text-decoration:none;">Schema</a>
-      <a href="https://github.com/dmcnp/open-dmcn" style="font-size:14px;color:var(--text-body);text-decoration:none;">Repository</a>
-      <a href="https://github.com/dmcnp/open-dmcn/releases" style="font-size:14px;color:var(--text-body);text-decoration:none;">Releases</a>
-      <a href="https://github.com/dmcnp/open-dmcn/issues" style="font-size:14px;color:var(--text-body);text-decoration:none;">Issues</a>
-      <a href="https://github.com/dmcnp/open-dmcn/blob/main/LICENSE" style="font-size:14px;color:var(--text-body);text-decoration:none;">License</a>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;">Built on DMCNP</div>
-      <a href="https://get.dmcn.email" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
-      <a href="https://get.dmcnmail.com" style="display:inline-flex;align-items:center;gap:4px;font-size:14px;color:var(--text-body);text-decoration:none;">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+
+    
+    <div data-foot-cols>
+      <nav>
+        <div class="foot-label">Protocol</div>
+        <a href="/spec">Specification</a>
+        <a href="/quickstart">Try it</a>
+        <a href="/faq">FAQ</a>
+        <a href="/open-dmcn">Go module</a>
+      </nav>
+      <nav>
+        <div class="foot-label">Source</div>
+        <a href="https://github.com/dmcnp/open-dmcn/tree/main/proto">Schema</a>
+        <a href="https://github.com/dmcnp/open-dmcn">Repository</a>
+        <a href="https://github.com/dmcnp/open-dmcn/releases">Releases</a>
+        <a href="https://github.com/dmcnp/open-dmcn/issues">Issues</a>
+        <a href="https://github.com/dmcnp/open-dmcn/blob/main/LICENSE">License</a>
+      </nav>
+      <nav>
+        <div class="foot-label">Built on DMCNP</div>
+        <a href="https://get.dmcn.email">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+        <a href="https://get.dmcnmail.com">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </nav>
     </div>
   </div>
+
   <div style="border-top:1px solid var(--border-subtle);padding:20px clamp(18px,5vw,40px);max-width:1120px;margin:0 auto;font-size:12px;line-height:1.6;color:var(--text-subtle);">
     © 2026 DMCN · dmcn.dev · The Apache-2.0 license covers the code and schema; it does not grant rights to the names <strong style="color:var(--text-muted);font-weight:600;">DMCN</strong> or <strong style="color:var(--text-muted);font-weight:600;">DMCN&nbsp;Protocol</strong>. You may implement the protocol under any name of your own.
   </div>
