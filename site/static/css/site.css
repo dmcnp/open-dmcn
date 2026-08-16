@@ -26,6 +26,18 @@ a { color: var(--text-link); text-decoration: none; }
 a:hover { color: var(--brand); }
 ::selection { background: var(--brand-subtle-2); }
 
+/* ---- Code: no ligatures ----
+   Geist Mono ships programming ligatures, and its contextual handling of "--"
+   swallows the space in front of it: `dns --domain` renders as `dns--domain`,
+   which is a command a reader would copy and have fail. Code should show the
+   characters you actually type, so ligatures are off everywhere the mono face
+   is used. font-feature-settings repeats it at the low level for engines that
+   honour that but not font-variant-ligatures. */
+code, pre, kbd, samp {
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "clig" 0, "calt" 0, "dlig" 0;
+}
+
 /* ---- Hover utilities (replace the design's `style-hover`) ----
    !important so the hover state wins over the element's inline base
    style — an inline `style=` always beats a plain stylesheet rule. */
