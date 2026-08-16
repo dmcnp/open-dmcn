@@ -12,15 +12,6 @@ envelope, and the relay wire format — and they're the contract, not the prose.
 
 Everything else on this site exists to explain them.
 
-## Two names
-
-**DMCN** is the network — the deployments that actually exchange mail. **DMCNP** is what
-they speak, and that's what's specified here.
-
-Implement it under any name you like. Apache-2.0 covers the code and the schema, patent
-grant included. Just don't call something DMCNP unless it really conforms — the name is
-how people know what they're getting.
-
 ## Why there's no global directory
 
 Most decentralised messaging puts identity in a shared overlay: a DHT, a chain, a consensus
@@ -34,6 +25,12 @@ nodes, fetch the signed record, and check it against the anchor from DNS.
 
 A domain is served by its own nodes and nobody else's. Records sign themselves, so a
 hostile server can refuse to answer you — it can't lie to you.
+
+## Naming and licence
+
+Apache-2.0 covers the code and the schema, patent grant included. It does not cover the
+names. Implement the protocol under whatever name you like — just don't call something
+DMCNP unless it really conforms, because that name is how people know what they're getting.
 
 ## Where it's up to
 

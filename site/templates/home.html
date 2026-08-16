@@ -15,6 +15,32 @@
   </div>
 </section>
 
+<!-- ---------- What it is ----------
+     A reader who has never heard of DMCN lands here. Before any table of layers
+     or DNS record makes sense they need three things: what job this does, what
+     is different about it, and which of the two names means what. -->
+<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
+  <div style="max-width:70ch;">
+    <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What it is</h2>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">DMCNP is a mail protocol. It does the same job as SMTP — move a message from one person to another — but it starts somewhere different.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">In email your address is a name a server vouches for. Anyone can claim to be you, and the network sorts it out afterwards with filters and reputation. Here your address <em>is</em> a keypair. <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code> names one specific public key, published by <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> and signed so anyone can check it. Nothing else can be that address.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Everything else follows from that. If the address is a key, mail can be sealed to it before it leaves your device — so the servers in between carry bytes they cannot read, and the question "is this really from who it says?" is answered by arithmetic rather than by a spam filter's guess.</p>
+  </div>
+
+  <!-- The concrete walk-through: what actually happens when you hit send. -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:36px;">
+    {{ range .Steps }}
+    <div style="padding:22px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
+      {{ icon .Icon "font-size:20px;color:var(--brand);" }}
+      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">{{ .Title }}</h3>
+      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">{{ .Detail }}</p>
+    </div>
+    {{ end }}
+  </div>
+
+  <p style="margin:28px 0 0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Two names, because they mean different things.</strong> <strong style="color:var(--text-strong);">DMCN</strong> is the network — the deployments that actually exchange mail. <strong style="color:var(--text-strong);">DMCNP</strong> is the protocol they speak, and that is what this site specifies. You can implement it under any name you like.</p>
+</section>
+
 <!-- ---------- Resolution teaser: the one record that makes a domain reachable ---------- -->
 <section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
   <div style="padding:22px clamp(18px,3vw,28px);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">

@@ -47,6 +47,25 @@ var layers = []layer{
 	{"Transport", "libp2p streams. Discovery is DNS-seeded — no DHT, on purpose."},
 }
 
+// step is one stage of the "how a message gets there" row on the home page —
+// the concrete walk-through a newcomer needs before the layer table means
+// anything. Detail is plain text; no markup, so it stays a plain string.
+type step struct {
+	Icon, Title, Detail string
+}
+
+var steps = []step{
+	{"search", "Look it up",
+		"Your client reads a DNS record for the recipient's domain, fetches their signed identity record from that domain's own servers, and checks it against the fingerprint the DNS record published."},
+	{"lock", "Seal it to their key",
+		"The message is encrypted on your device, to that key. Header and body are sealed separately and padded to fixed sizes, so neither the contents nor the shape gives anything away."},
+	// Careful with this one: "prove they hold the key" reads as though the key is
+	// handed to the relay. It never is — the relay sends a nonce, the client signs
+	// it, and the signature is the proof. Say so plainly.
+	{"inbox", "Leave it at their relay",
+		"The sealed envelope goes to a relay the recipient nominated. They collect it by signing a challenge the relay sends — the key never leaves their device — and the relay hands back bytes it cannot read, for them to verify and open."},
+}
+
 // pageSpec declares one output page.
 type pageSpec struct {
 	url    string // clean URL path: "/", "/spec/", or a literal file like "/404.html"
@@ -104,6 +123,7 @@ type pageData struct {
 	TOC         []tocEntry
 	Vanity      *Vanity
 	Layers      []layer
+	Steps       []step
 }
 
 // build renders the whole site into outDir.
@@ -208,6 +228,7 @@ func renderPage(cfg SiteConfig, p pageSpec, specPath string, vanity *Vanity) (*p
 		Tagline:     doc.Meta["tagline"],
 		Body:        doc.Body,
 		Layers:      layers,
+		Steps:       steps,
 	}
 	if p.toc {
 		data.TOC = doc.TOC
