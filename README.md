@@ -36,18 +36,29 @@ What it is:
 
 ### Build & run
 
+The quickest way in — no clone, no Node, because the SPA is embedded in the binary:
+
 ```bash
-make build                 # builds the embedded SPA (needs Node 20+) then bin/dmcnd
-# or, if cmd/dmcnd/web/dist is already present (it is committed):
-go build -o bin/dmcnd ./cmd/dmcnd
+go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
+go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest   # operator CLI
 
 # Dev: plain HTTP on localhost (a secure context for Web Crypto), DNS anchoring stubbed,
 # and two throwaway accounts seeded so you can log in immediately.
-DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob ./bin/dmcnd
+DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob dmcnd
 # → open https://localhost:8443 (http in dev), import the seeded keys, send alice→bob.
 ```
 
-`web/dist` is committed, so `go build ./...` works from a clean clone without Node; run
+From a clone:
+
+```bash
+make build                 # builds the embedded SPA (needs Node 20+) then bin/dmcnd
+# or, since cmd/dmcnd/web/dist is committed:
+go build -o bin/dmcnd ./cmd/dmcnd
+```
+
+`web/dist` is committed on purpose: it makes `go build ./...` work from a clean clone
+without Node, and it is what lets `go install` produce a working daemon (the module zip
+carries it, so `//go:embed web/dist` resolves for anyone installing from the proxy). Run
 `make build-web` (or `make proto-web`) to regenerate it.
 
 ### Configuration (`DMCND_*` environment)

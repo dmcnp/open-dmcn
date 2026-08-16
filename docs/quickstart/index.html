@@ -89,16 +89,21 @@ concrete to check your own implementation against.</p>
 embedded stores, dev-friendly defaults, no operational hardening. Don't put it in front of
 real users. Do read it alongside <a href="/spec">the spec</a> when the prose is ambiguous.</p>
 <h2 id="run-it">Run it<a class="hash" href="#run-it" aria-label="Link to this section">#</a></h2>
-<p>You need <strong>Go 1.25+</strong>. The web UI is committed pre-built, so you don't need Node.</p>
-<pre><code class="language-bash">git clone https://github.com/dmcnp/open-dmcn
-cd open-dmcn
-go build -o bin/dmcnd ./cmd/dmcnd
+<p>You need <strong>Go 1.25+</strong>. That's it — the web UI ships pre-built inside the binary, so there's
+no Node step.</p>
+<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
 
-DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob ./bin/dmcnd
+DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob dmcnd
 </code></pre>
 <p>Open <code>http://localhost:8443</code>, import one of the seeded keys, and send alice → bob. Dev mode
 serves plain HTTP on localhost — still a secure context, so Web Crypto works — and stubs the
-DNS anchoring so you don't need real records to poke at it.</p>
+DNS anchoring, so you don't need real records to poke at it.</p>
+<p>If <code>dmcnd</code> isn't found, <code>go install</code> put it in <code>$(go env GOPATH)/bin</code>, which isn't on your
+<code>PATH</code> yet.</p>
+<p>Want to read the code alongside <a href="/spec">the spec</a>? Clone it instead:</p>
+<pre><code class="language-bash">git clone https://github.com/dmcnp/open-dmcn &amp;&amp; cd open-dmcn
+go build -o bin/dmcnd ./cmd/dmcnd
+</code></pre>
 <h2 id="what-to-watch">What to watch<a class="hash" href="#what-to-watch" aria-label="Link to this section">#</a></h2>
 <p>The interesting part isn't the UI, it's what the server never sees.</p>
 <p>Keys are generated in the browser and stay there. Every operation is signed client-side. The
@@ -108,8 +113,10 @@ the server could store.</p>
 <p>Put a proxy in front of it and watch the traffic: sealed envelopes, padded to fixed size
 classes, and a header you can list without touching a body.</p>
 <h2 id="point-a-real-domain-at-it">Point a real domain at it<a class="hash" href="#point-a-real-domain-at-it" aria-label="Link to this section">#</a></h2>
-<p>Other domains find yours through DNS. The CLI prints the exact record:</p>
-<pre><code class="language-bash">dmcndcli dns --domain mesh.example --data-dir data \
+<p>Other domains find yours through DNS. The operator CLI prints the exact record:</p>
+<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest
+
+dmcndcli dns --domain mesh.example --data-dir data \
   --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/$(dmcndcli peer-id --identity data/node.key)
 </code></pre>
 <pre><code>_dmcn.mesh.example.  TXT  &quot;dmcn-verification=v1; fp=&lt;40-hex&gt;; seed=/ip4/…/p2p/…&quot;

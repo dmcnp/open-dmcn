@@ -15,19 +15,28 @@ real users. Do read it alongside [the spec](/spec) when the prose is ambiguous.
 
 ## Run it
 
-You need **Go 1.25+**. The web UI is committed pre-built, so you don't need Node.
+You need **Go 1.25+**. That's it — the web UI ships pre-built inside the binary, so there's
+no Node step.
 
 ```bash
-git clone {{repo}}
-cd open-dmcn
-go build -o bin/dmcnd ./cmd/dmcnd
+go install {{module}}/cmd/dmcnd@latest
 
-DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob ./bin/dmcnd
+DMCND_DEV=true DMCND_SEED_IDENTITIES=alice,bob dmcnd
 ```
 
 Open `http://localhost:8443`, import one of the seeded keys, and send alice → bob. Dev mode
 serves plain HTTP on localhost — still a secure context, so Web Crypto works — and stubs the
-DNS anchoring so you don't need real records to poke at it.
+DNS anchoring, so you don't need real records to poke at it.
+
+If `dmcnd` isn't found, `go install` put it in `$(go env GOPATH)/bin`, which isn't on your
+`PATH` yet.
+
+Want to read the code alongside [the spec](/spec)? Clone it instead:
+
+```bash
+git clone {{repo}} && cd open-dmcn
+go build -o bin/dmcnd ./cmd/dmcnd
+```
 
 ## What to watch
 
@@ -43,9 +52,11 @@ classes, and a header you can list without touching a body.
 
 ## Point a real domain at it
 
-Other domains find yours through DNS. The CLI prints the exact record:
+Other domains find yours through DNS. The operator CLI prints the exact record:
 
 ```bash
+go install {{module}}/cmd/dmcndcli@latest
+
 dmcndcli dns --domain mesh.example --data-dir data \
   --seed /ip4/<public-ip>/tcp/7400/p2p/$(dmcndcli peer-id --identity data/node.key)
 ```
