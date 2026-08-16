@@ -11,6 +11,11 @@
   font-size: 15.5px;
   line-height: var(--leading-relaxed);
   max-width: 74ch;
+  /* The spec is full of long unbreakable tokens — identifiers like
+     IdentityRecord.operator_credentials, protocol IDs, hex fingerprints. Without
+     this they push the whole page sideways on a narrow phone, because a single
+     word that can't fit has nowhere to break. Only breaks when it has to. */
+  overflow-wrap: break-word;
 }
 
 /* ---- Headings ----
@@ -74,9 +79,12 @@
   border-radius: var(--radius-md);
   overflow-x: auto; line-height: 1.55;
 }
+/* Inside a fenced block the opposite is wanted: never break, scroll instead —
+   the ASCII stack diagram and the wire snippets are column-aligned. */
 .prose pre code {
   background: none; border: none; padding: 0;
-  font-size: 13px; color: var(--text-body); white-space: pre;
+  font-size: 13px; color: var(--text-body);
+  white-space: pre; overflow-wrap: normal;
 }
 
 /* ---- Tables ----
