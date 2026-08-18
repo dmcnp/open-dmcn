@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -12,12 +11,20 @@ import (
 	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
-// handlePutRecord stores a pushed self-authenticating record into the node's RecordStore after
-// re-verifying it — the fleet-replication path that replaces DHT writes. Identity pushes require
-// the caller's 'routing' fleet grant (anti-spam); every kind is re-verified (so a compromised
-// pusher cannot inject a forgery), and identity/DAR pushes are anti-rollback-guarded by revision.
-// DAR/roster/removal/blocklist are self-anchoring (DNS/root-signed) and re-verified authoritatively
-// by the reader at resolve time, so a bad one is rejected there even if stored.
+// handlePutRecord is the fleet-replication ingest for a pushed record (the path that replaced DHT
+// writes). It applies the one caller-relative check — the pusher's 'routing' fleet grant, which is
+// anti-spam and cannot be evaluated inside AcceptRecord because it depends on who is asking — and
+// then defers every acceptance rule to AcceptRecord.
+//
+// The former rationale here ("DAR/roster/removal/blocklist are self-anchoring and re-verified
+// authoritatively by the reader, so a bad one is rejected there even if stored") is retired. The
+// node is itself a NON-verifying reader on its hot paths, "self-anchoring" is a property of the DAR
+// whose DNS anchor was never checked on this path, and an unauthenticated write is a free disk-fill
+// primitive for any admitted peer regardless of how carefully readers behave.
+//
+// The rule that replaces it, applied uniformly by AcceptRecord: a record is stored only if the
+// storing node can tell, from state it already trusts, that it is a legitimate successor of what it
+// already holds.
 func (r *Relay) handlePutRecord(caller peer.ID, req *dmcnpb.PutRecordRequest) *dmcnpb.RelayResponse {
 	reject := func(reason string) *dmcnpb.RelayResponse {
 		return &dmcnpb.RelayResponse{Response: &dmcnpb.RelayResponse_PutRecord{
@@ -35,84 +42,22 @@ func (r *Relay) handlePutRecord(caller peer.ID, req *dmcnpb.PutRecordRequest) *d
 	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
 	defer cancel()
 
-	switch req.GetKind() {
-	case dmcnpb.RecordKind_RECORD_KIND_IDENTITY:
-		rec, err := identity.IdentityRecordFromProtoBytes(req.GetRecord())
-		if err != nil {
-			return reject("parse identity: " + err.Error())
+	// NOTE (open-dmcn): the fleet 'routing'-grant anti-spam gate on identity pushes is a
+	// fleet-ownership surface, omitted here. The record is self-authenticating (verified inside
+	// AcceptRecord and re-verified by every reader), so a single self-hosted domain accepts pushes
+	// for its own addresses. The key-continuity rule inside AcceptRecord is NOT a fleet surface and
+	// does apply: without it, anyone who can push a record could re-bind a live address to their
+	// own key.
+	accepted, reason := r.AcceptRecord(ctx, req.GetKind(), req.GetRecord())
+	if !accepted {
+		if storageFailure(reason) {
+			return errorResponse("STORAGE_FAILED", reason)
 		}
-		if err := rec.Verify(); err != nil {
-			return reject("identity self-signature invalid")
-		}
-		// NOTE (open-dmcn): the fleet 'routing'-grant anti-spam gate on identity pushes is a
-		// fleet-ownership surface, omitted here. The record is self-authenticating (verified
-		// above and re-verified by every reader), so a single self-hosted domain accepts pushes
-		// for its own addresses.
-		// Anti-rollback: a stale record must never overwrite a newer one.
-		if existing, _ := r.records.GetIdentity(ctx, rec.Address); existing != nil {
-			if rec.Revision < existing.Revision {
-				return reject(fmt.Sprintf("stale revision %d < %d", rec.Revision, existing.Revision))
-			}
-			if rec.Revision == existing.Revision && operatorFieldIssuedAt(rec).Before(operatorFieldIssuedAt(existing)) {
-				return reject("stale operator credential")
-			}
-		}
-		if err := r.records.PutIdentity(ctx, rec); err != nil {
-			return errorResponse("STORAGE_FAILED", "store identity")
-		}
-		r.log.Debugf("PutRecord identity %s (rev %d) from %s", rec.Address, rec.Revision, caller)
-		return accept()
-
-	case dmcnpb.RecordKind_RECORD_KIND_DAR:
-		dar, err := identity.DomainAuthorityRecordFromProtoBytes(req.GetRecord())
-		if err != nil {
-			return reject("parse DAR: " + err.Error())
-		}
-		if err := dar.Verify(); err != nil {
-			return reject("DAR self-signature invalid")
-		}
-		if existing, _ := r.records.GetDAR(ctx, dar.Domain); existing != nil && dar.Revision < existing.Revision {
-			return reject(fmt.Sprintf("stale DAR revision %d < %d", dar.Revision, existing.Revision))
-		}
-		if err := r.records.PutDAR(ctx, dar); err != nil {
-			return errorResponse("STORAGE_FAILED", "store DAR")
-		}
-		r.log.Debugf("PutRecord DAR %s (rev %d) from %s", dar.Domain, dar.Revision, caller)
-		return accept()
-
-	case dmcnpb.RecordKind_RECORD_KIND_ROSTER:
-		roster, err := identity.FleetRosterFromProtoBytes(req.GetRecord())
-		if err != nil {
-			return reject("parse roster: " + err.Error())
-		}
-		if err := r.records.PutRoster(ctx, roster); err != nil {
-			return errorResponse("STORAGE_FAILED", "store roster")
-		}
-		return accept()
-
-	case dmcnpb.RecordKind_RECORD_KIND_REMOVAL:
-		rm, err := identity.AddressRemovalRecordFromProtoBytes(req.GetRecord())
-		if err != nil {
-			return reject("parse removal: " + err.Error())
-		}
-		if err := r.records.PutRemoval(ctx, rm); err != nil {
-			return errorResponse("STORAGE_FAILED", "store removal")
-		}
-		return accept()
-
-	case dmcnpb.RecordKind_RECORD_KIND_BLOCKLIST:
-		bl, err := identity.CredentialBlockListFromProtoBytes(req.GetRecord())
-		if err != nil {
-			return reject("parse blocklist: " + err.Error())
-		}
-		if err := r.records.PutBlocklist(ctx, bl); err != nil {
-			return errorResponse("STORAGE_FAILED", "store blocklist")
-		}
-		return accept()
-
-	default:
-		return reject("unknown record kind")
+		r.log.Debugf("PutRecord %s from %s rejected: %s", req.GetKind(), caller, reason)
+		return reject(reason)
 	}
+	r.log.Debugf("PutRecord %s from %s accepted", req.GetKind(), caller)
+	return accept()
 }
 
 // operatorFieldIssuedAt returns the newest IssuedAt across the record's operator-owned

@@ -93,7 +93,12 @@ func relayHintsEqual(a, b []string) bool {
 
 // RemovalIsRootSigned reports whether an AddressRemovalRecord is signed by a root key the DAR
 // vouches for (the current key effective at the removal's timestamp, or any key in the timeline).
+// A nil DAR or record is NOT root-signed: callers that could not resolve the domain authority must
+// not be able to mistake "cannot verify" for "verified".
 func RemovalIsRootSigned(dar *DomainAuthorityRecord, rm *AddressRemovalRecord) bool {
+	if dar == nil || rm == nil {
+		return false
+	}
 	if pub, ok := dar.RootKeyAt(rm.CreatedAt); ok && rm.Verify(pub) == nil {
 		return true
 	}
@@ -109,7 +114,7 @@ func RemovalIsRootSigned(dar *DomainAuthorityRecord, rm *AddressRemovalRecord) b
 // vouches for. A reader MUST check this before honoring a blocklist — otherwise an untrusted
 // carrier (a hostile fleet) could censor a valid credential with a forged blocklist.
 func BlocklistIsRootSigned(dar *DomainAuthorityRecord, bl *CredentialBlockList) bool {
-	if bl == nil {
+	if dar == nil || bl == nil {
 		return false
 	}
 	for _, pub := range darRootKeys(dar) {
@@ -127,4 +132,79 @@ func darRootKeys(dar *DomainAuthorityRecord) []ed25519.PublicKey {
 		keys = append(keys, k.Ed25519Public)
 	}
 	return keys
+}
+
+// --- Address re-binding ------------------------------------------------------------------------
+
+// RebindArm names the rule that authorized an address↔key binding. Returned by AuthorizeRebind so
+// callers can log WHY a write was allowed, and so a new arm can be added without changing the
+// signature (a user-held recovery key is the planned next one).
+type RebindArm string
+
+const (
+	// RebindGenesis: no incumbent record — a first binding.
+	RebindGenesis RebindArm = "genesis"
+	// RebindSameKey: the owner key is unchanged — a republish, not a rebind. This is the arm
+	// every operator flow takes (rebalance, drain, approve, credential re-issue).
+	RebindSameKey RebindArm = "same-key"
+	// RebindRootTombstone: the domain root tombstoned the incumbent key, freeing the address.
+	RebindRootTombstone RebindArm = "root-tombstone"
+)
+
+var (
+	// ErrRebindTombstoneRequired: the rule was evaluated and the rebind is NOT authorized.
+	ErrRebindTombstoneRequired = errors.New("identity: re-binding an address requires a root-signed removal of the incumbent key")
+	// ErrRebindUnverifiable: the rule could NOT be evaluated (no domain authority available), so
+	// the caller must apply its own policy. Distinct from denial on purpose: a fleet node that
+	// serves the domain should fail closed, while a standalone/dev node has no DAR to consult and
+	// must not be bricked by that.
+	ErrRebindUnverifiable = errors.New("identity: cannot evaluate re-binding without the domain authority record")
+)
+
+// AuthorizeRebind decides whether `next` may replace `prev` as the record for an address, and
+// returns the arm that authorized it.
+//
+// This is the rule that makes the AddressRemovalRecord contract real: "Only the domain root can
+// publish one, so only root can free an address for re-binding." An AddressCredential is an
+// ordinary role-bearing leaf, so any DAR-enrolled issuer holding the `address` grant can attest
+// ANY address↔key binding on its domain. That is correct for attesting a binding and wrong for
+// CHANGING one — the missing rule is state-relative, so it lives here and at the store rather
+// than in the capability calculus.
+//
+// prev == nil means the caller holds no incumbent record. Note the boundary this implies: the
+// check is state-relative, so a node with no prior record accepts anything as a genesis binding.
+// It defeats theft of an online issuing key; it does not defeat an operator who controls both
+// issuance and every serving node.
+func AuthorizeRebind(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *DomainAuthorityRecord) (RebindArm, error) {
+	if next == nil {
+		return "", errors.New("identity: no record to authorize")
+	}
+	if prev == nil {
+		return RebindGenesis, nil
+	}
+	if bytes.Equal(prev.Ed25519Public, next.Ed25519Public) {
+		return RebindSameKey, nil
+	}
+	if dar == nil {
+		return "", ErrRebindUnverifiable
+	}
+	if rm == nil {
+		return "", ErrRebindTombstoneRequired
+	}
+	// Bind the tombstone to THIS address. Removed() matches on the key alone, so without this a
+	// root-signed removal freeing a key at one address would be a transferable capability to
+	// re-bind any other address that key happens to hold.
+	if !strings.EqualFold(rm.Address, next.Address) {
+		return "", fmt.Errorf("%w: removal record names %q, not %q", ErrRebindTombstoneRequired, rm.Address, next.Address)
+	}
+	if !strings.EqualFold(rm.Domain, dar.Domain) {
+		return "", fmt.Errorf("%w: removal record domain %q is outside the authority for %q", ErrRebindTombstoneRequired, rm.Domain, dar.Domain)
+	}
+	if !RemovalIsRootSigned(dar, rm) {
+		return "", fmt.Errorf("%w: removal record is not signed by a domain root key", ErrRebindTombstoneRequired)
+	}
+	if _, ok := rm.Removed(prev.Ed25519Public); !ok {
+		return "", fmt.Errorf("%w: the incumbent key is not tombstoned", ErrRebindTombstoneRequired)
+	}
+	return RebindRootTombstone, nil
 }

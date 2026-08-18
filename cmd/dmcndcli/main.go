@@ -4,6 +4,8 @@
 //
 //	peer-id   print the libp2p peer ID for an identity key (for seed multiaddrs / peer allowlisting)
 //	dns       print the _dmcn.<domain> TXT record the operator must publish for federation
+//	remove-address
+//	          root-sign a tombstone freeing an address, so it can be bound to a new key
 //
 // It reads the same on-disk state the daemon uses (the persistent identity key, the seed keystore),
 // so its output matches what the daemon runs with.
@@ -35,6 +37,8 @@ func main() {
 		err = cmdPeerID(os.Args[2:])
 	case "dns":
 		err = cmdDNS(os.Args[2:])
+	case "remove-address":
+		err = cmdRemoveAddress(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -61,8 +65,15 @@ Usage:
         Print the _dmcn.<domain> TXT record to publish in DNS so other domains can resolve and
         federate with yours. Reads the domain root key from the daemon's seed keystore.
 
-Environment: DMCND_IDENTITY, DMCND_DOMAIN, DMCND_DATA_DIR, DMCND_SEED_PASSPHRASE are used as
-defaults for the matching flags.
+  dmcndcli remove-address --address <local@domain> --peers <multiaddr>[,...] [--pubkey <hex>] [--yes]
+        Root-sign and publish a tombstone for an address's current key, freeing the address to be
+        registered again with a fresh key. This is the ONLY way to recover an address whose key was
+        lost or compromised: the daemon refuses any record that re-binds a live address to a
+        different key unless the domain root has tombstoned the incumbent. Reads the domain root key
+        from the daemon's seed keystore, so it must run on the host holding it.
+
+Environment: DMCND_IDENTITY, DMCND_DOMAIN, DMCND_DATA_DIR, DMCND_SEED_PASSPHRASE, DMCND_PEERS are
+used as defaults for the matching flags.
 `)
 }
 

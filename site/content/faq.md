@@ -85,9 +85,15 @@ Yes, on purpose. The `RelayHints` that say which relays hold your mailbox sit *o
 signature, in a credential the operator signs. So an operator can re-point them to rebalance
 load or drain a machine without touching your key.
 
-What they can't do is change who you are. Your address, your keys, your validity window —
-those are covered by your own signature. Moving the mailbox doesn't move the identity, which
-is also why your address survives the move.
+Moving the mailbox doesn't move the identity, which is also why your address survives the move.
+
+Changing *who you are* is a different power, and it needs a different key. Re-binding an address to
+a new keypair is only accepted with a tombstone for the current key signed by the domain's **root**
+— the offline key behind its authority record. An operator key that can re-point routing, or attest
+new addresses, cannot do it. That matters because those are the keys that live on a running server.
+
+The root itself can. On a domain someone else runs, that is a trust you are extending to them; it is
+also what makes admin key recovery possible at all. Run the domain yourself and the root is yours.
 
 ## Who can read my mail?
 
@@ -129,10 +135,18 @@ It's federated, and it's worth being precise about what that buys you.
 Operators run relays, control routing, and can attest addresses on their domain. That's real
 power over whether you get service and where your mail sits.
 
-What they never get is the ability to read your mail or impersonate you, because the keys for
-either never leave your device. The goal isn't a world with no operators. It's that picking
-one hands them as little as possible, and leaving costs you a routing change and nothing
-else.
+What an operator's day-to-day keys never get is the ability to read your mail — the keys for that
+never leave your device — or to re-bind your address to a key of their choosing, which takes a
+root-signed tombstone they don't hold.
+
+The domain's root key is the honest exception. It can free an address and let it be bound again,
+which is the same mechanism that recovers a lost or compromised account. It cannot read mail that
+was already sent to you — that is sealed to a key it never had — but it can take over what arrives
+next. So the operator you should think hard about is whoever holds the root for your domain, and if
+that is you, there isn't one.
+
+The goal isn't a world with no operators. It's that picking one hands them as little as possible,
+and leaving costs you a routing change and nothing else.
 
 ## Is it production ready?
 
