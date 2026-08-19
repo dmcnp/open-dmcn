@@ -116,23 +116,30 @@ provider never holds, so who sent a message is settled by the message itself rat
 a policy the receiving side may or may not honour. The same key is what lets the mail be
 sealed so the servers in between can't read it either.</p>
 <p>None of which makes the old three useless. DMCNP's <a href="/quickstart">SMTP bridge</a> runs all of
-them on inbound legacy mail and passes the verdict on as a signed attestation inside the
-sealed envelope — for mail that starts in the old world, they're the best signal there is.</p>
+them for real on inbound legacy mail and passes the verdict on as a signed attestation inside the
+sealed envelope — for mail that starts in the old world, they're the best signal there is. (The
+daemon ships a <code>stub</code> auth mode for offline development that skips the checks; it is not the
+default, and it must never be used where real mail arrives.)</p>
 <h2 id="is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?<a class="hash" href="#is-there-a-blockchain-a-dht-or-a-global-directory" aria-label="Link to this section">#</a></h2>
 <p>No, and that's deliberate.</p>
 <p>An earlier version did resolve identities through a Kademlia DHT. It came out because a big
 enough hostile majority in a shared overlay can quietly withhold records. For something
 meant to replace email, that's disqualifying.</p>
-<p>Resolution is per-domain and DNS-seeded now: read <code>_dmcn.&lt;domain&gt;</code>, dial that domain's own
-nodes, check what comes back against the fingerprint from DNS. A domain is served by its own
-nodes and nobody else's.</p>
+<p>Resolution is per-domain and DNS-seeded now: read <code>_dmcn.&lt;domain&gt;</code>, dial the nodes that record
+names, check what comes back against the fingerprint from DNS. A domain is served by the nodes it
+chooses — its own, or a host it delegates to — never by a shared pool it has no say in.</p>
 <h2 id="what-if-a-domains-server-lies-about-a-record">What if a domain's server lies about a record?<a class="hash" href="#what-if-a-domains-server-lies-about-a-record" aria-label="Link to this section">#</a></h2>
-<p>It can't, in the way that matters. Records sign themselves, and they chain to a domain
-authority anchored by a fingerprint in DNS. A hostile or just broken server can refuse to
-answer, or answer with something that fails verification. Both mean you don't get service.
-Neither means you get a forgery.</p>
+<p>A server that isn't your domain's authority can't, in the way that matters. Records sign
+themselves, and they chain to a domain authority anchored by a fingerprint in DNS. A hostile or
+just broken carrier can refuse to answer, or answer with something that fails verification. Both
+mean you don't get service. Neither means you get a forgery.</p>
 <p>That's the whole reason the anchor lives in DNS and the records live with the domain: the
 dangerous failure isn't available.</p>
+<p>The authority key itself is a different question, because it is what the fingerprint in DNS
+delegates to. It can't decrypt anything, and it can't produce a record your key signed — but it can
+tombstone a binding and let the address be bound again, which is the same mechanism that recovers a
+lost account. What it can't do is that silently: freeing an address leaves a signed, versioned,
+publicly resolvable record, and a client that pinned the old key sees the change.</p>
 <h2 id="can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?<a class="hash" href="#can-my-provider-move-my-mailbox-without-asking-me" aria-label="Link to this section">#</a></h2>
 <p>Yes, on purpose. The <code>RelayHints</code> that say which relays hold your mailbox sit <em>outside</em> your
 signature, in a credential the operator signs. So an operator can re-point them to rebalance
@@ -151,7 +158,9 @@ separately so listing an inbox never touches a body.</p>
 <p>Two honest limits. Mail crossing the <strong>SMTP bridge</strong> is TLS-in-transit on the legacy side,
 not end-to-end encrypted. And relays necessarily see routing metadata — which mailbox is
 getting something, and roughly when. Payloads are padded to fixed size classes to blunt
-traffic analysis, and onion routing is there for senders who need the path hidden too.</p>
+traffic analysis, and onion routing is there for senders who need the path hidden too — though it
+is inherited transport that stays inert until a mesh has at least three relays, so a single
+self-hosted node gets the padding but not the path hiding.</p>
 <h2 id="whats-core-and-whats-an-extension">What's core and what's an extension?<a class="hash" href="#whats-core-and-whats-an-extension" aria-label="Link to this section">#</a></h2>
 <p>Core is what you need to interoperate. Everything else — fleet administration, hosting
 permits, provisioning, entitlements, quotas — is an extension.</p>

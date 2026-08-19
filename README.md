@@ -34,8 +34,10 @@ What it is:
   client-side (Web Crypto), the backend is an in-process proxy to the node;
 - **self-service registration** — the browser generates keys and self-signs its record;
   the daemon attaches an operator routing credential and publishes it;
-- an optional **SMTP bridge** (`DMCND_BRIDGE_ENABLED`) — inbound legacy email is
-  signed+encrypted into DMCN mailboxes, DMCN→SMTP goes out over the bridge;
+- an optional **SMTP bridge** (`DMCND_BRIDGE_ENABLED`) — inbound legacy email is verified with
+  real SPF/DKIM/DMARC, then signed+encrypted into DMCN mailboxes with the verdict attached as a
+  signed attestation; outbound DMCN→SMTP is captured in memory until you opt in with
+  `DMCND_BRIDGE_DELIVERY_MODE=smtp`, so a fresh install never sends live mail;
 - **onion routing** — inherited transport, inert until the mesh has ≥3 relays.
 
 ### Build & run
@@ -86,6 +88,11 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_BRIDGE_ADDRESS` | `bridge@<domain>` | the bridge's own DMCN address |
 | `DMCND_BRIDGE_DOMAIN` | `<domain>` | the legacy (SMTP) domain the bridge represents |
 | `DMCND_BRIDGE_AUDIT_LOG` | — | append-only JSON audit log path |
+| `DMCND_BRIDGE_AUTH_MODE` | `dns` | inbound verification: `dns` (real SPF/DKIM/DMARC) or `stub` (no checks — offline dev only) |
+| `DMCND_BRIDGE_DELIVERY_MODE` | `stub` | outbound: `smtp` (real MX lookup + STARTTLS) or `stub` (captured in memory, sends nothing) |
+| `DMCND_BRIDGE_DKIM_KEY` | — | PEM private key for outbound DKIM signing; without it outbound mail is unsigned and widely spam-filtered |
+| `DMCND_BRIDGE_DKIM_SELECTOR` | `dmcn` | DKIM selector (the `<selector>._domainkey` label) |
+| `DMCND_BRIDGE_HELO` | OS hostname | EHLO name announced to remote MTAs |
 
 ### Federation
 
@@ -111,6 +118,11 @@ dmcndcli dns --domain mesh.example --data-dir data \
 
 # The libp2p peer ID for an identity key (created if missing) — for seed multiaddrs / allowlisting:
 dmcndcli peer-id --identity data/node.key
+
+# Free an address whose key was lost, compromised or squatted, so it can be registered again.
+# Root-only, and the ONLY recovery path: the daemon refuses any record that re-binds a live
+# address to a different key unless the domain root has tombstoned the incumbent.
+dmcndcli remove-address --address alice@mesh.example --peers /ip4/127.0.0.1/tcp/7400/p2p/<peerID>
 ```
 
 ## Layout

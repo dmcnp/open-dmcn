@@ -103,20 +103,25 @@ func main() {
 
 	// Optional SMTP bridge, folded onto the shared node. The daemon provisions the bridge's DMCN
 	// identity (BridgeCapability + routing credential), then hands the node + key pair to the
-	// bridge, which owns only the SMTP<->DMCN translation. Auth + delivery default to dev stubs
-	// (no live mail sent); real SPF/DKIM/DMARC + outbound SMTP are deployment opt-ins.
+	// bridge, which owns only the SMTP<->DMCN translation. Inbound auth runs real SPF/DKIM/DMARC by
+	// default; outbound delivery defaults to the in-memory stub so a fresh install never sends live
+	// mail until the operator opts in (DMCND_BRIDGE_DELIVERY_MODE=smtp).
 	if cfg.bridgeEnabled {
 		bridgeKP, berr := seeds.seedBridgeIdentity(ctx, n, rootKP, cfg.bridgeAddress, now)
 		if berr != nil {
 			fatalf("seed bridge identity %s: %v", cfg.bridgeAddress, berr)
 		}
-		br, berr := bridge.New(ctx, n, bridgeKP, bridge.Config{
+		bcfg := bridge.Config{
 			SMTPListenAddr: cfg.bridgeSMTPListen,
 			BridgeAddress:  cfg.bridgeAddress,
 			BridgeDomain:   cfg.bridgeDomain,
 			DMCNDomain:     cfg.domain,
 			AuditLogPath:   os.Getenv("DMCND_BRIDGE_AUDIT_LOG"),
-		}, log)
+		}
+		if berr := applyBridgeModes(&bcfg, cfg, log); berr != nil {
+			fatalf("%v", berr)
+		}
+		br, berr := bridge.New(ctx, n, bridgeKP, bcfg, log)
 		if berr != nil {
 			fatalf("start bridge: %v", berr)
 		}
@@ -261,6 +266,11 @@ type config struct {
 	bridgeEnabled    bool
 	bridgeSMTPListen string
 	bridgeAddress    string // bridge's DMCN address (default bridge@<domain>)
+	bridgeAuthMode   string // "dns" = real SPF/DKIM/DMARC on inbound, "stub" = no checks (dev only)
+	bridgeDelivery   string // "smtp" = real MX lookup + STARTTLS outbound, "stub" = in-memory (default)
+	bridgeDKIMKey    string // PEM private key path; without it outbound mail is unsigned
+	bridgeDKIMSel    string // DKIM selector (default "dmcn")
+	bridgeHELO       string // EHLO name announced to remote MTAs (default: OS hostname)
 	bridgeDomain     string // the legacy email (SMTP) domain the bridge represents
 }
 
@@ -279,6 +289,11 @@ func loadConfig() config {
 		allowedPeers:     splitList(os.Getenv("DMCND_ALLOWED_PEERS")),
 		seedPassphrase:   envOr("DMCND_SEED_PASSPHRASE", "dmcnd-dev-seed"),
 		bridgeEnabled:    envBool("DMCND_BRIDGE_ENABLED"),
+		bridgeAuthMode:   envOr("DMCND_BRIDGE_AUTH_MODE", "dns"),
+		bridgeDelivery:   envOr("DMCND_BRIDGE_DELIVERY_MODE", "stub"),
+		bridgeDKIMKey:    os.Getenv("DMCND_BRIDGE_DKIM_KEY"),
+		bridgeDKIMSel:    envOr("DMCND_BRIDGE_DKIM_SELECTOR", "dmcn"),
+		bridgeHELO:       os.Getenv("DMCND_BRIDGE_HELO"),
 		bridgeSMTPListen: envOr("DMCND_BRIDGE_SMTP_LISTEN", ":2525"),
 		bridgeAddress:    os.Getenv("DMCND_BRIDGE_ADDRESS"),
 		bridgeDomain:     os.Getenv("DMCND_BRIDGE_DOMAIN"),
@@ -334,4 +349,54 @@ func fatalf(format string, args ...any) {
 	log.Errorf(format, args...)
 	logr.Wait()
 	os.Exit(1)
+}
+
+// applyBridgeModes selects the bridge's inbound verifier and outbound deliverer.
+//
+// Both used to be unreachable: the daemon never set either field, so bridge.New installed the dev
+// stubs and the real DNSAuthVerifier/SMTPSender had no caller anywhere in this repo. The site said
+// inbound mail was checked with SPF/DKIM/DMARC, which was simply untrue of the binary it told you
+// to run — the attestation was real but the verdict inside it was a stub's.
+//
+// Defaults are chosen so the honest claim is also the default one: inbound verification is REAL
+// (it only costs DNS lookups when mail actually arrives), while outbound delivery stays in-memory
+// until the operator opts in, so installing the daemon never starts sending live mail.
+func applyBridgeModes(bcfg *bridge.Config, cfg config, log logr.Logger) error {
+	switch cfg.bridgeAuthMode {
+	case "dns":
+		bcfg.AuthVerifier = bridge.NewDNSAuthVerifier()
+		log.Infof("bridge inbound auth: real SPF/DKIM/DMARC")
+	case "stub":
+		log.Warnf("INSECURE: DMCND_BRIDGE_AUTH_MODE=stub — inbound SPF/DKIM/DMARC verification is DISABLED and the signed verdict attached to bridged mail is meaningless (dev only)")
+	default:
+		return fmt.Errorf("invalid DMCND_BRIDGE_AUTH_MODE %q (want \"dns\" or \"stub\")", cfg.bridgeAuthMode)
+	}
+
+	switch cfg.bridgeDelivery {
+	case "smtp":
+		var signer *bridge.DKIMSigner
+		if cfg.bridgeDKIMKey != "" {
+			key, err := bridge.LoadDKIMKey(cfg.bridgeDKIMKey)
+			if err != nil {
+				return fmt.Errorf("load DMCND_BRIDGE_DKIM_KEY: %w", err)
+			}
+			if signer, err = bridge.NewDKIMSigner(cfg.bridgeDomain, cfg.bridgeDKIMSel, key); err != nil {
+				return err
+			}
+			log.Infof("outbound DKIM signing enabled (d=%s s=%s)", cfg.bridgeDomain, cfg.bridgeDKIMSel)
+		} else {
+			log.Warnf("outbound DKIM signing DISABLED (no DMCND_BRIDGE_DKIM_KEY) — receivers will very likely treat this mail as spam")
+		}
+		bcfg.Deliverer = bridge.NewSMTPSender(bridge.SMTPSenderConfig{
+			HELOName: cfg.bridgeHELO,
+			DKIM:     signer,
+		})
+		log.Infof("bridge outbound delivery: real SMTP (MX lookup + opportunistic STARTTLS)")
+	case "stub":
+		// Leave Deliverer nil so bridge.New installs the in-memory stub.
+		log.Warnf("bridge outbound delivery: stub — DMCN→SMTP mail is captured in memory, NOT sent (set DMCND_BRIDGE_DELIVERY_MODE=smtp to send for real)")
+	default:
+		return fmt.Errorf("invalid DMCND_BRIDGE_DELIVERY_MODE %q (want \"smtp\" or \"stub\")", cfg.bridgeDelivery)
+	}
+	return nil
 }

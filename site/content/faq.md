@@ -54,8 +54,10 @@ a policy the receiving side may or may not honour. The same key is what lets the
 sealed so the servers in between can't read it either.
 
 None of which makes the old three useless. DMCNP's [SMTP bridge](/quickstart) runs all of
-them on inbound legacy mail and passes the verdict on as a signed attestation inside the
-sealed envelope — for mail that starts in the old world, they're the best signal there is.
+them for real on inbound legacy mail and passes the verdict on as a signed attestation inside the
+sealed envelope — for mail that starts in the old world, they're the best signal there is. (The
+daemon ships a `stub` auth mode for offline development that skips the checks; it is not the
+default, and it must never be used where real mail arrives.)
 
 ## Is there a blockchain, a DHT, or a global directory?
 
@@ -65,19 +67,25 @@ An earlier version did resolve identities through a Kademlia DHT. It came out be
 enough hostile majority in a shared overlay can quietly withhold records. For something
 meant to replace email, that's disqualifying.
 
-Resolution is per-domain and DNS-seeded now: read `_dmcn.<domain>`, dial that domain's own
-nodes, check what comes back against the fingerprint from DNS. A domain is served by its own
-nodes and nobody else's.
+Resolution is per-domain and DNS-seeded now: read `_dmcn.<domain>`, dial the nodes that record
+names, check what comes back against the fingerprint from DNS. A domain is served by the nodes it
+chooses — its own, or a host it delegates to — never by a shared pool it has no say in.
 
 ## What if a domain's server lies about a record?
 
-It can't, in the way that matters. Records sign themselves, and they chain to a domain
-authority anchored by a fingerprint in DNS. A hostile or just broken server can refuse to
-answer, or answer with something that fails verification. Both mean you don't get service.
-Neither means you get a forgery.
+A server that isn't your domain's authority can't, in the way that matters. Records sign
+themselves, and they chain to a domain authority anchored by a fingerprint in DNS. A hostile or
+just broken carrier can refuse to answer, or answer with something that fails verification. Both
+mean you don't get service. Neither means you get a forgery.
 
 That's the whole reason the anchor lives in DNS and the records live with the domain: the
 dangerous failure isn't available.
+
+The authority key itself is a different question, because it is what the fingerprint in DNS
+delegates to. It can't decrypt anything, and it can't produce a record your key signed — but it can
+tombstone a binding and let the address be bound again, which is the same mechanism that recovers a
+lost account. What it can't do is that silently: freeing an address leaves a signed, versioned,
+publicly resolvable record, and a client that pinned the old key sees the change.
 
 ## Can my provider move my mailbox without asking me?
 
@@ -104,7 +112,9 @@ separately so listing an inbox never touches a body.
 Two honest limits. Mail crossing the **SMTP bridge** is TLS-in-transit on the legacy side,
 not end-to-end encrypted. And relays necessarily see routing metadata — which mailbox is
 getting something, and roughly when. Payloads are padded to fixed size classes to blunt
-traffic analysis, and onion routing is there for senders who need the path hidden too.
+traffic analysis, and onion routing is there for senders who need the path hidden too — though it
+is inherited transport that stays inert until a mesh has at least three relays, so a single
+self-hosted node gets the padding but not the path hiding.
 
 ## What's core and what's an extension?
 

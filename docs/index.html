@@ -66,7 +66,7 @@
     <svg class="lucide lucide-git-fork" style="font-size:13px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" /><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9" /><path d="M12 12v3" /></svg> DMCNP · an open protocol · Apache-2.0
   </div>
   <h1 style="margin:0;max-width:19ch;font-size:clamp(34px,6vw,60px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">Cryptographic identity replaces SMTP-style trust.</h1>
-  <p style="margin:24px 0 0;max-width:62ch;font-size:clamp(16px,2vw,18.5px);line-height:1.6;color:var(--text-muted);">An open protocol for end-to-end-encrypted mail. Your address is a keypair. Your domain serves its own records, found through DNS. There&#39;s no global directory to censor, and no server that can read your mail.</p>
+  <p style="margin:24px 0 0;max-width:62ch;font-size:clamp(16px,2vw,18.5px);line-height:1.6;color:var(--text-muted);">An open protocol for end-to-end-encrypted mail. Your address is a keypair. Your domain serves its own records, found through DNS. There&#39;s no global directory to censor, and no server in the middle that can read mail sent between DMCN addresses.</p>
 
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:34px;">
     <a href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;"><svg class="lucide lucide-book-open" style="font-size:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></svg> Read the spec</a>
@@ -200,8 +200,9 @@ email, that's fatal.</p>
 <p>So resolution works like mail delivery already does. A domain publishes a <code>_dmcn</code> TXT
 record with its trust anchor and a few seed nodes. You read it, dial that domain's own
 nodes, fetch the signed record, and check it against the anchor from DNS.</p>
-<p>A domain is served by its own nodes and nobody else's. Records sign themselves, so a
-hostile server can refuse to answer you — it can't lie to you.</p>
+<p>A domain is served by the nodes its own DNS names — its own, or a host it explicitly delegates to
+— never by a shared pool it doesn't choose. Records sign themselves, so a server that isn't your
+domain's authority can refuse to answer you; it can't lie to you.</p>
 <h2 id="naming-and-licence">Naming and licence<a class="hash" href="#naming-and-licence" aria-label="Link to this section">#</a></h2>
 <p>Apache-2.0 covers the code and the schema, patent grant included. It does not cover the
 names. Implement the protocol under whatever name you like — just don't call something

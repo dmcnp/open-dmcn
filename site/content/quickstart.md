@@ -94,6 +94,7 @@ Everything is environment-driven. These are the ones you'll actually touch:
 | `DMCND_DEV` | `false` | plain HTTP on localhost, stubbed DNS anchoring |
 | `DMCND_PEERS` | — | peers to bootstrap from |
 | `DMCND_BRIDGE_ENABLED` | `false` | turn on the SMTP bridge |
+| `DMCND_BRIDGE_DELIVERY_MODE` | `stub` | `smtp` to actually send outbound mail (default captures it in memory) |
 
 The full list — TLS, libp2p listen addresses, federation allow-sets, bridge options — is in
 the [repository README]({{repo}}#configuration-dmcnd_-environment).
@@ -107,11 +108,24 @@ either allowlist them or hand them a valid credential.
 DMCND_BRIDGE_ENABLED=true dmcnd
 ```
 
-Inbound legacy mail gets checked with SPF/DKIM/DMARC at the bridge, and the verdict travels
+Inbound legacy mail gets checked with real SPF/DKIM/DMARC at the bridge, and the verdict travels
 as a signed attachment *inside* the sealed envelope. So the recipient's client verifies the
 bridge's attestation against the bridge's own published identity, rather than trusting
 whichever relay carried it.
 
-**The honest bit:** mail crossing a bridge is TLS-in-transit on the legacy side, not
-end-to-end encrypted. A bridge is there for interoperability, not security. Mail that stays
-inside DMCN never leaves the sender's device unsealed.
+Outbound is opt-in and off by default:
+
+```bash
+DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_DELIVERY_MODE=smtp DMCND_BRIDGE_DKIM_KEY=dkim.pem dmcnd
+```
+
+Without `DMCND_BRIDGE_DELIVERY_MODE=smtp` the bridge accepts and translates outbound mail but
+captures it in memory instead of sending it, so installing the daemon never starts emitting live
+mail at anyone. Turn it on and you want a DKIM key too — unsigned mail from a new host is filtered
+almost everywhere.
+
+**The honest bits.** Mail crossing a bridge is TLS-in-transit on the legacy side, not end-to-end
+encrypted; a bridge is there for interoperability, not security, and mail that stays inside DMCN
+never leaves the sender's device unsealed. And SPF, DKIM and DMARC are only meaningful if the DNS
+they read is real — `DMCND_BRIDGE_AUTH_MODE=stub` exists for offline development and turns the
+verdict into a rubber stamp, so never run it anywhere real mail arrives.

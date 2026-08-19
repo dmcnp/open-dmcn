@@ -1,7 +1,7 @@
 ---
 title: The DMCN Protocol
 description: DMCNP is an open protocol for end-to-end-encrypted mail, where the address is a keypair instead of a name a server vouches for. Apache-2.0 spec and schema.
-tagline: An open protocol for end-to-end-encrypted mail. Your address is a keypair. Your domain serves its own records, found through DNS. There's no global directory to censor, and no server that can read your mail.
+tagline: An open protocol for end-to-end-encrypted mail. Your address is a keypair. Your domain serves its own records, found through DNS. There's no global directory to censor, and no server in the middle that can read mail sent between DMCN addresses.
 ---
 
 ## Start with the schema
@@ -23,8 +23,9 @@ So resolution works like mail delivery already does. A domain publishes a `_dmcn
 record with its trust anchor and a few seed nodes. You read it, dial that domain's own
 nodes, fetch the signed record, and check it against the anchor from DNS.
 
-A domain is served by its own nodes and nobody else's. Records sign themselves, so a
-hostile server can refuse to answer you — it can't lie to you.
+A domain is served by the nodes its own DNS names — its own, or a host it explicitly delegates to
+— never by a shared pool it doesn't choose. Records sign themselves, so a server that isn't your
+domain's authority can refuse to answer you; it can't lie to you.
 
 ## Naming and licence
 
