@@ -51,7 +51,8 @@ go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest   # operator CLI
 # Dev: plain HTTP on localhost (a secure context for Web Crypto) and DNS anchoring stubbed,
 # so a throwaway domain works without publishing real records.
 DMCND_DEV=true dmcnd
-# → open https://localhost:8443 (http in dev) and register an account at /register.
+# → open http://localhost:8080 in dev (https://localhost:8443 in production);
+#   the daemon prints the exact URL on startup. Register at /register.
 ```
 
 From a clone:
@@ -72,7 +73,7 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | Variable | Default | Purpose |
 |---|---|---|
 | `DMCND_DOMAIN` | `localhost` | the DMCN domain this daemon serves |
-| `DMCND_LISTEN` | `:8443` | webmail HTTPS listen address |
+| `DMCND_LISTEN` | `:8443` (`:8080` in dev) | webmail listen address — dev serves plain HTTP, so it defaults off the HTTPS-conventional port |
 | `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/0` | libp2p listen multiaddr |
 | `DMCND_DATA_DIR` | `data` | mailbox/record store, sessions, seed keystore |
 | `DMCND_IDENTITY` | — | persistent libp2p identity key (stable peer ID) |
@@ -168,7 +169,7 @@ make proto        # regenerate dmcnpb/ from proto/ (requires buf + protoc-gen-go
 make proto-web    # regenerate the browser protobuf bundle (cmd/dmcnd/web/src/lib/proto)
 make build-web    # rebuild the embedded SPA (needs Node 20+)
 make site         # render dmcn.dev into docs/
-make site-serve   # preview docs/ on localhost:8080 with production headers
+make site-serve   # preview docs/ on localhost:8081 with production headers
 ```
 
 ## The documentation site (`dmcn.dev`)

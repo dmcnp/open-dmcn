@@ -252,13 +252,13 @@ export function InboxMain() {
       if (folderSel) return folderOf(m.hash) === folderSel;
       if (folder === 'archive') return isArchived(m.hash);
       if (folder === 'starred') return isStarred(m.hash);
-      // My own address is inherently trusted, so mail I sent myself is allowlisted
-      // (lands in Inbox, not Pending).
+      // One combined inbox: every received message except blocked senders (still hidden) and
+      // archived/filed ones. There is no trust-based list split — trust is decided at READ TIME
+      // by the reader's gate, so a spoofed sender cannot ride an address match into a "trusted"
+      // bucket, and an unknown sender is visible (identity, subject, snippet) with only the body
+      // sealed until the reader decides.
       const cat = isSent(m.senderAddress) ? 'allowlisted' : catOf(m);
-      if (folder === 'pending') return cat === 'pending' && !isArchived(m.hash) && !isFiled(m.hash);
-      // inbox: allowlisted senders only (consent-based, §8.2). Unknown senders live
-      // in Pending; blocked senders are excluded entirely.
-      return cat === 'allowlisted' && !isArchived(m.hash) && !isFiled(m.hash);
+      return cat !== 'blocked' && !isArchived(m.hash) && !isFiled(m.hash);
     };
     rows = mail.filter(inFolder).filter(matchesQ).map(m => ({ msg: m, hashes: [m.hash] }));
   }
@@ -301,11 +301,10 @@ export function InboxMain() {
   const folderTitle = folder.startsWith('label:') ? (labelById(folder.slice(6))?.name ?? 'Label')
     : folder.startsWith('folder:') ? (folderById(folder.slice(7))?.name ?? 'Folder')
     : folder === 'sent' ? 'Sent' : folder === 'archive' ? 'Archive' : folder === 'starred' ? 'Starred'
-    : folder === 'pending' ? 'Pending' : 'Inbox';
+    : 'Inbox';
   const emptyText = folder === 'sent' ? 'Nothing sent yet.'
     : folder === 'archive' ? 'Nothing archived.'
     : folder === 'starred' ? 'No starred messages.'
-    : folder === 'pending' ? 'No messages from unknown senders waiting for review.'
     : folder.startsWith('label:') ? 'No messages with this label.'
     : folder.startsWith('folder:') ? 'This folder is empty.'
     : "You're all caught up. Nothing else to read.";
@@ -358,7 +357,7 @@ export function InboxMain() {
 
             {rows.length === 0 ? (
               <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : folder === 'pending' ? 'clock' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
+                <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
                 <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
                   {q ? 'No messages match your filter.' : emptyText}
                 </p>

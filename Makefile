@@ -57,9 +57,10 @@ site:
 	cd $(SITE) && GOWORK=off go run . build -out ../docs
 
 # site-serve previews docs/ locally with the same security headers the
-# self-hosted deployment would send. http://localhost:8080
+# self-hosted deployment would send. http://localhost:8081 — deliberately not :8080,
+# which dmcnd dev mode now uses, so the site preview and the daemon can run together.
 site-serve: site
-	cd $(SITE) && GOWORK=off go run . serve -dir ../docs -addr :8080 -dev
+	cd $(SITE) && GOWORK=off go run . serve -dir ../docs -addr :8081 -dev
 
 site-test:
 	cd $(SITE) && GOWORK=off go test ./... -timeout 60s

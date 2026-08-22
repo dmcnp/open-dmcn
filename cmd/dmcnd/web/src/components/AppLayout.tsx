@@ -27,7 +27,7 @@ import { ComposeDialog, type ComposeReplyTo } from './ComposeDialog';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
-type Folder = 'inbox' | 'pending' | 'sent' | 'archive' | 'starred' | `label:${string}` | `folder:${string}`;
+type Folder = 'inbox' | 'sent' | 'archive' | 'starred' | `label:${string}` | `folder:${string}`;
 type Section = 'mail' | 'contacts' | 'settings';
 
 // Shared state the shell hands to the active section via react-router's outlet
@@ -143,7 +143,8 @@ export function AppLayout() {
   }, []);
 
   // Received, non-control, non-archived mail, split by trust category (§14.2) so the
-  // nav counts match the split views: Inbox = allowlisted-unread, Pending = pending.
+  // Inbox is one combined list — unread count covers every non-blocked sender, since
+  // trust is decided at read time rather than by splitting the list.
   const liveReceived = messages.filter(m =>
     isReceivedForMe(m, address) && !CONTROL_SUBJECTS.has(m.subject) && !isArchived(m.hash)
   );
@@ -154,7 +155,6 @@ export function AppLayout() {
       ? 'allowlisted' as const
       : categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
   const unreadCount = liveReceived.filter(m => !isRead(m.hash) && catOf(m) === 'allowlisted').length;
-  const pendingCount = liveReceived.filter(m => catOf(m) === 'pending').length;
 
   const handleSignOut = async () => {
     try { await apiLogout(); } catch { /* ignore */ }
@@ -233,7 +233,6 @@ export function AppLayout() {
 
         <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
           <NavRow icon="inbox" label="Inbox" active={section === 'mail' && folder === 'inbox'} count={unreadCount || undefined} collapsed={railCollapsed} onClick={() => selectFolder('inbox')} />
-          <NavRow icon="clock" label="Pending" active={section === 'mail' && folder === 'pending'} count={pendingCount || undefined} collapsed={railCollapsed} onClick={() => selectFolder('pending')} />
           <NavRow icon="star" label="Starred" active={section === 'mail' && folder === 'starred'} collapsed={railCollapsed} onClick={() => selectFolder('starred')} />
           <NavRow icon="send" label="Sent" active={section === 'mail' && folder === 'sent'} collapsed={railCollapsed} onClick={() => selectFolder('sent')} />
           <NavRow icon="archive" label="Archive" active={section === 'mail' && folder === 'archive'} collapsed={railCollapsed} onClick={() => selectFolder('archive')} />

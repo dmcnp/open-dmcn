@@ -111,7 +111,7 @@ func main() {
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ExitOnError)
 		dir := fs.String("dir", "../docs", "directory to serve")
-		addr := fs.String("addr", ":8080", "listen address")
+		addr := fs.String("addr", ":8081", "listen address")
 		dev := fs.Bool("dev", false, "omit HSTS (local preview over plain HTTP)")
 		_ = fs.Parse(os.Args[2:])
 		if err := serve(*dir, *addr, *dev); err != nil {
@@ -127,7 +127,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `site — render and serve %s
 
   site build [-out ../docs] [-spec ../SPEC.md]
-  site serve [-dir ../docs] [-addr :8080] [-dev]
+  site serve [-dir ../docs] [-addr :8081] [-dev]
 `, siteDomain)
 	os.Exit(2)
 }

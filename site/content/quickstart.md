@@ -24,9 +24,13 @@ go install {{module}}/cmd/dmcnd@latest
 DMCND_DEV=true dmcnd
 ```
 
-Open `http://localhost:8443` and register an account. Dev mode serves plain HTTP on localhost
-— still a secure context, so Web Crypto works — and stubs the DNS anchoring, so you don't
-need real records to poke at it.
+Open `http://localhost:8080` and register an account — the daemon prints that exact URL on
+startup, so you can copy it rather than typing a scheme. Dev mode serves plain **HTTP** on
+`:8080`; production defaults to HTTPS on `:8443`, and the ports differ deliberately so a
+browser is never guessing which scheme applies.
+
+Plain HTTP is fine here: localhost is a secure context, so Web Crypto works. Dev mode also
+stubs the DNS anchoring, so you don't need real records to poke at it.
 
 To watch mail move between two accounts, register a second one in a private window: keys live
 in browser storage, so a separate profile is a separate account. Or just send to yourself —
@@ -60,7 +64,12 @@ classes, and a header you can list without touching a body.
 
 ## Point a real domain at it
 
-Other domains find yours through DNS. The operator CLI prints the exact record:
+Other domains find yours through DNS. The operator CLI prints the exact record.
+
+**Run this on the node itself**, in the same directory the daemon uses. It is not a remote
+admin tool: it reads your daemon's `--data-dir` to load the domain root key and derive the
+fingerprint, and reads `data/node.key` to derive the peer ID. Neither is fetched over the
+network, and the command dials nothing.
 
 ```bash
 go install {{module}}/cmd/dmcndcli@latest
@@ -69,6 +78,10 @@ dmcndcli dns --domain mesh.example --data-dir data \
   --seed /ip4/<public-ip>/tcp/7400/p2p/$(dmcndcli peer-id --identity data/node.key)
 ```
 
+`--seed` is the address you want **published** in the record so other domains can dial you —
+an output, not something the command queries. Give it your node's reachable public address;
+repeat the flag for more than one.
+
 ```
 _dmcn.mesh.example.  TXT  "dmcn-verification=v1; fp=<40-hex>; seed=/ip4/…/p2p/…"
 ```
@@ -76,6 +89,20 @@ _dmcn.mesh.example.  TXT  "dmcn-verification=v1; fp=<40-hex>; seed=/ip4/…/p2p/
 `fp=` is your domain's trust anchor — the first 20 bytes of `SHA-256(ed25519_pub ‖
 x25519_pub)` of its root key. Anyone resolving an address on your domain checks what your
 server hands them against that fingerprint, so they never have to trust the server itself.
+
+### The root key is on this machine
+
+That root key lives in `data/seed-keystore.json`, on the node. `dmcnd` folds the domain
+authority into the daemon rather than a separate offline ceremony — a deliberate
+simplification for a one-binary self-host, and a weaker posture than keeping it offline. Two
+things follow, and both matter the moment a real domain points here:
+
+- **Set `DMCND_SEED_PASSPHRASE`.** The default is a constant in the source, so leaving it
+  means the at-rest key and every backup of it are protected by a value anyone can read. The
+  daemon warns at startup if you have not.
+- **Back that file up, offline.** It is the anchor in your DNS record. Lose it and you cannot
+  issue or rotate anything on the domain — nobody can re-issue it for you, and the recovery is
+  to publish a new `fp=` and have every correspondent re-verify you.
 
 Two daemons on two domains then interoperate the way email already does: resolve the
 recipient's domain, dial a seed, fetch the signed record, store the sealed envelope. For a

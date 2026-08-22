@@ -5,7 +5,7 @@ path for this module.
 
 ```bash
 make site         # render into ../docs
-make site-serve   # preview on localhost:8080 with production headers
+make site-serve   # preview on localhost:8081 with production headers
 make site-test    # unit tests
 make site-check   # fail if ../docs is not what site/ generates (wired into `make test`)
 ```

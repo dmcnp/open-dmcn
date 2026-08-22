@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -94,6 +95,18 @@ func main() {
 	// ONLY the domain's own operator keys are minted here. Accounts are created in the
 	// browser at /register, which generates the keypair client-side and sends only the
 	// signed public record — so the daemon never holds an account private key.
+	// The domain root key is the trust anchor every other domain checks records against, and
+	// on dmcnd it lives on THIS box rather than an offline ceremony machine — a deliberate
+	// simplification for a single-binary self-host, but one that makes the passphrase load
+	// bearing. The default is published in this source file, so leaving it on a real domain
+	// means the at-rest copy and any backup of it are protected by a value anyone can read.
+	if !cfg.devMode && cfg.seedPassphrase == defaultSeedPassphrase {
+		log.Warnf("DMCND_SEED_PASSPHRASE is unset, so the domain root key in %s is encrypted with "+
+			"the PUBLIC default passphrase. Anyone who obtains that file obtains %s. Set "+
+			"DMCND_SEED_PASSPHRASE to a high-entropy value and back the file up somewhere offline — "+
+			"losing it loses the domain's trust anchor, and no one can re-issue it for you.",
+			filepath.Join(cfg.dataDir, "seed-keystore.json"), cfg.domain)
+	}
 	seeds := newSeedStore(cfg.dataDir, cfg.seedPassphrase)
 	now := time.Now()
 	rootKP, err := seeds.seedDomain(ctx, n, cfg.domain, now)
@@ -226,7 +239,21 @@ func main() {
 			cancel()
 		}
 	}()
-	log.Infof("dmcnd webmail listening on %s (domain %s)", cfg.httpListen, cfg.domain)
+	// Print the URL WITH its scheme, not just the port. A bare ":8080" is not something a
+	// reader can paste, and it says nothing about whether TLS is on — which is the one
+	// detail they need in the second before they open a browser. See defaultHTTPListen for
+	// why dev and production listen on different ports.
+	switch {
+	case cfg.tlsCert != "" && cfg.tlsKey != "":
+		log.Infof("dmcnd webmail listening on https://%s (domain %s)", listenURLHost(cfg.httpListen, cfg.domain), cfg.domain)
+	case cfg.devMode:
+		log.Infof("dmcnd webmail listening on http://%s (domain %s)", listenURLHost(cfg.httpListen, "localhost"), cfg.domain)
+		log.Warnf("dev mode serves PLAIN HTTP — no TLS. Open the http:// URL above explicitly; " +
+			"a browser left to guess the scheme will try https:// and fail. localhost is still a " +
+			"secure context, so Web Crypto works.")
+	default:
+		log.Infof("dmcnd webmail listening on https://%s (domain %s, autocert)", listenURLHost(cfg.httpListen, cfg.domain), cfg.domain)
+	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -277,7 +304,7 @@ type config struct {
 func loadConfig() config {
 	devMode := envBool("DMCND_DEV")
 	c := config{
-		httpListen:       envOr("DMCND_LISTEN", ":8443"),
+		httpListen:       envOr("DMCND_LISTEN", defaultHTTPListen(devMode)),
 		nodeListen:       envOr("DMCND_NODE_LISTEN", "/ip4/0.0.0.0/tcp/0"),
 		domain:           envOr("DMCND_DOMAIN", "localhost"),
 		dataDir:          envOr("DMCND_DATA_DIR", "data"),
@@ -287,7 +314,7 @@ func loadConfig() config {
 		devMode:          devMode,
 		peers:            splitList(os.Getenv("DMCND_PEERS")),
 		allowedPeers:     splitList(os.Getenv("DMCND_ALLOWED_PEERS")),
-		seedPassphrase:   envOr("DMCND_SEED_PASSPHRASE", "dmcnd-dev-seed"),
+		seedPassphrase:   envOr("DMCND_SEED_PASSPHRASE", defaultSeedPassphrase),
 		bridgeEnabled:    envBool("DMCND_BRIDGE_ENABLED"),
 		bridgeAuthMode:   envOr("DMCND_BRIDGE_AUTH_MODE", "dns"),
 		bridgeDelivery:   envOr("DMCND_BRIDGE_DELIVERY_MODE", "stub"),
@@ -400,3 +427,42 @@ func applyBridgeModes(bcfg *bridge.Config, cfg config, log logr.Logger) error {
 	}
 	return nil
 }
+
+// listenURLHost turns a listen address into something pasteable into a browser: a bare
+// ":8443" or "0.0.0.0:8443" becomes "<host>:8443", since neither is a URL a reader can click.
+func listenURLHost(listen, host string) string {
+	if host == "" {
+		host = "localhost"
+	}
+	h, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return host + listen // e.g. a bare ":8443" that failed to split
+	}
+	if h == "" || h == "0.0.0.0" || h == "::" {
+		h = host
+	}
+	return net.JoinHostPort(h, port)
+}
+
+// defaultHTTPListen picks the webmail port when DMCND_LISTEN is unset.
+//
+// Dev serves plain HTTP, so it defaults to :8080 rather than :8443. Port 8443 conventionally
+// means HTTPS: serving cleartext there invites both the reader and the browser to assume TLS
+// that is not on offer, and the resulting connection error reads as a broken daemon rather
+// than a wrong scheme. It is worse for anyone also running a hosted DMCN mail client, which
+// serves real HTTPS on 8443 — their browser may hold a cached upgrade for localhost:8443 that
+// no amount of documentation undoes.
+//
+// Production keeps :8443, where the port and the scheme agree. An explicit DMCND_LISTEN wins
+// in either mode.
+func defaultHTTPListen(devMode bool) string {
+	if devMode {
+		return ":8080"
+	}
+	return ":8443"
+}
+
+// defaultSeedPassphrase protects the domain root keystore when DMCND_SEED_PASSPHRASE is
+// unset. It is fine for dev and wrong for a real domain, so startup warns when a
+// non-dev daemon is still using it.
+const defaultSeedPassphrase = "dmcnd-dev-seed"
