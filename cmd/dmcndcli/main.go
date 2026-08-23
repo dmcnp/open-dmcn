@@ -27,8 +27,13 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"dmcn.dev/open-dmcn/internal/buildinfo"
 	"dmcn.dev/open-dmcn/internal/node"
 )
+
+// version is stamped by the Makefile (-X main.version). A `go install` applies no ldflags, so
+// buildinfo.Version falls back to the module version or the VCS revision.
+var version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -37,6 +42,9 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "version":
+		fmt.Println("dmcndcli", buildinfo.Version(version))
+		return
 	case "peer-id":
 		err = cmdPeerID(os.Args[2:])
 	case "domain":
@@ -97,6 +105,10 @@ Usage:
         bound to a fresh one. This is the ONLY way to recover an address whose key was lost or
         compromised: the daemon refuses any record that re-binds a live address to a different key
         unless the domain root has tombstoned the incumbent.
+
+  dmcndcli version
+        Print this tool's version. It should match the daemon's — a credential or record format
+        can move between releases.
 
   dmcndcli peer-id --identity <path>
         Print the libp2p peer ID for an identity key on THIS machine (created if missing). For the

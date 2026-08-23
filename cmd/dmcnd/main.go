@@ -26,6 +26,7 @@ import (
 	"github.com/mertenvg/logr/v2"
 
 	"dmcn.dev/open-dmcn/internal/bridge"
+	"dmcn.dev/open-dmcn/internal/buildinfo"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/node"
@@ -46,7 +47,7 @@ var (
 
 func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "version" {
-		fmt.Println("dmcnd", version)
+		fmt.Println("dmcnd", buildinfo.Version(version))
 		return
 	}
 	// peer-id has to work BEFORE the daemon can start. A live domain refuses to boot without a
@@ -251,7 +252,7 @@ func main() {
 		fatalf("frontend sub-FS: %v", err)
 	}
 	frontendConfig := server.FrontendConfig{
-		Version:        version,
+		Version:        buildinfo.Version(version),
 		DefaultDomain:  cfg.domain,
 		Domains:        cfg.domain,
 		DevMode:        cfg.devMode,

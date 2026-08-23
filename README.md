@@ -48,6 +48,9 @@ The quickest way in — no clone, no Node, because the SPA is embedded in the bi
 go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
 go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest   # operator CLI
 
+# Both report the version they were installed at (`dmcnd version`) — from the module version
+# when installed this way, or from git describe when built with `make build`.
+
 # Dev: plain HTTP on localhost (a secure context for Web Crypto) and DNS anchoring stubbed,
 # so a throwaway domain works without publishing real records.
 DMCND_DEV=true dmcnd
