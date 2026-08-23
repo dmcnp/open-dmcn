@@ -18,6 +18,7 @@ require (
 	github.com/pires/go-proxyproto v0.12.0
 	golang.org/x/crypto v0.41.0
 	golang.org/x/net v0.43.0
+	golang.org/x/term v0.34.0
 	google.golang.org/protobuf v1.36.11
 )
 

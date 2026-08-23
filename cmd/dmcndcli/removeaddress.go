@@ -11,7 +11,6 @@ import (
 
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
-	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // cmdRemoveAddress publishes a root-signed AddressRemovalRecord tombstoning an address's current
@@ -56,19 +55,11 @@ func cmdRemoveAddress(args []string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	n, err := node.New(ctx, node.Config{
-		ListenAddr:   "/ip4/127.0.0.1/tcp/0",
-		AllowedPeers: []string{"*"},
-		ClientOnly:   true,
-		Peers:        splitCSV(*peers),
-	})
+	n, err := dialDaemon(ctx, *peers)
 	if err != nil {
-		return fmt.Errorf("start client node: %w", err)
+		return err
 	}
 	defer n.Close()
-	if err := n.WaitForPeers(ctx, 15*time.Second); err != nil {
-		return fmt.Errorf("connect to the daemon: %w", err)
-	}
 
 	// Pick the victim key: an explicit --pubkey (for a squatted address whose record you do not
 	// want to trust) or whatever is currently published.

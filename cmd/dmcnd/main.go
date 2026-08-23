@@ -67,6 +67,14 @@ func main() {
 
 	cfg := loadConfig()
 
+	// Check we can bind the webmail port before doing anything else. Without this the failure
+	// lands at the very END of startup — after the node is up, the domain adopted and the
+	// authority record served — and then takes the whole daemon down with it. Same error either
+	// way; the difference is whether the operator waits through a successful-looking boot first.
+	if err := preflightListen(cfg.httpListen); err != nil {
+		fatalf("%v", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

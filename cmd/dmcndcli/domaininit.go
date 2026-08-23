@@ -9,7 +9,6 @@ import (
 
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/keystore"
-	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // domaininit.go is the offline ceremony that brings a domain into existence, and the push that
@@ -44,9 +43,6 @@ func cmdDomainInit(args []string) error {
 	if *domain == "" {
 		return fmt.Errorf("--domain is required (or set DMCND_DOMAIN)")
 	}
-	if *rf.passphrase == "" {
-		return fmt.Errorf("--passphrase is required (or set DMCND_ROOT_PASSPHRASE) — it encrypts the root key at rest, and it is the only thing protecting your domain's trust anchor")
-	}
 	if len(seeds) == 0 {
 		return fmt.Errorf("--seed is required: other domains find yours by dialling it.\n" +
 			"  On the node, run `dmcnd peer-id`, then:\n" +
@@ -55,7 +51,14 @@ func cmdDomainInit(args []string) error {
 			"  in DNS and is not easy to change later.")
 	}
 
-	ks := keystore.New(*rf.keystore, *rf.passphrase)
+	// Asked twice: this passphrase is being SET, and it is the only thing protecting the
+	// domain's trust anchor at rest. A typo here is unrecoverable — not "reset it", but "no
+	// address on this domain can ever be issued or rotated again".
+	pass, err := rf.resolvePassphrase(true)
+	if err != nil {
+		return err
+	}
+	ks := keystore.New(*rf.keystore, pass)
 	if existing, err := ks.Load(rootAlias(*domain)); err == nil && !*force {
 		return fmt.Errorf("a root key for %s already exists in %s (fingerprint %s).\n"+
 			"  Re-running would mint a DIFFERENT root, invalidating every record on the domain and the\n"+
@@ -65,16 +68,16 @@ func cmdDomainInit(args []string) error {
 			*domain, *rf.keystore, fingerprintOf(*domain, existing))
 	}
 
-	root, err := identity.GenerateIdentityKeyPair()
-	if err != nil {
-		return fmt.Errorf("generate root key: %w", err)
+	root, gerr := identity.GenerateIdentityKeyPair()
+	if gerr != nil {
+		return fmt.Errorf("generate root key: %w", gerr)
 	}
 	if err := ks.Store(rootAlias(*domain), root); err != nil {
 		return fmt.Errorf("persist root key to %s: %w", *rf.keystore, err)
 	}
-	dar, err := buildDAR(*domain, root)
-	if err != nil {
-		return err
+	dar, derr := buildDAR(*domain, root)
+	if derr != nil {
+		return derr
 	}
 
 	fmt.Println(dmcnTXT(*domain, dar.Fingerprint(), seeds, bridges))
@@ -135,19 +138,11 @@ func cmdDomainPublish(args []string) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	n, err := node.New(ctx, node.Config{
-		ListenAddr:   "/ip4/127.0.0.1/tcp/0",
-		AllowedPeers: []string{"*"},
-		ClientOnly:   true,
-		Peers:        splitCSV(*peers),
-	})
+	n, err := dialDaemon(ctx, *peers)
 	if err != nil {
-		return fmt.Errorf("start client node: %w", err)
+		return err
 	}
 	defer n.Close()
-	if err := n.WaitForPeers(ctx, 15*time.Second); err != nil {
-		return fmt.Errorf("connect to the daemon: %w", err)
-	}
 
 	accepted, err := n.PublishDAR(ctx, dar)
 	if err != nil {

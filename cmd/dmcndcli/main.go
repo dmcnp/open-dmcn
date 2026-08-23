@@ -114,6 +114,10 @@ Usage:
         Print the libp2p peer ID for an identity key on THIS machine (created if missing). For the
         node's own peer ID, run 'dmcnd peer-id' there.
 
+Commands that use the domain root key prompt for its passphrase when it is not supplied. For
+scripted use prefer DMCND_ROOT_PASSPHRASE over --passphrase: a value in argv is readable via ps
+by anyone else on the machine, and lands in shell history too.
+
 Environment: DMCND_DOMAIN, DMCND_URL, DMCND_PEERS, DMCND_IDENTITY, DMCND_ROOT_KEYSTORE and
 DMCND_ROOT_PASSPHRASE are used as defaults for the matching flags.
 `)

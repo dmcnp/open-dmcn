@@ -84,8 +84,43 @@ it waits until you hand it one and serves nothing until then.
 over HTTPS. A genuinely air-gapped root would need the signing step carried across by hand, which
 the format allows and the CLI does not yet do.)
 
+### Ports — open these first
+
+Do this before starting anything. Two of the steps below reach the node over the network, and a
+closed port shows up as a timeout four steps after the mistake was made.
+
+**Inbound — these are the firewall rules to add:**
+
+| Port | What for | When |
+|---|---|---|
+| `7400` (`DMCND_NODE_LISTEN`) | libp2p: federation with other domains, and the `domain publish` step below. **This is the port in your published `seed=`.** | any live domain |
+| `443` (`DMCND_LISTEN`) | webmail, and the ACME challenge for its certificate | always |
+| `25` | SMTP — your domain's MX | bridge enabled |
+
+**Outbound — already fine unless you filter egress:**
+
+| Port | What for | When |
+|---|---|---|
+| `53` | DNS: other domains' `_dmcn` records, and MX/SPF/DKIM/DMARC lookups | always |
+| `25` | delivering to other providers' mail servers | `DELIVERY_MODE=smtp` |
+| ephemeral | dialling other domains' seeds and bridges | always |
+
+Three of these catch people out:
+
+- **Automatic certificates only work on 443.** Let's Encrypt performs the TLS-ALPN-01 challenge
+  there and nowhere else, so the daemon refuses to start if you point `DMCND_LISTEN` elsewhere
+  without also supplying `DMCND_TLS_CERT`/`DMCND_TLS_KEY`. Terminating TLS at a proxy is fine —
+  bring your own certificate. There is no DNS-01 challenge and nothing here runs a DNS server, so
+  you do not need inbound `53` or an acme-dns sidecar.
+- **Many hosting providers block outbound port 25 by default** and want a support ticket before
+  they will open it. A bridge that receives fine but never delivers is usually this, not a DMCN bug.
+- **Inbound 25 and 443 need privileges** (`setcap CAP_NET_BIND_SERVICE`, or systemd
+  `AmbientCapabilities`). The bridge's own default is `:2525`, which is convenient for testing and
+  which no sending mail server will ever try — set `DMCND_BRIDGE_SMTP_LISTEN=:25` for a real MX.
+
 **1. [node]** Install the daemon and get its peer ID. Set the libp2p port first — it goes into DNS
-and is awkward to change later.
+and is awkward to change later — and confirm 7400 is reachable from wherever you will run
+`dmcndcli`, since step 7 dials it.
 
 ```bash
 go install {{module}}/cmd/dmcnd@latest
@@ -106,10 +141,24 @@ go install {{module}}/cmd/dmcndcli@latest
 ```bash
 dmcndcli domain init --domain mesh.example \
   --seed /ip4/<public-ip>/tcp/7400/p2p/<peer-id from step 1> \
-  --keystore root.enc --passphrase '<high-entropy>'
+  --keystore root.enc
 ```
 
-It prints the DNS record. The authority record it signs sets two things that are easy to miss and
+It asks for a passphrase — twice, since this one is being set — and prints the DNS record. Every
+later command that needs the root asks the same way. Three ways to supply it, and the difference
+between them is where the secret ends up:
+
+| | Ends up in |
+|---|---|
+| type it when asked | nowhere |
+| `DMCND_ROOT_PASSPHRASE=…` | the environment |
+| `--passphrase …` | the environment, your shell history, **and `ps`** |
+
+Scripting it is fine — prefer the variable, since a value in `argv` is readable by anyone else on
+the machine for as long as the command runs. `DMCND_ROOT_PASSPHRASE="$PASS" dmcndcli …` is the same
+command with the flag dropped.
+
+The authority record it signs sets two things that are easy to miss and
 load-bearing: countersigning is required (so an address is unusable until the root has attested it)
 and the reserved local-parts are seeded (so `postmaster@` and `countersign@` are not first-come).
 
@@ -132,6 +181,9 @@ re-issue it for you.
 **6. [node]** Start the daemon.
 
 ```bash
+# Once, so it may bind :443 as an ordinary service user — see Ports above.
+sudo setcap CAP_NET_BIND_SERVICE=+eip "$(command -v dmcnd)"
+
 dmcnd
 ```
 
@@ -167,7 +219,7 @@ address. Instead:
 
   ```bash
   dmcndcli petition assign --code 0428-9173-5560 --address them@mesh.example \
-    --url https://mesh.example --keystore root.enc --passphrase '<…>'
+    --url https://mesh.example  --keystore root.enc
   ```
 
 - **[them]** Their browser picks the address up on its own and the mailbox opens. You never have
@@ -181,34 +233,6 @@ eavesdropper nothing.
 
 To free an address later — a lost key, someone leaving — `dmcndcli remove-address` publishes a
 root-signed tombstone, after which the address can be petitioned for again.
-
-### Ports
-
-| Port | Direction | What for | When |
-|---|---|---|---|
-| `7400` (`DMCND_NODE_LISTEN`) | inbound | libp2p federation — **this is the port in your published `seed=`** | any live domain |
-| `443` (`DMCND_LISTEN`) | inbound | webmail, and the ACME challenge for its certificate | always |
-| `25` | inbound | SMTP — your domain's MX | bridge enabled |
-| `25` | **outbound** | delivering to other providers' mail servers | `DMCND_BRIDGE_DELIVERY_MODE=smtp` |
-| `53` | outbound | DNS: other domains' `_dmcn` anchors, and MX lookups | always |
-| ephemeral | outbound | dialling other domains' seeds | always |
-
-Three of these catch people out:
-
-- **Many hosting providers block outbound port 25 by default** and want a support ticket before
-  they'll open it. A bridge that receives fine but never delivers is usually this, not a DMCN bug.
-- **Inbound 25 needs privileges** (`setcap CAP_NET_BIND_SERVICE`, or systemd `AmbientCapabilities`),
-  as does 443. The bridge's own default is `:2525`, which is convenient for testing and which no
-  sending mail server will ever try — set `DMCND_BRIDGE_SMTP_LISTEN=:25` for a real MX.
-- **Automatic certificates only work on 443.** Let's Encrypt performs its challenge there and
-  nowhere else, so the daemon refuses to start if you point `DMCND_LISTEN` somewhere else without
-  also supplying `DMCND_TLS_CERT`/`DMCND_TLS_KEY`. Terminating TLS at a proxy is fine — bring your
-  own certificate, or run the proxy in front and give the daemon one it can use.
-
-Two daemons on two domains then interoperate the way email already does: resolve the recipient's
-domain, dial a seed, fetch the signed record, store the sealed envelope. For a local cluster with
-no real DNS, list the peer anchors in a `DMCND_STATIC_DNS` file instead — the resolver checks it
-before DNS, so you can exercise the whole path offline.
 
 ## Configuration
 

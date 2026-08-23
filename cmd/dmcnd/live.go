@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -76,9 +79,10 @@ func awaitDomainAuthority(ctx context.Context, n *node.Node, domain string) (*id
 		"  machine. On the machine holding it (if there isn't one yet, `dmcndcli domain init`):\n"+
 		"      dmcndcli domain publish --domain %s --peers /ip4/<this-host>/tcp/7400/p2p/%s \\\n"+
 		"          --keystore root.enc\n"+
-		"  Webmail and mailbox petitions stay closed until it arrives. Waiting…\n"+
+		"  That command dials THIS node, so its libp2p port must be reachable from wherever you run\n"+
+		"  it — %s. Webmail and mailbox petitions stay closed until the record arrives. Waiting…\n"+
 		"  (For a throwaway local instance, DMCND_DEV=true skips all of this.)",
-		domain, domain, n.PeerID())
+		domain, domain, n.PeerID(), listenHint(n))
 
 	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
@@ -224,4 +228,59 @@ func domainFingerprint(dar *identity.DomainAuthorityRecord, rootKP *identity.Ide
 		return ""
 	}
 	return d.Fingerprint()
+}
+
+// listenHint describes where this node is actually listening, for the "open the port" advice. The
+// address an operator needs to reach is not necessarily the one in their config — a container or a
+// cloud NAT can rewrite it — so report what the host bound rather than what was requested.
+func listenHint(n *node.Node) string {
+	addrs := n.Addrs()
+	if len(addrs) == 0 {
+		return "it is not listening on any address"
+	}
+	return "listening on " + strings.Join(addrs, ", ")
+}
+
+// preflightListen reports whether the webmail listen address can actually be bound, translating
+// the two failures that actually happen into something an operator can act on.
+//
+// Port 443 is the default outside dev mode because automatic certificates only work there, and
+// binding it needs a privilege an ordinary service user does not have. That is a reasonable
+// trade — but "bind: permission denied" arriving after a clean-looking startup is not, so it is
+// caught here and explained.
+//
+// The listener is closed again immediately, which leaves a moment in which something else could
+// take the port. That is fine: the real bind still fails if so, just with the "in use" message
+// this function would have given anyway.
+func preflightListen(addr string) error {
+	l, err := net.Listen("tcp", addr)
+	if err == nil {
+		return l.Close()
+	}
+	return explainListenError(addr, err)
+}
+
+// explainListenError turns a bind failure into operator-facing advice. Split out from
+// preflightListen so each message can be tested — the permission case in particular is
+// unreproducible on a machine where unprivileged ports are unrestricted, which includes most
+// containers, so it would otherwise only ever be exercised in production.
+func explainListenError(addr string, err error) error {
+	switch {
+	case errors.Is(err, os.ErrPermission), strings.Contains(err.Error(), "permission denied"):
+		return fmt.Errorf("cannot bind %s: permission denied.\n"+
+			"  Ports below 1024 need a privilege this process does not have. Pick one:\n"+
+			"    sudo setcap CAP_NET_BIND_SERVICE=+eip $(command -v dmcnd)   # grant it to the binary\n"+
+			"    AmbientCapabilities=CAP_NET_BIND_SERVICE                    # in the systemd unit\n"+
+			"    DMCND_LISTEN=:8443 DMCND_TLS_CERT=… DMCND_TLS_KEY=…         # high port, your own cert\n"+
+			"  The default is :443 because automatic certificates only work there — Let's Encrypt\n"+
+			"  performs its challenge against 443 and nowhere else. Moving to a high port therefore\n"+
+			"  means bringing your own certificate, typically with a reverse proxy in front.",
+			addr)
+	case strings.Contains(err.Error(), "address already in use"):
+		return fmt.Errorf("cannot bind %s: already in use.\n"+
+			"  Something else is on that port — another dmcnd, or a web server. `ss -lntp | grep %s`\n"+
+			"  will name it.", addr, addr)
+	default:
+		return fmt.Errorf("cannot bind %s: %w", addr, err)
+	}
 }

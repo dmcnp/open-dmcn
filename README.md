@@ -110,6 +110,14 @@ wrong or hostile fleet is a denial-of-service risk, never a forgery vector.
 
 ### Operator CLI (`dmcndcli`)
 
+Binding `:443` as a non-root service user needs `setcap CAP_NET_BIND_SERVICE=+eip $(command -v
+dmcnd)` or systemd's `AmbientCapabilities`; the daemon checks at startup and says so rather than
+failing after a clean-looking boot.
+
+Every command below that touches the root key prompts for its passphrase when it is not supplied.
+For scripted use set `DMCND_ROOT_PASSPHRASE` rather than passing `--passphrase`: a value in `argv`
+is readable via `ps` by anyone else on the machine, and lands in shell history too.
+
 `dmcndcli` runs on a **different machine from the node** — ideally one that stays offline. It
 holds the domain root key, and the node never does: the node is given a signed authority record
 and has no way to mint an address by itself, so breaching it does not let an attacker create or
@@ -121,7 +129,7 @@ falling back to minting a root for itself.
 # the DNS record to publish. Touches no network.
 dmcndcli domain init --domain mesh.example \
   --seed /ip4/<public-ip>/tcp/7400/p2p/$(ssh node dmcnd peer-id) \
-  --keystore root.enc --passphrase '<high-entropy>'
+  --keystore root.enc
 #   → _dmcn.mesh.example.  TXT  "dmcn-verification=v1; fp=<40-hex>; seed=/ip4/…/p2p/…"
 
 # Hand that record to a running daemon, which serves nothing until it has one. Sends only the
