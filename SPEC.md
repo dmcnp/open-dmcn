@@ -254,7 +254,10 @@ that advertises no `bridge=` simply cannot send outside DMCN.
 
 These are message payloads, not wire ops: the bridge speaks the same core relay protocol as
 everyone else. Honest edge: mail crossing a bridge is TLS-in-transit on the legacy side, not
-end-to-end encrypted.
+end-to-end encrypted — and that TLS is opportunistic, so it is unauthenticated. A bridge
+should not verify peer certificates on outbound STARTTLS: SMTP has no trust anchor, so the
+practical alternative to unverified TLS is cleartext rather than verified TLS. DANE or
+MTA-STS are the mechanisms that make it authenticated; neither is required by this spec.
 
 ## 8. Extension points (how everything else attaches)
 

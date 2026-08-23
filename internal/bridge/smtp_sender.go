@@ -32,11 +32,12 @@ type SMTPSenderConfig struct {
 	// SessionTimeout bounds the whole SMTP exchange per host (connect→QUIT) when the caller's
 	// context carries no (earlier) deadline. Defaults to 5m.
 	SessionTimeout time.Duration
-	// RequireTLS refuses to deliver to a host that does not offer STARTTLS instead of falling
-	// back to cleartext. Off by default (opportunistic TLS: encrypt whenever the host offers it).
+	// RequireTLS refuses to deliver to a host that does not offer STARTTLS, and VERIFIES its
+	// certificate, instead of falling back to cleartext. Off by default — see the note on
+	// certificate verification in deliverTo.
 	RequireTLS bool
-	// TLSConfig is the base config for STARTTLS (ServerName is set per host). Defaults to
-	// MinVersion TLS 1.2.
+	// TLSConfig is the base config for STARTTLS (ServerName and verification are set per host).
+	// Defaults to MinVersion TLS 1.2.
 	TLSConfig *tls.Config
 	// DKIM, when set, signs every outbound message (RFC 6376) so receivers can verify the
 	// bridge as the originator. Strongly recommended — unsigned mail is widely spam-filtered.
@@ -108,7 +109,27 @@ func NewSMTPSender(cfg SMTPSenderConfig) *SMTPSender {
 		s.sessionTimeout = 5 * time.Minute
 	}
 	if s.tlsConfig == nil {
-		s.tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		// Opportunistic STARTTLS does NOT verify the peer certificate, and that is correct
+		// rather than a shortcut — it is what every production MTA does (Postfix's
+		// smtp_tls_security_level = may) and what RFC 7435 describes.
+		//
+		// The reasoning is easy to get backwards. The alternative to UNVERIFIED TLS here is not
+		// verified TLS, it is CLEARTEXT: there is no trust anchor for SMTP, a large share of
+		// mail servers present self-signed or hostname-mismatched certificates, and an MX
+		// hostname learned from unsigned DNS is not an identity worth checking against anyway.
+		// Verifying therefore buys no authentication — it just turns "delivered, encrypted,
+		// unauthenticated" into "bounced", which is worse on both counts.
+		//
+		// Real authentication needs a policy saying which certificate to expect: DANE (TLSA
+		// records, DNSSEC-signed) or MTA-STS. Neither is implemented; when one is, it belongs
+		// here and NOT as a blanket verify.
+		//
+		// RequireTLS is the opposite posture — the operator has asserted this path must be
+		// protected — so verification is on and a failure refuses delivery.
+		s.tlsConfig = &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !s.requireTLS, //nolint:gosec // opportunistic by design; see above
+		}
 	}
 	if s.log == nil {
 		s.log = logr.With(logr.M("component", "bridge-smtp"))
@@ -230,6 +251,8 @@ func (s *SMTPSender) deliverTo(ctx context.Context, host, from, to string, msg [
 		return fmt.Errorf("EHLO: %w", err)
 	}
 	if ok, _ := c.Extension("STARTTLS"); ok {
+		// Only the server name is per-host; the verification policy was decided once, at
+		// construction, so a caller that supplied its own TLSConfig keeps it intact.
 		tc := s.tlsConfig.Clone()
 		tc.ServerName = host
 		if err := c.StartTLS(tc); err != nil {

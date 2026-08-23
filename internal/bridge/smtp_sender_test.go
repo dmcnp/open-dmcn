@@ -235,3 +235,64 @@ func TestSMTPSenderHeaderInjectionRejected(t *testing.T) {
 		t.Fatalf("Deliver err = %v, want a header-injection rejection", err)
 	}
 }
+
+// TestOpportunisticSTARTTLSDoesNotVerify is the regression for a live delivery failure: mail to
+// Outlook bounced with "x509: certificate signed by unknown authority" because the sender verified
+// the peer certificate on opportunistic STARTTLS.
+//
+// That is the wrong posture for SMTP. The alternative to unverified TLS between MTAs is CLEARTEXT,
+// not verified TLS — there is no trust anchor, plenty of mail servers present self-signed or
+// mismatched certificates, and an MX hostname from unsigned DNS is not an identity worth checking.
+// Verifying converts "delivered, encrypted" into "bounced" and authenticates nothing.
+//
+// The server here presents a self-signed certificate, exactly like much of the internet's mail
+// infrastructure. Delivery must succeed.
+func TestOpportunisticSTARTTLSDoesNotVerify(t *testing.T) {
+	addr, be := startRecordingServer(t, selfSignedTLS(t))
+	// No TLSConfig and no RequireTLS: the default opportunistic posture, as a live bridge runs.
+	s := senderTo(addr, SMTPSenderConfig{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body")); err != nil {
+		t.Fatalf("opportunistic delivery to a self-signed host failed: %v", err)
+	}
+	if got := be.recorded(); len(got) != 1 {
+		t.Fatalf("recorded %d messages, want 1", len(got))
+	}
+}
+
+// TestRequireTLSStillVerifies keeps the strict posture strict. RequireTLS is the operator saying
+// this path must be protected, so an unverifiable certificate there must refuse delivery rather
+// than fall through to the opportunistic behaviour.
+func TestRequireTLSStillVerifies(t *testing.T) {
+	addr, _ := startRecordingServer(t, selfSignedTLS(t))
+	s := senderTo(addr, SMTPSenderConfig{RequireTLS: true}) // no InsecureSkipVerify override
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body"))
+	if err == nil {
+		t.Fatal("RequireTLS accepted an unverifiable certificate")
+	}
+	if !strings.Contains(err.Error(), "certificate") {
+		t.Errorf("failed for the wrong reason: %v", err)
+	}
+}
+
+// TestCallerTLSConfigIsRespected: an operator supplying their own config — a pinned root for an
+// internal relay, say — must keep it. An earlier version of this fix overwrote the caller's
+// verification setting on every connection.
+func TestCallerTLSConfigIsRespected(t *testing.T) {
+	addr, _ := startRecordingServer(t, selfSignedTLS(t))
+	s := senderTo(addr, SMTPSenderConfig{
+		RequireTLS: true,
+		TLSConfig:  &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body")); err != nil {
+		t.Fatalf("the caller's TLSConfig was overridden: %v", err)
+	}
+}

@@ -337,7 +337,10 @@ order to hand it to SMTP, so whoever answers a <code>bridge=</code> token reads 
 that advertises no <code>bridge=</code> simply cannot send outside DMCN.</p>
 <p>These are message payloads, not wire ops: the bridge speaks the same core relay protocol as
 everyone else. Honest edge: mail crossing a bridge is TLS-in-transit on the legacy side, not
-end-to-end encrypted.</p>
+end-to-end encrypted — and that TLS is opportunistic, so it is unauthenticated. A bridge
+should not verify peer certificates on outbound STARTTLS: SMTP has no trust anchor, so the
+practical alternative to unverified TLS is cleartext rather than verified TLS. DANE or
+MTA-STS are the mechanisms that make it authenticated; neither is required by this spec.</p>
 <h2 id="8-extension-points-how-everything-else-attaches">8. Extension points (how everything else attaches)<a class="hash" href="#8-extension-points-how-everything-else-attaches" aria-label="Link to this section">#</a></h2>
 <p>The core deliberately defines the <em>attachment surfaces</em> for extensions rather than the
 extensions themselves:</p>

@@ -393,6 +393,13 @@ captures it in memory instead of sending it, so installing the daemon never star
 mail at anyone. Turn it on and you want a DKIM key too — unsigned mail from a new host is filtered
 almost everywhere.
 
+**On the TLS to other mail servers.** Outbound STARTTLS is *opportunistic*: encrypted where the
+receiving server offers it, and the certificate is deliberately not verified. That is what every
+production MTA does, and the reason is that the alternative to unverified TLS is cleartext, not
+verified TLS — SMTP has no trust anchor, and much of the internet's mail infrastructure presents
+self-signed certificates. Verifying would bounce mail rather than authenticate anything. Real
+authentication needs DANE or MTA-STS, neither of which is implemented yet.
+
 **The honest bits.** Mail crossing a bridge is TLS-in-transit on the legacy side, not end-to-end
 encrypted — and outbound is worse than that phrase suggests: the bridge *decrypts* your message to
 hand it to SMTP, so it reads the plaintext. The compose window says so when a recipient is not a
