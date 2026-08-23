@@ -169,7 +169,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 	// anything a browser composes; handling only the older single-blob form meant every real
 	// outbound message failed AEAD authentication here, which stayed invisible for as long as
 	// nothing could discover the bridge to send to it.
-	pt, err := decryptForBridge(env, h.bridgeKP)
+	pt, audience, err := decryptForBridge(env, h.bridgeKP)
 	if err != nil {
 		return nil, fmt.Errorf("bridge: decrypt: %w", err)
 	}
@@ -241,7 +241,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 
 	// 9. Deliver via SMTP (smtpFrom validated in step 6b). The full message is passed so the
 	// deliverer renders a faithful MIME body — content type, attachments, and threading headers.
-	deliverErr := h.deliverer.Deliver(ctx, smtpFrom, recipientAddr, pt)
+	deliverErr := h.deliverer.Deliver(ctx, smtpFrom, recipientAddr, pt, audience)
 	if deliverErr != nil {
 		h.log.Warnf("outbound delivery failed to %s: %v", recipientAddr, deliverErr)
 		h.audit.Record(AuditEvent{Action: "outbound.deliver", From: senderAddr, To: recipientAddr, Success: false, Detail: deliverErr.Error()})
@@ -300,30 +300,35 @@ func hasHeaderInjection(s string) bool {
 // the wrong signature against the wrong bytes. Reassembling the split parts into a PlaintextMessage
 // does not weaken anything: the header signature covers BodyHash and BodyContentAddress, and
 // DecryptBody refuses a body that does not match them.
-func decryptForBridge(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPair) (*message.PlaintextMessage, error) {
+func decryptForBridge(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPair) (*message.PlaintextMessage, Audience, error) {
 	if !env.IsSplit() {
+		// The legacy whole-message form has no audience list at all, so a message in that shape
+		// can only ever be addressed to its single recipient.
 		sm, err := message.Decrypt(env, kp.X25519Private, kp.X25519Public)
 		if err != nil {
-			return nil, err
+			return nil, Audience{}, err
 		}
 		if err := sm.Verify(); err != nil {
-			return nil, fmt.Errorf("verify sender: %w", err)
+			return nil, Audience{}, fmt.Errorf("verify sender: %w", err)
 		}
-		return &sm.Plaintext, nil
+		return &sm.Plaintext, Audience{}, nil
 	}
 
 	sh, err := message.DecryptHeader(env, kp.X25519Private, kp.X25519Public)
 	if err != nil {
-		return nil, fmt.Errorf("header: %w", err)
+		return nil, Audience{}, fmt.Errorf("header: %w", err)
 	}
 	if err := sh.Verify(); err != nil {
-		return nil, fmt.Errorf("verify sender: %w", err)
+		return nil, Audience{}, fmt.Errorf("verify sender: %w", err)
 	}
 	content, err := message.DecryptBody(env, &sh.Header, kp.X25519Private, kp.X25519Public)
 	if err != nil {
-		return nil, fmt.Errorf("body: %w", err)
+		return nil, Audience{}, fmt.Errorf("body: %w", err)
 	}
 	h := sh.Header
+	// Bcc is intentionally not carried: it is signed into the header the SENDER kept, but a
+	// recipient copy never contains it, and it must never reach an outbound header.
+	audience := Audience{To: h.To, Cc: h.Cc}
 	return &message.PlaintextMessage{
 		Version:          h.Version,
 		MessageID:        h.MessageID,
@@ -336,12 +341,12 @@ func decryptForBridge(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPa
 		Body:             content.Body,
 		Attachments:      content.Attachments,
 		ReplyToID:        h.ReplyToID,
-	}, nil
+	}, audience, nil
 }
 
 // DecryptForBridgeForTest exposes decryptForBridge to the external test package, so a test can
 // assert that the delivery path and the receipt path read the same envelope identically. They
 // diverged once, and the symptom was invisible until a real message was delivered.
-func DecryptForBridgeForTest(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPair) (*message.PlaintextMessage, error) {
+func DecryptForBridgeForTest(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPair) (*message.PlaintextMessage, Audience, error) {
 	return decryptForBridge(env, kp)
 }

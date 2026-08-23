@@ -162,7 +162,7 @@ func TestSMTPSenderDelivers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	body := "Hello, world.\n.leading dot becomes dot-stuffed on the wire\n"
-	if err := s.Deliver(ctx, "bridge@bridge.test", "alice@example.com", plainMsg("Hi there", body)); err != nil {
+	if err := s.Deliver(ctx, "bridge@bridge.test", "alice@example.com", plainMsg("Hi there", body), Audience{}); err != nil {
 		t.Fatalf("Deliver: %v", err)
 	}
 
@@ -204,7 +204,7 @@ func TestSMTPSenderSTARTTLS(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Secure", "over TLS")); err != nil {
+	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Secure", "over TLS"), Audience{}); err != nil {
 		t.Fatalf("Deliver over STARTTLS: %v", err)
 	}
 	if got := be.recorded(); len(got) != 1 || got[0].rcpt[0] != "bob@example.com" {
@@ -218,7 +218,7 @@ func TestSMTPSenderRequireTLSRefused(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("x", "y"))
+	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("x", "y"), Audience{})
 	if err == nil || !strings.Contains(err.Error(), "STARTTLS") {
 		t.Fatalf("Deliver err = %v, want a STARTTLS-required failure", err)
 	}
@@ -230,7 +230,7 @@ func TestSMTPSenderRequireTLSRefused(t *testing.T) {
 func TestSMTPSenderHeaderInjectionRejected(t *testing.T) {
 	s := NewSMTPSender(SMTPSenderConfig{}) // never dials — buildMessage rejects first
 	ctx := context.Background()
-	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi\r\nBcc: evil@example.com", "body"))
+	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi\r\nBcc: evil@example.com", "body"), Audience{})
 	if err == nil || !strings.Contains(err.Error(), "injection") {
 		t.Fatalf("Deliver err = %v, want a header-injection rejection", err)
 	}
@@ -254,7 +254,7 @@ func TestOpportunisticSTARTTLSDoesNotVerify(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body")); err != nil {
+	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body"), Audience{}); err != nil {
 		t.Fatalf("opportunistic delivery to a self-signed host failed: %v", err)
 	}
 	if got := be.recorded(); len(got) != 1 {
@@ -271,7 +271,7 @@ func TestRequireTLSStillVerifies(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body"))
+	err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body"), Audience{})
 	if err == nil {
 		t.Fatal("RequireTLS accepted an unverifiable certificate")
 	}
@@ -292,7 +292,7 @@ func TestCallerTLSConfigIsRespected(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body")); err != nil {
+	if err := s.Deliver(ctx, "bridge@bridge.test", "bob@example.com", plainMsg("Hi", "body"), Audience{}); err != nil {
 		t.Fatalf("the caller's TLSConfig was overridden: %v", err)
 	}
 }

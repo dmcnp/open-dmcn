@@ -191,7 +191,7 @@ func TestInboundStoresDecryptableEnvelope(t *testing.T) {
 // failingDeliverer fails SMTP delivery with a fixed error.
 type failingDeliverer struct{ err error }
 
-func (d failingDeliverer) Deliver(context.Context, string, string, *message.PlaintextMessage) error {
+func (d failingDeliverer) Deliver(context.Context, string, string, *message.PlaintextMessage, bridge.Audience) error {
 	return d.err
 }
 
@@ -454,7 +454,7 @@ func TestSplitEnvelopeYieldsAWorkingReceipt(t *testing.T) {
 
 	// ...and so must the receipt path, from the SAME envelope. Anything that can be delivered
 	// can be acknowledged; if these two ever disagree, the sender stops hearing back.
-	pt, err := bridge.DecryptForBridgeForTest(env, bridgeKP)
+	pt, _, err := bridge.DecryptForBridgeForTest(env, bridgeKP)
 	if err != nil {
 		t.Fatalf("the receipt path could not read an envelope the delivery path just read: %v", err)
 	}
@@ -632,4 +632,109 @@ func TestReplayToTheSameRecipientIsStillSuppressed(t *testing.T) {
 	if len(deliverer.Messages) != 1 {
 		t.Fatalf("the same envelope was delivered %d times, want once", len(deliverer.Messages))
 	}
+}
+
+// mkAudienceEnvelope seals one recipient's copy of a multi-recipient compose: the shared To/Cc
+// lists every recipient is meant to see, with recipientAddress naming just this copy.
+func mkAudienceEnvelope(t *testing.T, senderKP, bridgeKP *identity.IdentityKeyPair, rcpt string, to, cc []string) *message.EncryptedEnvelope {
+	t.Helper()
+	msg, err := message.NewPlaintextMessage("alice@dmcn.localhost", rcpt, "Group thread", "body", senderKP.Ed25519Public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh, content, err := message.Split(msg, senderKP.Ed25519Private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh.Header.To, sh.Header.Cc = to, cc
+	// Bcc rides only on the sender's own copy; a recipient copy never carries it.
+	if err := sh.Sign(senderKP.Ed25519Private); err != nil {
+		t.Fatal(err)
+	}
+	env, err := message.EncryptSplit(sh, content,
+		[]message.RecipientInfo{{DeviceID: senderKP.DeviceID, X25519Pub: bridgeKP.X25519Public}},
+		senderKP.Ed25519Private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return env
+}
+
+// TestBridgedMailCarriesTheWholeAudience is what makes Reply All work.
+//
+// A client seals one copy per recipient, each labelled with only its own recipient_address. The
+// bridge addressed the outbound message from that field alone, so a Gmail recipient saw a message
+// apparently sent to them and nobody else — they could reply to the sender but never to the rest
+// of the thread, and had no way to know there was a rest. The shared To/Cc lists were on the
+// signed header the whole time.
+func TestBridgedMailCarriesTheWholeAudience(t *testing.T) {
+	bridgeKP, senderKP := mustKeyPair(t), mustKeyPair(t)
+	deliverer := &bridge.StubSMTPDeliverer{}
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, deliverer, bridgeKP)
+
+	to := []string{"one@gmail.com", "two@outlook.com"}
+	cc := []string{"watcher@example.net"}
+	env := mkAudienceEnvelope(t, senderKP, bridgeKP, "one@gmail.com", to, cc)
+	if _, err := h.HandleEnvelope(context.Background(), env); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	if len(deliverer.Messages) != 1 {
+		t.Fatalf("delivered %d messages", len(deliverer.Messages))
+	}
+	got := deliverer.Messages[0].Audience
+	if len(got.To) != 2 || got.To[0] != "one@gmail.com" || got.To[1] != "two@outlook.com" {
+		t.Errorf("To = %v, want both recipients — Reply All has nobody to reach without it", got.To)
+	}
+	if len(got.Cc) != 1 || got.Cc[0] != "watcher@example.net" {
+		t.Errorf("Cc = %v", got.Cc)
+	}
+}
+
+// TestRenderedHeadersListEveryoneButNeverBcc checks the actual RFC 5322 headers, since that is
+// what a receiving mail client reads — and that Bcc never appears in them, which is the one thing
+// that would turn a privacy feature into a leak.
+func TestRenderedHeadersListEveryoneButNeverBcc(t *testing.T) {
+	msg, err := message.NewPlaintextMessage("alice@bridge.test", "one@gmail.com", "Group", "hi", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := bridge.BuildMIMEForTest("alice@bridge.test", "one@gmail.com", msg,
+		bridge.Audience{To: []string{"one@gmail.com", "two@outlook.com"}, Cc: []string{"cc@example.net"}})
+	if err != nil {
+		t.Fatalf("buildMIME: %v", err)
+	}
+	out := string(raw)
+	for _, want := range []string{"one@gmail.com", "two@outlook.com", "cc@example.net", "Cc:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("headers omit %q:\n%s", want, out[:min(len(out), 500)])
+		}
+	}
+	if strings.Contains(out, "Bcc:") {
+		t.Error("a Bcc header was rendered — blind recipients must never appear in the message")
+	}
+}
+
+// TestNoAudienceFallsBackToTheRecipient keeps a legacy envelope (no lists at all) deliverable, and
+// never emits an empty To:, which would be worse than a narrow one.
+func TestNoAudienceFallsBackToTheRecipient(t *testing.T) {
+	msg, err := message.NewPlaintextMessage("alice@bridge.test", "solo@gmail.com", "Solo", "hi", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := bridge.BuildMIMEForTest("alice@bridge.test", "solo@gmail.com", msg, bridge.Audience{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "solo@gmail.com") {
+		t.Errorf("the single recipient was not addressed:\n%s", raw)
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

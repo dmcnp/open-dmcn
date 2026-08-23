@@ -16,6 +16,8 @@ type DeliveredMessage struct {
 	ContentType string
 	Attachments []message.AttachmentRecord
 	Msg         *message.PlaintextMessage // the full message, for fidelity assertions
+	// Audience is the shared To/Cc the message was addressed to — what Reply All depends on.
+	Audience Audience
 }
 
 // StubSMTPDeliverer is an SMTPDeliverer that captures messages in memory
@@ -26,7 +28,7 @@ type StubSMTPDeliverer struct {
 }
 
 // Deliver records the message for later inspection.
-func (s *StubSMTPDeliverer) Deliver(_ context.Context, from, to string, msg *message.PlaintextMessage) error {
+func (s *StubSMTPDeliverer) Deliver(_ context.Context, from, to string, msg *message.PlaintextMessage, audience Audience) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Messages = append(s.Messages, DeliveredMessage{
@@ -37,6 +39,7 @@ func (s *StubSMTPDeliverer) Deliver(_ context.Context, from, to string, msg *mes
 		ContentType: msg.Body.ContentType,
 		Attachments: msg.Attachments,
 		Msg:         msg,
+		Audience:    audience,
 	})
 	return nil
 }

@@ -28,7 +28,7 @@ import (
 // keeps its content type; attachments become MIME attachment parts; the Message-ID and any
 // In-Reply-To/References are derived deterministically from the DMCN message IDs so replies thread
 // in the recipient's mail client.
-func buildMIME(from, to string, msg *message.PlaintextMessage, now time.Time) ([]byte, error) {
+func buildMIME(from, to string, msg *message.PlaintextMessage, audience Audience, now time.Time) ([]byte, error) {
 	// Defence in depth: the OutboundHandler already rejects CR/LF in these and the library encodes
 	// header values, but never build a message from a header field carrying a newline.
 	if strings.ContainsAny(from, "\r\n") || strings.ContainsAny(to, "\r\n") || strings.ContainsAny(msg.Subject, "\r\n") {
@@ -38,7 +38,20 @@ func buildMIME(from, to string, msg *message.PlaintextMessage, now time.Time) ([
 
 	var h mail.Header
 	h.SetAddressList("From", []*mail.Address{{Address: from}})
-	h.SetAddressList("To", []*mail.Address{{Address: to}})
+	// The FULL shared audience, not just this copy's recipient. A client seals one copy per
+	// recipient, so addressing only `to` makes every message look like it was sent to one person
+	// and leaves Reply All with nobody to reply to. Bcc is never rendered.
+	//
+	// Falls back to the single recipient when there is no list — a legacy envelope, or a sender
+	// that provided none. An empty To: header would be worse than a narrow one.
+	if toList := addressList(audience.To); len(toList) > 0 {
+		h.SetAddressList("To", toList)
+	} else {
+		h.SetAddressList("To", []*mail.Address{{Address: to}})
+	}
+	if ccList := addressList(audience.Cc); len(ccList) > 0 {
+		h.SetAddressList("Cc", ccList)
+	}
 	h.SetSubject(msg.Subject)
 	h.SetDate(now)
 	h.Set("Message-ID", mailMsgID(msg.MessageID, domain))
@@ -241,4 +254,25 @@ func mkAttachment(filename, contentType string, content []byte) message.Attachme
 		ContentHash:  crypto.SHA256Hash(content),
 		Content:      content,
 	}
+}
+
+// addressList converts addresses to mail.Address, dropping empties and anything carrying a
+// newline. Header injection is already rejected upstream; this is the last line before the header
+// is written, and one bad entry must not poison the whole list.
+func addressList(addrs []string) []*mail.Address {
+	out := make([]*mail.Address, 0, len(addrs))
+	for _, a := range addrs {
+		a = strings.TrimSpace(a)
+		if a == "" || strings.ContainsAny(a, "\r\n") {
+			continue
+		}
+		out = append(out, &mail.Address{Address: a})
+	}
+	return out
+}
+
+// BuildMIMEForTest exposes buildMIME to the external test package so the rendered RFC 5322 headers
+// — which is what a receiving mail client actually reads — can be asserted directly.
+func BuildMIMEForTest(from, to string, msg *message.PlaintextMessage, audience Audience) ([]byte, error) {
+	return buildMIME(from, to, msg, audience, time.Unix(1_700_000_000, 0).UTC())
 }

@@ -128,8 +128,27 @@ type AuthVerifier interface {
 // full content (subject, typed body, attachments, threading IDs) so the deliverer can render a
 // faithful MIME message.
 type SMTPDeliverer interface {
-	Deliver(ctx context.Context, from, to string, msg *message.PlaintextMessage) error
+	Deliver(ctx context.Context, from, to string, msg *message.PlaintextMessage, audience Audience) error
 }
+
+// Audience is the shared recipient list a message was addressed to — everyone the recipients are
+// meant to see, and everyone Reply All should reach.
+//
+// It is carried separately because PlaintextMessage has only recipient_address, which labels the
+// single recipient THIS copy went to. A client sends one sealed copy per recipient, so without the
+// shared list every bridged message arrives looking like it was sent to one person, and Reply All
+// silently drops everybody else.
+//
+// Bcc is deliberately absent: a blind recipient is delivered to via the SMTP envelope and must not
+// appear in any header, which is exactly how Bcc behaves in ordinary mail.
+type Audience struct {
+	To []string
+	Cc []string
+}
+
+// Empty reports whether there is no shared audience to render — a legacy envelope, or a client
+// that sent no lists. Callers fall back to addressing the single recipient.
+func (a Audience) Empty() bool { return len(a.To) == 0 && len(a.Cc) == 0 }
 
 // ClassificationContentType is the MIME type used for BridgeClassificationRecord
 // attachments in DMCN messages.

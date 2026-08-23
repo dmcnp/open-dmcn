@@ -26,7 +26,7 @@ func TestMIMERoundTrip(t *testing.T) {
 		Content:     []byte("%PDF-1.4 not really a pdf"),
 	}}
 
-	raw, err := buildMIME("bridge@bridge.test", "bob@example.com", msg, fixedTime)
+	raw, err := buildMIME("bridge@bridge.test", "bob@example.com", msg, Audience{}, fixedTime)
 	if err != nil {
 		t.Fatalf("buildMIME: %v", err)
 	}

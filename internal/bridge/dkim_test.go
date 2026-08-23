@@ -44,7 +44,7 @@ func TestDKIMSignVerifyRoundTrip(t *testing.T) {
 
 			// Build a real MIME message (CRLF) the way SMTPSender does, then sign it.
 			msg, err := buildMIME("alice@"+domain, "bob@example.com",
-				plainMsg("Round trip", "Hello,\nthis is the body.\n"), time.Unix(1_700_000_000, 0).UTC())
+				plainMsg("Round trip", "Hello,\nthis is the body.\n"), Audience{}, time.Unix(1_700_000_000, 0).UTC())
 			if err != nil {
 				t.Fatalf("buildMIME: %v", err)
 			}
@@ -99,7 +99,7 @@ func TestDKIMDeliveredMessageVerifies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	body := "Body with a .leading-dot line\nand a second line.\n"
-	if err := s.Deliver(ctx, "alice@"+domain, "bob@example.com", plainMsg("Signed + delivered", body)); err != nil {
+	if err := s.Deliver(ctx, "alice@"+domain, "bob@example.com", plainMsg("Signed + delivered", body), Audience{}); err != nil {
 		t.Fatalf("Deliver: %v", err)
 	}
 

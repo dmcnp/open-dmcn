@@ -399,6 +399,10 @@ SPF/DKIM/DMARC verdict for that address is what makes the attribution meaningful
 it as a verified legacy sender, and marks it unanchored, because a legacy address has no DMCN
 identity to check the signing key against.
 
+A message you send to several people arrives at each of them addressed to all of them — the shared
+To and Cc lists travel on the signed header, so Reply All reaches the whole thread rather than just
+you. Bcc recipients are delivered to and never named, exactly as in ordinary mail.
+
 Outbound, you hear about **failures only**. A non-delivery notice arrives from `mailer-daemon@`
 your domain with the reason in the body; a successful send produces no mail, the way email has
 always worked. The signed receipt is on the bridge's audit trail either way.

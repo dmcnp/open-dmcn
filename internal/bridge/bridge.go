@@ -336,7 +336,7 @@ func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.Encrypted
 	// path the delivery itself does — a split envelope (what any browser produces) is not
 	// readable by message.Decrypt, so using that here meant the receipt was silently dropped for
 	// exactly the messages that were successfully delivered.
-	pt, err := decryptForBridge(originalEnv, b.bridgeKP)
+	pt, _, err := decryptForBridge(originalEnv, b.bridgeKP)
 	if err != nil {
 		b.log.Warnf("cannot decrypt for receipt: %v", err)
 		return

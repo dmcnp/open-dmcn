@@ -160,7 +160,7 @@ func (s *SMTPSender) dkimFor(from string) *DKIMSigner {
 
 // Deliver resolves the recipient's MX hosts and delivers the message to the first one that
 // accepts it (preference order). Returns an error aggregating every host failure if none do.
-func (s *SMTPSender) Deliver(ctx context.Context, from, to string, msg *message.PlaintextMessage) error {
+func (s *SMTPSender) Deliver(ctx context.Context, from, to string, msg *message.PlaintextMessage, audience Audience) error {
 	to = strings.TrimSpace(to)
 	at := strings.LastIndex(to, "@")
 	if at <= 0 || at == len(to)-1 {
@@ -168,7 +168,7 @@ func (s *SMTPSender) Deliver(ctx context.Context, from, to string, msg *message.
 	}
 	domain := to[at+1:]
 
-	raw, err := buildMIME(from, to, msg, s.now())
+	raw, err := buildMIME(from, to, msg, audience, s.now())
 	if err != nil {
 		return err
 	}
