@@ -389,13 +389,14 @@ type config struct {
 	// bridge is delivered outbound over SMTP.
 	bridgeEnabled    bool
 	bridgeSMTPListen string
-	bridgeCredential string // path to the bridge's root-signed `bridge` credential
-	bridgeAuthMode   string // "dns" = real SPF/DKIM/DMARC on inbound, "stub" = no checks (dev only)
-	bridgeDelivery   string // "smtp" = real MX lookup + STARTTLS outbound, "stub" = in-memory (default)
-	bridgeDKIMKey    string // PEM private key path; without it outbound mail is unsigned
-	bridgeDKIMSel    string // DKIM selector (default "dmcn")
-	bridgeHELO       string // EHLO name announced to remote MTAs (default: OS hostname)
-	bridgeDomain     string // the legacy email (SMTP) domain the bridge represents
+	bridgeCredential string   // path to the bridge's root-signed `bridge` credential
+	bridgeAuthMode   string   // "dns" = real SPF/DKIM/DMARC on inbound, "stub" = no checks (dev only)
+	bridgeDelivery   string   // "smtp" = real MX lookup + STARTTLS outbound, "stub" = in-memory (default)
+	bridgeDKIMKey    string   // PEM private key path; without it outbound mail is unsigned
+	bridgeDKIMSel    string   // DKIM selector (default "dmcn")
+	bridgeHELO       string   // EHLO name announced to remote MTAs (defaults to webHost, then domain)
+	bridgeSendIPs    []string // public addresses this bridge sends from, for the SPF/PTR guidance
+	bridgeDomain     string   // the legacy email (SMTP) domain the bridge represents
 }
 
 func loadConfig() config {
@@ -421,6 +422,7 @@ func loadConfig() config {
 		bridgeDKIMKey:    os.Getenv("DMCND_BRIDGE_DKIM_KEY"),
 		bridgeDKIMSel:    envOr("DMCND_BRIDGE_DKIM_SELECTOR", "dmcn"),
 		bridgeHELO:       os.Getenv("DMCND_BRIDGE_HELO"),
+		bridgeSendIPs:    splitList(os.Getenv("DMCND_BRIDGE_SEND_IPS")),
 		bridgeSMTPListen: envOr("DMCND_BRIDGE_SMTP_LISTEN", ":2525"),
 		bridgeCredential: os.Getenv("DMCND_BRIDGE_CREDENTIAL"),
 		bridgeDomain:     os.Getenv("DMCND_BRIDGE_DOMAIN"),
@@ -444,6 +446,17 @@ func loadConfig() config {
 	}
 	if c.webHost == "" {
 		c.webHost = c.domain
+	}
+	// The EHLO name defaults to this host, never to the OS hostname.
+	//
+	// SMTPSender falls back to os.Hostname() when given nothing, which on a VPS is something like
+	// "ubuntu-2gb-hel1-1": not a FQDN, no A record, and no match for the PTR. Receivers penalise
+	// or reject that, and forward-confirmed reverse DNS compares the PTR against exactly this
+	// name. webHost is the right answer because this is one process — the host serving webmail IS
+	// the host sending mail — and an operator who set it has already told us what this machine is
+	// called. Falling back to the domain covers the single-name deployment.
+	if c.bridgeHELO == "" {
+		c.bridgeHELO = c.webHost
 	}
 	pi := envOr("DMCND_POLL_INTERVAL", "10s")
 	d, err := time.ParseDuration(pi)

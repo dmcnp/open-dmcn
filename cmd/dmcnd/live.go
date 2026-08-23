@@ -189,7 +189,7 @@ func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, c
 	// this would be noise. DeliverabilityDNS existed in this tree with no caller at all, which
 	// meant the one thing a new bridge operator most needs was never shown to them.
 	if cfg.bridgeDelivery == "smtp" {
-		fmt.Fprint(os.Stderr, "\n"+bridge.DeliverabilityDNS(cfg.bridgeDomain, cfg.bridgeDKIMSel, signer, cfg.bridgeHELO, "")+"\n")
+		fmt.Fprint(os.Stderr, "\n"+bridge.DeliverabilityDNS(cfg.bridgeDomain, cfg.bridgeDKIMSel, signer, cfg.bridgeHELO, cfg.bridgeSendIPs)+"\n")
 	}
 	br, berr := bridge.New(ctx, n, bridgeKP, bcfg, log)
 	if berr != nil {

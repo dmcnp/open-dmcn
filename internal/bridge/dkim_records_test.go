@@ -62,7 +62,7 @@ func TestDeliverabilityRecordsCarryEverythingAnOperatorMustPublish(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := DeliverabilityDNS("merten.vg", "dmcn", ds, "", "")
+	out := DeliverabilityDNS("merten.vg", "dmcn", ds, "", nil)
 
 	for _, want := range []string{
 		"IN MX",                     // inbound: without it no legacy mail arrives at all
@@ -95,7 +95,7 @@ func TestAlignmentRecordsUseTheDomainNotTheHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := DeliverabilityDNS("merten.vg", "dmcn", ds, "mail.merten.vg", "203.0.113.7")
+	out := DeliverabilityDNS("merten.vg", "dmcn", ds, "mail.merten.vg", []string{"203.0.113.7"})
 
 	// Alignment records: on the bare domain.
 	for _, want := range []string{
@@ -123,7 +123,7 @@ func TestAlignmentRecordsUseTheDomainNotTheHost(t *testing.T) {
 // TestHostDefaultsToTheDomain covers the common single-name deployment, where the bridge is simply
 // on the domain itself and there is no subdomain to name.
 func TestHostDefaultsToTheDomain(t *testing.T) {
-	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", "")
+	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", nil)
 	if !strings.Contains(out, "IN MX\t10 merten.vg.") {
 		t.Errorf("MX target did not fall back to the domain:\n%s", out)
 	}
@@ -133,11 +133,49 @@ func TestHostDefaultsToTheDomain(t *testing.T) {
 // merely incomplete — and names a command that exists in THIS repo. It previously pointed at
 // `dmcn-bridge dkim-keygen`, which is a product binary and not shipped here.
 func TestDeliverabilityWithoutAKeySaysHowToGetOne(t *testing.T) {
-	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", "")
+	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", nil)
 	if !strings.Contains(out, "dkim-keygen") {
 		t.Errorf("no pointer to key generation:\n%s", out)
 	}
 	if strings.Contains(out, "dmcn-bridge") {
 		t.Errorf("points at `dmcn-bridge`, which does not exist in this repo:\n%s", out)
+	}
+}
+
+// TestSPFClassifiesAddressFamilies is the fix for a real defect: --ip hardcoded ip4:, so an IPv6
+// address rendered as "ip4:2001:db8::1". That is not a stricter record, it is a malformed one, and
+// receivers treat a malformed SPF record as permerror — worse than publishing nothing.
+//
+// It matters because outbound SMTP dials "tcp", so Go's Happy Eyeballs prefers IPv6 whenever the
+// receiving MX has AAAA. A dual-stacked host really does send over v6, and an ip4-only record
+// fails SPF for exactly those messages — intermittently, depending on the receiver.
+func TestSPFClassifiesAddressFamilies(t *testing.T) {
+	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", []string{"203.0.113.7", "2001:db8::7"})
+	if !strings.Contains(out, "ip4:203.0.113.7 ip6:2001:db8::7") {
+		t.Errorf("addresses were not classified by family:\n%s", out)
+	}
+	if strings.Contains(out, "ip4:2001:db8::7") {
+		t.Errorf("an IPv6 address was emitted as ip4:, which is invalid SPF:\n%s", out)
+	}
+}
+
+// TestSPFPassesThroughMechanisms lets an operator whose sending IPs are not fixed use include: or
+// a: instead, rather than being forced into a literal that will go stale.
+func TestSPFPassesThroughMechanisms(t *testing.T) {
+	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", []string{"include:_spf.example.net"})
+	if !strings.Contains(out, "v=spf1 include:_spf.example.net -all") {
+		t.Errorf("mechanism was mangled instead of passed through:\n%s", out)
+	}
+	if strings.Contains(out, "ip4:include:") {
+		t.Errorf("a mechanism was prefixed as an address:\n%s", out)
+	}
+}
+
+// TestSPFPlaceholderPromptsForBothFamilies: with no addresses given the record is a template an
+// operator fills in, so it should show both slots rather than quietly implying IPv4 is enough.
+func TestSPFPlaceholderPromptsForBothFamilies(t *testing.T) {
+	out := DeliverabilityDNS("merten.vg", "dmcn", nil, "", nil)
+	if !strings.Contains(out, "ip4:<your-sending-ip>") || !strings.Contains(out, "ip6:") {
+		t.Errorf("the placeholder does not prompt for both address families:\n%s", out)
 	}
 }

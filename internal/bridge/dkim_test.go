@@ -201,7 +201,7 @@ func TestDeliverabilityDNS(t *testing.T) {
 		t.Fatal(err)
 	}
 	ds, _ := NewDKIMSigner("bridge.test", "sel", signer)
-	out := DeliverabilityDNS("bridge.test", "sel", ds, "mx.bridge.test", "203.0.113.7")
+	out := DeliverabilityDNS("bridge.test", "sel", ds, "mx.bridge.test", []string{"203.0.113.7"})
 	for _, want := range []string{
 		"v=spf1 ip4:203.0.113.7 -all",
 		"sel._domainkey.bridge.test.",
@@ -216,7 +216,7 @@ func TestDeliverabilityDNS(t *testing.T) {
 	}
 
 	// With no signer, the DKIM section points at the keygen command and renders a placeholder IP.
-	noKey := DeliverabilityDNS("bridge.test", "sel", nil, "", "")
+	noKey := DeliverabilityDNS("bridge.test", "sel", nil, "", nil)
 	if !strings.Contains(noKey, "dkim-keygen") || !strings.Contains(noKey, "<your-sending-ip>") {
 		t.Errorf("no-signer output should mention dkim-keygen + a placeholder IP:\n%s", noKey)
 	}

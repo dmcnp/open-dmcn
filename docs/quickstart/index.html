@@ -439,8 +439,8 @@ SMTP, so whoever answers a <code>bridge=</code> token reads the plaintext. Poiso
 become that peer.</p>
 <p>Actually sending is still opt-in and off by default, and wants a DKIM key. Generate one and
 publish what it prints — the command outputs the whole SPF/DKIM/DMARC set:</p>
-<pre><code class="language-bash">dmcndcli bridge dkim-keygen --domain mesh.example \
-  --host mail.mesh.example --ip &lt;public-ip&gt; --out dkim.pem
+<pre><code class="language-bash">dmcndcli bridge dkim-keygen --domain mesh.example --host mail.mesh.example \
+  --ip &lt;public-ipv4&gt; --ip &lt;public-ipv6&gt; --out dkim.pem
 </code></pre>
 <p><strong><code>--domain</code> is the domain mail is <em>from</em>, not the host it runs on.</strong> If addresses are
 <code>user@mesh.example</code> then <code>d=mesh.example</code>, even when the bridge and the webmail live on
@@ -468,10 +468,21 @@ looking perfectly configured. The two roles split like this:</p>
 </tr>
 </tbody>
 </table></div>
-<p><code>--host</code> sets the second (defaults to the domain, for a single-name setup) and <code>--ip</code> fills in the
-SPF and PTR lines so the output is pasteable. It prints the full set:</p>
+<p>The daemon takes the host from <code>DMCND_WEB_HOST</code> (then the domain) for its EHLO name, so on a
+subdomain setup this is already right. It deliberately never falls back to the machine's own
+hostname: on a VPS that is something like <code>ubuntu-2gb-hel1-1</code>, which is not a FQDN, has no A
+record, and will not match your PTR — and receivers penalise a HELO that does not resolve.
+<code>DMCND_BRIDGE_HELO</code> overrides it if the sending host is neither.</p>
+<p><code>--host</code> sets the second (defaults to the domain, for a single-name setup). <code>--ip</code> is repeatable
+and fills in the SPF and PTR lines; each address is classified into <code>ip4:</code>/<code>ip6:</code> for you, and an
+SPF mechanism like <code>include:_spf.example.net</code> is passed through untouched.</p>
+<p><strong>Include IPv6 if the host has it.</strong> Outbound SMTP dials <code>tcp</code>, so Go prefers IPv6 whenever the
+receiving MX has an AAAA record — mail really does leave over v6, and an <code>ip4</code>-only SPF record
+fails for exactly those messages. Intermittently, since it depends on the receiver. Every address
+you send from also needs its own PTR.</p>
+<p>It prints the full set:</p>
 <pre><code>  merten.vg.                  IN MX   10 mail.merten.vg.
-  merten.vg.                  IN TXT  &quot;v=spf1 ip4:203.0.113.7 -all&quot;
+  merten.vg.                  IN TXT  &quot;v=spf1 ip4:203.0.113.7 ip6:2001:db8::7 -all&quot;
   dmcn._domainkey.merten.vg.  IN TXT  &quot;v=DKIM1; k=rsa; p=MIIBIjANBg…&quot;
   _dmarc.merten.vg.           IN TXT  &quot;v=DMARC1; p=quarantine; …&quot;
   ; plus the PTR requirement, which is set at your provider, not in this zone

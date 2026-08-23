@@ -321,8 +321,8 @@ Actually sending is still opt-in and off by default, and wants a DKIM key. Gener
 publish what it prints — the command outputs the whole SPF/DKIM/DMARC set:
 
 ```bash
-dmcndcli bridge dkim-keygen --domain mesh.example \
-  --host mail.mesh.example --ip <public-ip> --out dkim.pem
+dmcndcli bridge dkim-keygen --domain mesh.example --host mail.mesh.example \
+  --ip <public-ipv4> --ip <public-ipv6> --out dkim.pem
 ```
 
 **`--domain` is the domain mail is *from*, not the host it runs on.** If addresses are
@@ -336,12 +336,26 @@ looking perfectly configured. The two roles split like this:
 | the **domain** mail is from | `mesh.example` | SPF, DKIM (`d=`), DMARC |
 | the **host** running the bridge | `mail.mesh.example` | MX target, EHLO, PTR |
 
-`--host` sets the second (defaults to the domain, for a single-name setup) and `--ip` fills in the
-SPF and PTR lines so the output is pasteable. It prints the full set:
+The daemon takes the host from `DMCND_WEB_HOST` (then the domain) for its EHLO name, so on a
+subdomain setup this is already right. It deliberately never falls back to the machine's own
+hostname: on a VPS that is something like `ubuntu-2gb-hel1-1`, which is not a FQDN, has no A
+record, and will not match your PTR — and receivers penalise a HELO that does not resolve.
+`DMCND_BRIDGE_HELO` overrides it if the sending host is neither.
+
+`--host` sets the second (defaults to the domain, for a single-name setup). `--ip` is repeatable
+and fills in the SPF and PTR lines; each address is classified into `ip4:`/`ip6:` for you, and an
+SPF mechanism like `include:_spf.example.net` is passed through untouched.
+
+**Include IPv6 if the host has it.** Outbound SMTP dials `tcp`, so Go prefers IPv6 whenever the
+receiving MX has an AAAA record — mail really does leave over v6, and an `ip4`-only SPF record
+fails for exactly those messages. Intermittently, since it depends on the receiver. Every address
+you send from also needs its own PTR.
+
+It prints the full set:
 
 ```
   merten.vg.                  IN MX   10 mail.merten.vg.
-  merten.vg.                  IN TXT  "v=spf1 ip4:203.0.113.7 -all"
+  merten.vg.                  IN TXT  "v=spf1 ip4:203.0.113.7 ip6:2001:db8::7 -all"
   dmcn._domainkey.merten.vg.  IN TXT  "v=DKIM1; k=rsa; p=MIIBIjANBg…"
   _dmarc.merten.vg.           IN TXT  "v=DMARC1; p=quarantine; …"
   ; plus the PTR requirement, which is set at your provider, not in this zone

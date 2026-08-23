@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -177,22 +178,21 @@ func txtChunks(s string) string {
 // DMARC all hang off bridgeDomain, because DMARC alignment compares them against the From: header,
 // which the bridge rewrites to @bridgeDomain. The MX target, the HELO name and the PTR are the
 // HOST — often a subdomain like mail.example.com — and have nothing to do with alignment.
-func DeliverabilityDNS(bridgeDomain, selector string, signer *DKIMSigner, helo, publicIP string) string {
-	ip := publicIP
-	if ip == "" {
-		ip = "<your-sending-ip>"
-	}
+func DeliverabilityDNS(bridgeDomain, selector string, signer *DKIMSigner, helo string, publicIPs []string) string {
 	if helo == "" {
 		helo = bridgeDomain
 	}
+	mechanisms, ptrTargets := spfMechanisms(publicIPs)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Bridge mail DNS — publish these records for %s:\n\n", bridgeDomain)
 
 	fmt.Fprintf(&b, "  ; MX — where legacy mail for @%s is delivered (inbound)\n", bridgeDomain)
 	fmt.Fprintf(&b, "  %s.\tIN MX\t10 %s.\n\n", bridgeDomain, helo)
 
-	fmt.Fprintf(&b, "  ; SPF — authorize the bridge's sending IP (envelope MAIL FROM is @%s)\n", bridgeDomain)
-	fmt.Fprintf(&b, "  %s.\tIN TXT\t\"v=spf1 ip4:%s -all\"\n\n", bridgeDomain, ip)
+	fmt.Fprintf(&b, "  ; SPF — authorize every address the bridge sends FROM (envelope MAIL FROM is @%s).\n", bridgeDomain)
+	fmt.Fprintf(&b, "  ;   Include IPv6 if this host has it: outbound SMTP dials \"tcp\", which prefers IPv6\n")
+	fmt.Fprintf(&b, "  ;   whenever the receiver has AAAA — so mail leaves over v6 and an ip4-only record fails.\n")
+	fmt.Fprintf(&b, "  %s.\tIN TXT\t\"v=spf1 %s -all\"\n\n", bridgeDomain, mechanisms)
 
 	if signer != nil {
 		if val, err := dkimPublicTXT(signer.public()); err == nil {
@@ -208,7 +208,44 @@ func DeliverabilityDNS(bridgeDomain, selector string, signer *DKIMSigner, helo, 
 	fmt.Fprintf(&b, "  _dmarc.%s.\tIN TXT\t\"v=DMARC1; p=quarantine; adkim=s; aspf=s; rua=mailto:dmarc@%s\"\n\n", bridgeDomain, bridgeDomain)
 
 	fmt.Fprintf(&b, "  ; Reverse DNS (PTR) — set by your IP/hosting provider, NOT in this zone:\n")
-	fmt.Fprintf(&b, "  ;   the PTR for %s must resolve to %q, and %q must have an A/AAAA record\n", ip, helo, helo)
-	fmt.Fprintf(&b, "  ;   resolving back to %s (forward-confirmed reverse DNS).\n", ip)
+	fmt.Fprintf(&b, "  ;   the PTR for %s must resolve to %q, and %q must have a matching A/AAAA\n", ptrTargets, helo, helo)
+	fmt.Fprintf(&b, "  ;   record resolving back (forward-confirmed reverse DNS). Every address you send\n")
+	fmt.Fprintf(&b, "  ;   from needs one, IPv6 included.\n")
 	return b.String()
+}
+
+// spfMechanisms renders the SPF ip4:/ip6: terms for the addresses the bridge sends from, and the
+// human list of those addresses for the PTR note.
+//
+// Each address is classified rather than assumed: an IPv6 address written as ip4: is not a
+// stricter record, it is an invalid one, and receivers treat a malformed SPF record as permerror —
+// which is worse than having published nothing.
+func spfMechanisms(ips []string) (mechanisms, ptrTargets string) {
+	var terms, addrs []string
+	for _, raw := range ips {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		parsed := net.ParseIP(raw)
+		switch {
+		case parsed == nil:
+			// Not an address — most likely an SPF mechanism the operator wants passed through
+			// (include:, a:, mx:). Emit it verbatim rather than mangling it.
+			terms = append(terms, raw)
+		case parsed.To4() != nil:
+			terms = append(terms, "ip4:"+raw)
+			addrs = append(addrs, raw)
+		default:
+			terms = append(terms, "ip6:"+raw)
+			addrs = append(addrs, raw)
+		}
+	}
+	if len(terms) == 0 {
+		return "ip4:<your-sending-ip> ip6:<your-sending-ip-v6>", "<your-sending-ip>"
+	}
+	if len(addrs) == 0 {
+		addrs = []string{"<your-sending-ip>"}
+	}
+	return strings.Join(terms, " "), strings.Join(addrs, " and ")
 }

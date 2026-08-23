@@ -32,7 +32,8 @@ func cmdDKIMKeygen(args []string) error {
 	out := fs.String("out", "dkim.pem", "file to write the private key to")
 	force := fs.Bool("force", false, "overwrite an existing key file")
 	helo := fs.String("host", os.Getenv("DMCND_BRIDGE_HELO"), "the HOST running the bridge — the MX target, EHLO name and PTR target (e.g. mail.example.com). Defaults to the domain itself")
-	ip := fs.String("ip", "", "the bridge's public sending IP, so the SPF and PTR lines are pasteable")
+	var ips multiFlag
+	fs.Var(&ips, "ip", "a public address the bridge sends from — repeat for IPv4 and IPv6, or pass an SPF mechanism like include:… verbatim. Each is classified into ip4:/ip6: for you")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func cmdDKIMKeygen(args []string) error {
 		return err
 	}
 
-	fmt.Print(bridge.DeliverabilityDNS(*domain, *selector, dkimSigner, *helo, *ip))
+	fmt.Print(bridge.DeliverabilityDNS(*domain, *selector, dkimSigner, *helo, ips))
 	fmt.Fprintf(os.Stderr, "\nWrote %s (%s). On the node:\n"+
 		"    DMCND_BRIDGE_DKIM_KEY=%s\n"+
 		"    DMCND_BRIDGE_DKIM_SELECTOR=%s\n"+

@@ -99,7 +99,8 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_BRIDGE_DELIVERY_MODE` | `stub` | outbound: `smtp` (real MX lookup + STARTTLS) or `stub` (captured in memory, sends nothing) |
 | `DMCND_BRIDGE_DKIM_KEY` | — | PEM private key for outbound DKIM signing (`dmcndcli bridge dkim-keygen`); without it outbound mail is unsigned and widely spam-filtered |
 | `DMCND_BRIDGE_DKIM_SELECTOR` | `dmcn` | DKIM selector (the `<selector>._domainkey` label) |
-| `DMCND_BRIDGE_HELO` | OS hostname | EHLO name announced to remote MTAs |
+| `DMCND_BRIDGE_HELO` | `$DMCND_WEB_HOST`, else the domain | EHLO name announced to remote MTAs — must be a FQDN whose PTR matches, so it defaults to the host rather than the OS hostname |
+| `DMCND_BRIDGE_SEND_IPS` | — | public addresses this bridge sends from (comma-separated, v4 and v6), so the DNS records printed at startup are pasteable |
 
 ### Federation
 
@@ -151,7 +152,8 @@ dmcndcli petition assign --code 0428-9173-5560 --address alice@mesh.example \
 
 # Generate the outbound DKIM key and print the SPF/DKIM/DMARC records to publish. Touches no
 # network and no domain root — this is the bridge's key, not the domain's.
-dmcndcli bridge dkim-keygen --domain mesh.example --out dkim.pem
+dmcndcli bridge dkim-keygen --domain mesh.example --host mail.mesh.example \
+  --ip <public-ipv4> --ip <public-ipv6> --out dkim.pem
 
 # Free an address whose key was lost, compromised or squatted, so it can be bound again.
 # Root-only, and the ONLY recovery path: the daemon refuses any record that re-binds a live
