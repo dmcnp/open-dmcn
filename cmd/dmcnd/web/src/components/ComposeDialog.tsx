@@ -3,16 +3,20 @@ import type { CSSProperties, ReactNode, KeyboardEvent } from 'react';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { lookupIdentity, sendMessage } from '../lib/api/client';
-import { encryptSplit, type SplitEnvelope } from '../lib/crypto/split';
+import { encryptSplit, type SplitEnvelope, type AttachmentInput } from '../lib/crypto/split';
 import { encodeSplitEnvelope } from '../lib/crypto/protobuf';
 import { signWithKey } from '../lib/crypto/sign';
 import { toBase64, fromBase64, toHex } from '../lib/crypto/keys';
-import { SentStore, sentAuthorBytes, type SentEntry } from '../lib/api/sentStore';
+import { SentStore } from '../lib/api/sentStore';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useContacts, type Contact } from '../lib/hooks/useContacts';
 import { DEFAULT_DOMAIN } from '../lib/config';
-import { Button, IconButton, Tag, Avatar } from '../ds';
+import { Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
+import { RichTextEditor, type RichTextEditorHandle, type InsertedImage } from './RichTextEditor';
+import { sanitizeOutgoing } from '../lib/html/sanitize';
+import { toPlainText } from '../lib/html/toPlainText';
+import { fromPlainText } from '../lib/html/fromPlainText';
 
 export interface ComposeReplyTo {
   to: string;
@@ -36,6 +40,34 @@ function recipientChip(kind: RecipientKind | undefined): {
     case 'legacy':  return { icon: 'alert-triangle', color: 'var(--warning)', title: 'Legacy email — cannot be end-to-end encrypted' };
     default:        return { icon: 'shield', color: 'var(--text-muted)', title: 'Checking recipient…' };
   }
+}
+
+// Attachments ride inline in the sealed body blob, so the cap is a real memory and
+// message-size limit, not a policy knob.
+const MAX_TOTAL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// truncateFilename shortens a long name in the MIDDLE so the chip fits the compose
+// box while keeping the start and the extension (the full name is in the title tip).
+function truncateFilename(name: string, max = 28): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
+  const keep = Math.max(6, max - ext.length - 1);
+  return name.slice(0, keep) + '\u2026' + ext;
+}
+
+// newUuid returns 16 random bytes with RFC-4122 v4 bits set (attachment_id).
+function newUuid(): Uint8Array {
+  const id = crypto.getRandomValues(new Uint8Array(16));
+  id[6] = (id[6] & 0x0f) | 0x40;
+  id[8] = (id[8] & 0x3f) | 0x80;
+  return id;
 }
 
 export interface ComposeDialogProps {
@@ -70,6 +102,23 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [subject, setSubject] = useState(replyTo?.subject ? `Re: ${replyTo.subject.replace(/^Re:\s*/i, '')}` : '');
   const [body, setBody] = useState('');
+  // Rich (HTML) is the default for every compose; the account setting flips the STARTING
+  // mode and the footer toggle overrides it for this message only.
+  const [richMode, setRichMode] = useState(() => settings.composePlainText !== true);
+  const editorRef = useRef<RichTextEditorHandle>(null);
+  // The editor is uncontrolled and reads this only when it mounts, so it doubles as the
+  // seed for a plain -> rich switch (which is exactly when it mounts).
+  const richInitial = useRef('');
+  // Holds the HTML from before a rich -> plain switch, so switching back is lossless as
+  // long as the plain text was not edited in between.
+  const stashedHtml = useRef<string | null>(null);
+
+  // Attachments ride inline in the sealed body blob (one CEK), read fully into memory
+  // here. The ref is authoritative because inline images are inserted from async
+  // handlers that would otherwise read a stale `attachments` closure mid-batch.
+  const [attachments, setAttachments] = useState<AttachmentInput[]>([]);
+  const attachmentsRef = useRef<AttachmentInput[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Onion routing is no longer user-selectable (not enough peers yet), but if a
   // recipient's record or domain REQUIRES onion delivery the server enforces it, so
   // we still detect it and route accordingly.
@@ -161,6 +210,95 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     }
   };
 
+  // Inline images are attachments too — same sealed blob, same cap — but they are
+  // referenced from the HTML body by cid: rather than listed, so the chip strip shows
+  // only the real attachments.
+  const fileAttachments = attachments.filter(a => a.disposition !== 'inline');
+  const attachedBytes = attachments.reduce((n, a) => n + a.sizeBytes, 0);
+  const usedBytes = () => attachmentsRef.current.reduce((n, a) => n + a.sizeBytes, 0);
+  const capMessage = `Attachments can't exceed ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB in total.`;
+
+  const pushAttachments = (adds: AttachmentInput[]) => {
+    attachmentsRef.current = [...attachmentsRef.current, ...adds];
+    setAttachments(attachmentsRef.current);
+  };
+
+  // addFiles reads each selected file fully into memory, hashes it, and appends it. The
+  // whole batch is rejected (nothing added) if it would push the running total past the
+  // cap, so the composer never holds an over-limit set.
+  const addFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const additions: AttachmentInput[] = [];
+    let running = usedBytes();
+    for (const file of Array.from(files)) {
+      const content = new Uint8Array(await file.arrayBuffer());
+      running += content.length;
+      if (running > MAX_TOTAL_ATTACHMENT_BYTES) {
+        setError(capMessage);
+        return;
+      }
+      const contentHash = new Uint8Array(await crypto.subtle.digest('SHA-256', content as BufferSource));
+      additions.push({
+        attachmentId: newUuid(),
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        sizeBytes: content.length,
+        contentHash,
+        content,
+      });
+    }
+    setError('');
+    pushAttachments(additions);
+  };
+
+  // addInlineImage backs the editor's image insert (toolbar / paste / drop): it stores the
+  // bytes as an inline-disposition attachment and hands back the cid the body references,
+  // plus a data: preview (the CSP allows data:, not blob:).
+  const addInlineImage = async (file: File): Promise<InsertedImage | null> => {
+    const content = new Uint8Array(await file.arrayBuffer());
+    if (usedBytes() + content.length > MAX_TOTAL_ATTACHMENT_BYTES) {
+      setError(capMessage);
+      return null;
+    }
+    const contentHash = new Uint8Array(await crypto.subtle.digest('SHA-256', content as BufferSource));
+    const contentType = file.type || 'application/octet-stream';
+    const contentId = `${toHex(newUuid())}@dmcn`;
+    const filename = file.name || 'image';
+    pushAttachments([{
+      attachmentId: newUuid(),
+      filename,
+      contentType,
+      sizeBytes: content.length,
+      contentHash,
+      content,
+      contentId,
+      disposition: 'inline',
+    }]);
+    setError('');
+    return { contentId, previewUrl: `data:${contentType};base64,${toBase64(content)}`, alt: filename };
+  };
+
+  const removeAttachment = (att: AttachmentInput) => {
+    attachmentsRef.current = attachmentsRef.current.filter(a => a !== att);
+    setAttachments(attachmentsRef.current);
+  };
+
+  // Switching modes is lossy in one direction only: rich -> plain flattens formatting.
+  // The HTML is stashed so switching straight back restores it; once the plain text has
+  // actually been edited, the edit wins and the formatting is genuinely gone.
+  const toggleMode = () => {
+    if (richMode) {
+      const html = editorRef.current?.getHTML() ?? '';
+      stashedHtml.current = html;
+      setBody(toPlainText(html));
+      setRichMode(false);
+      return;
+    }
+    const stash = stashedHtml.current;
+    richInitial.current = stash !== null && toPlainText(stash) === body ? stash : fromPlainText(body);
+    setRichMode(true);
+  };
+
   const handleSend = async () => {
     if (!keys || !address) return;
     // Flush any un-committed pending text in each field first.
@@ -212,6 +350,35 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     threadId[8] = (threadId[8] & 0x3f) | 0x80;
     const sentAt = Math.floor(Date.now() / 1000);
 
+    // Derive both renderings ONCE, before the recipient loop, so every copy (recipients
+    // and the Sent self-copy) carries byte-identical content.
+    //
+    // Sanitizing here is the point of the exercise: this is the boundary where composed
+    // markup becomes wire bytes, and the last chance to ensure a hostile paste isn't
+    // shipped under the sender's own signature. The plain-text part is always produced —
+    // it stays the primary body, so text-only readers and the trust-gated plain-text peek
+    // never see an empty message.
+    let bodyHtml: string | undefined;
+    let bodyText = body;
+    if (richMode) {
+      const clean = sanitizeOutgoing(editorRef.current?.getHTML() ?? '').html;
+      const plain = toPlainText(clean);
+      // An empty rich body is just an empty message — don't ship a hollow HTML part.
+      if (plain.trim() || /<img\s/i.test(clean)) {
+        bodyHtml = clean;
+        bodyText = plain;
+      } else {
+        bodyText = '';
+      }
+    }
+
+    // Inline images the user inserted and then deleted again are still in the attachment
+    // list; drop the ones the final body doesn't reference so no orphan parts ride along.
+    const referenced = new Set(Array.from(bodyHtml?.matchAll(/src="cid:([^"]*)"/g) ?? [], m => m[1]));
+    const sendAttachments = attachmentsRef.current.filter(
+      a => a.disposition !== 'inline' || referenced.has(a.contentId ?? '')
+    );
+
     // Shared header fields. recipientAddress (per-copy routing label) and bcc are
     // filled in per copy below; to/cc are identical and visible everywhere.
     const common = {
@@ -223,7 +390,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       senderSignKey: k.ed25519Sign,
       sentAt,
       subject,
-      bodyText: body,
+      bodyText,
+      bodyHtml,
+      attachments: sendAttachments,
       to: toList,
       cc: ccList,
     };
@@ -253,30 +422,22 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         );
       }
 
-      // Sent copy: a record in the owner-only personal store ("sent/" namespace), NOT
-      // a message. Sealed to us alone, so it never touches onion routing, the relay
-      // STORE path, or the free-ride guard — this is what retires the old
-      // self-addressed STORE (and fixes the RequireOnion-on-self failure). It records
-      // the full to/cc/bcc audience, the authorship signature, and each recipient's
-      // relay-accept hash. Best-effort: the message is already delivered, so a failure
-      // to save our own Sent copy must not fail the send.
-      const sentEntry: SentEntry = {
-        v: 1,
-        messageId: toHex(messageId),
-        threadId: toHex(threadId),
-        sentAt,
-        subject,
-        body,
-        to: toList,
-        cc: ccList,
-        bcc: bccList,
-        attachments: [],
-        authorSig: '',
-        acceptHashes,
-      };
-      sentEntry.authorSig = toBase64(await signWithKey(k.ed25519Sign, sentAuthorBytes(sentEntry)));
+      // Sent self-copy: seal the SAME composed message to our OWN X25519 key and store
+      // the envelope (a small listed header + a lazy body) in the owner-only personal
+      // store. Sent then renders through the normal header/body path — body, attachments
+      // and HTML alternatives all live in the body, decrypted on open, exactly like inbox
+      // mail — so the Sent list only ever handles headers. Sealed to us alone, so it never
+      // touches the relay STORE path, onion routing, or the free-ride guard (the full bcc
+      // audience rides on this self-copy only). Best-effort: the message is already
+      // delivered, so a Sent-copy failure must not fail the send.
       try {
-        await new SentStore(k).put(sentEntry);
+        const selfEnvelope = await encryptSplit({
+          ...common,
+          recipientAddress: selfAddress,
+          bcc: bccList,
+          recipients: [{ deviceId: k.deviceId, x25519Pub: k.x25519Public }],
+        });
+        await new SentStore(k).putEnvelope(toHex(messageId), selfEnvelope);
       } catch (copyErr) {
         console.warn('Sent copy could not be saved (message delivered):', copyErr);
       }
@@ -392,11 +553,47 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       </div>
 
       {/* Body */}
-      <textarea
-        value={body}
-        onChange={e => setBody(e.target.value)}
-        placeholder="Write something — it's encrypted before it leaves your device."
-        style={{ ...inputReset, resize: 'none', fontSize: mobile ? 16 : 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', padding: 'var(--space-4)', minHeight: mobile ? 0 : 200, flex: 1 }}
+      {richMode ? (
+        <RichTextEditor
+          ref={editorRef}
+          initialHtml={richInitial.current}
+          placeholder="Write something — it's encrypted before it leaves your device."
+          mobile={mobile}
+          onInsertImage={addInlineImage}
+        />
+      ) : (
+        <textarea
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          placeholder="Write something — it's encrypted before it leaves your device."
+          style={{ ...inputReset, resize: 'none', fontSize: mobile ? 16 : 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', padding: 'var(--space-4)', minHeight: mobile ? 0 : 200, flex: 1 }}
+        />
+      )}
+
+      {/* Attachment chips (name · size), with a running total against the cap. Inline
+          images are excluded — they're visible in the body itself — but their bytes
+          still count towards the total shown here. */}
+      {fileAttachments.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)' }}>
+          {fileAttachments.map((a, i) => (
+            <Tag key={i} onRemove={() => removeAttachment(a)}>
+              <Icon name="paperclip" size={13} style={{ color: 'var(--text-muted)', flex: 'none' }} />
+              <span title={a.filename} style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncateFilename(a.filename)}</span>
+              <span style={{ color: 'var(--text-muted)', flex: 'none' }}>· {formatBytes(a.sizeBytes)}</span>
+            </Tag>
+          ))}
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            {formatBytes(attachedBytes)} of {Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB
+          </span>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={e => { void addFiles(e.target.files); e.target.value = ''; }}
+        style={{ display: 'none' }}
       />
 
       {error && (
@@ -424,6 +621,18 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         <Button leftIcon={<Icon name="send" size={16} />} onClick={handleSend} disabled={loading}>
           {loading ? 'Sending…' : 'Send'}
         </Button>
+        <IconButton aria-label="Attach files" onClick={() => fileInputRef.current?.click()} disabled={loading}>
+          <Icon name="paperclip" />
+        </IconButton>
+        <IconButton
+          aria-label={richMode ? 'Switch to plain text' : 'Switch to rich text'}
+          title={richMode ? 'Plain text' : 'Rich text'}
+          active={!richMode}
+          onClick={toggleMode}
+          disabled={loading}
+        >
+          <Icon name={richMode ? 'file' : 'pencil'} />
+        </IconButton>
         <div style={{ flex: 1 }} />
         <IconButton aria-label="Discard" onClick={onClose}><Icon name="trash" /></IconButton>
       </div>
@@ -552,7 +761,6 @@ function RecipientField({ label, values, onRemove, pending, setPending, onKey, o
                 background: i === activeIdx ? 'var(--surface-hover)' : 'transparent',
               }}
             >
-              <Avatar name={c.name || c.address} size="sm" />
               <div style={{ minWidth: 0, flex: 1 }}>
                 {c.name && (
                   <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>

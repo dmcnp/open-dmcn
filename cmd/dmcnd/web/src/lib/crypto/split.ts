@@ -56,6 +56,11 @@ export interface AttachmentInput {
   sizeBytes: number;
   contentHash: Uint8Array; // 32, SHA-256 of content
   content: Uint8Array;
+  // Set on parts embedded in the HTML body: contentId is the bare MIME Content-ID the
+  // body references as <img src="cid:…"> and disposition is 'inline'. Omitted for an
+  // ordinary attachment, which is then listed for download rather than rendered.
+  contentId?: string;
+  disposition?: string;
 }
 
 export interface ComposeInput {
@@ -72,9 +77,16 @@ export interface ComposeInput {
   to?: string[];
   cc?: string[];
   bcc?: string[];
+  // 16-byte header replyToId: the messageId of the message this replies to. Omitted for
+  // a non-reply — encodeMessageHeader then emits the required zero-filled 16 bytes.
+  replyToId?: Uint8Array;
   sentAt: number; // Unix seconds
   subject: string;
   bodyText: string;
+  // The optional text/html rendering of bodyText. It rides in MessageContent.alternatives;
+  // the primary body stays text/plain so snippet/body_size keep their meaning and a
+  // text-only reader (or the trust-gated plain-text peek) always has something to show.
+  bodyHtml?: string;
   attachments?: AttachmentInput[];
   recipients: RecipientInfo[];
 }
@@ -127,11 +139,18 @@ function snippetOf(contentType: string, content: Uint8Array): string {
 export async function encryptSplit(input: ComposeInput): Promise<SplitEnvelope> {
   const bodyContent = new TextEncoder().encode(input.bodyText);
   const attachments = input.attachments ?? [];
+  // multipart/alternative analog: the primary body is always text/plain; an HTML
+  // rendering (when the composer produced one) is the richer alternative.
+  const alternatives = input.bodyHtml
+    ? [{ contentType: 'text/html', content: new TextEncoder().encode(input.bodyHtml) }]
+    : undefined;
 
-  // Body (content) → canonical bytes → body_hash commitment.
+  // Body (content) → canonical bytes → body_hash commitment. body_hash therefore
+  // commits to BOTH renderings, so neither can be swapped without breaking the header.
   const contentBytes = await encodeMessageContent({
     body: { contentType: 'text/plain', content: bodyContent },
     attachments,
+    alternatives,
   });
   const bodyHash = await sha256(contentBytes);
 
@@ -149,6 +168,7 @@ export async function encryptSplit(input: ComposeInput): Promise<SplitEnvelope> 
     version: input.version,
     messageId: input.messageId,
     threadId: input.threadId,
+    replyToId: input.replyToId,
     senderAddress: input.senderAddress,
     senderPublicKey: input.senderPublicKey,
     recipientAddress: input.recipientAddress,
@@ -256,6 +276,8 @@ export interface DecryptedAttachment {
   filename: string;
   contentType: string;
   content: Uint8Array;
+  contentId: string;   // bare MIME Content-ID (inline parts referenced by cid:); '' otherwise
+  disposition: string; // 'inline' | 'attachment' | ''
 }
 
 export async function decryptBody(
@@ -264,7 +286,7 @@ export async function decryptBody(
   header: MessageHeaderFields,
   x25519Derive: CryptoKey,
   x25519Pub: Uint8Array
-): Promise<{ contentType: string; content: Uint8Array; bodyText: string; attachments: DecryptedAttachment[] }> {
+): Promise<{ contentType: string; content: Uint8Array; bodyText: string; htmlBody?: string; attachments: DecryptedAttachment[] }> {
   const rec = findRecipient(entry.recipients, x25519Pub);
   const cek = await unwrapCEK(rec, x25519Derive);
   const padded = await aesGcmDecrypt(
@@ -295,15 +317,28 @@ export async function decryptBody(
 
   const content = await decodeMessageContent(contentBytes);
   const raw = new Uint8Array(content.body.content);
+
+  // body + alternatives = the multipart/alternative parts. bodyText is the text/plain
+  // rendering (the primary body, or a text/plain alternative); htmlBody is the text/html
+  // part if any. Text-only clients read bodyText; the reader prefers htmlBody when trusted.
+  const parts = [content.body, ...(content.alternatives ?? [])];
+  const textPart = parts.find(p => p.contentType === 'text/plain');
+  const htmlPart = parts.find(p => p.contentType === 'text/html');
+  const bodyText = new TextDecoder().decode(textPart ? new Uint8Array(textPart.content) : raw);
+  const htmlBody = htmlPart ? new TextDecoder().decode(new Uint8Array(htmlPart.content)) : undefined;
+
   const attachments: DecryptedAttachment[] = (content.attachments ?? []).map(a => ({
     filename: a.filename,
     contentType: a.contentType,
     content: new Uint8Array(a.content),
+    contentId: a.contentId ?? '',
+    disposition: a.disposition ?? '',
   }));
   return {
     contentType: content.body.contentType,
     content: raw,
-    bodyText: new TextDecoder().decode(raw),
+    bodyText,
+    htmlBody,
     attachments,
   };
 }

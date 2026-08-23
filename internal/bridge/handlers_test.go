@@ -738,3 +738,47 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// TestHTMLSurvivesTheSplitRoundTrip pins the formatted-mail path out to the legacy world:
+// MessageContent.Alternatives carries the text/html rendering, and buildMIME must emit it as
+// multipart/alternative. Without the alternative reaching the outbound message, every formatted
+// message silently arrives as plain text.
+func TestHTMLSurvivesTheSplitRoundTrip(t *testing.T) {
+	bridgeKP, senderKP := mustKeyPair(t), mustKeyPair(t)
+	deliverer := &bridge.StubSMTPDeliverer{}
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, deliverer, bridgeKP)
+
+	msg, err := message.NewPlaintextMessage("alice@dmcn.localhost", "ext@gmail.com", "Formatted", "plain fallback", senderKP.Ed25519Public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg.Alternatives = []message.MessageBody{{ContentType: "text/html", Content: []byte("<p>formatted <b>body</b></p>")}}
+	sh, content, err := message.Split(msg, senderKP.Ed25519Private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := message.EncryptSplit(sh, content,
+		[]message.RecipientInfo{{DeviceID: senderKP.DeviceID, X25519Pub: bridgeKP.X25519Public}},
+		senderKP.Ed25519Private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.HandleEnvelope(context.Background(), env); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+
+	alts := deliverer.Messages[0].Msg.Alternatives
+	if len(alts) != 1 || alts[0].ContentType != "text/html" {
+		t.Fatalf("alternatives = %+v, want the text/html rendering — formatted mail arrives as plain text without it", alts)
+	}
+
+	raw, err := bridge.BuildMIMEForTest("alice@bridge.test", "ext@gmail.com", deliverer.Messages[0].Msg, bridge.Audience{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "multipart/alternative") || !strings.Contains(string(raw), "text/html") {
+		t.Errorf("the rendered message carries no HTML part:\n%s", raw)
+	}
+}

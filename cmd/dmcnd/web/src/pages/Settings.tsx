@@ -105,6 +105,7 @@ export function Settings() {
   // Profile form (synced account settings). Seeded from the loaded settings doc.
   const [displayName, setDisplayName] = useState('');
   const [signature, setSignature] = useState('');
+  const [composePlainText, setComposePlainText] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
   const [fingerprint, setFingerprint] = useState('');
@@ -229,13 +230,14 @@ export function Settings() {
   useEffect(() => {
     setDisplayName(settings.displayName ?? '');
     setSignature(settings.signature ?? '');
-  }, [settings.displayName, settings.signature]);
+    setComposePlainText(settings.composePlainText === true);
+  }, [settings.displayName, settings.signature, settings.composePlainText]);
 
   const saveProfile = async () => {
     setProfileBusy(true);
     setProfileMsg('');
     try {
-      await updateSettings({ displayName: displayName.trim(), signature });
+      await updateSettings({ displayName: displayName.trim(), signature, composePlainText });
       setProfileMsg('Saved. Your profile syncs to your other devices.');
     } catch (e) {
       setProfileMsg(e instanceof Error ? e.message : 'Failed to save');
@@ -295,6 +297,12 @@ export function Settings() {
               </div>
               <Textarea value={signature} onChange={e => setSignature(e.target.value)} rows={4} placeholder="— Sent securely over dmcn" aria-label="Signature" />
             </div>
+            <Row
+              title="Compose in plain text"
+              desc="New messages and replies start in plain text. You can still switch any single message to rich text."
+            >
+              <Switch checked={composePlainText} onChange={setComposePlainText} />
+            </Row>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
               <Button onClick={saveProfile} disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save profile'}</Button>
               {profileMsg && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{profileMsg}</span>}

@@ -176,6 +176,9 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 			msg.Body = message.MessageBody{ContentType: "text/plain", Content: rawMsg}
 		} else {
 			msg.Body = parsed.Body
+			// Carry the HTML alternative (when the mail was multipart/alternative) so an
+			// HTML-capable client can render it; text clients still read msg.Body.
+			msg.Alternatives = parsed.Alternatives
 		}
 		if parsed.HasIDs {
 			msg.MessageID = parsed.MessageID

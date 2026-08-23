@@ -13,6 +13,9 @@ import type { WorkingKeys } from '../crypto/workingKeys';
 
 export interface FullBody {
   bodyText: string;
+  // The text/html rendering when the message carries one (multipart/alternative
+  // analog). Absent for plain-only mail. The reader renders it sanitized + sandboxed.
+  htmlBody?: string;
   attachments: DecryptedAttachment[];
 }
 
@@ -21,6 +24,9 @@ export interface Preview {
   // Hex of the header messageId. Shared across every copy of one compose, so the
   // Sent view groups a multi-recipient send into a single row.
   messageId: string;
+  // Hex of the header threadId — lets a reply continue the original thread.
+  // All-zero/empty for pre-feature messages.
+  threadId: string;
   senderAddress: string;
   // Hex of the sender's ed25519 public key from the signature-verified header
   // (decryptHeader throws on a bad signature). Used to anchor sender trust against
@@ -161,7 +167,7 @@ export class MailboxSync {
     const res = await this.complete<BodyResp>(ch.correlation_id, ch.nonce);
     const bodyProto = (await decodeMailboxBody(fromBase64(res.body))) as unknown as MailboxBodyLike;
     const content = await decryptBody(cached.entry, bodyProto, cached.header, this.keys.x25519Derive, this.keys.x25519Public);
-    return { bodyText: content.bodyText, attachments: content.attachments };
+    return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
   }
 
   // deleteMessage removes a message from the mailbox (hold-until-deleted) and
@@ -181,6 +187,7 @@ export class MailboxSync {
       previews.push({
         hash,
         messageId: toHex(c.header.messageId),
+        threadId: toHex(c.header.threadId),
         senderAddress: c.header.senderAddress,
         senderPublicKey: toHex(c.header.senderPublicKey),
         recipientAddress: c.header.recipientAddress,

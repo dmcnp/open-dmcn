@@ -10,13 +10,6 @@ interface RecipientRecord {
   cekTag: Uint8Array;
 }
 
-interface EncryptedEnvelope {
-  recipients: RecipientRecord[];
-  encryptedPayload: Uint8Array;
-  payloadNonce: Uint8Array;
-  payloadTag: Uint8Array;
-}
-
 export async function aesGcmDecrypt(
   key: Uint8Array,
   nonce: Uint8Array,
@@ -65,30 +58,4 @@ export async function unwrapCEK(rec: RecipientRecord, x25519Derive: CryptoKey): 
 
   const kwkRaw = new Uint8Array(await crypto.subtle.exportKey('raw', kwk));
   return aesGcmDecrypt(kwkRaw, rec.cekNonce, rec.wrappedCek, rec.cekTag);
-}
-
-export async function decryptEnvelope(
-  envelope: EncryptedEnvelope,
-  x25519Derive: CryptoKey,
-  x25519PubKey: Uint8Array
-): Promise<Uint8Array> {
-  // Find matching recipient
-  const rec = envelope.recipients.find(r => {
-    if (r.recipientXPub.length !== x25519PubKey.length) return false;
-    for (let i = 0; i < r.recipientXPub.length; i++) {
-      if (r.recipientXPub[i] !== x25519PubKey[i]) return false;
-    }
-    return true;
-  });
-
-  if (!rec) throw new Error('Recipient not found in envelope');
-
-  // Unwrap CEK
-  const cek = await unwrapCEK(rec, x25519Derive);
-
-  // Decrypt payload
-  const padded = await aesGcmDecrypt(cek, envelope.payloadNonce, envelope.encryptedPayload, envelope.payloadTag);
-
-  // Unpad
-  return unpadPayload(padded);
 }

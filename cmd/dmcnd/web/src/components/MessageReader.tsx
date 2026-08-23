@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { Preview } from '../lib/api/mailboxRest';
+import type { Preview, FullBody } from '../lib/api/mailboxRest';
 import { useMessages } from '../lib/hooks/useMessages';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
 import type { LabelDef } from '../lib/api/labelStore';
 import { useAuth } from '../lib/hooks/useAuth';
-import { Avatar, Badge, Button, IconButton, Tag } from '../ds';
+import { Badge, Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
 import { lookupIdentity } from '../lib/api/client';
-import { verifyBridgeAttestation, BridgeTrustTier, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
+import { verifyBridgeAttestation, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
 import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust';
 import { senderTrustView } from '../lib/trust/trustView';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
+import type { DecryptedAttachment } from '../lib/crypto/split';
+import { HtmlMessageBody } from './HtmlMessageBody';
 import { fromHex } from '../lib/crypto/keys';
 
 // attestationView maps a bridged-message verdict to its display treatment. Only a
@@ -62,6 +64,52 @@ function formatTime(sec: number): string {
   return new Date(sec * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// System attachments carried for protocol purposes (the bridge attestation and the raw
+// legacy source) are consumed elsewhere and hidden from the user-facing list.
+const INTERNAL_ATTACHMENT_TYPES = new Set<string>([
+  CLASSIFICATION_CONTENT_TYPE,
+  'message/rfc822', // original.eml — raw legacy email preserved by the bridge
+]);
+function userAttachments(all: DecryptedAttachment[]): DecryptedAttachment[] {
+  return all.filter(a => !INTERNAL_ATTACHMENT_TYPES.has(a.contentType));
+}
+
+// sanitizeFilename strips path separators, control chars, and leading dots before the
+// name is used as a download target, so a hostile filename can't escape the download
+// dir or masquerade (the browser's `download` attribute already forces save-to-disk).
+function sanitizeFilename(name: string): string {
+  const clean = (name || '')
+    .replace(/[/\\]/g, '_')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .replace(/^\.+/, '')
+    .trim()
+    .slice(0, 200);
+  return clean || 'attachment';
+}
+
+// downloadAttachment saves an attachment via a transient blob: URL. The blob is revoked
+// on a delay so the bytes aren't retained; nothing is opened inline, so a hostile
+// content type can't execute in-page.
+function downloadAttachment(a: DecryptedAttachment): void {
+  const blob = new Blob([a.content as BufferSource], { type: a.contentType || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = sanitizeFilename(a.filename);
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export interface MessageReaderProps {
   msg: Preview;
   sentView: boolean;
@@ -69,9 +117,10 @@ export interface MessageReaderProps {
   onReply: (msg: Preview) => void;
   /** Tighter padding + smaller title on mobile. */
   mobile?: boolean;
-  /** When set, render this body inline instead of fetching from the mailbox — used
-   *  for Sent entries read from the personal store, which carry their own body. */
-  inlineBody?: string | null;
+  /** Overrides the mailbox body fetch — used for Sent messages, which read their
+   *  self-sealed envelope from the personal store instead of the mailbox. Same
+   *  FullBody shape, so the render path (body, attachments, HTML) is identical. */
+  openFull?: (hash: string) => Promise<FullBody>;
   /** Overrides the default mailbox delete (e.g. delete a Sent record from the store). */
   onDeleteOverride?: () => Promise<void>;
   /** Flag state + toggles (extrinsic metadata). onArchive omitted ⇒ archive hidden. */
@@ -85,7 +134,7 @@ export interface MessageReaderProps {
  * In-page email detail view. Renders in place of the message list (the design's
  * Reader pattern) rather than as a standalone route, so the inbox shell stays put.
  */
-export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, inlineBody, onDeleteOverride, starred, archived, onToggleStar, onArchive }: MessageReaderProps) {
+export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, openFull, onDeleteOverride, starred, archived, onToggleStar, onArchive }: MessageReaderProps) {
   const { openMessageFull, deleteMessage } = useMessages();
   const { labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } = useFlags();
   const { labels, folders, labelById } = useLabels();
@@ -105,9 +154,19 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const sentByMe = address != null && msg.senderAddress.toLowerCase() === address.toLowerCase();
   const ownMessage = sentView || sentByMe;
 
-  const inline = inlineBody !== undefined && inlineBody !== null;
-  const [body, setBody] = useState<string | null>(inline ? inlineBody : null);
+  // Sent messages read their self-sealed envelope from the personal store; everything
+  // else fetches from the mailbox. Both return the same FullBody, so one code path.
+  const fetchFull = openFull ?? openMessageFull;
+  const [body, setBody] = useState<string | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
+  // The text/html rendering, when the message carries one. It renders only for a
+  // trusted sender (see htmlAllowed) — a pending sender's plain-text peek never
+  // renders HTML. `showHtml` toggles between the two views.
+  const [htmlBody, setHtmlBody] = useState<string | null>(null);
+  const [showHtml, setShowHtml] = useState(true);
+  const [attachments, setAttachments] = useState<DecryptedAttachment[]>([]);
+  // Per-file "download anyway" acknowledgments for a sender who isn't trusted yet.
+  const [ackedDownloads, setAckedDownloads] = useState<Set<number>>(new Set());
   const [attestation, setAttestation] = useState<BridgeAttestation | null>(null);
   // Native-sender trust (§14): anchors the signature-verified header key to the
   // directory + the owner's allowlist. Independent of the body fetch.
@@ -128,27 +187,25 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // holds previews); for bridged legacy mail, verify the bridge's signed
   // classification attestation client-side before trusting the tier it claims.
   useEffect(() => {
-    if (inline) {
-      setBody(inlineBody);
-      setBodyError(null);
-      setAttestation(null);
-      return;
-    }
     let cancelled = false;
     setBody(null);
     setBodyError(null);
+    setHtmlBody(null);
+    setAttachments([]);
     setAttestation(null);
-    openMessageFull(msg.hash)
+    fetchFull(msg.hash)
       .then(full => {
         if (cancelled) return;
         setBody(full.bodyText);
+        setHtmlBody(full.htmlBody ?? null);
+        setAttachments(userAttachments(full.attachments));
         verifyBridgeAttestation(full.attachments)
           .then(a => { if (!cancelled) setAttestation(a); })
           .catch(() => { /* unexpected: treat as non-bridged, show no badge */ });
       })
       .catch(err => { if (!cancelled) setBodyError(err instanceof Error ? err.message : 'Failed to load message body'); });
     return () => { cancelled = true; };
-  }, [msg.hash, openMessageFull, inline, inlineBody]);
+  }, [msg.hash, fetchFull]);
 
   // Evaluate native-sender trust (skip your own Sent copies). The header key is
   // already signature-verified upstream; this anchors it to the directory + the
@@ -180,10 +237,19 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const trustReady = ownMessage || (contactsReady && filterReady);
   const category = ownMessage ? 'allowlisted' : categorizeSender(msg.senderAddress, msg.senderPublicKey, senderContact, mailFilter);
   const gated = trustReady && category !== 'allowlisted';
+  // Attachment downloads unlock on sender TRUST only (own message or allowlisted), or a
+  // per-file "download anyway" acknowledgment. Deliberately independent of `revealed`.
+  const downloadsUnlocked = ownMessage || category === 'allowlisted';
+  // HTML renders ONLY for a trusted sender (mirrors downloadsUnlocked) — a pending
+  // sender's plain-text peek shows escaped text, never rendered HTML.
+  const htmlAllowed = !!htmlBody && downloadsUnlocked;
+  // Inline images (disposition=inline) render inside the HTML body, so they're kept out
+  // of the downloadable-attachment list.
+  const downloadAttachments = attachments.filter(a => a.disposition !== 'inline');
 
   // Reset per-message UI (accept-once reveal + prior trust verdict) when the open
   // message changes, so nothing from the previous message lingers.
-  useEffect(() => { setRevealed(false); setNativeTrust(null); }, [msg.hash]);
+  useEffect(() => { setRevealed(false); setNativeTrust(null); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
 
   // Lazy key-pin (§14.1.2): once a message from an allowlisted-but-unpinned contact
   // verifies as allowlisted (header key == directory key), record the keys so a
@@ -269,9 +335,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-5)' }}>
-            <Avatar name={counterparty} size="md" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div title={sentView ? toList.join(', ') : counterparty} style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sentView ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.join(', ')}</span></> : counterparty}
               </div>
               {!sentView && toList.length > 0 && (
@@ -364,17 +429,65 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                   <Button size="sm" variant="danger" leftIcon={<Icon name="alert-octagon" size={14} />} onClick={handleBlock} disabled={actioning}>Block</Button>
                 </div>
               )}
-              <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', whiteSpace: 'pre-wrap', minHeight: 80 }}>
-                {bodyError && (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-                    <Icon name="alert-triangle" size={16} style={{ marginTop: 1 }} />
-                    <span>Failed to load body: {bodyError}</span>
-                  </div>
-                )}
-                {!bodyError && body === null && <span style={{ color: 'var(--text-muted)' }}>Loading…</span>}
-                {body !== null && body}
-              </div>
+              {htmlAllowed && (
+                <div style={{ marginTop: 'var(--space-4)', display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button size="sm" variant="secondary" leftIcon={<Icon name={showHtml ? 'file' : 'mail'} size={14} />} onClick={() => setShowHtml(v => !v)}>
+                    {showHtml ? 'View plain text' : 'View HTML'}
+                  </Button>
+                </div>
+              )}
+              {htmlAllowed && showHtml ? (
+                <HtmlMessageBody html={htmlBody as string} attachments={attachments} />
+              ) : (
+                <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', whiteSpace: 'pre-wrap', minHeight: 80 }}>
+                  {bodyError && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+                      <Icon name="alert-triangle" size={16} style={{ marginTop: 1 }} />
+                      <span>Failed to load body: {bodyError}</span>
+                    </div>
+                  )}
+                  {!bodyError && body === null && <span style={{ color: 'var(--text-muted)' }}>Loading…</span>}
+                  {body !== null && body}
+                </div>
+              )}
             </>
+          )}
+
+          {/* Attachments: metadata is always shown; the download itself is disabled for a
+              not-yet-trusted sender until they're trusted or the file is individually
+              acknowledged. Files never open inline — always save-to-disk. */}
+          {downloadAttachments.length > 0 && (
+            <div style={{ marginTop: 'var(--space-6)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)' }}>
+                <Icon name="paperclip" size={15} />
+                {downloadAttachments.length} attachment{downloadAttachments.length > 1 ? 's' : ''}
+              </div>
+              {!downloadsUnlocked && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+                  <Icon name="alert-triangle" size={15} style={{ color: 'var(--warning)', flex: 'none' }} />
+                  <span>Downloads are locked because you haven't trusted this sender. Files from unknown senders can be unsafe.</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                {downloadAttachments.map((a, i) => {
+                  const enabled = downloadsUnlocked || ackedDownloads.has(i);
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--surface-card)' }}>
+                      <Icon name="file" size={18} style={{ color: 'var(--text-muted)', flex: 'none' }} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-strong)', fontSize: 'var(--text-sm)' }}>{a.filename || 'attachment'}</div>
+                        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{formatBytes(a.content.length)}{a.contentType ? ` \u00b7 ${a.contentType}` : ''}</div>
+                      </div>
+                      {enabled ? (
+                        <Button size="sm" variant="secondary" leftIcon={<Icon name="download" size={14} />} onClick={() => downloadAttachment(a)}>Download</Button>
+                      ) : (
+                        <Button size="sm" variant="secondary" onClick={() => setAckedDownloads(s => new Set(s).add(i))}>Download anyway</Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>

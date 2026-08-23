@@ -17,18 +17,6 @@ export interface RecipientRecord {
   cekTag: Uint8Array;    // 16 bytes
 }
 
-export interface EncryptedEnvelope {
-  version: number;
-  messageId: Uint8Array;
-  recipients: RecipientRecord[];
-  encryptedPayload: Uint8Array;
-  payloadNonce: Uint8Array;
-  payloadTag: Uint8Array;
-  payloadSizeClass: number;
-  createdAt: number;
-  ratchetPubKey: Uint8Array;
-}
-
 export function selectSizeClass(payloadSize: number): number {
   // padPayload prepends a 4-byte length prefix; the bucket must fit payloadSize+4
   // so a payload at a class boundary is not truncated (parity with Go).
@@ -105,41 +93,5 @@ export async function wrapCEK(cek: Uint8Array, recipient: RecipientInfo): Promis
     wrappedCek: ciphertext,
     cekNonce: nonce,
     cekTag: tag,
-  };
-}
-
-export async function encryptMessage(
-  signedMessageProto: Uint8Array,
-  messageId: Uint8Array,
-  createdAt: number,
-  recipients: RecipientInfo[]
-): Promise<EncryptedEnvelope> {
-  // Pad to size class
-  const sizeClass = selectSizeClass(signedMessageProto.length);
-  const padded = padPayload(signedMessageProto, sizeClass);
-
-  // Generate random CEK
-  const cek = crypto.getRandomValues(new Uint8Array(32));
-
-  // Encrypt padded payload with CEK
-  const {
-    nonce: payloadNonce,
-    ciphertext: encryptedPayload,
-    tag: payloadTag,
-  } = await aesGcmEncrypt(cek, padded);
-
-  // Wrap CEK for each recipient
-  const recipientRecords = await Promise.all(recipients.map(r => wrapCEK(cek, r)));
-
-  return {
-    version: 1,
-    messageId,
-    recipients: recipientRecords,
-    encryptedPayload,
-    payloadNonce,
-    payloadTag,
-    payloadSizeClass: sizeClass,
-    createdAt,
-    ratchetPubKey: new Uint8Array(32), // zero in v1
   };
 }

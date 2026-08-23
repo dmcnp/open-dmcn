@@ -56,9 +56,18 @@ func buildMIME(from, to string, msg *message.PlaintextMessage, audience Audience
 	h.SetDate(now)
 	h.Set("Message-ID", mailMsgID(msg.MessageID, domain))
 	if msg.ReplyToID != ([16]byte{}) {
-		ref := mailMsgID(msg.ReplyToID, domain)
-		h.Set("In-Reply-To", ref)
-		h.Set("References", ref)
+		parent := mailMsgID(msg.ReplyToID, domain)
+		// In-Reply-To is the immediate parent. References lists the conversation oldest-first,
+		// ending at the parent: we lead with the thread root (ThreadID) as a stable anchor so a
+		// MUA groups the whole conversation, then the parent. This mirrors the inbound path,
+		// which reads the conversation root from References[0] (see parseInboundMIME). The anchor
+		// is dropped when ThreadID is absent or coincides with the parent.
+		h.Set("In-Reply-To", parent)
+		refs := parent
+		if msg.ThreadID != ([16]byte{}) && msg.ThreadID != msg.ReplyToID {
+			refs = mailMsgID(msg.ThreadID, domain) + " " + parent
+		}
+		h.Set("References", refs)
 	}
 
 	bodyCT := msg.Body.ContentType
@@ -66,9 +75,14 @@ func buildMIME(from, to string, msg *message.PlaintextMessage, audience Audience
 		bodyCT = "text/plain"
 	}
 
-	// No attachments → a simple single-part message (no multipart/mixed wrapper) — what MUAs emit
-	// for plain mail and what receivers expect.
-	if len(msg.Attachments) == 0 {
+	// Alternative renderings of the body (a text/html part when the sender composed one).
+	// Emitted as multipart/alternative with the LEAST rich part first, per RFC 2046 §5.1.4 —
+	// a receiving MUA picks the last part it can render.
+	alts := msg.Alternatives
+
+	// No attachments and no alternatives → a simple single-part message (no multipart wrapper)
+	// — what MUAs emit for plain mail and what receivers expect.
+	if len(msg.Attachments) == 0 && len(alts) == 0 {
 		h.SetContentType(bodyCT, map[string]string{"charset": "utf-8"})
 		var buf bytes.Buffer
 		w, err := mail.CreateSingleInlineWriter(&buf, h)
@@ -84,35 +98,104 @@ func buildMIME(from, to string, msg *message.PlaintextMessage, audience Audience
 		return buf.Bytes(), nil
 	}
 
-	// With attachments → multipart/mixed: the body as an inline part, then each attachment.
+	// Alternatives but no attachments → a top-level multipart/alternative.
+	if len(msg.Attachments) == 0 {
+		var buf bytes.Buffer
+		iw, err := mail.CreateInlineWriter(&buf, h)
+		if err != nil {
+			return nil, fmt.Errorf("smtp: create writer: %w", err)
+		}
+		if err := writeBodyParts(iw, bodyCT, msg.Body.Content, alts); err != nil {
+			return nil, err
+		}
+		if err := iw.Close(); err != nil {
+			return nil, fmt.Errorf("smtp: close writer: %w", err)
+		}
+		return buf.Bytes(), nil
+	}
+
+	// With attachments → multipart/mixed: the body first (as a single inline part, or a
+	// nested multipart/alternative when there are alternatives), then each attachment.
 	var buf bytes.Buffer
 	mw, err := mail.CreateWriter(&buf, h)
 	if err != nil {
 		return nil, fmt.Errorf("smtp: create writer: %w", err)
 	}
-	var ih mail.InlineHeader
-	ih.SetContentType(bodyCT, map[string]string{"charset": "utf-8"})
-	iw, err := mw.CreateSingleInline(ih)
-	if err != nil {
-		return nil, fmt.Errorf("smtp: create inline body: %w", err)
-	}
-	if _, err := iw.Write(msg.Body.Content); err != nil {
-		return nil, err
-	}
-	if err := iw.Close(); err != nil {
-		return nil, err
+	if len(alts) > 0 {
+		aw, err := mw.CreateInline()
+		if err != nil {
+			return nil, fmt.Errorf("smtp: create inline body: %w", err)
+		}
+		if err := writeBodyParts(aw, bodyCT, msg.Body.Content, alts); err != nil {
+			return nil, err
+		}
+		if err := aw.Close(); err != nil {
+			return nil, err
+		}
+	} else {
+		var ih mail.InlineHeader
+		ih.SetContentType(bodyCT, map[string]string{"charset": "utf-8"})
+		iw, err := mw.CreateSingleInline(ih)
+		if err != nil {
+			return nil, fmt.Errorf("smtp: create inline body: %w", err)
+		}
+		if _, err := iw.Write(msg.Body.Content); err != nil {
+			return nil, err
+		}
+		if err := iw.Close(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Attachments (the bridge classification record + any user attachments).
 	for _, a := range msg.Attachments {
-		var ah mail.AttachmentHeader
 		actype := a.ContentType
 		if actype == "" {
 			actype = "application/octet-stream"
 		}
+
+		// An inline part referenced from the HTML body by <img src="cid:..."> must keep
+		// Content-Disposition: inline and carry its Content-ID, so it renders in place
+		// instead of showing up as a paperclip. It CANNOT go through CreateAttachment:
+		// initAttachmentHeader force-rewrites the disposition back to "attachment"
+		// (go-message/mail/writer.go). CreateSingleInline is the writer that preserves it.
+		//
+		// Strictly, cid: parts belong in a multipart/related subtree, which go-message/mail
+		// does not model (it offers mixed + alternative only). A Content-ID inline part
+		// inside multipart/mixed is what Gmail, Apple Mail, Thunderbird and Outlook actually
+		// resolve cid: against; true multipart/related nesting would mean dropping to the
+		// core message.CreateWriter and is deferred.
+		if a.Disposition == "inline" && a.ContentID != "" {
+			var ih mail.InlineHeader
+			// The filename rides as the content-type "name" parameter: initInlineHeader
+			// overwrites Content-Disposition wholesale, so a disposition filename= would
+			// not survive.
+			params := map[string]string{}
+			if a.Filename != "" {
+				params["name"] = a.Filename
+			}
+			ih.SetContentType(actype, params)
+			ih.Set("Content-ID", "<"+a.ContentID+">")
+			iw, err := mw.CreateSingleInline(ih)
+			if err != nil {
+				return nil, fmt.Errorf("smtp: create inline part: %w", err)
+			}
+			if _, err := iw.Write(a.Content); err != nil {
+				return nil, err
+			}
+			if err := iw.Close(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		var ah mail.AttachmentHeader
 		ah.SetContentType(actype, nil)
 		if a.Filename != "" {
 			ah.SetFilename(a.Filename)
+		}
+		if a.ContentID != "" {
+			ah.Set("Content-ID", "<"+a.ContentID+">")
 		}
 		aw, err := mw.CreateAttachment(ah)
 		if err != nil {
@@ -132,15 +215,45 @@ func buildMIME(from, to string, msg *message.PlaintextMessage, audience Audience
 	return buf.Bytes(), nil
 }
 
+// writeBodyParts writes the primary body and each alternative rendering into an already-
+// created multipart/alternative writer, primary first (least rich → most rich).
+func writeBodyParts(iw *mail.InlineWriter, bodyCT string, body []byte, alts []message.MessageBody) error {
+	write := func(ct string, content []byte) error {
+		if ct == "" {
+			ct = "text/plain"
+		}
+		var ih mail.InlineHeader
+		ih.SetContentType(ct, map[string]string{"charset": "utf-8"})
+		pw, err := iw.CreatePart(ih)
+		if err != nil {
+			return fmt.Errorf("smtp: create body part: %w", err)
+		}
+		if _, err := pw.Write(content); err != nil {
+			return err
+		}
+		return pw.Close()
+	}
+	if err := write(bodyCT, body); err != nil {
+		return err
+	}
+	for _, a := range alts {
+		if err := write(a.ContentType, a.Content); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // parsedMail is the fidelity-preserving result of parsing an inbound RFC 5322 message.
 type parsedMail struct {
-	Subject     string
-	Body        message.MessageBody
-	Attachments []message.AttachmentRecord
-	MessageID   [16]byte // derived from the email Message-ID
-	ThreadID    [16]byte // derived from References root / In-Reply-To / Message-ID
-	ReplyToID   [16]byte // derived from In-Reply-To (zero ⇒ not a reply)
-	HasIDs      bool     // the email carried a Message-ID we mapped onto the DMCN IDs
+	Subject      string
+	Body         message.MessageBody   // primary (text/plain when present, else text/html)
+	Alternatives []message.MessageBody // richer parts (e.g. text/html) when the mail is multipart/alternative
+	Attachments  []message.AttachmentRecord
+	MessageID    [16]byte // derived from the email Message-ID
+	ThreadID     [16]byte // derived from References root / In-Reply-To / Message-ID
+	ReplyToID    [16]byte // derived from In-Reply-To (zero ⇒ not a reply)
+	HasIDs       bool     // the email carried a Message-ID we mapped onto the DMCN IDs
 }
 
 // parseInboundMIME parses a raw inbound email into a fidelity-preserving form: the decoded subject,
@@ -201,26 +314,46 @@ func parseInboundMIME(raw []byte) (*parsedMail, error) {
 					html = data
 				}
 			default:
-				out.Attachments = append(out.Attachments, mkAttachment("", ct, data))
+				// A non-text inline part with a Content-ID is an inline image the HTML
+				// references via cid: — carry its cid + disposition so the client can
+				// resolve it. Inline parts without a cid are treated as normal attachments.
+				if cid := bareContentID(hdr.Get("Content-Id")); cid != "" {
+					out.Attachments = append(out.Attachments, mkAttachment("", ct, cid, "inline", data))
+				} else {
+					out.Attachments = append(out.Attachments, mkAttachment("", ct, "", "", data))
+				}
 			}
 		case *mail.AttachmentHeader:
 			filename, _ := hdr.Filename()
 			ct, _, _ := hdr.ContentType()
-			out.Attachments = append(out.Attachments, mkAttachment(filename, ct, data))
+			out.Attachments = append(out.Attachments, mkAttachment(filename, ct, "", "", data))
 		}
 	}
 
-	// Prefer text/plain for the body (most compatible for DMCN clients); fall back to HTML. The
-	// raw original is preserved as an attachment by the caller, so the alternative isn't lost.
+	// Body = text/plain when present (universal fallback), else text/html. When BOTH
+	// exist, keep the HTML as an alternative so an HTML-capable client can render it
+	// (text clients still read Body). The raw original is also preserved by the caller.
 	switch {
 	case plain != nil:
 		out.Body = message.MessageBody{ContentType: "text/plain", Content: plain}
+		if html != nil {
+			out.Alternatives = []message.MessageBody{{ContentType: "text/html", Content: html}}
+		}
 	case html != nil:
 		out.Body = message.MessageBody{ContentType: "text/html", Content: html}
 	default:
 		out.Body = message.MessageBody{ContentType: "text/plain"}
 	}
 	return out, nil
+}
+
+// bareContentID strips the surrounding angle brackets from a MIME Content-ID header
+// value (e.g. "<logo@host>" → "logo@host") so it matches an HTML `cid:` reference.
+func bareContentID(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "<")
+	v = strings.TrimSuffix(v, ">")
+	return strings.TrimSpace(v)
 }
 
 // mailMsgID renders a DMCN 16-byte ID as an RFC 5322 Message-ID scoped to the bridge domain.
@@ -237,8 +370,9 @@ func deriveID(s string) [16]byte {
 	return id
 }
 
-// mkAttachment builds a DMCN AttachmentRecord from a parsed MIME part.
-func mkAttachment(filename, contentType string, content []byte) message.AttachmentRecord {
+// mkAttachment builds a DMCN AttachmentRecord from a parsed MIME part. contentID +
+// disposition are set for inline parts (cid images); both empty for a normal attachment.
+func mkAttachment(filename, contentType, contentID, disposition string, content []byte) message.AttachmentRecord {
 	id, _ := crypto.RandomUUID() // a zero ID is acceptable if entropy is briefly unavailable
 	if filename == "" {
 		filename = "attachment"
@@ -253,6 +387,8 @@ func mkAttachment(filename, contentType string, content []byte) message.Attachme
 		SizeBytes:    uint64(len(content)),
 		ContentHash:  crypto.SHA256Hash(content),
 		Content:      content,
+		ContentID:    contentID,
+		Disposition:  disposition,
 	}
 }
 
@@ -272,7 +408,7 @@ func addressList(addrs []string) []*mail.Address {
 }
 
 // BuildMIMEForTest exposes buildMIME to the external test package so the rendered RFC 5322 headers
-// — which is what a receiving mail client actually reads — can be asserted directly.
+// — what a receiving mail client actually reads — can be asserted directly.
 func BuildMIMEForTest(from, to string, msg *message.PlaintextMessage, audience Audience) ([]byte, error) {
 	return buildMIME(from, to, msg, audience, time.Unix(1_700_000_000, 0).UTC())
 }

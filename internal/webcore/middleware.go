@@ -112,6 +112,10 @@ type CSPConfig struct {
 	DevMode bool
 	// ExtraConnectSrc are additional origins allowed in connect-src.
 	ExtraConnectSrc []string
+	// FrameSelf adds 'self' to frame-src so the app can embed a SAME-ORIGIN sandboxed
+	// iframe — the HTML-email renderer, a srcdoc frame with neither allow-scripts nor
+	// allow-same-origin. Without it the frame is blocked outright by frame-src 'none'.
+	FrameSelf bool
 }
 
 // CSPMiddleware returns a middleware that sets Content-Security-Policy and the
@@ -139,6 +143,11 @@ func CSPMiddleware(cfg CSPConfig) func(http.Handler) http.Handler {
 		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" {
 			connectExtra += " " + o
 		}
+	}
+	// Same-origin sandboxed iframe (HTML-email renderer). The frame itself carries an
+	// even tighter CSP + a no-allow-scripts sandbox; this only permits framing 'self'.
+	if cfg.FrameSelf {
+		frameSrc = "'self'"
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

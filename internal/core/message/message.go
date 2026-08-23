@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -39,6 +39,12 @@ type AttachmentRecord struct {
 	SizeBytes    uint64
 	ContentHash  [32]byte // SHA-256 of plaintext content
 	Content      []byte
+	// ContentID is the bare MIME Content-ID (no angle brackets) of an inline part the
+	// HTML body references as <img src="cid:...">. Empty for an ordinary attachment.
+	ContentID string
+	// Disposition is "inline" or "attachment"; empty means attachment. An inline part
+	// with a ContentID renders in place instead of showing up as a paperclip.
+	Disposition string
 }
 
 // PlaintextMessage represents a composed message before signing or encryption.
@@ -55,6 +61,10 @@ type PlaintextMessage struct {
 	Body             MessageBody
 	Attachments      []AttachmentRecord
 	ReplyToID        [16]byte // zero = not a reply
+	// Alternatives are richer renderings of Body — the multipart/alternative analog.
+	// Body stays the primary text/plain fallback that every reader can display; a
+	// text/html part rides here. A reader picks the richest form it can render safely.
+	Alternatives []MessageBody
 }
 
 // NewPlaintextMessage creates a new PlaintextMessage with generated IDs.
@@ -85,6 +95,60 @@ func NewPlaintextMessage(from, to, subject, body string, senderPubKey ed25519.Pu
 	}, nil
 }
 
+// attachmentToProto / attachmentFromProto and bodiesToProto / bodiesFromProto are shared
+// by PlaintextMessage (here) and MessageContent (split.go) so the attachment and
+// alternative-body mappings stay identical on both paths. They diverged once by simply
+// not existing on one side, and the symptom was formatted mail silently arriving as
+// plain text.
+func attachmentToProto(a AttachmentRecord) *dmcnpb.AttachmentRecord {
+	return &dmcnpb.AttachmentRecord{
+		AttachmentId: a.AttachmentID[:],
+		Filename:     a.Filename,
+		ContentType:  a.ContentType,
+		SizeBytes:    a.SizeBytes,
+		ContentHash:  a.ContentHash[:],
+		Content:      a.Content,
+		ContentId:    a.ContentID,
+		Disposition:  a.Disposition,
+	}
+}
+
+func attachmentFromProto(a *dmcnpb.AttachmentRecord) AttachmentRecord {
+	att := AttachmentRecord{
+		Filename:    a.Filename,
+		ContentType: a.ContentType,
+		SizeBytes:   a.SizeBytes,
+		Content:     a.Content,
+		ContentID:   a.ContentId,
+		Disposition: a.Disposition,
+	}
+	copy(att.AttachmentID[:], a.AttachmentId)
+	copy(att.ContentHash[:], a.ContentHash)
+	return att
+}
+
+func bodiesToProto(bodies []MessageBody) []*dmcnpb.MessageBody {
+	if len(bodies) == 0 {
+		return nil
+	}
+	out := make([]*dmcnpb.MessageBody, 0, len(bodies))
+	for _, b := range bodies {
+		out = append(out, &dmcnpb.MessageBody{ContentType: b.ContentType, Content: b.Content})
+	}
+	return out
+}
+
+func bodiesFromProto(pb []*dmcnpb.MessageBody) []MessageBody {
+	if len(pb) == 0 {
+		return nil
+	}
+	out := make([]MessageBody, 0, len(pb))
+	for _, b := range pb {
+		out = append(out, MessageBody{ContentType: b.GetContentType(), Content: b.GetContent()})
+	}
+	return out
+}
+
 // toProto converts PlaintextMessage to its protobuf representation.
 func (m *PlaintextMessage) toProto() *dmcnpb.PlaintextMessage {
 	pb := &dmcnpb.PlaintextMessage{
@@ -100,18 +164,12 @@ func (m *PlaintextMessage) toProto() *dmcnpb.PlaintextMessage {
 			ContentType: m.Body.ContentType,
 			Content:     m.Body.Content,
 		},
-		ReplyToId: m.ReplyToID[:],
+		ReplyToId:    m.ReplyToID[:],
+		Alternatives: bodiesToProto(m.Alternatives),
 	}
 
 	for _, a := range m.Attachments {
-		pb.Attachments = append(pb.Attachments, &dmcnpb.AttachmentRecord{
-			AttachmentId: a.AttachmentID[:],
-			Filename:     a.Filename,
-			ContentType:  a.ContentType,
-			SizeBytes:    a.SizeBytes,
-			ContentHash:  a.ContentHash[:],
-			Content:      a.Content,
-		})
+		pb.Attachments = append(pb.Attachments, attachmentToProto(a))
 	}
 
 	return pb
@@ -130,6 +188,7 @@ func plaintextMessageFromProto(pb *dmcnpb.PlaintextMessage) *PlaintextMessage {
 			ContentType: pb.Body.GetContentType(),
 			Content:     pb.Body.GetContent(),
 		},
+		Alternatives: bodiesFromProto(pb.Alternatives),
 	}
 
 	copy(m.MessageID[:], pb.MessageId)
@@ -137,15 +196,7 @@ func plaintextMessageFromProto(pb *dmcnpb.PlaintextMessage) *PlaintextMessage {
 	copy(m.ReplyToID[:], pb.ReplyToId)
 
 	for _, a := range pb.Attachments {
-		att := AttachmentRecord{
-			Filename:    a.Filename,
-			ContentType: a.ContentType,
-			SizeBytes:   a.SizeBytes,
-			Content:     a.Content,
-		}
-		copy(att.AttachmentID[:], a.AttachmentId)
-		copy(att.ContentHash[:], a.ContentHash)
-		m.Attachments = append(m.Attachments, att)
+		m.Attachments = append(m.Attachments, attachmentFromProto(a))
 	}
 
 	return m

@@ -11,8 +11,10 @@ import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
 import { isReceivedForMe } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
-import { IconButton, Avatar } from '../ds';
+import { IconButton } from '../ds';
 import { Icon } from '../components/Icon';
+import { KindIcon } from '../components/KindIcon';
+import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
 import { MessageReader } from '../components/MessageReader';
 import type { MailOutletContext } from '../components/AppLayout';
 
@@ -75,12 +77,16 @@ function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen,
   // Unread applies to received mail only (you don't "read" your own Sent copy).
   const unread = !sent && !read;
   const nameWeight = unread ? 700 : 500;
-  // For a sent message the "who" is the full recipient audience (To + Cc). The
-  // avatar seeds on the first recipient; the label shows the whole list. Falls back
-  // to the singular recipientAddress for pre-feature messages with no lists.
+  // For a sent message the "who" is the full recipient audience (To + Cc); the label
+  // shows the whole list. Falls back to the singular recipientAddress for pre-feature
+  // messages with no lists.
   const recipientList = msg.to.length || msg.cc.length ? [...msg.to, ...msg.cc] : [msg.recipientAddress];
   const who = sent ? recipientList[0] : msg.senderAddress;
   const sentLabel = `To: ${recipientList.join(', ')}`;
+  // Which network the counterparty is on — the one bit worth a glance per row. For
+  // received mail the header's signing key is compared against the directory, so a
+  // bridged message claiming a DMCN address cannot wear the shield.
+  const kind = useCounterpartyKind(who, sent ? '' : msg.senderPublicKey);
   const [dx, setDx] = useState(0);
   const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false });
 
@@ -125,20 +131,17 @@ function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen,
             background: 'var(--surface-card)', borderLeft: '2px solid transparent',
           }}
         >
-          <Avatar name={who} size="md" />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
               {unread && <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: 'var(--brand)', alignSelf: 'center' }} />}
-              <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ alignSelf: 'center', display: 'inline-flex', marginRight: 2 }}><KindIcon kind={kind} size={14} /></span>
+              <span title={sent ? recipientList.join(', ') : who} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sent ? sentLabel : who}
               </span>
               {starred && <Icon name="star-fill" size={14} style={{ color: 'var(--warning)', flex: 'none' }} />}
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flex: 'none' }}>{formatWhen(msg.sentAt)}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <Icon name="lock" size={13} style={{ color: 'var(--brand)', flex: 'none' }} title="End-to-end encrypted" />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.subject || '(no subject)'}</span>
-            </div>
+            <div style={{ marginTop: 2, fontSize: 'var(--text-md)', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.subject || '(no subject)'}</div>
             {msg.snippet && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{msg.snippet}</div>}
           </div>
         </div>
@@ -159,14 +162,15 @@ function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen,
       }}
     >
       <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: unread ? 'var(--brand)' : 'transparent' }} />
-      <Avatar name={who} size="sm" />
-      <div style={{ minWidth: 160, width: 160, flex: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* The kind glyph sits with the NAME, not the subject: it is a fact about the
+          person, and putting it here keeps the subject column a single readable run. */}
+      <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <KindIcon kind={kind} size={14} />
+        <span title={sent ? recipientList.join(', ') : who} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sent ? `To: ${who}` : who}
         </span>
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <Icon name="lock" size={13} style={{ color: 'var(--brand)' }} title="End-to-end encrypted" />
         <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 'none', maxWidth: '45%' }}>
           {msg.subject || '(no subject)'}
         </span>
@@ -201,7 +205,7 @@ function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen,
 /** The mail content (list + reader) that fills the app shell's main column. */
 export function InboxMain() {
   const { messages, error, refresh, deleteMessage } = useMessages();
-  const { sent, error: sentError, refreshSent, bodyOf, deleteSent } = useSent();
+  const { sent, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
   const { isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
   const { knownFolderIds, labelById, folderById } = useLabels();
   const { address } = useAuth();
@@ -318,7 +322,7 @@ export function InboxMain() {
           onBack={() => setOpenHash(null)}
           onReply={handleReply}
           mobile={isMobile}
-          inlineBody={isSentStoreHash(openMsg.hash) ? bodyOf(openMsg.hash) : undefined}
+          openFull={isSentStoreHash(openMsg.hash) ? fetchSentFull : undefined}
           onDeleteOverride={isSentStoreHash(openMsg.hash) ? () => deleteSent(openMsg.hash) : undefined}
           starred={isStarred(openMsg.hash)}
           archived={isArchived(openMsg.hash)}

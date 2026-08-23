@@ -24,8 +24,6 @@ export type { BadgeProps } from './components/data-display/Badge';
 export { Tag } from './components/data-display/Tag';
 export type { TagProps } from './components/data-display/Tag';
 
-export { Avatar } from './components/data-display/Avatar';
-export type { AvatarProps } from './components/data-display/Avatar';
 
 export { UsageMeter } from './components/data-display/UsageMeter';
 export type { UsageMeterProps } from './components/data-display/UsageMeter';

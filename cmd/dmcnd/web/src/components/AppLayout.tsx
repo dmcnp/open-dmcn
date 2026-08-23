@@ -21,7 +21,8 @@ import { LabelManager } from './LabelManager';
 // are product surfaces), so nothing is excluded from the inbox. Kept as an (empty) set so
 // the shared list-filtering logic is unchanged. In sync with InboxMain's CONTROL_SUBJECTS.
 const CONTROL_SUBJECTS = new Set<string>([]);
-import { Button, IconButton, Input, Avatar } from '../ds';
+import { Button, IconButton, Input } from '../ds';
+import { AccountMonogram } from './AccountMonogram';
 import { Icon } from './Icon';
 import { ComposeDialog, type ComposeReplyTo } from './ComposeDialog';
 
@@ -334,7 +335,7 @@ export function AppLayout() {
               </IconButton>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginLeft: 'var(--space-1)' }}>
-              <Avatar name={displayName || '?'} size="sm" />
+              <AccountMonogram address={address || '?'} size={32} />
               {!isMobile && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={address ?? undefined}>{displayName}</span>}
             </div>
           </header>

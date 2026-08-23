@@ -11,6 +11,10 @@ export interface AppSettings {
   v: number;
   displayName?: string;
   signature?: string;
+  // Overrides the system default (rich text) for NEW messages and replies. Only ever
+  // seeds the composer's starting mode — the per-message toggle still wins. Left
+  // undefined for every existing account, which reads as "use the default".
+  composePlainText?: boolean;
 }
 
 export const SETTINGS_KEY = 'settings/app';

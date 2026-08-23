@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -63,6 +63,10 @@ type SignedHeader struct {
 type MessageContent struct {
 	Body        MessageBody
 	Attachments []AttachmentRecord
+	// Alternatives are richer renderings of Body (see PlaintextMessage.Alternatives).
+	// Covered by MessageHeader.BodyHash and the body content address exactly like Body,
+	// so a text/html part cannot be swapped without breaking the header signature.
+	Alternatives []MessageBody
 }
 
 func (h *MessageHeader) toProto() *dmcnpb.MessageHeader {
@@ -116,16 +120,10 @@ func (c *MessageContent) toProto() *dmcnpb.MessageContent {
 			ContentType: c.Body.ContentType,
 			Content:     c.Body.Content,
 		},
+		Alternatives: bodiesToProto(c.Alternatives),
 	}
 	for _, a := range c.Attachments {
-		pb.Attachments = append(pb.Attachments, &dmcnpb.AttachmentRecord{
-			AttachmentId: a.AttachmentID[:],
-			Filename:     a.Filename,
-			ContentType:  a.ContentType,
-			SizeBytes:    a.SizeBytes,
-			ContentHash:  a.ContentHash[:],
-			Content:      a.Content,
-		})
+		pb.Attachments = append(pb.Attachments, attachmentToProto(a))
 	}
 	return pb
 }
@@ -136,17 +134,10 @@ func messageContentFromProto(pb *dmcnpb.MessageContent) MessageContent {
 			ContentType: pb.GetBody().GetContentType(),
 			Content:     pb.GetBody().GetContent(),
 		},
+		Alternatives: bodiesFromProto(pb.Alternatives),
 	}
 	for _, a := range pb.Attachments {
-		att := AttachmentRecord{
-			Filename:    a.Filename,
-			ContentType: a.ContentType,
-			SizeBytes:   a.SizeBytes,
-			Content:     a.Content,
-		}
-		copy(att.AttachmentID[:], a.AttachmentId)
-		copy(att.ContentHash[:], a.ContentHash)
-		c.Attachments = append(c.Attachments, att)
+		c.Attachments = append(c.Attachments, attachmentFromProto(a))
 	}
 	return c
 }
@@ -199,7 +190,7 @@ func (sh *SignedHeader) Verify() error {
 // Split derives a signed header + content from a composed PlaintextMessage: it
 // computes the body hash, fills the preview fields, and signs the header.
 func Split(msg *PlaintextMessage, senderPriv ed25519.PrivateKey) (*SignedHeader, *MessageContent, error) {
-	content := &MessageContent{Body: msg.Body, Attachments: msg.Attachments}
+	content := &MessageContent{Body: msg.Body, Attachments: msg.Attachments, Alternatives: msg.Alternatives}
 	bodyHash, err := content.hash()
 	if err != nil {
 		return nil, nil, err

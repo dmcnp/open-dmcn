@@ -95,7 +95,9 @@ func New(cfg Config, logger logr.Logger) *Server {
 		extraConnect = []string{cfg.AccountURL}
 	}
 	// The reference client is self-contained, so the CSP stays strict same-origin.
-	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, ExtraConnectSrc: extraConnect})
+	// FrameSelf: the reader renders HTML mail inside a same-origin sandboxed srcdoc
+	// iframe, which frame-src 'none' would block outright.
+	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, ExtraConnectSrc: extraConnect, FrameSelf: true})
 	handler := csp(webcore.CORSMiddleware(cfg.DevMode, origins)(mux))
 	return &Server{
 		httpServer: &http.Server{

@@ -5,7 +5,9 @@ import { PageShell } from '../components/PageShell';
 import { useIsMobile } from '../lib/useIsMobile';
 import { DEFAULT_DOMAIN } from '../lib/config';
 import { emailInputProps } from '../lib/emailInput';
-import { Avatar, Badge, Button, Dialog, IconButton, Input } from '../ds';
+import { Badge, Button, Dialog, IconButton, Input } from '../ds';
+import { KindIcon } from '../components/KindIcon';
+import { contactKind } from '../lib/trust/senderKind';
 import { Icon } from '../components/Icon';
 import { provenanceView } from '../lib/trust/trustView';
 
@@ -68,10 +70,11 @@ export function Contacts() {
             {filtered.map(c => {
               // Every contact is an allowlist entry; provenance defaults to the
               // weakest tier (user_approved) when it was added before this feature.
-              const pv = provenanceView(contactByAddress(c.address)?.provenance ?? 'user_approved');
+              const rec = contactByAddress(c.address);
+              const pv = provenanceView(rec?.provenance ?? 'user_approved');
               return (
               <div key={c.address} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-4)', background: 'var(--surface-card)', border: '1px solid var(--border-subtle)' }}>
-                <Avatar name={c.name} size="md" />
+                <KindIcon kind={contactKind(rec)} size={16} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
                   <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address}</div>

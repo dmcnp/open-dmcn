@@ -340,7 +340,11 @@ func decryptForBridge(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPa
 		Subject:          h.Subject,
 		Body:             content.Body,
 		Attachments:      content.Attachments,
-		ReplyToID:        h.ReplyToID,
+		// The text/html rendering lives here, and dropping it silently down-converts every
+		// formatted message to plain text on the way out. buildMIME already emits
+		// multipart/alternative when it is present — it would simply never be given one.
+		Alternatives: content.Alternatives,
+		ReplyToID:    h.ReplyToID,
 	}, audience, nil
 }
 

@@ -101,114 +101,34 @@ export async function encodeIdentitySignableBytes(record: {
   return IdentityRecord.encode(msg).finish();
 }
 
-export async function encodePlaintextMessage(msg: {
-  version: number;
-  messageId: Uint8Array;
-  threadId: Uint8Array;
-  senderAddress: string;
-  senderPublicKey: Uint8Array;
-  recipientAddress: string;
-  sentAt: number;
-  subject: string;
-  body: { contentType: string; content: Uint8Array };
-  replyToId?: Uint8Array;
-}): Promise<Uint8Array> {
-  const root = await getRoot();
-  const PlaintextMessage = root.lookupType('dmcn.message.PlaintextMessage');
-  const encoded = PlaintextMessage.create(msg);
-  return PlaintextMessage.encode(encoded).finish();
+// AttachmentWire mirrors dmcnpb.AttachmentRecord (message.proto). Each record is
+// canonicalized so a zero-valued inner field (e.g. a 0-byte attachment's
+// size_bytes/content) is stripped to match Go's deterministic marshal — see canonical().
+export interface AttachmentWire {
+  attachmentId: Uint8Array;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  contentHash: Uint8Array;
+  content: Uint8Array;
+  /** Bare MIME Content-ID (no <>) for an inline part referenced by <img src="cid:…">. */
+  contentId?: string;
+  /** 'inline' or 'attachment'; omitted = attachment. */
+  disposition?: string;
 }
 
-export async function encodeSignedMessage(msg: {
-  plaintext: {
-    version: number;
-    messageId: Uint8Array;
-    threadId: Uint8Array;
-    senderAddress: string;
-    senderPublicKey: Uint8Array;
-    recipientAddress: string;
-    sentAt: number;
-    subject: string;
-    body: { contentType: string; content: Uint8Array };
-    replyToId?: Uint8Array;
-  };
-  senderSignature: Uint8Array;
-}): Promise<Uint8Array> {
-  const root = await getRoot();
-  const SignedMessage = root.lookupType('dmcn.message.SignedMessage');
-  const encoded = SignedMessage.create(msg);
-  return SignedMessage.encode(encoded).finish();
+// BodyWire mirrors dmcnpb.MessageBody. `body` is always the text/plain primary; richer
+// renderings (text/html) ride in `alternatives` — the multipart/alternative analog.
+export interface BodyWire {
+  contentType: string;
+  content: Uint8Array;
 }
 
-export async function encodeEncryptedEnvelope(env: {
-  version: number;
-  messageId: Uint8Array;
-  recipients: Array<{
-    deviceId: Uint8Array;
-    recipientXPub: Uint8Array;
-    ephemeralXPub: Uint8Array;
-    wrappedCek: Uint8Array;
-    cekNonce: Uint8Array;
-    cekTag: Uint8Array;
-  }>;
-  encryptedPayload: Uint8Array;
-  payloadNonce: Uint8Array;
-  payloadTag: Uint8Array;
-  payloadSizeClass: number;
-  createdAt: number;
-  ratchetPubKey: Uint8Array;
-}): Promise<Uint8Array> {
-  const root = await getRoot();
-  const EncryptedEnvelope = root.lookupType('dmcn.message.EncryptedEnvelope');
-  const encoded = EncryptedEnvelope.create(env);
-  return EncryptedEnvelope.encode(encoded).finish();
-}
-
-export async function decodeSignedMessage(data: Uint8Array): Promise<{
-  plaintext: {
-    version: number;
-    messageId: Uint8Array;
-    threadId: Uint8Array;
-    senderAddress: string;
-    senderPublicKey: Uint8Array;
-    recipientAddress: string;
-    sentAt: number;
-    subject: string;
-    body: { contentType: string; content: Uint8Array };
-  };
-  senderSignature: Uint8Array;
-}> {
-  const root = await getRoot();
-  const SignedMessage = root.lookupType('dmcn.message.SignedMessage');
-  const decoded = SignedMessage.decode(data);
-  return decoded as any;
-}
-
-export async function decodeEncryptedEnvelope(data: Uint8Array): Promise<{
-  version: number;
-  messageId: Uint8Array;
-  recipients: Array<{
-    deviceId: Uint8Array;
-    recipientXPub: Uint8Array;
-    ephemeralXPub: Uint8Array;
-    wrappedCek: Uint8Array;
-    cekNonce: Uint8Array;
-    cekTag: Uint8Array;
-  }>;
-  encryptedPayload: Uint8Array;
-  payloadNonce: Uint8Array;
-  payloadTag: Uint8Array;
-  payloadSizeClass: number;
-  createdAt: number;
-  ratchetPubKey: Uint8Array;
-}> {
-  const root = await getRoot();
-  const EncryptedEnvelope = root.lookupType('dmcn.message.EncryptedEnvelope');
-  const decoded = EncryptedEnvelope.decode(data);
-  return decoded as any;
-}
-
-// --- Split header/body (Phase 2) ---
+// --- Split header/body ---
+//
+// The only shape this client produces. The older whole-message form (PlaintextMessage /
+// SignedMessage sealed into one blob) had no callers left in either direction, so its
+// codecs are gone; Go still reads and writes v1 for records predating the split.
 
 export interface MessageHeaderFields {
   version: number;
@@ -303,15 +223,9 @@ export async function decodeSignedHeader(data: Uint8Array): Promise<{
 }
 
 export async function encodeMessageContent(c: {
-  body: { contentType: string; content: Uint8Array };
-  attachments?: Array<{
-    attachmentId: Uint8Array;
-    filename: string;
-    contentType: string;
-    sizeBytes: number;
-    contentHash: Uint8Array;
-    content: Uint8Array;
-  }>;
+  body: BodyWire;
+  attachments?: AttachmentWire[];
+  alternatives?: BodyWire[];
 }): Promise<Uint8Array> {
   const root = await getRoot();
   const MessageContent = root.lookupType('dmcn.message.MessageContent');
@@ -322,7 +236,9 @@ export async function encodeMessageContent(c: {
 
 export async function decodeMessageContent(data: Uint8Array): Promise<{
   body: { contentType: string; content: Uint8Array };
-  attachments: Array<{ filename: string; contentType: string; content: Uint8Array }>;
+  // Richer renderings of body (e.g. text/html) — multipart/alternative analog.
+  alternatives?: Array<{ contentType: string; content: Uint8Array }>;
+  attachments: Array<{ filename: string; contentType: string; content: Uint8Array; contentId?: string; disposition?: string }>;
 }> {
   const root = await getRoot();
   const MessageContent = root.lookupType('dmcn.message.MessageContent');
