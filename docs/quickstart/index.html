@@ -171,7 +171,7 @@ closed port shows up as a timeout four steps after the mistake was made.</p>
 <td>always</td>
 </tr>
 <tr>
-<td><code>25</code></td>
+<td><code>25</code> (<code>DMCND_BRIDGE_SMTP_LISTEN</code>)</td>
 <td>SMTP — your domain's MX</td>
 <td>bridge enabled</td>
 </tr>
@@ -213,9 +213,10 @@ bring your own certificate. There is no DNS-01 challenge and nothing here runs a
 you do not need inbound <code>53</code> or an acme-dns sidecar.</li>
 <li><strong>Many hosting providers block outbound port 25 by default</strong> and want a support ticket before
 they will open it. A bridge that receives fine but never delivers is usually this, not a DMCN bug.</li>
-<li><strong>Inbound 25 and 443 need privileges</strong> (<code>setcap CAP_NET_BIND_SERVICE</code>, or systemd
-<code>AmbientCapabilities</code>). The bridge's own default is <code>:2525</code>, which is convenient for testing and
-which no sending mail server will ever try — set <code>DMCND_BRIDGE_SMTP_LISTEN=:25</code> for a real MX.</li>
+<li><strong>Inbound 25 and 443 need privileges</strong> — one <code>setcap CAP_NET_BIND_SERVICE</code> on the binary, or
+systemd's <code>AmbientCapabilities</code>, covers both. Dev listens on <code>:2525</code> instead, since nothing
+delivers to a dev instance; if you move a live bridge off 25 the daemon warns, because sending
+mail servers try 25 and nothing else, and outbound keeps working so the gap is invisible.</li>
 </ul>
 <p><strong>1. [node]</strong> Install the daemon and get its peer ID. Set the libp2p port first — it goes into DNS
 and is awkward to change later — and confirm 7400 is reachable from wherever you will run

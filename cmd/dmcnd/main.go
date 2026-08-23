@@ -174,12 +174,16 @@ func main() {
 			if aerr := anchorSelf(n, cfg.domain, domainFingerprint(dar, rootKP), true); aerr != nil {
 				log.Warnf("could not advertise this node as the domain bridge: %v", aerr)
 			}
+			// Degrade rather than exit. DMCN mail keeps working without the bridge, and the
+			// most likely failure here is binding :25 without the capability — which should
+			// not take the whole domain offline.
 			br, serr := startBridge(ctx, n, cred, cfg)
 			if serr != nil {
-				fatalf("%v", serr)
+				log.Errorf("SMTP bridge NOT started: %v", serr)
+			} else {
+				defer br.Stop()
+				bridgeUp = true
 			}
-			defer br.Stop()
-			bridgeUp = true
 		}
 	}
 
@@ -423,7 +427,7 @@ func loadConfig() config {
 		bridgeDKIMSel:    envOr("DMCND_BRIDGE_DKIM_SELECTOR", "dmcn"),
 		bridgeHELO:       os.Getenv("DMCND_BRIDGE_HELO"),
 		bridgeSendIPs:    splitList(os.Getenv("DMCND_BRIDGE_SEND_IPS")),
-		bridgeSMTPListen: envOr("DMCND_BRIDGE_SMTP_LISTEN", ":2525"),
+		bridgeSMTPListen: envOr("DMCND_BRIDGE_SMTP_LISTEN", defaultBridgeSMTPListen(devMode)),
 		bridgeCredential: os.Getenv("DMCND_BRIDGE_CREDENTIAL"),
 		bridgeDomain:     os.Getenv("DMCND_BRIDGE_DOMAIN"),
 	}
@@ -603,6 +607,23 @@ func defaultNodeListen(devMode bool) string {
 		return "/ip4/0.0.0.0/tcp/0"
 	}
 	return "/ip4/0.0.0.0/tcp/7400"
+}
+
+// defaultBridgeSMTPListen picks the bridge's SMTP port when DMCND_BRIDGE_SMTP_LISTEN is unset.
+//
+// Production is :25, because that is the only port a sending mail server will ever try. The
+// previous default of :2525 was convenient — no privilege needed — and silently useless: outbound
+// mail worked, so the deployment looked healthy right up until someone replied and it never
+// arrived. Binding 25 needs the same CAP_NET_BIND_SERVICE as :443 already does, so an operator who
+// got webmail running has already done the work.
+//
+// Dev keeps :2525: nothing delivers to a dev instance, and requiring a capability to try the
+// bridge locally would be friction for no benefit. Mirrors defaultHTTPListen.
+func defaultBridgeSMTPListen(devMode bool) string {
+	if devMode {
+		return ":2525"
+	}
+	return ":25"
 }
 
 // defaultSeedPassphrase protects the DEV domain root keystore when DMCND_SEED_PASSPHRASE is unset.

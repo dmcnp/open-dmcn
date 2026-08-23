@@ -429,3 +429,35 @@ func TestOutboundDeliversAndSignsReceipt(t *testing.T) {
 		t.Fatalf("delivered: to=%q body=%q", got.To, got.Body)
 	}
 }
+
+// TestSplitEnvelopeYieldsAWorkingReceipt is the regression for a bug that only showed on the
+// happy path: a message was delivered to SMTP, and then the delivery receipt was silently dropped
+// because the code that builds it used the legacy-only decrypt. Delivery succeeded, the sender
+// was never told, and the log line looked like a decryption failure on a message that had just
+// been decrypted fine moments earlier.
+//
+// It tests decryptForBridge directly because that is the shared path both HandleEnvelope and
+// sendReceipt take — the bug was one of them not using it.
+func TestSplitEnvelopeYieldsAWorkingReceipt(t *testing.T) {
+	bridgeKP := mustKeyPair(t)
+	senderKP := mustKeyPair(t)
+	env := splitSealedToBridge(t, senderKP, bridgeKP, "alice@dmcn.localhost", "ext@gmail.com", "body")
+
+	// The delivery path reads it...
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, &bridge.StubSMTPDeliverer{}, bridgeKP)
+	if _, err := h.HandleEnvelope(context.Background(), env); err != nil {
+		t.Fatalf("delivery: %v", err)
+	}
+
+	// ...and so must the receipt path, from the SAME envelope. Anything that can be delivered
+	// can be acknowledged; if these two ever disagree, the sender stops hearing back.
+	pt, err := bridge.DecryptForBridgeForTest(env, bridgeKP)
+	if err != nil {
+		t.Fatalf("the receipt path could not read an envelope the delivery path just read: %v", err)
+	}
+	if pt.SenderAddress != "alice@dmcn.localhost" {
+		t.Errorf("sender address = %q, so the receipt would be addressed wrongly", pt.SenderAddress)
+	}
+}

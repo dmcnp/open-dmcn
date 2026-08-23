@@ -200,7 +200,41 @@ func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, c
 	}
 	log.Infof("SMTP bridge folded in: listening on %s (bridge domain %s ↔ dmcn domain %s)",
 		cfg.bridgeSMTPListen, cfg.bridgeDomain, cfg.domain)
+	warnIfUnreachableMX(cfg)
 	return br, nil
+}
+
+// warnIfUnreachableMX flags the default that silently breaks inbound mail.
+//
+// Production defaults to :25 now, so this fires only when an operator has deliberately moved it.
+// It stays because the failure is invisible from inside: sending mail servers connect to port 25
+// and nothing else, outbound is unaffected, and the deployment looks healthy right up until
+// someone replies and it never arrives — with nothing in the log, because the connection was never
+// made to this process.
+//
+// A warning rather than a refusal: forwarding 25→2525 (iptables, a systemd socket, a proxy) is a
+// legitimate way to avoid granting the binary CAP_NET_BIND_SERVICE, and the daemon cannot tell
+// that from a misconfiguration.
+func warnIfUnreachableMX(cfg config) {
+	if !mxUnreachable(cfg) {
+		return
+	}
+	log.Warnf("the bridge is listening on %s, not port 25 — sending mail servers only ever connect "+
+		"to 25, so INBOUND mail will not arrive. Outbound is unaffected, which is what makes this "+
+		"easy to miss. Either set DMCND_BRIDGE_SMTP_LISTEN=:25 (needs CAP_NET_BIND_SERVICE, as :443 "+
+		"does) or forward 25 to %s at the host. Also publish an MX for %s pointing at %s — "+
+		"`dmcndcli bridge dkim-keygen` prints it.",
+		cfg.bridgeSMTPListen, cfg.bridgeSMTPListen, cfg.bridgeDomain, cfg.bridgeHELO)
+}
+
+// mxUnreachable reports whether the bridge is listening somewhere no sending mail server will
+// look. Dev is exempt: nothing is expected to deliver to it.
+func mxUnreachable(cfg config) bool {
+	if cfg.devMode {
+		return false
+	}
+	_, port, err := net.SplitHostPort(cfg.bridgeSMTPListen)
+	return err != nil || port != "25"
 }
 
 // domainRootPub is the domain root's public key, base64, for the SPA to verify bridge credentials

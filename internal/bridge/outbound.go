@@ -319,3 +319,10 @@ func decryptForBridge(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPa
 		ReplyToID:        h.ReplyToID,
 	}, nil
 }
+
+// DecryptForBridgeForTest exposes decryptForBridge to the external test package, so a test can
+// assert that the delivery path and the receipt path read the same envelope identically. They
+// diverged once, and the symptom was invisible until a real message was delivered.
+func DecryptForBridgeForTest(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPair) (*message.PlaintextMessage, error) {
+	return decryptForBridge(env, kp)
+}

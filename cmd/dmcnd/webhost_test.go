@@ -100,3 +100,51 @@ func TestHELOCanBeOverridden(t *testing.T) {
 		t.Errorf("EHLO name = %q, want the explicit override", c.bridgeHELO)
 	}
 }
+
+// TestMXUnreachableDetectsTheTestingDefault covers the default that silently breaks inbound mail.
+//
+// The bridge listens on :2525 unless told otherwise. Sending mail servers connect to port 25 and
+// nothing else, so inbound never arrives — while outbound works perfectly, which is what makes it
+// easy to miss: the deployment looks healthy until someone replies.
+func TestMXUnreachableDetectsTheTestingDefault(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		listen string
+		dev    bool
+		want   bool
+	}{
+		{"the :2525 default cannot receive", ":2525", false, true},
+		{"port 25 is reachable", ":25", false, false},
+		{"a bound host on 25 is fine", "0.0.0.0:25", false, false},
+		{"dev is exempt — nothing delivers to it", ":2525", true, false},
+		{"an unparseable listen address is not assumed fine", "garbage", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mxUnreachable(config{bridgeSMTPListen: tc.listen, devMode: tc.dev})
+			if got != tc.want {
+				t.Errorf("mxUnreachable(%q, dev=%v) = %v, want %v", tc.listen, tc.dev, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestBridgeSMTPDefaultsToPort25 pins the production default. The bridge previously defaulted to
+// :2525 everywhere, which no sending mail server will ever try — so a live domain received nothing
+// while outbound worked perfectly, and nothing in the log said why.
+func TestBridgeSMTPDefaultsToPort25(t *testing.T) {
+	if got := defaultBridgeSMTPListen(false); got != ":25" {
+		t.Errorf("production default = %q, want :25 — sending servers connect there and nowhere else", got)
+	}
+	if got := defaultBridgeSMTPListen(true); got != ":2525" {
+		t.Errorf("dev default = %q, want :2525 — nothing delivers to a dev instance, so requiring a capability is friction", got)
+	}
+}
+
+// TestBridgeDefaultSatisfiesTheMXCheck keeps the default and the warning in agreement: if the
+// out-of-the-box configuration tripped the "cannot receive mail" warning, the warning would be
+// noise and stop being read.
+func TestBridgeDefaultSatisfiesTheMXCheck(t *testing.T) {
+	if mxUnreachable(config{bridgeSMTPListen: defaultBridgeSMTPListen(false)}) {
+		t.Error("the production default trips the unreachable-MX warning")
+	}
+}

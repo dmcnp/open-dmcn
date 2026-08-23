@@ -91,7 +91,7 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_POLL_INTERVAL` | `10s` | webmail mailbox poll cadence |
 | `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the DEV domain root keystore. A live daemon never creates a keystore, so this applies to dev only |
 | `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge |
-| `DMCND_BRIDGE_SMTP_LISTEN` | `:2525` | bridge SMTP listen address |
+| `DMCND_BRIDGE_SMTP_LISTEN` | `:25` (`:2525` in dev) | bridge SMTP listen address — 25 is the only port sending mail servers try, and needs the same `CAP_NET_BIND_SERVICE` as `:443` |
 | `DMCND_BRIDGE_CREDENTIAL` | — | the bridge's root-signed `bridge` credential (`dmcndcli bridge issue`). Without it the bridge runs but its verdicts are unverifiable |
 | `DMCND_BRIDGE_DOMAIN` | `<domain>` | the legacy (SMTP) domain the bridge represents |
 | `DMCND_BRIDGE_AUDIT_LOG` | — | append-only JSON audit log path |

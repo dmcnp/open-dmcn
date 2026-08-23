@@ -324,15 +324,18 @@ func (b *Bridge) deliverOne(env *message.EncryptedEnvelope) bool {
 }
 
 func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.EncryptedEnvelope, receipt *BridgeDeliveryReceipt) {
-	// Decrypt original to get sender address for the receipt
-	sm, err := message.Decrypt(originalEnv, b.bridgeKP.X25519Private, b.bridgeKP.X25519Public)
+	// Decrypt the original to learn who to send the receipt to. Uses the same format-agnostic
+	// path the delivery itself does — a split envelope (what any browser produces) is not
+	// readable by message.Decrypt, so using that here meant the receipt was silently dropped for
+	// exactly the messages that were successfully delivered.
+	pt, err := decryptForBridge(originalEnv, b.bridgeKP)
 	if err != nil {
 		b.log.Warnf("cannot decrypt for receipt: %v", err)
 		return
 	}
 
 	// Look up sender to encrypt receipt to them
-	senderRec, err := b.node.Lookup(ctx, sm.Plaintext.SenderAddress)
+	senderRec, err := b.node.Lookup(ctx, pt.SenderAddress)
 	if err != nil {
 		b.log.Warnf("cannot look up sender for receipt: %v", err)
 		return
@@ -346,7 +349,7 @@ func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.Encrypted
 
 	msg, err := message.NewPlaintextMessage(
 		b.inbound.bridgeAddr,
-		sm.Plaintext.SenderAddress,
+		pt.SenderAddress,
 		"Delivery Receipt",
 		"Message delivery receipt attached.",
 		b.bridgeKP.Ed25519Public,
@@ -378,11 +381,11 @@ func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.Encrypted
 	}
 
 	if err := b.deliver(ctx, senderRec, env); err != nil {
-		b.log.Warnf("deliver receipt to %s: %v", sm.Plaintext.SenderAddress, err)
+		b.log.Warnf("deliver receipt to %s: %v", pt.SenderAddress, err)
 		return
 	}
 
-	b.log.Debugf("delivery receipt sent to %s", sm.Plaintext.SenderAddress)
+	b.log.Debugf("delivery receipt sent to %s", pt.SenderAddress)
 }
 
 // Node returns the underlying DMCN node.

@@ -109,7 +109,7 @@ closed port shows up as a timeout four steps after the mistake was made.
 |---|---|---|
 | `7400` (`DMCND_NODE_LISTEN`) | libp2p: federation with other domains, and the `domain publish` step below. **This is the port in your published `seed=`.** | any live domain |
 | `443` (`DMCND_LISTEN`) | webmail, and the ACME challenge for its certificate | always |
-| `25` | SMTP — your domain's MX | bridge enabled |
+| `25` (`DMCND_BRIDGE_SMTP_LISTEN`) | SMTP — your domain's MX | bridge enabled |
 
 **Outbound — already fine unless you filter egress:**
 
@@ -128,9 +128,10 @@ Three of these catch people out:
   you do not need inbound `53` or an acme-dns sidecar.
 - **Many hosting providers block outbound port 25 by default** and want a support ticket before
   they will open it. A bridge that receives fine but never delivers is usually this, not a DMCN bug.
-- **Inbound 25 and 443 need privileges** (`setcap CAP_NET_BIND_SERVICE`, or systemd
-  `AmbientCapabilities`). The bridge's own default is `:2525`, which is convenient for testing and
-  which no sending mail server will ever try — set `DMCND_BRIDGE_SMTP_LISTEN=:25` for a real MX.
+- **Inbound 25 and 443 need privileges** — one `setcap CAP_NET_BIND_SERVICE` on the binary, or
+  systemd's `AmbientCapabilities`, covers both. Dev listens on `:2525` instead, since nothing
+  delivers to a dev instance; if you move a live bridge off 25 the daemon warns, because sending
+  mail servers try 25 and nothing else, and outbound keeps working so the gap is invisible.
 
 **1. [node]** Install the daemon and get its peer ID. Set the libp2p port first — it goes into DNS
 and is awkward to change later — and confirm 7400 is reachable from wherever you will run
