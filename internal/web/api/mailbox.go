@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/relay"
 	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
@@ -52,6 +54,13 @@ type RelayProxy interface {
 	List(ctx context.Context, address string, nonce, signature []byte, limit int, cursor []byte) (entries []*dmcnpb.MailboxEntry, next []byte, err error)
 	Body(ctx context.Context, address string, nonce, signature []byte, hash [32]byte) (*dmcnpb.MailboxBody, error)
 	Delete(ctx context.Context, address string, nonce, signature []byte, hash [32]byte) error
+	// Personal storage: the owner's sealed per-account state (contacts, Sent, flags, labels,
+	// settings). The relay only ever sees ciphertext.
+	KvGet(ctx context.Context, address string, nonce, signature []byte, key string) (sealed []byte, version uint64, found bool, err error)
+	KvPut(ctx context.Context, address string, nonce, signature []byte, key string, sealed []byte, expectedVersion uint64) (version uint64, err error)
+	KvList(ctx context.Context, address string, nonce, signature []byte, prefix string, limit int, cursor string, values bool) (items []relay.KvItem, next string, err error)
+	KvDelete(ctx context.Context, address string, nonce, signature []byte, key string) error
+	KvStat(ctx context.Context, address string, nonce, signature []byte) (used, quota, count uint64, err error)
 }
 
 // pendingMailbox holds a challenge nonce + op parameters between the challenge and
@@ -64,6 +73,14 @@ type pendingMailbox struct {
 	hash      [32]byte
 	nonce     []byte
 	expiresAt time.Time
+
+	// Personal-storage parameters, carried across the challenge/complete pair like the mail
+	// ones above so the browser signs a nonce bound to the operation it asked for.
+	key             string
+	prefix          string
+	sealed          []byte
+	expectedVersion uint64
+	values          bool
 }
 
 // pendingStore holds in-flight mailbox challenges keyed by a random correlation
@@ -129,10 +146,18 @@ func NewMailboxHandler(relay RelayProxy, log logr.Logger) *MailboxHandler {
 }
 
 type mailboxChallengeRequest struct {
-	Op     string `json:"op"`               // "list" | "body" | "delete"
+	Op     string `json:"op"`               // "list" | "body" | "delete" | "kv_*"
 	Limit  int    `json:"limit,omitempty"`  // list page size (0 = relay default)
 	Cursor string `json:"cursor,omitempty"` // base64; list continuation
 	Hash   string `json:"hash,omitempty"`   // hex; body/delete target
+
+	// Personal storage. The sealed blob is opaque to this backend and to the relay — the
+	// browser seals it to the owner before it is ever sent.
+	Key             string `json:"key,omitempty"`              // kv_get/kv_put/kv_delete target
+	Prefix          string `json:"prefix,omitempty"`           // kv_list namespace, e.g. "contacts/"
+	Sealed          string `json:"sealed,omitempty"`           // base64; kv_put payload
+	ExpectedVersion uint64 `json:"expected_version,omitempty"` // kv_put CAS; 0 = unconditional
+	Values          bool   `json:"values,omitempty"`           // kv_list: include blobs, not just keys
 }
 
 type mailboxChallengeResponse struct {
@@ -166,6 +191,39 @@ type mailboxDeletedResponse struct {
 	Hash string `json:"hash"` // hex
 }
 
+// --- Personal-storage responses. Sealed blobs are base64 of ciphertext the server never reads.
+
+type kvGetResponse struct {
+	Found   bool   `json:"found"`
+	Sealed  string `json:"sealed,omitempty"`
+	Version uint64 `json:"version"`
+}
+
+type kvPutResponse struct {
+	Version uint64 `json:"version"`
+}
+
+type kvItemData struct {
+	Key     string `json:"key"`
+	Sealed  string `json:"sealed,omitempty"`
+	Version uint64 `json:"version"`
+}
+
+type kvListResponse struct {
+	Items      []kvItemData `json:"items"`
+	NextCursor string       `json:"next_cursor,omitempty"`
+}
+
+type kvDeleteResponse struct {
+	Deleted bool `json:"deleted"`
+}
+
+type kvStatResponse struct {
+	UsedBytes  uint64 `json:"used_bytes"`
+	QuotaBytes uint64 `json:"quota_bytes"`
+	Count      uint64 `json:"count"`
+}
+
 // HandleChallenge issues a challenge nonce for a mailbox op on the caller's mailbox and
 // returns a correlation ID to complete the op with.
 func (h *MailboxHandler) HandleChallenge(w http.ResponseWriter, r *http.Request) {
@@ -181,17 +239,29 @@ func (h *MailboxHandler) HandleChallenge(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	switch req.Op {
-	case "list", "body", "delete":
+	case "list", "body", "delete", "kv_get", "kv_put", "kv_list", "kv_delete", "kv_stat":
 	default:
 		writeError(w, http.StatusBadRequest, "unknown mailbox op: "+req.Op)
 		return
 	}
 
 	p := &pendingMailbox{
-		address:   address,
-		op:        req.Op,
-		limit:     req.Limit,
-		expiresAt: time.Now().Add(30 * time.Second),
+		address:         address,
+		op:              req.Op,
+		limit:           req.Limit,
+		key:             req.Key,
+		prefix:          req.Prefix,
+		expectedVersion: req.ExpectedVersion,
+		values:          req.Values,
+		expiresAt:       time.Now().Add(30 * time.Second),
+	}
+	if req.Sealed != "" {
+		blob, err := base64.StdEncoding.DecodeString(req.Sealed)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid sealed encoding")
+			return
+		}
+		p.sealed = blob
 	}
 	if req.Cursor != "" {
 		cur, err := base64.StdEncoding.DecodeString(req.Cursor)
@@ -322,5 +392,73 @@ func (h *MailboxHandler) HandleComplete(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeJSON(w, http.StatusOK, mailboxDeletedResponse{Hash: hex.EncodeToString(p.hash[:])})
+
+	case "kv_get":
+		sealed, version, found, err := h.relay.KvGet(ctx, p.address, p.nonce, signature, p.key)
+		if err != nil {
+			h.writeKvError(w, "get", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, kvGetResponse{
+			Found: found, Version: version, Sealed: base64.StdEncoding.EncodeToString(sealed),
+		})
+
+	case "kv_put":
+		version, err := h.relay.KvPut(ctx, p.address, p.nonce, signature, p.key, p.sealed, p.expectedVersion)
+		if err != nil {
+			h.writeKvError(w, "put", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, kvPutResponse{Version: version})
+
+	case "kv_list":
+		items, next, err := h.relay.KvList(ctx, p.address, p.nonce, signature, p.prefix, p.limit, string(p.cursor), p.values)
+		if err != nil {
+			h.writeKvError(w, "list", err)
+			return
+		}
+		out := make([]kvItemData, 0, len(items))
+		for _, it := range items {
+			out = append(out, kvItemData{
+				Key: it.Key, Version: it.Version,
+				Sealed: base64.StdEncoding.EncodeToString(it.Sealed),
+			})
+		}
+		writeJSON(w, http.StatusOK, kvListResponse{Items: out, NextCursor: next})
+
+	case "kv_delete":
+		if err := h.relay.KvDelete(ctx, p.address, p.nonce, signature, p.key); err != nil {
+			h.writeKvError(w, "delete", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, kvDeleteResponse{Deleted: true})
+
+	case "kv_stat":
+		used, quota, count, err := h.relay.KvStat(ctx, p.address, p.nonce, signature)
+		if err != nil {
+			h.writeKvError(w, "stat", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, kvStatResponse{UsedBytes: used, QuotaBytes: quota, Count: count})
+	}
+}
+
+// writeKvError maps a storage failure to a status the client can act on rather than a blanket
+// 502. The distinctions matter to the caller: a conflict means re-read and retry, a full quota
+// means delete something, and UNSUPPORTED means this relay has no personal storage at all and the
+// client should fall back to keeping state locally instead of retrying forever.
+func (h *MailboxHandler) writeKvError(w http.ResponseWriter, op string, err error) {
+	msg := err.Error()
+	switch {
+	case errors.Is(err, relay.ErrKvUnsupported) || strings.Contains(msg, "does not host personal storage"):
+		writeErrorCode(w, http.StatusNotImplemented, "storage_unsupported", msg)
+	case errors.Is(err, relay.ErrKvConflict) || strings.Contains(msg, "version conflict"):
+		writeErrorCode(w, http.StatusConflict, "storage_conflict", msg)
+	case errors.Is(err, relay.ErrQuotaExceeded) || strings.Contains(msg, "quota"):
+		writeErrorCode(w, http.StatusInsufficientStorage, "storage_quota", msg)
+	case errors.Is(err, relay.ErrKvBadKey):
+		writeErrorCode(w, http.StatusBadRequest, "storage_bad_key", msg)
+	default:
+		writeError(w, http.StatusBadGateway, "mailbox storage "+op+" failed: "+msg)
 	}
 }

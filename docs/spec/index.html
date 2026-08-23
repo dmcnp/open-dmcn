@@ -64,7 +64,7 @@
       On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </summary>
     <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
-      <a href="#the-layered-stack">The layered stack</a><a href="#1-identity--addressing">1. Identity &amp; addressing</a><a href="#2-trust-the-credential-pki">2. Trust: the Credential PKI</a><a href="#3-the-message-model-client-side-three-layers">3. The message model (client-side, three layers)</a><a href="#4-routing">4. Routing</a><a href="#5-wire-protocols-libp2p">5. Wire protocols (libp2p)</a><a href="#6-onion-routing-optional-capability">6. Onion routing (optional capability)</a><a href="#7-smtp-bridge-optional-capability">7. SMTP bridge (optional capability)</a><a href="#8-extension-points-how-everything-else-attaches">8. Extension points (how everything else attaches)</a>
+      <a href="#the-layered-stack">The layered stack</a><a href="#1-identity--addressing">1. Identity &amp; addressing</a><a href="#2-trust-the-credential-pki">2. Trust: the Credential PKI</a><a href="#3-the-message-model-client-side-three-layers">3. The message model (client-side, three layers)</a><a href="#4-routing">4. Routing</a><a href="#5-wire-protocols-libp2p">5. Wire protocols (libp2p)</a><a href="#6-onion-routing-optional-capability">6. Onion routing (optional capability)</a><a href="#6b-personal-storage">6b. Personal storage</a><a href="#7-smtp-bridge-optional-capability">7. SMTP bridge (optional capability)</a><a href="#8-extension-points-how-everything-else-attaches">8. Extension points (how everything else attaches)</a>
     </div>
   </details>
   
@@ -74,7 +74,7 @@
       
       <div class="toc-label">On this page</div>
       <nav class="toc-list">
-        <a href="#the-layered-stack">The layered stack</a><a href="#1-identity--addressing">1. Identity &amp; addressing</a><a href="#2-trust-the-credential-pki">2. Trust: the Credential PKI</a><a href="#3-the-message-model-client-side-three-layers">3. The message model (client-side, three layers)</a><a href="#4-routing">4. Routing</a><a href="#5-wire-protocols-libp2p">5. Wire protocols (libp2p)</a><a href="#6-onion-routing-optional-capability">6. Onion routing (optional capability)</a><a href="#7-smtp-bridge-optional-capability">7. SMTP bridge (optional capability)</a><a href="#8-extension-points-how-everything-else-attaches">8. Extension points (how everything else attaches)</a>
+        <a href="#the-layered-stack">The layered stack</a><a href="#1-identity--addressing">1. Identity &amp; addressing</a><a href="#2-trust-the-credential-pki">2. Trust: the Credential PKI</a><a href="#3-the-message-model-client-side-three-layers">3. The message model (client-side, three layers)</a><a href="#4-routing">4. Routing</a><a href="#5-wire-protocols-libp2p">5. Wire protocols (libp2p)</a><a href="#6-onion-routing-optional-capability">6. Onion routing (optional capability)</a><a href="#6b-personal-storage">6b. Personal storage</a><a href="#7-smtp-bridge-optional-capability">7. SMTP bridge (optional capability)</a><a href="#8-extension-points-how-everything-else-attaches">8. Extension points (how everything else attaches)</a>
       </nav>
       
     </aside>
@@ -279,6 +279,29 @@ is an <code>OnionPacket</code> sealed to one hop's key; only the innermost deliv
 to its own bucket classes. A mailbox (<code>require_onion</code>) or domain (<code>PolicyRequireOnion</code>)
 can require onion delivery, in which case relays reject direct STOREs with
 <code>ONION_REQUIRED</code>.</p>
+<h2 id="6b-personal-storage">6b. Personal storage<a class="hash" href="#6b-personal-storage" aria-label="Link to this section">#</a></h2>
+<p>A mailbox holder may keep per-account state on their home relay: contacts, sent messages,
+read/unread and labels, client settings. Logical keys are <code>&quot;&lt;namespace&gt;/&lt;id&gt;&quot;</code> and the relay
+treats them as opaque strings; <code>MailboxKvList</code> pages a <code>&quot;&lt;namespace&gt;/&quot;</code> prefix.</p>
+<p><strong>Values are sealed to the owner alone.</strong> The relay stores ciphertext for which it holds no
+key — it can count bytes and serve blobs back, and that is all. This is the same posture as the
+mailbox itself, which is why it belongs here rather than in an operator extension: a relay that
+already holds someone's sealed mail is not made more trusted by also holding sealed metadata
+about it.</p>
+<p>Ops ride the same FETCH-authenticated <code>MailboxOp</code> stream as <code>list</code>/<code>body</code>/<code>delete</code>
+(<code>MailboxKvGet</code>, <code>MailboxKvPut</code>, <code>MailboxKvList</code>, <code>MailboxKvDelete</code>, <code>MailboxKvStat</code>), so
+control of the recipient identity is already proven and every op is scoped to that owner.</p>
+<p>A per-key monotonic version supports optional compare-and-swap: <code>expected_version</code> non-zero
+requires the stored key to be at exactly that version, and a mismatch returns <code>CONFLICT</code>. This
+is what lets a singleton document edited on two devices resolve rather than silently lose a write.</p>
+<p>Storage is <strong>optional for a relay</strong>. One that does not offer it answers <code>UNSUPPORTED</code>, and a
+client is expected to fall back to keeping the state locally — single-device, but working. A
+relay that does offer it applies its own byte cap per account, covering mail and personal storage
+together; <code>MailboxKvStat</code> reports the figure actually enforced. Per-account entitlements are an
+extension concern and are not part of the core (§8).</p>
+<p>Without this, every client either stays single-device or invents its own incompatible sync, which
+is the outcome an interoperable mail protocol exists to avoid. It is the role IMAP plays alongside
+SMTP: the store, and the state that belongs with it.</p>
 <h2 id="7-smtp-bridge-optional-capability">7. SMTP bridge (optional capability)<a class="hash" href="#7-smtp-bridge-optional-capability" aria-label="Link to this section">#</a></h2>
 <p>An implementation may operate an SMTP↔DMCN bridge. A bridge is <strong>infrastructure, not a
 correspondent</strong>: it has no DMCN address and no directory entry. It is a peer whose key

@@ -102,6 +102,15 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_BRIDGE_HELO` | `$DMCND_WEB_HOST`, else the domain | EHLO name announced to remote MTAs — must be a FQDN whose PTR matches, so it defaults to the host rather than the OS hostname |
 | `DMCND_BRIDGE_SEND_IPS` | — | public addresses this bridge sends from (comma-separated, v4 and v6), so the DNS records printed at startup are pasteable |
 
+### What syncs between devices
+
+Mail lives in the mailbox on the relay, and so does per-account state — contacts, Sent,
+read/unread, labels and settings — held in the relay's **personal storage**, sealed to the owner
+so the relay stores ciphertext it cannot read. Sign in elsewhere and both follow you.
+
+A relay may decline to offer storage (no datastore, or a deliberately minimal node). It answers
+`UNSUPPORTED` and the client keeps that state in IndexedDB instead — single-device, still working.
+
 ### Federation
 
 Two daemons on different domains interoperate the way email does — via DNS, not a global

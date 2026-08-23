@@ -123,6 +123,16 @@ only ever receives the signed record it produced. See below — that difference 
 setup has two halves.</p>
 <p>Put a proxy in front of it and watch the traffic: sealed envelopes, padded to fixed size
 classes, and a header you can list without touching a body.</p>
+<h3 id="what-follows-the-account">What follows the account<a class="hash" href="#what-follows-the-account" aria-label="Link to this section">#</a></h3>
+<p>Your <strong>mail</strong> lives in the mailbox on the relay. So does the state that goes with it — contacts,
+Sent, read/unread, labels and settings — kept in the relay's personal storage. Sign in on a phone
+and both are there.</p>
+<p>Everything in that store is <strong>sealed to you in the browser before it is sent</strong>. The relay holds
+ciphertext it has no key for; it can count your bytes and hand the blobs back, and that is all.
+That is what makes it reasonable to keep an address book on a server at all, and it is the same
+posture as your mail, which the relay is already storing sealed.</p>
+<p>A relay is not obliged to offer storage — a minimal one can serve mail and nothing else. It says
+so, and the client keeps that state in the browser instead: single-device, still working.</p>
 <h2 id="point-a-real-domain-at-it">Point a real domain at it<a class="hash" href="#point-a-real-domain-at-it" aria-label="Link to this section">#</a></h2>
 <p>Two machines, and the split between them is the point.</p>
 <p>The <strong>node</strong> holds its own libp2p key and a signed copy of your domain's authority record. The

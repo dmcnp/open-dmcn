@@ -87,6 +87,52 @@ func (p *inProcRelay) Delete(ctx context.Context, address string, nonce, signatu
 	return p.node.Relay().Mailbox().Delete(ctx, rxHex, hash)
 }
 
+// --- Personal storage ---------------------------------------------------------------------
+//
+// Each op authorises exactly like the mail ops above — the browser signs a server-issued nonce —
+// then delegates to the Relay, which is also what the libp2p stream handler calls. Quota lives
+// there rather than here, so the in-process and over-the-wire paths cannot drift apart.
+
+func (p *inProcRelay) KvGet(ctx context.Context, address string, nonce, signature []byte, key string) ([]byte, uint64, bool, error) {
+	rxHex, err := p.authorize(ctx, address, nonce, signature)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	return p.node.Relay().KvGet(ctx, rxHex, key)
+}
+
+func (p *inProcRelay) KvPut(ctx context.Context, address string, nonce, signature []byte, key string, sealed []byte, expectedVersion uint64) (uint64, error) {
+	rxHex, err := p.authorize(ctx, address, nonce, signature)
+	if err != nil {
+		return 0, err
+	}
+	return p.node.Relay().KvPut(ctx, rxHex, key, sealed, expectedVersion)
+}
+
+func (p *inProcRelay) KvList(ctx context.Context, address string, nonce, signature []byte, prefix string, limit int, cursor string, values bool) ([]relay.KvItem, string, error) {
+	rxHex, err := p.authorize(ctx, address, nonce, signature)
+	if err != nil {
+		return nil, "", err
+	}
+	return p.node.Relay().KvList(ctx, rxHex, prefix, limit, cursor, values)
+}
+
+func (p *inProcRelay) KvDelete(ctx context.Context, address string, nonce, signature []byte, key string) error {
+	rxHex, err := p.authorize(ctx, address, nonce, signature)
+	if err != nil {
+		return err
+	}
+	return p.node.Relay().KvDelete(ctx, rxHex, key)
+}
+
+func (p *inProcRelay) KvStat(ctx context.Context, address string, nonce, signature []byte) (used, quota, count uint64, err error) {
+	rxHex, aerr := p.authorize(ctx, address, nonce, signature)
+	if aerr != nil {
+		return 0, 0, 0, aerr
+	}
+	return p.node.Relay().KvStat(ctx, rxHex)
+}
+
 // inProcRouter implements webapi.RelayRouter. A STORE whose hint resolves to this node is
 // accepted locally (no self-dial); a hint for another node is dialed like the product client.
 // This lets the same daemon serve a purely self-hosted domain (sender + recipient co-located)

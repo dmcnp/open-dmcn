@@ -401,6 +401,11 @@ type RelayResponse struct {
 	//	*RelayResponse_GetBlocklist
 	//	*RelayResponse_PutRecord
 	//	*RelayResponse_GetRelayDescriptor
+	//	*RelayResponse_MailboxKvPut
+	//	*RelayResponse_MailboxKvGet
+	//	*RelayResponse_MailboxKvList
+	//	*RelayResponse_MailboxKvDelete
+	//	*RelayResponse_MailboxKvStat
 	Response      isRelayResponse_Response `protobuf_oneof:"response"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -596,6 +601,51 @@ func (x *RelayResponse) GetGetRelayDescriptor() *GetRelayDescriptorResponse {
 	return nil
 }
 
+func (x *RelayResponse) GetMailboxKvPut() *MailboxKvPutResponse {
+	if x != nil {
+		if x, ok := x.Response.(*RelayResponse_MailboxKvPut); ok {
+			return x.MailboxKvPut
+		}
+	}
+	return nil
+}
+
+func (x *RelayResponse) GetMailboxKvGet() *MailboxKvGetResponse {
+	if x != nil {
+		if x, ok := x.Response.(*RelayResponse_MailboxKvGet); ok {
+			return x.MailboxKvGet
+		}
+	}
+	return nil
+}
+
+func (x *RelayResponse) GetMailboxKvList() *MailboxKvListResponse {
+	if x != nil {
+		if x, ok := x.Response.(*RelayResponse_MailboxKvList); ok {
+			return x.MailboxKvList
+		}
+	}
+	return nil
+}
+
+func (x *RelayResponse) GetMailboxKvDelete() *MailboxKvDeleteResponse {
+	if x != nil {
+		if x, ok := x.Response.(*RelayResponse_MailboxKvDelete); ok {
+			return x.MailboxKvDelete
+		}
+	}
+	return nil
+}
+
+func (x *RelayResponse) GetMailboxKvStat() *MailboxKvStatResponse {
+	if x != nil {
+		if x, ok := x.Response.(*RelayResponse_MailboxKvStat); ok {
+			return x.MailboxKvStat
+		}
+	}
+	return nil
+}
+
 type isRelayResponse_Response interface {
 	isRelayResponse_Response()
 }
@@ -672,6 +722,27 @@ type RelayResponse_GetRelayDescriptor struct {
 	GetRelayDescriptor *GetRelayDescriptorResponse `protobuf:"bytes,34,opt,name=get_relay_descriptor,json=getRelayDescriptor,proto3,oneof"`
 }
 
+type RelayResponse_MailboxKvPut struct {
+	// --- Personal storage responses. ---
+	MailboxKvPut *MailboxKvPutResponse `protobuf:"bytes,18,opt,name=mailbox_kv_put,json=mailboxKvPut,proto3,oneof"`
+}
+
+type RelayResponse_MailboxKvGet struct {
+	MailboxKvGet *MailboxKvGetResponse `protobuf:"bytes,19,opt,name=mailbox_kv_get,json=mailboxKvGet,proto3,oneof"`
+}
+
+type RelayResponse_MailboxKvList struct {
+	MailboxKvList *MailboxKvListResponse `protobuf:"bytes,20,opt,name=mailbox_kv_list,json=mailboxKvList,proto3,oneof"`
+}
+
+type RelayResponse_MailboxKvDelete struct {
+	MailboxKvDelete *MailboxKvDeleteResponse `protobuf:"bytes,21,opt,name=mailbox_kv_delete,json=mailboxKvDelete,proto3,oneof"`
+}
+
+type RelayResponse_MailboxKvStat struct {
+	MailboxKvStat *MailboxKvStatResponse `protobuf:"bytes,22,opt,name=mailbox_kv_stat,json=mailboxKvStat,proto3,oneof"`
+}
+
 func (*RelayResponse_Store) isRelayResponse_Response() {}
 
 func (*RelayResponse_FetchChallenge) isRelayResponse_Response() {}
@@ -705,6 +776,16 @@ func (*RelayResponse_GetBlocklist) isRelayResponse_Response() {}
 func (*RelayResponse_PutRecord) isRelayResponse_Response() {}
 
 func (*RelayResponse_GetRelayDescriptor) isRelayResponse_Response() {}
+
+func (*RelayResponse_MailboxKvPut) isRelayResponse_Response() {}
+
+func (*RelayResponse_MailboxKvGet) isRelayResponse_Response() {}
+
+func (*RelayResponse_MailboxKvList) isRelayResponse_Response() {}
+
+func (*RelayResponse_MailboxKvDelete) isRelayResponse_Response() {}
+
+func (*RelayResponse_MailboxKvStat) isRelayResponse_Response() {}
 
 // OnionPacket is one encrypted onion layer as it travels the wire — sealed to the
 // current hop's X25519 key (see internal/core/onion SealLayer). The relay derives
@@ -2478,6 +2559,11 @@ type MailboxOp struct {
 	//	*MailboxOp_List
 	//	*MailboxOp_Body
 	//	*MailboxOp_Delete
+	//	*MailboxOp_KvPut
+	//	*MailboxOp_KvGet
+	//	*MailboxOp_KvList
+	//	*MailboxOp_KvDelete
+	//	*MailboxOp_KvStat
 	Op            isMailboxOp_Op `protobuf_oneof:"op"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2561,6 +2647,51 @@ func (x *MailboxOp) GetDelete() *MailboxDeleteOp {
 	return nil
 }
 
+func (x *MailboxOp) GetKvPut() *MailboxKvPutOp {
+	if x != nil {
+		if x, ok := x.Op.(*MailboxOp_KvPut); ok {
+			return x.KvPut
+		}
+	}
+	return nil
+}
+
+func (x *MailboxOp) GetKvGet() *MailboxKvGetOp {
+	if x != nil {
+		if x, ok := x.Op.(*MailboxOp_KvGet); ok {
+			return x.KvGet
+		}
+	}
+	return nil
+}
+
+func (x *MailboxOp) GetKvList() *MailboxKvListOp {
+	if x != nil {
+		if x, ok := x.Op.(*MailboxOp_KvList); ok {
+			return x.KvList
+		}
+	}
+	return nil
+}
+
+func (x *MailboxOp) GetKvDelete() *MailboxKvDeleteOp {
+	if x != nil {
+		if x, ok := x.Op.(*MailboxOp_KvDelete); ok {
+			return x.KvDelete
+		}
+	}
+	return nil
+}
+
+func (x *MailboxOp) GetKvStat() *MailboxKvStatOp {
+	if x != nil {
+		if x, ok := x.Op.(*MailboxOp_KvStat); ok {
+			return x.KvStat
+		}
+	}
+	return nil
+}
+
 type isMailboxOp_Op interface {
 	isMailboxOp_Op()
 }
@@ -2577,11 +2708,45 @@ type MailboxOp_Delete struct {
 	Delete *MailboxDeleteOp `protobuf:"bytes,5,opt,name=delete,proto3,oneof"`
 }
 
+type MailboxOp_KvPut struct {
+	// Personal storage (see MailboxKv* below). These numbers come from the range this
+	// message reserved when the ops were moved out; the reservation is what makes adding
+	// them back safe. They are NOT the pre-split numbering, which is not recoverable — an
+	// implementation of the older layout is not wire-compatible and should not assume it is.
+	KvPut *MailboxKvPutOp `protobuf:"bytes,8,opt,name=kv_put,json=kvPut,proto3,oneof"`
+}
+
+type MailboxOp_KvGet struct {
+	KvGet *MailboxKvGetOp `protobuf:"bytes,9,opt,name=kv_get,json=kvGet,proto3,oneof"`
+}
+
+type MailboxOp_KvList struct {
+	KvList *MailboxKvListOp `protobuf:"bytes,10,opt,name=kv_list,json=kvList,proto3,oneof"`
+}
+
+type MailboxOp_KvDelete struct {
+	KvDelete *MailboxKvDeleteOp `protobuf:"bytes,11,opt,name=kv_delete,json=kvDelete,proto3,oneof"`
+}
+
+type MailboxOp_KvStat struct {
+	KvStat *MailboxKvStatOp `protobuf:"bytes,12,opt,name=kv_stat,json=kvStat,proto3,oneof"`
+}
+
 func (*MailboxOp_List) isMailboxOp_Op() {}
 
 func (*MailboxOp_Body) isMailboxOp_Op() {}
 
 func (*MailboxOp_Delete) isMailboxOp_Op() {}
+
+func (*MailboxOp_KvPut) isMailboxOp_Op() {}
+
+func (*MailboxOp_KvGet) isMailboxOp_Op() {}
+
+func (*MailboxOp_KvList) isMailboxOp_Op() {}
+
+func (*MailboxOp_KvDelete) isMailboxOp_Op() {}
+
+func (*MailboxOp_KvStat) isMailboxOp_Op() {}
 
 // MailboxListOp requests a page of header previews (non-consuming).
 type MailboxListOp struct {
@@ -3055,6 +3220,606 @@ func (x *StoreInit) GetBodyContentAddress() []byte {
 	return nil
 }
 
+// MailboxKvPutOp writes one blob. expected_version, when non-zero, requires the stored key to be
+// at exactly that version (compare-and-swap); a mismatch returns a CONFLICT error.
+// expected_version == 0 disables the check (unconditional write).
+type MailboxKvPutOp struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Key             string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Sealed          []byte                 `protobuf:"bytes,2,opt,name=sealed,proto3" json:"sealed,omitempty"`                                           // sealed to the owner alone; opaque to the relay
+	ExpectedVersion uint64                 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"` // 0 = unconditional; else CAS on the current version
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MailboxKvPutOp) Reset() {
+	*x = MailboxKvPutOp{}
+	mi := &file_relay_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvPutOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvPutOp) ProtoMessage() {}
+
+func (x *MailboxKvPutOp) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvPutOp.ProtoReflect.Descriptor instead.
+func (*MailboxKvPutOp) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *MailboxKvPutOp) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *MailboxKvPutOp) GetSealed() []byte {
+	if x != nil {
+		return x.Sealed
+	}
+	return nil
+}
+
+func (x *MailboxKvPutOp) GetExpectedVersion() uint64 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+// MailboxKvGetOp reads one blob by key.
+type MailboxKvGetOp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvGetOp) Reset() {
+	*x = MailboxKvGetOp{}
+	mi := &file_relay_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvGetOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvGetOp) ProtoMessage() {}
+
+func (x *MailboxKvGetOp) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvGetOp.ProtoReflect.Descriptor instead.
+func (*MailboxKvGetOp) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *MailboxKvGetOp) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+// MailboxKvListOp lists keys under a "<namespace>/" prefix, paged. When values is true each item
+// carries its sealed blob; otherwise only key+version.
+type MailboxKvListOp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prefix        string                 `protobuf:"bytes,1,opt,name=prefix,proto3" json:"prefix,omitempty"`  // logical key prefix, e.g. "contacts/"
+	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`   // 0 = server default
+	Cursor        []byte                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`  // empty = from the beginning; else a prior next_cursor
+	Values        bool                   `protobuf:"varint,4,opt,name=values,proto3" json:"values,omitempty"` // include the sealed blob per item
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvListOp) Reset() {
+	*x = MailboxKvListOp{}
+	mi := &file_relay_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvListOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvListOp) ProtoMessage() {}
+
+func (x *MailboxKvListOp) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvListOp.ProtoReflect.Descriptor instead.
+func (*MailboxKvListOp) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *MailboxKvListOp) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *MailboxKvListOp) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *MailboxKvListOp) GetCursor() []byte {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
+}
+
+func (x *MailboxKvListOp) GetValues() bool {
+	if x != nil {
+		return x.Values
+	}
+	return false
+}
+
+// MailboxKvDeleteOp removes one blob by key (idempotent).
+type MailboxKvDeleteOp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvDeleteOp) Reset() {
+	*x = MailboxKvDeleteOp{}
+	mi := &file_relay_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvDeleteOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvDeleteOp) ProtoMessage() {}
+
+func (x *MailboxKvDeleteOp) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvDeleteOp.ProtoReflect.Descriptor instead.
+func (*MailboxKvDeleteOp) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *MailboxKvDeleteOp) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+// MailboxKvStatOp reports the authenticated owner's personal-storage occupancy — used bytes and
+// the cap that applies. No parameters: the challenge signature scopes it to the caller's own
+// storage.
+type MailboxKvStatOp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvStatOp) Reset() {
+	*x = MailboxKvStatOp{}
+	mi := &file_relay_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvStatOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvStatOp) ProtoMessage() {}
+
+func (x *MailboxKvStatOp) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvStatOp.ProtoReflect.Descriptor instead.
+func (*MailboxKvStatOp) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{47}
+}
+
+// MailboxKvPutResponse confirms a write and returns the new version.
+type MailboxKvPutResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvPutResponse) Reset() {
+	*x = MailboxKvPutResponse{}
+	mi := &file_relay_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvPutResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvPutResponse) ProtoMessage() {}
+
+func (x *MailboxKvPutResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvPutResponse.ProtoReflect.Descriptor instead.
+func (*MailboxKvPutResponse) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *MailboxKvPutResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MailboxKvPutResponse) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// MailboxKvGetResponse returns one blob (found=false when the key is absent).
+type MailboxKvGetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	Sealed        []byte                 `protobuf:"bytes,2,opt,name=sealed,proto3" json:"sealed,omitempty"`
+	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvGetResponse) Reset() {
+	*x = MailboxKvGetResponse{}
+	mi := &file_relay_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvGetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvGetResponse) ProtoMessage() {}
+
+func (x *MailboxKvGetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvGetResponse.ProtoReflect.Descriptor instead.
+func (*MailboxKvGetResponse) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *MailboxKvGetResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *MailboxKvGetResponse) GetSealed() []byte {
+	if x != nil {
+		return x.Sealed
+	}
+	return nil
+}
+
+func (x *MailboxKvGetResponse) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// MailboxKvItem is one entry in a KV LIST page.
+type MailboxKvItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Sealed        []byte                 `protobuf:"bytes,2,opt,name=sealed,proto3" json:"sealed,omitempty"` // present only when the list op set values=true
+	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvItem) Reset() {
+	*x = MailboxKvItem{}
+	mi := &file_relay_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvItem) ProtoMessage() {}
+
+func (x *MailboxKvItem) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvItem.ProtoReflect.Descriptor instead.
+func (*MailboxKvItem) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *MailboxKvItem) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *MailboxKvItem) GetSealed() []byte {
+	if x != nil {
+		return x.Sealed
+	}
+	return nil
+}
+
+func (x *MailboxKvItem) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+// MailboxKvListResponse is a page of KV items plus a continuation cursor (empty when the
+// namespace has been fully listed).
+type MailboxKvListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*MailboxKvItem       `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	NextCursor    []byte                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvListResponse) Reset() {
+	*x = MailboxKvListResponse{}
+	mi := &file_relay_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvListResponse) ProtoMessage() {}
+
+func (x *MailboxKvListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvListResponse.ProtoReflect.Descriptor instead.
+func (*MailboxKvListResponse) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *MailboxKvListResponse) GetItems() []*MailboxKvItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *MailboxKvListResponse) GetNextCursor() []byte {
+	if x != nil {
+		return x.NextCursor
+	}
+	return nil
+}
+
+// MailboxKvDeleteResponse confirms a delete.
+type MailboxKvDeleteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvDeleteResponse) Reset() {
+	*x = MailboxKvDeleteResponse{}
+	mi := &file_relay_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvDeleteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvDeleteResponse) ProtoMessage() {}
+
+func (x *MailboxKvDeleteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvDeleteResponse.ProtoReflect.Descriptor instead.
+func (*MailboxKvDeleteResponse) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *MailboxKvDeleteResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// MailboxKvStatResponse reports the owner's personal-storage usage. quota_bytes is the cap that
+// applies (0 = unbounded) and comes from the NODE's configuration — there is no entitlement or
+// credential plane in the core. used_bytes is what they currently store; count is the number of
+// blobs.
+type MailboxKvStatResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UsedBytes     uint64                 `protobuf:"varint,1,opt,name=used_bytes,json=usedBytes,proto3" json:"used_bytes,omitempty"`
+	QuotaBytes    uint64                 `protobuf:"varint,2,opt,name=quota_bytes,json=quotaBytes,proto3" json:"quota_bytes,omitempty"`
+	Count         uint64                 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MailboxKvStatResponse) Reset() {
+	*x = MailboxKvStatResponse{}
+	mi := &file_relay_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxKvStatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxKvStatResponse) ProtoMessage() {}
+
+func (x *MailboxKvStatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxKvStatResponse.ProtoReflect.Descriptor instead.
+func (*MailboxKvStatResponse) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *MailboxKvStatResponse) GetUsedBytes() uint64 {
+	if x != nil {
+		return x.UsedBytes
+	}
+	return 0
+}
+
+func (x *MailboxKvStatResponse) GetQuotaBytes() uint64 {
+	if x != nil {
+		return x.QuotaBytes
+	}
+	return 0
+}
+
+func (x *MailboxKvStatResponse) GetCount() uint64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
 var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
@@ -3085,7 +3850,7 @@ const file_relay_proto_rawDesc = "" +
 	"\x14get_relay_descriptor\x18\x19 \x01(\v2%.dmcn.relay.GetRelayDescriptorRequestH\x00R\x12getRelayDescriptorB\t\n" +
 	"\arequestJ\x04\b\t\x10\x13J\x04\b\x1a\x10\x1bR\x04statR\tset_drainR\x0frequest_mailboxR\x0fmailbox_handoffR\baccountsR\x11mailbox_kv_injectR\tset_quotaR\n" +
 	"set_accessR\n" +
-	"get_accessR\fclear_accessR\x13consume_send_inject\"\x9e\v\n" +
+	"get_accessR\fclear_accessR\x13consume_send_inject\"\xd0\r\n" +
 	"\rRelayResponse\x121\n" +
 	"\x05store\x18\x01 \x01(\v2\x19.dmcn.relay.StoreResponseH\x00R\x05store\x12E\n" +
 	"\x0ffetch_challenge\x18\x02 \x01(\v2\x1a.dmcn.relay.FetchChallengeH\x00R\x0efetchChallenge\x121\n" +
@@ -3106,9 +3871,14 @@ const file_relay_proto_rawDesc = "" +
 	"\rget_blocklist\x18  \x01(\v2 .dmcn.relay.GetBlocklistResponseH\x00R\fgetBlocklist\x12>\n" +
 	"\n" +
 	"put_record\x18! \x01(\v2\x1d.dmcn.relay.PutRecordResponseH\x00R\tputRecord\x12Z\n" +
-	"\x14get_relay_descriptor\x18\" \x01(\v2&.dmcn.relay.GetRelayDescriptorResponseH\x00R\x12getRelayDescriptorB\n" +
+	"\x14get_relay_descriptor\x18\" \x01(\v2&.dmcn.relay.GetRelayDescriptorResponseH\x00R\x12getRelayDescriptor\x12H\n" +
+	"\x0emailbox_kv_put\x18\x12 \x01(\v2 .dmcn.relay.MailboxKvPutResponseH\x00R\fmailboxKvPut\x12H\n" +
+	"\x0emailbox_kv_get\x18\x13 \x01(\v2 .dmcn.relay.MailboxKvGetResponseH\x00R\fmailboxKvGet\x12K\n" +
+	"\x0fmailbox_kv_list\x18\x14 \x01(\v2!.dmcn.relay.MailboxKvListResponseH\x00R\rmailboxKvList\x12Q\n" +
+	"\x11mailbox_kv_delete\x18\x15 \x01(\v2#.dmcn.relay.MailboxKvDeleteResponseH\x00R\x0fmailboxKvDelete\x12K\n" +
+	"\x0fmailbox_kv_stat\x18\x16 \x01(\v2!.dmcn.relay.MailboxKvStatResponseH\x00R\rmailboxKvStatB\n" +
 	"\n" +
-	"\bresponseJ\x04\b\v\x10\x1cJ\x04\b#\x10$J\x04\b$\x10%R\x12mailbox_get_filterR\x12mailbox_put_filterR\x04statR\tset_drainR\x0frequest_mailboxR\x0fmailbox_handoffR\baccountsR\x0emailbox_kv_putR\x0emailbox_kv_getR\x0fmailbox_kv_listR\x11mailbox_kv_deleteR\x11mailbox_kv_injectR\x0fmailbox_kv_statR\tset_quotaR\n" +
+	"\bresponseJ\x04\b\v\x10\x12J\x04\b\x17\x10\x1cJ\x04\b#\x10$J\x04\b$\x10%R\x12mailbox_get_filterR\x12mailbox_put_filterR\x04statR\tset_drainR\x0frequest_mailboxR\x0fmailbox_handoffR\baccountsR\x11mailbox_kv_injectR\tset_quotaR\n" +
 	"set_accessR\n" +
 	"get_accessR\fclear_accessR\x13consume_send_inject\"\x9d\x01\n" +
 	"\vOnionPacket\x12\x18\n" +
@@ -3216,16 +3986,22 @@ const file_relay_proto_rawDesc = "" +
 	"body_nonce\x18\x02 \x01(\fR\tbodyNonce\x12\x19\n" +
 	"\bbody_tag\x18\x03 \x01(\fR\abodyTag\x12&\n" +
 	"\x0fbody_size_class\x18\x04 \x01(\rR\rbodySizeClass\x120\n" +
-	"\x14body_content_address\x18\x05 \x01(\fR\x12bodyContentAddress\"\xa9\x02\n" +
+	"\x14body_content_address\x18\x05 \x01(\fR\x12bodyContentAddress\"\xa0\x04\n" +
 	"\tMailboxOp\x12\x14\n" +
 	"\x05nonce\x18\x01 \x01(\fR\x05nonce\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\fR\tsignature\x12/\n" +
 	"\x04list\x18\x03 \x01(\v2\x19.dmcn.relay.MailboxListOpH\x00R\x04list\x12/\n" +
 	"\x04body\x18\x04 \x01(\v2\x19.dmcn.relay.MailboxBodyOpH\x00R\x04body\x125\n" +
-	"\x06delete\x18\x05 \x01(\v2\x1b.dmcn.relay.MailboxDeleteOpH\x00R\x06deleteB\x04\n" +
-	"\x02opJ\x04\b\x06\x10\x0eR\n" +
+	"\x06delete\x18\x05 \x01(\v2\x1b.dmcn.relay.MailboxDeleteOpH\x00R\x06delete\x123\n" +
+	"\x06kv_put\x18\b \x01(\v2\x1a.dmcn.relay.MailboxKvPutOpH\x00R\x05kvPut\x123\n" +
+	"\x06kv_get\x18\t \x01(\v2\x1a.dmcn.relay.MailboxKvGetOpH\x00R\x05kvGet\x126\n" +
+	"\akv_list\x18\n" +
+	" \x01(\v2\x1b.dmcn.relay.MailboxKvListOpH\x00R\x06kvList\x12<\n" +
+	"\tkv_delete\x18\v \x01(\v2\x1d.dmcn.relay.MailboxKvDeleteOpH\x00R\bkvDelete\x126\n" +
+	"\akv_stat\x18\f \x01(\v2\x1b.dmcn.relay.MailboxKvStatOpH\x00R\x06kvStatB\x04\n" +
+	"\x02opJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eR\n" +
 	"get_filterR\n" +
-	"put_filterR\x06kv_putR\x06kv_getR\akv_listR\tkv_deleteR\akv_stat\"=\n" +
+	"put_filter\"=\n" +
 	"\rMailboxListOp\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\rR\x05limit\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\fR\x06cursor\"#\n" +
@@ -3267,7 +4043,44 @@ const file_relay_proto_rawDesc = "" +
 	"\bbody_tag\x18\f \x01(\fR\abodyTag\x12&\n" +
 	"\x0fbody_size_class\x18\r \x01(\rR\rbodySizeClass\x12&\n" +
 	"\x0fbody_total_size\x18\x0e \x01(\x04R\rbodyTotalSize\x120\n" +
-	"\x14body_content_address\x18\x10 \x01(\fR\x12bodyContentAddressJ\x04\b\x0f\x10\x10R\ahandoff*\xa4\x01\n" +
+	"\x14body_content_address\x18\x10 \x01(\fR\x12bodyContentAddressJ\x04\b\x0f\x10\x10R\ahandoff\"e\n" +
+	"\x0eMailboxKvPutOp\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
+	"\x06sealed\x18\x02 \x01(\fR\x06sealed\x12)\n" +
+	"\x10expected_version\x18\x03 \x01(\x04R\x0fexpectedVersion\"\"\n" +
+	"\x0eMailboxKvGetOp\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"o\n" +
+	"\x0fMailboxKvListOp\x12\x16\n" +
+	"\x06prefix\x18\x01 \x01(\tR\x06prefix\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\fR\x06cursor\x12\x16\n" +
+	"\x06values\x18\x04 \x01(\bR\x06values\"%\n" +
+	"\x11MailboxKvDeleteOp\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"\x11\n" +
+	"\x0fMailboxKvStatOp\"J\n" +
+	"\x14MailboxKvPutResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\"^\n" +
+	"\x14MailboxKvGetResponse\x12\x14\n" +
+	"\x05found\x18\x01 \x01(\bR\x05found\x12\x16\n" +
+	"\x06sealed\x18\x02 \x01(\fR\x06sealed\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x04R\aversion\"S\n" +
+	"\rMailboxKvItem\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
+	"\x06sealed\x18\x02 \x01(\fR\x06sealed\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x04R\aversion\"i\n" +
+	"\x15MailboxKvListResponse\x12/\n" +
+	"\x05items\x18\x01 \x03(\v2\x19.dmcn.relay.MailboxKvItemR\x05items\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\fR\n" +
+	"nextCursor\"3\n" +
+	"\x17MailboxKvDeleteResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"m\n" +
+	"\x15MailboxKvStatResponse\x12\x1d\n" +
+	"\n" +
+	"used_bytes\x18\x01 \x01(\x04R\tusedBytes\x12\x1f\n" +
+	"\vquota_bytes\x18\x02 \x01(\x04R\n" +
+	"quotaBytes\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x04R\x05count*\xa4\x01\n" +
 	"\n" +
 	"RecordKind\x12\x1b\n" +
 	"\x17RECORD_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
@@ -3290,7 +4103,7 @@ func file_relay_proto_rawDescGZIP() []byte {
 }
 
 var file_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_relay_proto_goTypes = []any{
 	(RecordKind)(0),                    // 0: dmcn.relay.RecordKind
 	(*RelayRequest)(nil),               // 1: dmcn.relay.RelayRequest
@@ -3336,8 +4149,19 @@ var file_relay_proto_goTypes = []any{
 	(*MailboxBodyHeader)(nil),          // 41: dmcn.relay.MailboxBodyHeader
 	(*MailboxDeleteResponse)(nil),      // 42: dmcn.relay.MailboxDeleteResponse
 	(*StoreInit)(nil),                  // 43: dmcn.relay.StoreInit
-	(*EncryptedEnvelope)(nil),          // 44: dmcn.message.EncryptedEnvelope
-	(*RecipientRecord)(nil),            // 45: dmcn.message.RecipientRecord
+	(*MailboxKvPutOp)(nil),             // 44: dmcn.relay.MailboxKvPutOp
+	(*MailboxKvGetOp)(nil),             // 45: dmcn.relay.MailboxKvGetOp
+	(*MailboxKvListOp)(nil),            // 46: dmcn.relay.MailboxKvListOp
+	(*MailboxKvDeleteOp)(nil),          // 47: dmcn.relay.MailboxKvDeleteOp
+	(*MailboxKvStatOp)(nil),            // 48: dmcn.relay.MailboxKvStatOp
+	(*MailboxKvPutResponse)(nil),       // 49: dmcn.relay.MailboxKvPutResponse
+	(*MailboxKvGetResponse)(nil),       // 50: dmcn.relay.MailboxKvGetResponse
+	(*MailboxKvItem)(nil),              // 51: dmcn.relay.MailboxKvItem
+	(*MailboxKvListResponse)(nil),      // 52: dmcn.relay.MailboxKvListResponse
+	(*MailboxKvDeleteResponse)(nil),    // 53: dmcn.relay.MailboxKvDeleteResponse
+	(*MailboxKvStatResponse)(nil),      // 54: dmcn.relay.MailboxKvStatResponse
+	(*EncryptedEnvelope)(nil),          // 55: dmcn.message.EncryptedEnvelope
+	(*RecipientRecord)(nil),            // 56: dmcn.message.RecipientRecord
 }
 var file_relay_proto_depIdxs = []int32{
 	7,  // 0: dmcn.relay.RelayRequest.store:type_name -> dmcn.relay.StoreRequest
@@ -3372,22 +4196,33 @@ var file_relay_proto_depIdxs = []int32{
 	26, // 29: dmcn.relay.RelayResponse.get_blocklist:type_name -> dmcn.relay.GetBlocklistResponse
 	28, // 30: dmcn.relay.RelayResponse.put_record:type_name -> dmcn.relay.PutRecordResponse
 	30, // 31: dmcn.relay.RelayResponse.get_relay_descriptor:type_name -> dmcn.relay.GetRelayDescriptorResponse
-	3,  // 32: dmcn.relay.OnionLayer.inner:type_name -> dmcn.relay.OnionPacket
-	3,  // 33: dmcn.relay.OnionForwardRequest.packet:type_name -> dmcn.relay.OnionPacket
-	44, // 34: dmcn.relay.StoreRequest.envelope:type_name -> dmcn.message.EncryptedEnvelope
-	44, // 35: dmcn.relay.FetchResponse.envelopes:type_name -> dmcn.message.EncryptedEnvelope
-	0,  // 36: dmcn.relay.PutRecordRequest.kind:type_name -> dmcn.relay.RecordKind
-	45, // 37: dmcn.relay.MailboxEntry.recipients:type_name -> dmcn.message.RecipientRecord
-	37, // 38: dmcn.relay.MailboxOp.list:type_name -> dmcn.relay.MailboxListOp
-	38, // 39: dmcn.relay.MailboxOp.body:type_name -> dmcn.relay.MailboxBodyOp
-	39, // 40: dmcn.relay.MailboxOp.delete:type_name -> dmcn.relay.MailboxDeleteOp
-	34, // 41: dmcn.relay.MailboxListResponse.entries:type_name -> dmcn.relay.MailboxEntry
-	45, // 42: dmcn.relay.StoreInit.recipients:type_name -> dmcn.message.RecipientRecord
-	43, // [43:43] is the sub-list for method output_type
-	43, // [43:43] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	49, // 32: dmcn.relay.RelayResponse.mailbox_kv_put:type_name -> dmcn.relay.MailboxKvPutResponse
+	50, // 33: dmcn.relay.RelayResponse.mailbox_kv_get:type_name -> dmcn.relay.MailboxKvGetResponse
+	52, // 34: dmcn.relay.RelayResponse.mailbox_kv_list:type_name -> dmcn.relay.MailboxKvListResponse
+	53, // 35: dmcn.relay.RelayResponse.mailbox_kv_delete:type_name -> dmcn.relay.MailboxKvDeleteResponse
+	54, // 36: dmcn.relay.RelayResponse.mailbox_kv_stat:type_name -> dmcn.relay.MailboxKvStatResponse
+	3,  // 37: dmcn.relay.OnionLayer.inner:type_name -> dmcn.relay.OnionPacket
+	3,  // 38: dmcn.relay.OnionForwardRequest.packet:type_name -> dmcn.relay.OnionPacket
+	55, // 39: dmcn.relay.StoreRequest.envelope:type_name -> dmcn.message.EncryptedEnvelope
+	55, // 40: dmcn.relay.FetchResponse.envelopes:type_name -> dmcn.message.EncryptedEnvelope
+	0,  // 41: dmcn.relay.PutRecordRequest.kind:type_name -> dmcn.relay.RecordKind
+	56, // 42: dmcn.relay.MailboxEntry.recipients:type_name -> dmcn.message.RecipientRecord
+	37, // 43: dmcn.relay.MailboxOp.list:type_name -> dmcn.relay.MailboxListOp
+	38, // 44: dmcn.relay.MailboxOp.body:type_name -> dmcn.relay.MailboxBodyOp
+	39, // 45: dmcn.relay.MailboxOp.delete:type_name -> dmcn.relay.MailboxDeleteOp
+	44, // 46: dmcn.relay.MailboxOp.kv_put:type_name -> dmcn.relay.MailboxKvPutOp
+	45, // 47: dmcn.relay.MailboxOp.kv_get:type_name -> dmcn.relay.MailboxKvGetOp
+	46, // 48: dmcn.relay.MailboxOp.kv_list:type_name -> dmcn.relay.MailboxKvListOp
+	47, // 49: dmcn.relay.MailboxOp.kv_delete:type_name -> dmcn.relay.MailboxKvDeleteOp
+	48, // 50: dmcn.relay.MailboxOp.kv_stat:type_name -> dmcn.relay.MailboxKvStatOp
+	34, // 51: dmcn.relay.MailboxListResponse.entries:type_name -> dmcn.relay.MailboxEntry
+	56, // 52: dmcn.relay.StoreInit.recipients:type_name -> dmcn.message.RecipientRecord
+	51, // 53: dmcn.relay.MailboxKvListResponse.items:type_name -> dmcn.relay.MailboxKvItem
+	54, // [54:54] is the sub-list for method output_type
+	54, // [54:54] is the sub-list for method input_type
+	54, // [54:54] is the sub-list for extension type_name
+	54, // [54:54] is the sub-list for extension extendee
+	0,  // [0:54] is the sub-list for field type_name
 }
 
 func init() { file_relay_proto_init() }
@@ -3431,11 +4266,21 @@ func file_relay_proto_init() {
 		(*RelayResponse_GetBlocklist)(nil),
 		(*RelayResponse_PutRecord)(nil),
 		(*RelayResponse_GetRelayDescriptor)(nil),
+		(*RelayResponse_MailboxKvPut)(nil),
+		(*RelayResponse_MailboxKvGet)(nil),
+		(*RelayResponse_MailboxKvList)(nil),
+		(*RelayResponse_MailboxKvDelete)(nil),
+		(*RelayResponse_MailboxKvStat)(nil),
 	}
 	file_relay_proto_msgTypes[35].OneofWrappers = []any{
 		(*MailboxOp_List)(nil),
 		(*MailboxOp_Body)(nil),
 		(*MailboxOp_Delete)(nil),
+		(*MailboxOp_KvPut)(nil),
+		(*MailboxOp_KvGet)(nil),
+		(*MailboxOp_KvList)(nil),
+		(*MailboxOp_KvDelete)(nil),
+		(*MailboxOp_KvStat)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3443,7 +4288,7 @@ func file_relay_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_relay_proto_rawDesc), len(file_relay_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   43,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -68,16 +68,22 @@ message RelayResponse {
     GetBlocklistResponse get_blocklist = 32;
     PutRecordResponse put_record = 33;
     GetRelayDescriptorResponse get_relay_descriptor = 34;
+    // --- Personal storage responses. ---
+    MailboxKvPutResponse mailbox_kv_put = 18;
+    MailboxKvGetResponse mailbox_kv_get = 19;
+    MailboxKvListResponse mailbox_kv_list = 20;
+    MailboxKvDeleteResponse mailbox_kv_delete = 21;
+    MailboxKvStatResponse mailbox_kv_stat = 22;
   }
 
-  // GRAVESTONE: arms 11-27 were the filter/KV/operator response arms (moved to the
+  // GRAVESTONE: arms 11-17 and 23-27 were filter/operator response arms (moved to the
   // product-side /dmcn/mailbox-ext and /dmcn/operate protocols in the open-core split);
-  // 35 was consume_send (removed pre-split); 36 was consume_send_inject. Do not reuse.
-  reserved 11 to 27, 35, 36;
+  // 35 was consume_send (removed pre-split); 36 was consume_send_inject. 18-22 were taken
+  // from this range for personal storage — see MailboxOp. Do not reuse the rest.
+  reserved 11 to 17, 23 to 27, 35, 36;
   reserved "mailbox_get_filter", "mailbox_put_filter", "stat", "set_drain",
-           "request_mailbox", "mailbox_handoff", "accounts", "mailbox_kv_put",
-           "mailbox_kv_get", "mailbox_kv_list", "mailbox_kv_delete", "mailbox_kv_inject",
-           "mailbox_kv_stat", "set_quota", "set_access", "get_access", "clear_access",
+           "request_mailbox", "mailbox_handoff", "accounts", "mailbox_kv_inject",
+           "set_quota", "set_access", "get_access", "clear_access",
            "consume_send_inject";
 }
 
@@ -309,14 +315,21 @@ message MailboxOp {
     MailboxListOp list = 3;
     MailboxBodyOp body = 4;
     MailboxDeleteOp delete = 5;
+    // Personal storage (see MailboxKv* below). These numbers come from the range this
+    // message reserved when the ops were moved out; the reservation is what makes adding
+    // them back safe. They are NOT the pre-split numbering, which is not recoverable — an
+    // implementation of the older layout is not wire-compatible and should not assume it is.
+    MailboxKvPutOp kv_put = 8;
+    MailboxKvGetOp kv_get = 9;
+    MailboxKvListOp kv_list = 10;
+    MailboxKvDeleteOp kv_delete = 11;
+    MailboxKvStatOp kv_stat = 12;
   }
 
-  // GRAVESTONE: fields 6-12 were the mail-filter and personal-KV ops (get_filter,
-  // put_filter, kv_put, kv_get, kv_list, kv_delete, kv_stat), moved to the product-side
-  // /dmcn/mailbox-ext/1.0.0 protocol in the open-core split; 13 was a consume_send
-  // variant removed earlier. Do not reuse.
-  reserved 6 to 13;
-  reserved "get_filter", "put_filter", "kv_put", "kv_get", "kv_list", "kv_delete", "kv_stat";
+  // GRAVESTONE: 6-7 were the mail-filter ops (get_filter, put_filter), which remain an
+  // operator surface; 13 was a consume_send variant removed earlier. Do not reuse.
+  reserved 6, 7, 13;
+  reserved "get_filter", "put_filter";
 }
 
 // MailboxListOp requests a page of header previews (non-consuming).
@@ -381,4 +394,94 @@ message StoreInit {
   // product-side /dmcn/operate/1.0.0 protocol in the open-core split. Do not reuse.
   reserved 15;
   reserved "handoff";
+}
+
+// --- Personal storage -------------------------------------------------------------------
+//
+// An owner-only, zero-knowledge namespaced key-value store on the mailbox holder's home relay.
+// The logical key is "<namespace>/<id>" (e.g. "flags/<messageHash>", "contacts/<id>",
+// "settings/app"); the relay treats it as an opaque string. Values are sealed to the OWNER
+// alone, so the relay only ever holds ciphertext it cannot read.
+//
+// This is in the core because the relay already stores a person's mail; storing sealed metadata
+// ABOUT that mail is the same trust posture, and without it every client is either single-device
+// or invents its own incompatible sync. It is the role IMAP plays alongside SMTP: the store and
+// the state that goes with it.
+//
+// A monotonic per-key version supports optional compare-and-swap, for singleton documents edited
+// on more than one device.
+
+// MailboxKvPutOp writes one blob. expected_version, when non-zero, requires the stored key to be
+// at exactly that version (compare-and-swap); a mismatch returns a CONFLICT error.
+// expected_version == 0 disables the check (unconditional write).
+message MailboxKvPutOp {
+  string key = 1;
+  bytes sealed = 2;             // sealed to the owner alone; opaque to the relay
+  uint64 expected_version = 3;  // 0 = unconditional; else CAS on the current version
+}
+
+// MailboxKvGetOp reads one blob by key.
+message MailboxKvGetOp {
+  string key = 1;
+}
+
+// MailboxKvListOp lists keys under a "<namespace>/" prefix, paged. When values is true each item
+// carries its sealed blob; otherwise only key+version.
+message MailboxKvListOp {
+  string prefix = 1;   // logical key prefix, e.g. "contacts/"
+  uint32 limit = 2;    // 0 = server default
+  bytes cursor = 3;    // empty = from the beginning; else a prior next_cursor
+  bool values = 4;     // include the sealed blob per item
+}
+
+// MailboxKvDeleteOp removes one blob by key (idempotent).
+message MailboxKvDeleteOp {
+  string key = 1;
+}
+
+// MailboxKvStatOp reports the authenticated owner's personal-storage occupancy — used bytes and
+// the cap that applies. No parameters: the challenge signature scopes it to the caller's own
+// storage.
+message MailboxKvStatOp {}
+
+// MailboxKvPutResponse confirms a write and returns the new version.
+message MailboxKvPutResponse {
+  bool success = 1;
+  uint64 version = 2;
+}
+
+// MailboxKvGetResponse returns one blob (found=false when the key is absent).
+message MailboxKvGetResponse {
+  bool found = 1;
+  bytes sealed = 2;
+  uint64 version = 3;
+}
+
+// MailboxKvItem is one entry in a KV LIST page.
+message MailboxKvItem {
+  string key = 1;
+  bytes sealed = 2;    // present only when the list op set values=true
+  uint64 version = 3;
+}
+
+// MailboxKvListResponse is a page of KV items plus a continuation cursor (empty when the
+// namespace has been fully listed).
+message MailboxKvListResponse {
+  repeated MailboxKvItem items = 1;
+  bytes next_cursor = 2;
+}
+
+// MailboxKvDeleteResponse confirms a delete.
+message MailboxKvDeleteResponse {
+  bool success = 1;
+}
+
+// MailboxKvStatResponse reports the owner's personal-storage usage. quota_bytes is the cap that
+// applies (0 = unbounded) and comes from the NODE's configuration — there is no entitlement or
+// credential plane in the core. used_bytes is what they currently store; count is the number of
+// blobs.
+message MailboxKvStatResponse {
+  uint64 used_bytes = 1;
+  uint64 quota_bytes = 2;
+  uint64 count = 3;
 }

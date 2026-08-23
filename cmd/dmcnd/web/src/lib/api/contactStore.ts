@@ -1,7 +1,10 @@
-// ContactStore backs the address book with the personal storage substrate: one
-// sealed record per contact under "contacts/<id>", synced across the owner's devices
-// (replacing the old device-local localStorage list). Per-record LWW — concurrent
-// edits to different contacts never collide.
+// ContactStore backs the address book with the personal storage substrate: one record per
+// contact under "contacts/<id>". Per-record LWW — concurrent edits to different contacts never
+// collide.
+//
+// Synced across the owner's devices: PersonalStore is backed by the relay's personal storage,
+// with each record sealed to the owner before it leaves the browser. On a relay that offers no
+// storage it falls back to device-local IndexedDB — see personalStore.ts.
 
 import { PersonalStore, type StorageEntry } from './personalStore';
 import type { WorkingKeys } from '../crypto/workingKeys';

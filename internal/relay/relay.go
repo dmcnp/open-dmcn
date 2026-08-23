@@ -19,12 +19,12 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/mailfilter"
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/peerpolicy"
-	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/registry"
 )
 
@@ -244,10 +244,10 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 		filterPub:      cfg.filterPub,
 		senderVerified: cfg.senderVerified,
 
-		personalKv:      cfg.personalKv,
-		storageQuota:    cfg.storageQuota,
-		replicates:      cfg.replicates,
-		records:         cfg.records,
+		personalKv:   cfg.personalKv,
+		storageQuota: cfg.storageQuota,
+		replicates:   cfg.replicates,
+		records:      cfg.records,
 	}
 	return r
 }
@@ -276,10 +276,10 @@ type relayOptions struct {
 	filterPub      [32]byte
 	senderVerified SenderVerifierFunc
 
-	personalKv      *PersistentKvStore
-	storageQuota    uint64
-	replicates      func(context.Context, string) bool
-	records         *RecordStore
+	personalKv   *PersistentKvStore
+	storageQuota uint64
+	replicates   func(context.Context, string) bool
+	records      *RecordStore
 }
 
 // WithMailboxFilter enables recipient mail filtering: filterStore yields each
@@ -901,7 +901,6 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 		}
 	}
 
-
 	// 2. Generate challenge nonce
 	nonce, err := crypto.RandomBytes(32)
 	if err != nil {
@@ -1052,8 +1051,172 @@ func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, ad
 			},
 		})
 
+	// --- Personal storage. Owner auth is the same FETCH challenge that guards the mail ops
+	// above, so these need no separate authentication: reaching here already proves control of
+	// the recipient identity, and every op is scoped to that owner's rxHex.
+	//
+	// The work lives on Relay (KvGet/KvPut/...) rather than here, because the daemon's webmail
+	// reaches the same operations in-process without opening a stream. One implementation, two
+	// transports — otherwise the quota check exists on one path and not the other.
+	case op.GetKvGet() != nil:
+		sealed, version, found, err := r.KvGet(ctx, rxHex, op.GetKvGet().Key)
+		if err != nil {
+			writeResponse(s, kvErrorResponse(r, address, "GET", err))
+			return
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{
+			Response: &dmcnpb.RelayResponse_MailboxKvGet{
+				MailboxKvGet: &dmcnpb.MailboxKvGetResponse{Found: found, Sealed: sealed, Version: version},
+			},
+		})
+
+	case op.GetKvPut() != nil:
+		put := op.GetKvPut()
+		version, err := r.KvPut(ctx, rxHex, put.Key, put.Sealed, put.ExpectedVersion)
+		if err != nil {
+			writeResponse(s, kvErrorResponse(r, address, "PUT", err))
+			return
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{
+			Response: &dmcnpb.RelayResponse_MailboxKvPut{
+				MailboxKvPut: &dmcnpb.MailboxKvPutResponse{Success: true, Version: version},
+			},
+		})
+
+	case op.GetKvList() != nil:
+		lo := op.GetKvList()
+		items, next, err := r.KvList(ctx, rxHex, lo.Prefix, int(lo.Limit), string(lo.Cursor), lo.Values)
+		if err != nil {
+			writeResponse(s, kvErrorResponse(r, address, "LIST", err))
+			return
+		}
+		out := make([]*dmcnpb.MailboxKvItem, 0, len(items))
+		for _, it := range items {
+			out = append(out, &dmcnpb.MailboxKvItem{Key: it.Key, Sealed: it.Sealed, Version: it.Version})
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{
+			Response: &dmcnpb.RelayResponse_MailboxKvList{
+				MailboxKvList: &dmcnpb.MailboxKvListResponse{Items: out, NextCursor: []byte(next)},
+			},
+		})
+
+	case op.GetKvDelete() != nil:
+		if err := r.KvDelete(ctx, rxHex, op.GetKvDelete().Key); err != nil {
+			writeResponse(s, kvErrorResponse(r, address, "DELETE", err))
+			return
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{
+			Response: &dmcnpb.RelayResponse_MailboxKvDelete{
+				MailboxKvDelete: &dmcnpb.MailboxKvDeleteResponse{Success: true},
+			},
+		})
+
+	case op.GetKvStat() != nil:
+		used, quota, count, err := r.KvStat(ctx, rxHex)
+		if err != nil {
+			writeResponse(s, kvErrorResponse(r, address, "STAT", err))
+			return
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{
+			Response: &dmcnpb.RelayResponse_MailboxKvStat{
+				MailboxKvStat: &dmcnpb.MailboxKvStatResponse{UsedBytes: used, QuotaBytes: quota, Count: count},
+			},
+		})
+
 	default:
 		writeResponse(s, errorResponse("INVALID_REQUEST", "unknown mailbox op"))
+	}
+}
+
+// ErrKvUnsupported is returned when this relay hosts no personal storage. A relay may serve mail
+// without it (no datastore, or a deliberately minimal node), and a client that sees it can fall
+// back to local-only state rather than treating the mailbox as broken.
+var ErrKvUnsupported = errors.New("relay: this relay does not host personal storage")
+
+// KvGet reads one of the owner's sealed blobs.
+func (r *Relay) KvGet(ctx context.Context, rxHex, key string) (sealed []byte, version uint64, found bool, err error) {
+	if r.personalKv == nil {
+		return nil, 0, false, ErrKvUnsupported
+	}
+	return r.personalKv.Get(ctx, rxHex, key)
+}
+
+// KvPut writes one sealed blob, enforcing the account's storage cap.
+//
+// The cap is the account's TOTAL — mail plus personal storage — the same figure the mail STORE
+// path enforces, so the two cannot be used to exceed it separately. Usage is measured before the
+// write and the new blob added to it, which over-counts an overwrite slightly; that is safe,
+// since it can only refuse sooner. The coupling is worth knowing: a full mailbox blocks personal
+// writes too, and the way out is deleting mail or KV entries.
+func (r *Relay) KvPut(ctx context.Context, rxHex, key string, sealed []byte, expectedVersion uint64) (uint64, error) {
+	if r.personalKv == nil {
+		return 0, ErrKvUnsupported
+	}
+	if quota := r.effectiveQuota(ctx, rxHex); quota > 0 {
+		used, err := r.accountUsedBytes(ctx, rxHex)
+		if err != nil {
+			return 0, fmt.Errorf("relay: personal kv quota check: %w", err)
+		}
+		if used+uint64(len(sealed)) > quota {
+			return 0, ErrQuotaExceeded
+		}
+	}
+	return r.personalKv.Put(ctx, rxHex, key, sealed, expectedVersion)
+}
+
+// KvList pages the owner's keys under a namespace prefix.
+func (r *Relay) KvList(ctx context.Context, rxHex, prefix string, limit int, cursor string, values bool) ([]KvItem, string, error) {
+	if r.personalKv == nil {
+		return nil, "", ErrKvUnsupported
+	}
+	return r.personalKv.List(ctx, rxHex, prefix, limit, cursor, values)
+}
+
+// KvDelete removes one blob. Idempotent, and a malformed key is treated as absent rather than an
+// error — a client deleting something that cannot exist has already got what it wanted.
+func (r *Relay) KvDelete(ctx context.Context, rxHex, key string) error {
+	if r.personalKv == nil {
+		return ErrKvUnsupported
+	}
+	if err := r.personalKv.Delete(ctx, rxHex, key); err != nil && !errors.Is(err, ErrKvBadKey) {
+		return err
+	}
+	return nil
+}
+
+// KvStat reports the owner's storage occupancy and the cap that applies.
+//
+// used is the COMBINED mail + personal figure the quota is actually enforced against, not the KV
+// half alone: a meter showing room while writes are refused is worse than no meter.
+func (r *Relay) KvStat(ctx context.Context, rxHex string) (used, quota, count uint64, err error) {
+	if r.personalKv == nil {
+		return 0, 0, 0, ErrKvUnsupported
+	}
+	count, _, err = r.personalKv.StatsOwner(ctx, rxHex)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if used, err = r.accountUsedBytes(ctx, rxHex); err != nil {
+		return 0, 0, 0, err
+	}
+	return used, r.effectiveQuota(ctx, rxHex), count, nil
+}
+
+// kvErrorResponse maps a KV error to a wire response, logging only the ones that indicate a
+// server-side problem — a bad key or a version conflict is the client's to handle.
+func kvErrorResponse(r *Relay, address, op string, err error) *dmcnpb.RelayResponse {
+	switch {
+	case errors.Is(err, ErrKvUnsupported):
+		return errorResponse("UNSUPPORTED", err.Error())
+	case errors.Is(err, ErrKvBadKey):
+		return errorResponse("INVALID_REQUEST", "invalid storage key")
+	case errors.Is(err, ErrKvConflict):
+		return errorResponse("CONFLICT", "storage version conflict")
+	case errors.Is(err, ErrQuotaExceeded):
+		return errorResponse("QUOTA_EXCEEDED", "personal storage quota exceeded")
+	default:
+		r.log.Errorf("personal KV %s failed for %s: %v", op, address, err)
+		return errorResponse("STORAGE_FAILED", "storage operation failed")
 	}
 }
 
@@ -1695,6 +1858,7 @@ func (r *Relay) ClientMailboxDeleteComplete(s network.Stream, nonce, signature [
 	}
 	return nil
 }
+
 // ClientStoreDurable stores a split envelope on a remote mailbox using chunked
 // transfer, so the message body may exceed the per-frame cap. The sender signs
 // the canonical envelope hash for spam control, exactly like the single-frame STORE.

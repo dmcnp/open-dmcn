@@ -1,24 +1,31 @@
-// PersonalStore is the browser-local store for the owner's per-account mail state:
-// Sent messages, read/unread + labels, contacts, and settings. Logical keys are
-// "<namespace>/<id>" — e.g. "sent/<messageIdHex>", "flags/<messageHash>",
-// "contacts/<id>", "settings/app"; list() takes a "<namespace>/" prefix.
+// PersonalStore holds the owner's per-account mail state: Sent messages, read/unread + labels,
+// contacts, and settings. Logical keys are "<namespace>/<id>" — e.g. "sent/<messageIdHex>",
+// "flags/<messageHash>", "contacts/<id>", "settings/app"; list() takes a "<namespace>/" prefix.
 //
-// In the DMCN PRODUCT this rode a zero-knowledge personal-KV substrate on the mailbox
-// relay (sealed to the owner, synced across devices). The OPEN protocol deliberately
-// does not carry that operator surface, so the reference client keeps this state in the
-// browser's IndexedDB ONLY — it is single-device and never leaves the machine. The public
-// interface (get/put/list/listKeys/delete/stat + StorageEntry/StorageUsage/CAS) is
-// unchanged, so the higher stores (sent/flags/labels/contacts/settings) are untouched.
+// It is backed by the personal-storage ops on the owner's home relay, so this state follows the
+// account between devices. Every value is SEALED TO THE OWNER in this browser before it is sent:
+// the relay stores ciphertext it has no key for, and the server this client talks to never sees
+// plaintext either. That is what makes it defensible to keep an address book on someone else's
+// machine at all.
 //
-// Storage is namespaced by the owner's address so multiple accounts in one browser never
-// collide (mirroring the product's per-account server namespacing). A per-key monotonic
-// version supports the same optional compare-and-swap the callers already use.
+// A relay is not obliged to offer storage. One that does not answers UNSUPPORTED, and this store
+// falls back to IndexedDB for the rest of the session — a minimal relay stays usable, at the cost
+// of that account's state being single-device. The fallback is per-instance and never silent in
+// the other direction: nothing is copied up automatically, because two devices that both went
+// local would each have a divergent set and picking a winner is not ours to do.
+//
+// A per-key monotonic version supports optional compare-and-swap for singleton documents edited
+// on more than one device.
 
 import { idbGet, idbGetAllKeys, idbPut, idbDelete, PERSONAL_STORE } from '../crypto/idb';
 import type { WorkingKeys } from '../crypto/workingKeys';
+import { sealToRecipients, openSealed, type SealedBlobJSON } from '../crypto/sealedBlob';
+import { signWithKey } from '../crypto/sign';
+import { toBase64, fromBase64 } from '../crypto/keys';
+import { postJSON, ApiError } from './client';
 
 // StorageUsage is the owner's personal-storage occupancy for the Settings meter.
-// quotaBytes === 0 means no cap (the browser's own storage limits apply, not a relay quota).
+// quotaBytes === 0 means no cap.
 export interface StorageUsage {
   usedBytes: number;
   quotaBytes: number;
@@ -41,85 +48,204 @@ export class StorageConflictError extends Error {
   }
 }
 
-// record is the physical shape stored in IndexedDB under the namespaced key.
+// record is the physical shape stored in IndexedDB by the local fallback.
 interface record<T> {
   value: T;
   version: number;
 }
 
+interface ChallengeResp { correlation_id: string; nonce: string }
+interface KvGetResp { found: boolean; sealed?: string; version: number }
+interface KvPutResp { version: number }
+interface KvItemResp { key: string; sealed?: string; version: number }
+interface KvListResp { items: KvItemResp[]; next_cursor?: string }
+interface KvStatResp { used_bytes: number; quota_bytes: number; count: number }
+
 export class PersonalStore {
-  // The owner address namespaces this account's keys within the shared per-origin store.
+  private keys: WorkingKeys;
+  // The owner address namespaces the LOCAL fallback's keys within the shared per-origin store.
+  // The relay namespaces by mailbox key on its side, so this is only for the fallback path.
   private owner: string;
+  // Set once a relay tells us it has no storage. Sticky for the instance so every subsequent
+  // call does not pay a failed round trip first.
+  private localOnly = false;
 
   constructor(keys: WorkingKeys) {
+    this.keys = keys;
     this.owner = keys.address;
   }
 
-  // ns maps a logical key ("sent/<id>") to its physical IndexedDB key, scoped to the owner.
+  // localOnlyMode reports whether this store fell back to device-local storage, so the UI can
+  // say so rather than leaving someone to discover it when a second device is empty.
+  get isLocalOnly(): boolean {
+    return this.localOnly;
+  }
+
   private ns(key: string): string {
     return this.owner + '::' + key;
   }
 
-  // get returns the parsed object + version for a key, or null if absent.
+  // --- transport ---------------------------------------------------------------------------
+
+  private async op<T>(req: Record<string, unknown>): Promise<T> {
+    const ch = await postJSON<ChallengeResp>('/api/v1/mailbox/challenge', req);
+    const signature = toBase64(await signWithKey(this.keys.ed25519Sign, fromBase64(ch.nonce)));
+    return postJSON<T>('/api/v1/mailbox/complete', {
+      correlation_id: ch.correlation_id,
+      signature,
+    });
+  }
+
+  // unsupported recognises the relay saying it hosts no storage, and latches the fallback.
+  private unsupported(err: unknown): boolean {
+    if (err instanceof ApiError && (err.code === 'storage_unsupported' || err.status === 501)) {
+      this.localOnly = true;
+      return true;
+    }
+    return false;
+  }
+
+  private async seal(obj: unknown): Promise<string> {
+    const plain = new TextEncoder().encode(JSON.stringify(obj));
+    const blob = await sealToRecipients(plain, [this.keys.x25519Public]);
+    return toBase64(new TextEncoder().encode(JSON.stringify(blob)));
+  }
+
+  private async unseal<T>(sealedB64: string): Promise<T> {
+    const blob = JSON.parse(new TextDecoder().decode(fromBase64(sealedB64))) as SealedBlobJSON;
+    const plain = await openSealed(blob, this.keys.x25519Derive, this.keys.x25519Public);
+    return JSON.parse(new TextDecoder().decode(plain)) as T;
+  }
+
+  // --- public interface (unchanged for callers) ---------------------------------------------
+
   async get<T>(key: string): Promise<StorageEntry<T> | null> {
+    if (!this.localOnly) {
+      try {
+        const res = await this.op<KvGetResp>({ op: 'kv_get', key });
+        if (!res.found || !res.sealed) return null;
+        return { key, value: await this.unseal<T>(res.sealed), version: res.version };
+      } catch (err) {
+        if (!this.unsupported(err)) throw err;
+      }
+    }
     const rec = await idbGet<record<T>>(PERSONAL_STORE, this.ns(key));
     if (!rec) return null;
     return { key, value: rec.value, version: rec.version };
   }
 
-  // put writes an object and returns the new version. When expectedVersion is provided
-  // (> 0) the write is a compare-and-swap: a mismatch throws StorageConflictError.
   async put(key: string, obj: unknown, expectedVersion = 0): Promise<number> {
-    const physKey = this.ns(key);
-    const cur = await idbGet<record<unknown>>(PERSONAL_STORE, physKey);
-    const curVersion = cur ? cur.version : 0;
-    if (expectedVersion > 0 && expectedVersion !== curVersion) {
+    if (!this.localOnly) {
+      try {
+        const res = await this.op<KvPutResp>({
+          op: 'kv_put', key, sealed: await this.seal(obj), expected_version: expectedVersion,
+        });
+        return res.version;
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'storage_conflict') {
+          throw new StorageConflictError();
+        }
+        if (!this.unsupported(err)) throw err;
+      }
+    }
+    const cur = await idbGet<record<unknown>>(PERSONAL_STORE, this.ns(key));
+    const version = (cur?.version ?? 0) + 1;
+    if (expectedVersion > 0 && (cur?.version ?? 0) !== expectedVersion) {
       throw new StorageConflictError();
     }
-    const version = curVersion + 1;
-    await idbPut(PERSONAL_STORE, physKey, { value: obj, version } satisfies record<unknown>);
+    await idbPut(PERSONAL_STORE, this.ns(key), { value: obj, version });
     return version;
   }
 
-  // list returns all entries under a namespace prefix (e.g. "sent/").
   async list<T>(prefix: string): Promise<StorageEntry<T>[]> {
-    const entries = await this.listInternal<T>(prefix, true);
-    return entries;
+    return this.listInternal<T>(prefix, true);
   }
 
-  // listKeys lists the keys under a prefix without loading values.
   async listKeys(prefix: string): Promise<{ key: string; version: number }[]> {
-    const entries = await this.listInternal<unknown>(prefix, false);
-    return entries.map(e => ({ key: e.key, version: e.version }));
+    return (await this.listInternal<never>(prefix, false)).map(e => ({ key: e.key, version: e.version }));
   }
 
   private async listInternal<T>(prefix: string, withValues: boolean): Promise<StorageEntry<T>[]> {
-    const physPrefix = this.ns(prefix);
+    if (!this.localOnly) {
+      try {
+        const out: StorageEntry<T>[] = [];
+        let cursor = '';
+        // Paged: a mailbox with a long history has more Sent entries than one page holds, and
+        // stopping at the first would silently truncate the folder.
+        for (;;) {
+          const res = await this.op<KvListResp>({
+            op: 'kv_list', prefix, values: withValues, cursor,
+          });
+          for (const it of res.items) {
+            if (!withValues) {
+              out.push({ key: it.key, value: undefined as T, version: it.version });
+              continue;
+            }
+            if (!it.sealed) continue;
+            try {
+              out.push({ key: it.key, value: await this.unseal<T>(it.sealed), version: it.version });
+            } catch {
+              // One unreadable blob must not take out the whole namespace — skip it and keep
+              // the rest of the address book, folder or flag set usable.
+            }
+          }
+          if (!res.next_cursor) break;
+          cursor = res.next_cursor;
+        }
+        return out;
+      } catch (err) {
+        if (!this.unsupported(err)) throw err;
+      }
+    }
     const keys = await idbGetAllKeys(PERSONAL_STORE);
+    const want = this.ns(prefix);
     const out: StorageEntry<T>[] = [];
-    for (const physKey of keys) {
-      if (!physKey.startsWith(physPrefix)) continue;
-      const logical = physKey.slice((this.owner + '::').length);
-      const rec = await idbGet<record<T>>(PERSONAL_STORE, physKey);
+    for (const k of keys) {
+      const physical = String(k);
+      if (!physical.startsWith(want)) continue;
+      const rec = await idbGet<record<T>>(PERSONAL_STORE, physical);
       if (!rec) continue;
-      out.push({ key: logical, value: withValues ? rec.value : (undefined as unknown as T), version: rec.version });
+      out.push({
+        key: physical.slice(this.owner.length + 2),
+        value: withValues ? rec.value : (undefined as T),
+        version: rec.version,
+      });
     }
     return out;
   }
 
   async delete(key: string): Promise<void> {
+    if (!this.localOnly) {
+      try {
+        await this.op<unknown>({ op: 'kv_delete', key });
+        return;
+      } catch (err) {
+        if (!this.unsupported(err)) throw err;
+      }
+    }
     await idbDelete(PERSONAL_STORE, this.ns(key));
   }
 
-  // stat reports this account's local personal-storage usage. quotaBytes is 0 (no relay
-  // quota applies to browser-local storage); usedBytes is an approximation from a JSON
-  // serialization of the stored values.
   async stat(): Promise<StorageUsage> {
-    const entries = await this.list<unknown>('');
-    let usedBytes = 0;
-    for (const e of entries) {
-      usedBytes += new TextEncoder().encode(JSON.stringify(e.value)).length;
+    if (!this.localOnly) {
+      try {
+        const res = await this.op<KvStatResp>({ op: 'kv_stat' });
+        return { usedBytes: res.used_bytes, quotaBytes: res.quota_bytes, count: res.count };
+      } catch (err) {
+        if (!this.unsupported(err)) throw err;
+      }
     }
-    return { usedBytes, quotaBytes: 0, count: entries.length };
+    const keys = await idbGetAllKeys(PERSONAL_STORE);
+    let usedBytes = 0;
+    let count = 0;
+    for (const k of keys) {
+      const physical = String(k);
+      if (!physical.startsWith(this.owner + '::')) continue;
+      const rec = await idbGet<record<unknown>>(PERSONAL_STORE, physical);
+      if (!rec) continue;
+      count++;
+      usedBytes += new TextEncoder().encode(JSON.stringify(rec.value)).length;
+    }
+    return { usedBytes, quotaBytes: 0, count };
   }
 }

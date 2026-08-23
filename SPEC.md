@@ -182,6 +182,36 @@ to its own bucket classes. A mailbox (`require_onion`) or domain (`PolicyRequire
 can require onion delivery, in which case relays reject direct STOREs with
 `ONION_REQUIRED`.
 
+## 6b. Personal storage
+
+A mailbox holder may keep per-account state on their home relay: contacts, sent messages,
+read/unread and labels, client settings. Logical keys are `"<namespace>/<id>"` and the relay
+treats them as opaque strings; `MailboxKvList` pages a `"<namespace>/"` prefix.
+
+**Values are sealed to the owner alone.** The relay stores ciphertext for which it holds no
+key — it can count bytes and serve blobs back, and that is all. This is the same posture as the
+mailbox itself, which is why it belongs here rather than in an operator extension: a relay that
+already holds someone's sealed mail is not made more trusted by also holding sealed metadata
+about it.
+
+Ops ride the same FETCH-authenticated `MailboxOp` stream as `list`/`body`/`delete`
+(`MailboxKvGet`, `MailboxKvPut`, `MailboxKvList`, `MailboxKvDelete`, `MailboxKvStat`), so
+control of the recipient identity is already proven and every op is scoped to that owner.
+
+A per-key monotonic version supports optional compare-and-swap: `expected_version` non-zero
+requires the stored key to be at exactly that version, and a mismatch returns `CONFLICT`. This
+is what lets a singleton document edited on two devices resolve rather than silently lose a write.
+
+Storage is **optional for a relay**. One that does not offer it answers `UNSUPPORTED`, and a
+client is expected to fall back to keeping the state locally — single-device, but working. A
+relay that does offer it applies its own byte cap per account, covering mail and personal storage
+together; `MailboxKvStat` reports the figure actually enforced. Per-account entitlements are an
+extension concern and are not part of the core (§8).
+
+Without this, every client either stays single-device or invents its own incompatible sync, which
+is the outcome an interoperable mail protocol exists to avoid. It is the role IMAP plays alongside
+SMTP: the store, and the state that belongs with it.
+
 ## 7. SMTP bridge (optional capability)
 
 An implementation may operate an SMTP↔DMCN bridge. A bridge is **infrastructure, not a

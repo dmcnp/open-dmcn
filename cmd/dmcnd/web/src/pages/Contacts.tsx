@@ -61,6 +61,7 @@ export function Contacts() {
             <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
               {q ? 'No contacts match your search.' : 'No contacts yet. Add someone to start an encrypted thread.'}
             </p>
+
           </div>
         ) : (
           <div style={{ maxWidth: 980, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 'var(--space-3)' }}>

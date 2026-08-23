@@ -65,6 +65,20 @@ setup has two halves.
 Put a proxy in front of it and watch the traffic: sealed envelopes, padded to fixed size
 classes, and a header you can list without touching a body.
 
+### What follows the account
+
+Your **mail** lives in the mailbox on the relay. So does the state that goes with it — contacts,
+Sent, read/unread, labels and settings — kept in the relay's personal storage. Sign in on a phone
+and both are there.
+
+Everything in that store is **sealed to you in the browser before it is sent**. The relay holds
+ciphertext it has no key for; it can count your bytes and hand the blobs back, and that is all.
+That is what makes it reasonable to keep an address book on a server at all, and it is the same
+posture as your mail, which the relay is already storing sealed.
+
+A relay is not obliged to offer storage — a minimal one can serve mail and nothing else. It says
+so, and the client keeps that state in the browser instead: single-device, still working.
+
 ## Point a real domain at it
 
 Two machines, and the split between them is the point.
