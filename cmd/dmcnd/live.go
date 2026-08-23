@@ -180,8 +180,16 @@ func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, c
 		DMCNDomain:    cfg.domain,
 		AuditLogPath:  os.Getenv("DMCND_BRIDGE_AUDIT_LOG"),
 	}
-	if err := applyBridgeModes(&bcfg, cfg, log); err != nil {
+	signer, err := applyBridgeModes(&bcfg, cfg, log)
+	if err != nil {
 		return nil, err
+	}
+	// Print the records an operator has to publish for outbound mail to be accepted anywhere.
+	// Only when actually sending: on the default stub deliverer nothing leaves the process, so
+	// this would be noise. DeliverabilityDNS existed in this tree with no caller at all, which
+	// meant the one thing a new bridge operator most needs was never shown to them.
+	if cfg.bridgeDelivery == "smtp" {
+		fmt.Fprint(os.Stderr, "\n"+bridge.DeliverabilityDNS(cfg.bridgeDomain, cfg.bridgeDKIMSel, signer, cfg.bridgeHELO, "")+"\n")
 	}
 	br, berr := bridge.New(ctx, n, bridgeKP, bcfg, log)
 	if berr != nil {

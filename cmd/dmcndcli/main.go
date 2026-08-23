@@ -12,6 +12,8 @@
 //	petition show    look up one mailbox petition by the code its petitioner gave you
 //	petition assign  assign an address to a petitioned key, signing with the offline root
 //	bridge issue     sign the credential that lets a node act as an SMTP bridge for the domain
+//	bridge dkim-keygen
+//	                 mint the outbound DKIM key and print the DNS records to publish
 //	remove-address   root-sign a tombstone freeing an address, so it can be bound to a new key
 //	peer-id          print the libp2p peer ID for an identity key
 //
@@ -100,6 +102,11 @@ Usage:
         no email address — recipients trust its SPF/DKIM/DMARC verdicts through this credential.
         Needs only the peer ID, so it runs offline: an Ed25519 peer ID contains its public key.
 
+  dmcndcli bridge dkim-keygen --domain <email-domain> [--selector dmcn] [--out dkim.pem]
+        Generate the DKIM signing key for outbound mail and print the SPF/DKIM/DMARC records to
+        publish. Without DKIM, mail from a new host is filtered almost everywhere — and a key
+        whose record is not published is worse still, since a failing signature beats none.
+
   dmcndcli remove-address --address <local@domain> --peers <multiaddr>[,...] [--pubkey <hex>] [--yes]
         Root-sign and publish a tombstone for an address's current key, freeing the address to be
         bound to a fresh one. This is the ONLY way to recover an address whose key was lost or
@@ -143,13 +150,15 @@ func dispatchDomain(args []string) error {
 // dispatchBridge routes the bridge sub-commands.
 func dispatchBridge(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("bridge needs a sub-command: issue")
+		return fmt.Errorf("bridge needs a sub-command: issue, dkim-keygen")
 	}
 	switch args[0] {
 	case "issue":
 		return cmdBridgeIssue(args[1:])
+	case "dkim-keygen":
+		return cmdDKIMKeygen(args[1:])
 	default:
-		return fmt.Errorf("unknown bridge sub-command %q (want issue)", args[0])
+		return fmt.Errorf("unknown bridge sub-command %q (want issue or dkim-keygen)", args[0])
 	}
 }
 

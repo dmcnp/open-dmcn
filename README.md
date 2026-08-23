@@ -79,6 +79,7 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_WEB_HOST` | `$DMCND_DOMAIN` | hostname the web client is served on and certificated for — set it to serve webmail at `mail.example.com` while addresses stay `user@example.com`. Never affects addresses |
 | `DMCND_LISTEN` | `:443` (`:8080` in dev) | webmail listen address — 443 because autocert's ACME challenge only works there; dev serves plain HTTP, so it defaults off an HTTPS-conventional port |
 | `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/7400` (ephemeral in dev) | libp2p listen multiaddr — this port goes into your published `seed=`, so it must be stable |
+| `DMCND_ANNOUNCE_ADDR` | detected | multiaddr(s) other domains should reach this node at, when the bound address is not the reachable one (a NAT'd cloud VM). Replaces detection; these go into every routing credential this node issues |
 | `DMCND_DATA_DIR` | `data` | mailbox/record store, sessions, node key, petition queue |
 | `DMCND_IDENTITY` | `<data-dir>/node.key` | persistent libp2p identity key — the peer ID is published in DNS, so it must survive restarts |
 | `DMCND_PETITION_TTL` | `24h` | how long an unclaimed mailbox petition survives |
@@ -96,7 +97,7 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_BRIDGE_AUDIT_LOG` | — | append-only JSON audit log path |
 | `DMCND_BRIDGE_AUTH_MODE` | `dns` | inbound verification: `dns` (real SPF/DKIM/DMARC) or `stub` (no checks — offline dev only) |
 | `DMCND_BRIDGE_DELIVERY_MODE` | `stub` | outbound: `smtp` (real MX lookup + STARTTLS) or `stub` (captured in memory, sends nothing) |
-| `DMCND_BRIDGE_DKIM_KEY` | — | PEM private key for outbound DKIM signing; without it outbound mail is unsigned and widely spam-filtered |
+| `DMCND_BRIDGE_DKIM_KEY` | — | PEM private key for outbound DKIM signing (`dmcndcli bridge dkim-keygen`); without it outbound mail is unsigned and widely spam-filtered |
 | `DMCND_BRIDGE_DKIM_SELECTOR` | `dmcn` | DKIM selector (the `<selector>._domainkey` label) |
 | `DMCND_BRIDGE_HELO` | OS hostname | EHLO name announced to remote MTAs |
 
@@ -147,6 +148,10 @@ dmcndcli domain dns --domain mesh.example \
 # band; that contact IS the authorization. They do not choose their address — you do.
 dmcndcli petition assign --code 0428-9173-5560 --address alice@mesh.example \
   --url https://mesh.example --keystore root.enc
+
+# Generate the outbound DKIM key and print the SPF/DKIM/DMARC records to publish. Touches no
+# network and no domain root — this is the bridge's key, not the domain's.
+dmcndcli bridge dkim-keygen --domain mesh.example --out dkim.pem
 
 # Free an address whose key was lost, compromised or squatted, so it can be bound again.
 # Root-only, and the ONLY recovery path: the daemon refuses any record that re-binds a live

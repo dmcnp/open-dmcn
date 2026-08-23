@@ -190,7 +190,8 @@ func DeliverabilityDNS(bridgeDomain, selector string, signer *DKIMSigner, helo, 
 			fmt.Fprintf(&b, "  %s._domainkey.%s.\tIN TXT\t%s\n\n", selector, bridgeDomain, txtChunks(val))
 		}
 	} else {
-		fmt.Fprintf(&b, "  ; DKIM — no signing key loaded; run `dmcn-bridge dkim-keygen --domain %s` and pass --dkim-key\n\n", bridgeDomain)
+		fmt.Fprintf(&b, "  ; DKIM — no signing key loaded; run `dmcndcli bridge dkim-keygen --domain %s`\n"+
+			"  ;   and set DMCND_BRIDGE_DKIM_KEY to the file it writes\n\n", bridgeDomain)
 	}
 
 	fmt.Fprintf(&b, "  ; DMARC — start at quarantine, tighten to p=reject once SPF+DKIM verify\n")

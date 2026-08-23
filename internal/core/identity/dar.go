@@ -42,7 +42,7 @@ const (
 )
 
 // DefaultReservedLocalParts is the reserved set written into a NEW domain's DAR at genesis
-// (`dmcn-node domain register`). It is ONLY a seed — after creation the domain owner fully owns
+// (`dmcndcli domain init`). It is ONLY a seed — after creation the domain owner fully owns
 // the list (DomainAuthorityRecord.ReservedLocalParts) and may add or remove any of these. It is
 // NOT consulted at enforcement time (no hardcoded floor): an empty list means nothing reserved.
 var DefaultReservedLocalParts = []string{

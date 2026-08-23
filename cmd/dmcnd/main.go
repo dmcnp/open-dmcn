@@ -83,6 +83,7 @@ func main() {
 	// ClientOnly+Mailbox and only arms the onion key for serving nodes).
 	nodeCfg := node.Config{
 		ListenAddr:      cfg.nodeListen,
+		AnnounceAddrs:   cfg.announceAddrs,
 		IdentityKeyPath: cfg.identityKeyPath,
 		DataDir:         cfg.dataDir,
 		Mailbox:         true,
@@ -364,7 +365,10 @@ type config struct {
 	// defaults to domain, and differs when an operator wants addresses at the apex
 	// (user@example.com) but the client on a subdomain (mail.example.com) — the ordinary email
 	// arrangement. It never affects addresses, which always come from domain.
-	webHost         string
+	webHost string
+	// announceAddrs overrides the multiaddrs this node tells other domains to reach it at,
+	// for a host whose public address is not on any local interface (a NAT'd cloud VM).
+	announceAddrs   []string
 	dataDir         string
 	identityKeyPath string
 	tlsCert         string
@@ -401,6 +405,7 @@ func loadConfig() config {
 		nodeListen:       envOr("DMCND_NODE_LISTEN", defaultNodeListen(devMode)),
 		domain:           envOr("DMCND_DOMAIN", "localhost"),
 		webHost:          os.Getenv("DMCND_WEB_HOST"),
+		announceAddrs:    splitList(os.Getenv("DMCND_ANNOUNCE_ADDR")),
 		dataDir:          envOr("DMCND_DATA_DIR", "data"),
 		identityKeyPath:  identityKeyPath(envOr("DMCND_DATA_DIR", "data")),
 		tlsCert:          os.Getenv("DMCND_TLS_CERT"),
@@ -491,7 +496,7 @@ func fatalf(format string, args ...any) {
 // Defaults are chosen so the honest claim is also the default one: inbound verification is REAL
 // (it only costs DNS lookups when mail actually arrives), while outbound delivery stays in-memory
 // until the operator opts in, so installing the daemon never starts sending live mail.
-func applyBridgeModes(bcfg *bridge.Config, cfg config, log logr.Logger) error {
+func applyBridgeModes(bcfg *bridge.Config, cfg config, log logr.Logger) (*bridge.DKIMSigner, error) {
 	switch cfg.bridgeAuthMode {
 	case "dns":
 		bcfg.AuthVerifier = bridge.NewDNSAuthVerifier()
@@ -499,23 +504,25 @@ func applyBridgeModes(bcfg *bridge.Config, cfg config, log logr.Logger) error {
 	case "stub":
 		log.Warnf("INSECURE: DMCND_BRIDGE_AUTH_MODE=stub — inbound SPF/DKIM/DMARC verification is DISABLED and the signed verdict attached to bridged mail is meaningless (dev only)")
 	default:
-		return fmt.Errorf("invalid DMCND_BRIDGE_AUTH_MODE %q (want \"dns\" or \"stub\")", cfg.bridgeAuthMode)
+		return nil, fmt.Errorf("invalid DMCND_BRIDGE_AUTH_MODE %q (want \"dns\" or \"stub\")", cfg.bridgeAuthMode)
 	}
 
+	// Declared out here so the caller can report the DNS records this key implies.
+	var signer *bridge.DKIMSigner
 	switch cfg.bridgeDelivery {
 	case "smtp":
-		var signer *bridge.DKIMSigner
 		if cfg.bridgeDKIMKey != "" {
 			key, err := bridge.LoadDKIMKey(cfg.bridgeDKIMKey)
 			if err != nil {
-				return fmt.Errorf("load DMCND_BRIDGE_DKIM_KEY: %w", err)
+				return nil, fmt.Errorf("load DMCND_BRIDGE_DKIM_KEY: %w", err)
 			}
 			if signer, err = bridge.NewDKIMSigner(cfg.bridgeDomain, cfg.bridgeDKIMSel, key); err != nil {
-				return err
+				return nil, err
 			}
 			log.Infof("outbound DKIM signing enabled (d=%s s=%s)", cfg.bridgeDomain, cfg.bridgeDKIMSel)
 		} else {
-			log.Warnf("outbound DKIM signing DISABLED (no DMCND_BRIDGE_DKIM_KEY) — receivers will very likely treat this mail as spam")
+			log.Warnf("outbound DKIM signing DISABLED (no DMCND_BRIDGE_DKIM_KEY) — receivers will very " +
+				"likely treat this mail as spam. Generate one with `dmcndcli bridge dkim-keygen`")
 		}
 		bcfg.Deliverer = bridge.NewSMTPSender(bridge.SMTPSenderConfig{
 			HELOName: cfg.bridgeHELO,
@@ -526,9 +533,9 @@ func applyBridgeModes(bcfg *bridge.Config, cfg config, log logr.Logger) error {
 		// Leave Deliverer nil so bridge.New installs the in-memory stub.
 		log.Warnf("bridge outbound delivery: stub — DMCN→SMTP mail is captured in memory, NOT sent (set DMCND_BRIDGE_DELIVERY_MODE=smtp to send for real)")
 	default:
-		return fmt.Errorf("invalid DMCND_BRIDGE_DELIVERY_MODE %q (want \"smtp\" or \"stub\")", cfg.bridgeDelivery)
+		return nil, fmt.Errorf("invalid DMCND_BRIDGE_DELIVERY_MODE %q (want \"smtp\" or \"stub\")", cfg.bridgeDelivery)
 	}
-	return nil
+	return signer, nil
 }
 
 // listenURLHost turns a listen address into something pasteable into a browser: a bare

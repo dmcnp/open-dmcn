@@ -18,7 +18,7 @@ func modeLogger() logr.Logger { return logr.With(logr.M("component", "test")) }
 func TestApplyBridgeModesDefaults(t *testing.T) {
 	var bcfg bridge.Config
 	cfg := config{bridgeAuthMode: "dns", bridgeDelivery: "stub"}
-	if err := applyBridgeModes(&bcfg, cfg, modeLogger()); err != nil {
+	if _, err := applyBridgeModes(&bcfg, cfg, modeLogger()); err != nil {
 		t.Fatalf("defaults rejected: %v", err)
 	}
 	// Inbound verification must be REAL by default — the signed verdict the recipient's client
@@ -39,7 +39,7 @@ func TestApplyBridgeModesOptIns(t *testing.T) {
 	t.Run("auth stub is available but explicit", func(t *testing.T) {
 		var bcfg bridge.Config
 		cfg := config{bridgeAuthMode: "stub", bridgeDelivery: "stub"}
-		if err := applyBridgeModes(&bcfg, cfg, modeLogger()); err != nil {
+		if _, err := applyBridgeModes(&bcfg, cfg, modeLogger()); err != nil {
 			t.Fatal(err)
 		}
 		if bcfg.AuthVerifier != nil {
@@ -50,7 +50,7 @@ func TestApplyBridgeModesOptIns(t *testing.T) {
 	t.Run("real outbound delivery is reachable", func(t *testing.T) {
 		var bcfg bridge.Config
 		cfg := config{bridgeAuthMode: "dns", bridgeDelivery: "smtp", bridgeDomain: "mesh.example"}
-		if err := applyBridgeModes(&bcfg, cfg, modeLogger()); err != nil {
+		if _, err := applyBridgeModes(&bcfg, cfg, modeLogger()); err != nil {
 			t.Fatal(err)
 		}
 		if _, ok := bcfg.Deliverer.(*bridge.SMTPSender); !ok {
@@ -64,7 +64,7 @@ func TestApplyBridgeModesOptIns(t *testing.T) {
 			{bridgeAuthMode: "dns", bridgeDelivery: "send"},
 		} {
 			var bcfg bridge.Config
-			err := applyBridgeModes(&bcfg, c, modeLogger())
+			_, err := applyBridgeModes(&bcfg, c, modeLogger())
 			if err == nil {
 				t.Fatalf("config %+v accepted", c)
 			}

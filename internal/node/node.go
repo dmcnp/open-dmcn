@@ -34,7 +34,19 @@ import (
 
 // Config holds configuration for a DMCN node.
 type Config struct {
-	ListenAddr           string   // multiaddr string, e.g. "/ip4/0.0.0.0/tcp/7400"
+	ListenAddr string // multiaddr string, e.g. "/ip4/0.0.0.0/tcp/7400"
+	// AnnounceAddrs replaces the addresses this node advertises to others, when the address it
+	// binds is not the address it is reachable at. That is the normal case behind NAT — a cloud
+	// VM with a NAT'd public IP binds a private one — and it matters more than it looks: these
+	// addresses are written into the RelayHints of every record this node provisions and into
+	// its relay descriptor, so a node advertising 10.x tells other domains to deliver mail
+	// somewhere they cannot reach, and nothing local ever notices.
+	//
+	// Set, these REPLACE the detected set rather than adding to it. A private address left in
+	// the list is not harmless: a sender tries the hints it is given and waits for each to time
+	// out. Empty (the default) keeps libp2p's own detection, which is right when the public
+	// address is on an interface.
+	AnnounceAddrs        []string
 	Peers                []string // multiaddr strings of infra peers: DHT entry points + cluster discovery seeds
 	KeystorePath         string   // path to encrypted keystore file
 	Passphrase           string   // passphrase for keystore encryption
@@ -185,6 +197,7 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 
 	opts := []libp2p.Option{
 		libp2p.ListenAddrs(listenAddr),
+		libp2p.AddrsFactory(announceFactory(cfg.AnnounceAddrs)),
 		// Disable TCP reuseport. By default libp2p dials out from its listen port
 		// (e.g. 7400); some VPS networks silently drop those packets (the SYN-ACK
 		// never returns → i/o timeout) while ephemeral-source dials succeed, which
@@ -337,11 +350,11 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		}
 		relayOpts = append(relayOpts, relay.WithAccountStore(accStore))
 
-			// NOTE (open-dmcn): the per-account quota and access-assertion stores are
-			// omitted. Per-account entitlements (storage grants, suspend/close assertions)
-			// are an operator concern outside the core protocol — see SPEC.md §8. A
-			// self-hosting operator sets one node-wide cap via WithStorageQuota and is its
-			// own authority over the accounts it serves; there is nobody to sell an upgrade to.
+		// NOTE (open-dmcn): the per-account quota and access-assertion stores are
+		// omitted. Per-account entitlements (storage grants, suspend/close assertions)
+		// are an operator concern outside the core protocol — see SPEC.md §8. A
+		// self-hosting operator sets one node-wide cap via WithStorageQuota and is its
+		// own authority over the accounts it serves; there is nobody to sell an upgrade to.
 
 		// NOTE (open-dmcn): the per-account OUTBOUND send-counter store is omitted — the ops
 		// that fed it (the operate.go ConsumeSendInject + the bridge send-cap) are extension
@@ -768,4 +781,30 @@ func (n *Node) Close() error {
 		n.datastore.Close()
 	}
 	return nil
+}
+
+// announceFactory builds the libp2p AddrsFactory implementing Config.AnnounceAddrs: identity when
+// none are configured, otherwise the configured set regardless of what was detected.
+//
+// An unparseable entry is dropped rather than fatal, and if that leaves nothing the detected
+// addresses stand — announcing no address at all would make the node undiscoverable, which is a
+// worse outcome than announcing an imperfect one.
+func announceFactory(announce []string) func([]multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	var fixed []multiaddr.Multiaddr
+	for _, a := range announce {
+		if a = strings.TrimSpace(a); a == "" {
+			continue
+		}
+		ma, err := multiaddr.NewMultiaddr(a)
+		if err != nil {
+			continue
+		}
+		fixed = append(fixed, ma)
+	}
+	return func(detected []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+		if len(fixed) == 0 {
+			return detected
+		}
+		return fixed
+	}
 }

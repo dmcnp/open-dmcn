@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
@@ -203,21 +203,21 @@ export function Petition() {
   }, [method, passphrase, navigate, setKeys, setSession]);
 
   // --- step 2: wait ------------------------------------------------------------------------
-  const claimRef = useRef(claim);
-  claimRef.current = claim;
   useEffect(() => {
-    if (!pending || claiming) return;
+    // Stop once assigned: there is nothing further to learn, and the claim is now waiting on the
+    // person rather than on the admin.
+    if (!pending || claiming || assigned) return;
     let stop = false;
     const tick = async () => {
       try {
         const s = await petitionStatus(pending.code);
         if (stop) return;
         if (s.status === 'assigned' && s.address) {
+          // Show it and stop. Deliberately NOT claiming here: claiming unlocks the keystore, and
+          // for a passkey that means a WebAuthn prompt. Firing one from a timer gives the person
+          // an authentication dialog with no explanation of what approved or why — and browsers
+          // increasingly require a user gesture for it, so on Safari it does not work at all.
           setAssigned(s.address);
-          // A passphrase-protected keystore needs the passphrase to unlock, and it is only in
-          // memory during the visit that created it. On a resumed visit, ask rather than fail.
-          if (method === 'passphrase' && !passphrase) return;
-          await claimRef.current(pending, s.address);
         }
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -230,7 +230,7 @@ export function Petition() {
     void tick();
     const id = setInterval(tick, 5000);
     return () => { stop = true; clearInterval(id); };
-  }, [pending, claiming, method, passphrase]);
+  }, [pending, claiming, assigned]);
 
   const copyCode = async () => {
     if (!pending) return;
@@ -243,12 +243,64 @@ export function Petition() {
 
   // ------------------------------------------------------------------------- waiting screen
   if (pending) {
-    const needsPassphrase = assigned && method === 'passphrase' && !passphrase;
+    // Assigned: the admin has acted, and the person needs to know that before anything asks them
+    // to authenticate. One explicit action from here, which also gives the passkey prompt the user
+    // gesture browsers want.
+    if (assigned) {
+      return (
+        <AuthShell
+          title="Your mailbox is ready"
+          subtitle={`${assigned} was assigned to you`}
+          footer={<>Not what you expected? <a href="#" style={linkStyle} onClick={async e => { e.preventDefault(); await clearPending(pending); setPending(null); setAssigned(''); }}>Cancel and start over</a></>}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+              padding: 'var(--space-4)', background: 'var(--surface-sunken)',
+              border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)',
+            }}>
+              <Icon name="shield-check" size={20} style={{ flex: 'none', color: 'var(--success)' }} />
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, color: 'var(--text-strong)' }}>{assigned}</div>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>Approved by your administrator</div>
+              </div>
+            </div>
+
+            <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
+              {method === 'passkey'
+                ? 'Unlock with your passkey to finish setting up and open your mailbox.'
+                : 'Enter the passphrase you chose when you made this request, to unlock your keys and finish.'}
+            </p>
+
+            {method === 'passphrase' && (
+              <Input label="Passphrase" type="password" value={passphrase} onChange={e => setPassphrase(e.target.value)} />
+            )}
+
+            {error && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>
+                <Icon name="alert-triangle" size={15} style={{ marginTop: 1, flex: 'none' }} /><span>{error}</span>
+              </div>
+            )}
+
+            <Button
+              size="lg"
+              fullWidth
+              disabled={claiming || (method === 'passphrase' && !passphrase)}
+              onClick={() => claim(pending, assigned)}
+            >
+              {claiming ? 'Setting up…' : 'Open my mailbox'}
+            </Button>
+          </div>
+        </AuthShell>
+      );
+    }
+
+    // Still waiting on the admin.
     return (
       <AuthShell
-        title={assigned ? 'Your mailbox is ready' : 'Give this code to your administrator'}
-        subtitle={assigned ? assigned : `They will use it to set up your mailbox on ${domain}`}
-        footer={<>Changed your mind? <a href="#" style={linkStyle} onClick={async e => { e.preventDefault(); await clearPending(pending); setPending(null); setAssigned(''); }}>Cancel this request</a></>}
+        title="Give this code to your administrator"
+        subtitle={`They will use it to set up your mailbox on ${domain}`}
+        footer={<>Changed your mind? <a href="#" style={linkStyle} onClick={async e => { e.preventDefault(); await clearPending(pending); setPending(null); }}>Cancel this request</a></>}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <div style={{
@@ -262,41 +314,19 @@ export function Petition() {
             {copied ? 'Copied' : 'Copy code'}
           </Button>
 
-          {needsPassphrase ? (
-            <>
-              <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
-                Enter the passphrase you chose when you made this request, to unlock your keys and finish.
-              </p>
-              <Input
-                label="Passphrase"
-                type="password"
-                value={passphrase}
-                onChange={e => setPassphrase(e.target.value)}
-              />
-              <Button size="lg" fullWidth disabled={!passphrase || claiming} onClick={() => claim(pending, assigned)}>
-                {claiming ? 'Setting up…' : 'Open my mailbox'}
-              </Button>
-            </>
-          ) : assigned ? (
-            <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', textAlign: 'center' }}>
-              Setting up your mailbox…
-            </p>
-          ) : (
-            <>
-              <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
-                Read this code to your administrator however you normally reach them. They pick your
-                address — you do not choose it here, and nothing is created until they act.
-              </p>
-              <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                This page checks for you. You can close it and come back on this device
-                {pending.expiresAt ? ` — the request expires ${new Date(pending.expiresAt).toLocaleString()}` : ''}.
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-subtle)', fontSize: 'var(--text-sm)' }}>
-                <Icon name="lock" size={14} style={{ flex: 'none' }} />
-                <span>Your keys were made in this browser and stay here. Only the public half was sent.</span>
-              </div>
-            </>
-          )}
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
+            Read this code to your administrator however you normally reach them. They pick your
+            address — you do not choose it here, and nothing is created until they act.
+          </p>
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            This page checks every few seconds and will tell you as soon as it is approved. You can
+            close it and come back on this device
+            {pending.expiresAt ? ` — the request expires ${new Date(pending.expiresAt).toLocaleString()}` : ''}.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-subtle)', fontSize: 'var(--text-sm)' }}>
+            <Icon name="lock" size={14} style={{ flex: 'none' }} />
+            <span>Your keys were made in this browser and stay here. Only the public half was sent.</span>
+          </div>
 
           {error && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>

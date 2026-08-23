@@ -178,6 +178,14 @@ Lose it and no address on the domain can ever be issued or rotated again. There 
 path except publishing a new `fp=` and having every correspondent re-verify you, and nobody can
 re-issue it for you.
 
+**If the node is behind NAT.** A cloud VM whose public IP is NAT'd rather than on an interface
+binds a private address, and libp2p can only see what it binds — so the node would advertise
+`10.x` to the world. That address is written into the RelayHints of every mailbox it provisions,
+so other domains would be told to deliver your mail somewhere unreachable, and nothing local would
+notice. Set `DMCND_ANNOUNCE_ADDR=/ip4/<public-ip>/tcp/7400` and it advertises that instead. To
+check: after assigning yourself a mailbox, look at the `relay_hints` on your published record — if
+they are private addresses, this is why.
+
 **Serving the client on a subdomain.** Addresses come from `DMCND_DOMAIN`, but the client does not
 have to be served there. Set `DMCND_WEB_HOST=mail.example.com` and webmail is served — and
 certificated — on that name while addresses stay `user@example.com`, the arrangement ordinary email
@@ -250,6 +258,7 @@ Everything is environment-driven. These are the ones you'll actually touch:
 | `DMCND_WEB_HOST` | `$DMCND_DOMAIN` | hostname the web client is served on, if not the domain itself |
 | `DMCND_LISTEN` | `:443` (`:8080` in dev) | webmail listen address |
 | `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/7400` (ephemeral in dev) | libp2p listen address — the port in your published `seed=` |
+| `DMCND_ANNOUNCE_ADDR` | detected | where other domains should reach this node, if that is not the address it binds (NAT) |
 | `DMCND_DATA_DIR` | `data` | mailboxes, records, the node key |
 | `DMCND_IDENTITY` | `<data-dir>/node.key` | libp2p identity — keeps the peer ID stable across restarts |
 | `DMCND_PETITION_TTL` | `24h` | how long an unclaimed mailbox petition survives |
@@ -308,12 +317,30 @@ relay only ever holds sealed envelopes, but a bridge decrypts outbound mail in o
 SMTP, so whoever answers a `bridge=` token reads the plaintext. Poisoning your DNS is not enough to
 become that peer.
 
-Actually sending is still opt-in and off by default:
+Actually sending is still opt-in and off by default, and wants a DKIM key. Generate one and
+publish what it prints — the command outputs the whole SPF/DKIM/DMARC set:
+
+```bash
+dmcndcli bridge dkim-keygen --domain mesh.example --out dkim.pem
+```
+
+```
+  ; DKIM — public key for selector "dmcn" (split into 255-byte strings)
+  dmcn._domainkey.mesh.example.  IN TXT  "v=DKIM1; k=rsa; p=MIIBIjANBg…"
+  ; SPF, DMARC and the PTR guidance are printed alongside it.
+```
+
+Then:
 
 ```bash
 DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_CREDENTIAL=bridge.cred \
   DMCND_BRIDGE_DELIVERY_MODE=smtp DMCND_BRIDGE_DKIM_KEY=dkim.pem dmcnd
 ```
+
+The daemon reprints the same records on startup whenever it is actually sending, so you can check
+what you published against what it is signing with. **Publish before you send.** A key whose
+selector does not resolve is worse than no key at all: a DKIM signature that fails to verify reads
+as forgery, where an absent one merely reads as unauthenticated.
 
 Without `DMCND_BRIDGE_DELIVERY_MODE=smtp` the bridge accepts and translates outbound mail but
 captures it in memory instead of sending it, so installing the daemon never starts emitting live
