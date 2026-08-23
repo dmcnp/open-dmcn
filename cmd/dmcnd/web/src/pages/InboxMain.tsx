@@ -177,8 +177,15 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
       }}
     >
       <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: unread ? 'var(--brand)' : 'transparent' }} />
-      {/* The kind glyph sits with the NAME, not the subject: it is a fact about the
-          person, and putting it here keeps the subject column a single readable run. */}
+      {/* The star lives here, always rendered in both states: it gives the row a
+          constant height (an icon button is taller than the text line), so hovering
+          reveals actions without the row growing or the columns shifting. */}
+      <IconButton size="sm" aria-label={starred ? 'Unstar' : 'Star'} onClick={e => { e.stopPropagation(); onToggleStar(); }}>
+        <Icon name={starred ? 'star-fill' : 'star'} size={16} style={starred ? { color: 'var(--warning)' } : undefined} />
+      </IconButton>
+      {/* The kind icon describes the PERSON, so it sits with their name; the star
+          describes the message but lives in the left rail with it (where mail clients
+          put it) rather than floating in the middle of the subject text. */}
       <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
         <KindIcon kind={kind} size={14} />
         <span title={sent ? recipientList.join(', ') : whoAddress} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -196,23 +203,18 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
           </span>
         )}
       </div>
-      <div style={{ flex: 'none', width: 132, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
-        {/* Star is always actionable (filled when starred); archive + delete appear on hover. */}
-        {(starred || hovered) && (
-          <IconButton size="sm" aria-label={starred ? 'Unstar' : 'Star'} onClick={e => { e.stopPropagation(); onToggleStar(); }}>
-            <Icon name={starred ? 'star-fill' : 'star'} size={16} style={starred ? { color: 'var(--warning)' } : undefined} />
-          </IconButton>
-        )}
-        {hovered ? (
-          <>
-            {!sent && (
-              <IconButton size="sm" aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={e => { e.stopPropagation(); onArchive(); }}><Icon name="archive" size={16} /></IconButton>
-            )}
-            <IconButton size="sm" aria-label="Delete" onClick={e => { e.stopPropagation(); onDelete(); }}><Icon name="trash" size={16} /></IconButton>
-          </>
-        ) : (
-          !starred && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{formatWhen(msg.sentAt)}</span>
-        )}
+      <div style={{ flex: 'none', width: 140, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)' }}>
+        {/* The date never moves or disappears, and the hover actions keep their slot
+            when hidden (visibility, not unmounting) — so hovering changes colours,
+            never geometry. Swapping the date OUT for buttons was what made every row
+            resize as the pointer crossed it. */}
+        <span style={{ flex: 1, textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatWhen(msg.sentAt)}</span>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, visibility: hovered ? 'visible' : 'hidden' }}>
+          {!sent && (
+            <IconButton size="sm" aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={e => { e.stopPropagation(); onArchive(); }}><Icon name="archive" size={16} /></IconButton>
+          )}
+          <IconButton size="sm" aria-label="Delete" onClick={e => { e.stopPropagation(); onDelete(); }}><Icon name="trash" size={16} /></IconButton>
+        </div>
       </div>
     </div>
   );

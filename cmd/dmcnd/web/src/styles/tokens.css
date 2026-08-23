@@ -73,10 +73,9 @@
 [data-density="compact"] { --density-row:var(--space-2); }
 [data-density="comfortable"] { --density-row:var(--space-4); }
 
-/* Auth screens are responsive: below 820px the brand panel is dropped and the form
-   column top-aligns with tighter padding (so it doesn't float mid-screen on phones). */
+/* Auth screens are responsive: below 820px the form column top-aligns with tighter
+   padding, so it doesn't float mid-screen on phones. */
 @media (max-width: 820px) {
-  .dmcn-auth-brand { display: none !important; }
   .dmcn-auth-left {
     align-items: flex-start !important;
     padding: calc(var(--space-8) + env(safe-area-inset-top)) 20px calc(var(--space-8) + env(safe-area-inset-bottom)) 20px !important;

@@ -3,17 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>DMCN Mail</title>
+    <!-- Deliberately unbranded: the reference client is the daemon's webmail, not a
+         product. The document title is refined client-side to the deployment's own
+         domain once config loads (src/main.tsx) — a self-hoster's identity, not ours. -->
+    <title>Mail</title>
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0C1010" />
-    <meta name="description" content="Decentralized Mesh Communication Network — your end-to-end encrypted inbox." />
+    <meta name="theme-color" content="#14171A" />
+    <meta name="description" content="End-to-end encrypted mail, decrypted in your browser." />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="DMCN" />
+    <meta name="apple-mobile-web-app-title" content="Mail" />
 
     <!-- Runtime config rendered by the Go backend (html/template). The nonce lets
          this inline script run under a strict, no-unsafe-inline script CSP. In raw
@@ -37,10 +40,10 @@
 
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0C1010; color: #333; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #14171A; color: #333; }
     </style>
-    <script type="module" crossorigin src="/assets/index-C1nGDBoY.js" integrity="sha384-RPgq5AkdogA/hRKISx1gbrnvY3wQ/S8DHNhGoIkqTrRdcntUOjpkVKOV5GG4wrDV"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CxqB8HVP.css" integrity="sha384-VieJ8lGplrYeut5brnllhIVy0QOrDGuG/yJbQGpzBLovppuVHt/XcyAeXAvMJIYD">
+    <script type="module" crossorigin src="/assets/index-B-pQ5aLh.js" integrity="sha384-xqnLqZGYdQt9Si/0odJ50Oc3cRif7AvdwusuzftnEtvtZ+uf87LtrEKzF1I9CoUQ"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-D1zMni_X.css" integrity="sha384-rkWWwSZrwOwDln0Nv5FVnI58zsSkc8xjRHYfluw0GP0GFwajUt1atZJidpZzr6wK">
   </head>
   <body>
     <div id="root"></div>

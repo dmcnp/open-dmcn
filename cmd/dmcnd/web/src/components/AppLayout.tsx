@@ -6,7 +6,7 @@ import { useSent } from '../lib/hooks/useSent';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
-import { readThemePref, resolveTheme, readDensity, writeThemePref, type ThemePref } from '../lib/theme';
+import { readThemePref, resolveTheme, readDensity, writeThemePref, writeDensity, type ThemePref } from '../lib/theme';
 import { logout as apiLogout } from '../lib/api/client';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
@@ -25,6 +25,7 @@ import { Button, IconButton, Input } from '../ds';
 import { AccountMonogram } from './AccountMonogram';
 import { Icon } from './Icon';
 import { ComposeDialog, type ComposeReplyTo } from './ComposeDialog';
+import { DEFAULT_DOMAIN } from '../lib/config';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
@@ -134,7 +135,7 @@ export function AppLayout() {
   const theme = resolveTheme(themePref);
 
   useEffect(() => { writeThemePref(themePref); }, [themePref]);
-  useEffect(() => { localStorage.setItem('dmcn_density', compact ? 'compact' : 'comfortable'); }, [compact]);
+  useEffect(() => { writeDensity(compact ? 'compact' : 'comfortable'); }, [compact]);
   useEffect(() => { if (!isMobile) { setDrawerOpen(false); setSearchOpen(false); } }, [isMobile]);
   // Search/filter only applies to the mail list; reset it when leaving mail.
   useEffect(() => { if (section !== 'mail') { setSearchOpen(false); setFilter(''); } }, [section]);
@@ -303,9 +304,14 @@ export function AppLayout() {
             <IconButton aria-label={isMobile ? 'Open menu' : 'Toggle navigation'} active={!isMobile && collapsed} onClick={onMenu}>
               <Icon name={isMobile ? 'menu' : 'panel-left'} />
             </IconButton>
-            <span style={{ display: 'inline-flex', alignItems: 'flex-end', fontWeight: 600, fontSize: 22, letterSpacing: '-1px', color: 'var(--text-strong)', marginRight: 'var(--space-2)' }}>
-              dmcn<span style={{ width: 7, height: 7, background: 'var(--brand)', marginLeft: 4, marginBottom: 4 }} />
-            </span>
+            {/* The deployment's own domain, not a product mark. This client is unbranded;
+                the useful thing to show here is WHICH server you are signed in to. */}
+            {DEFAULT_DOMAIN && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--text-strong)', marginRight: 'var(--space-2)', whiteSpace: 'nowrap' }}>
+                <Icon name="mail" size={17} style={{ color: 'var(--text-muted)' }} />
+                {DEFAULT_DOMAIN}
+              </span>
+            )}
             {!isMobile && section === 'mail' && (
               <div style={{ flex: 1, maxWidth: 620 }}>
                 <Input

@@ -126,7 +126,7 @@ export function Login() {
       <AuthShell
         title="Set up this device"
         subtitle="There's no identity stored in this browser yet."
-        footer={<>New to DMCN? <CreateAccountLink label="Create an account" petitionLabel="Ask for a mailbox" /></>}
+        footer={<>Don't have a mailbox here yet? <CreateAccountLink label="Create an account" petitionLabel="Ask for a mailbox" /></>}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>

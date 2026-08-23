@@ -457,8 +457,10 @@ export function Settings() {
           </div>
         )}
 
+        {/* The daemon's version, not a product name — this client has no branding of its
+            own, and the version is the one thing worth surfacing for a bug report. */}
         <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-          DMCN Mail <span style={{ fontFamily: 'var(--font-mono)' }}>{APP_VERSION}</span>
+          dmcnd <span style={{ fontFamily: 'var(--font-mono)' }}>{APP_VERSION}</span>
         </div>
       </div>
     </PageShell>
