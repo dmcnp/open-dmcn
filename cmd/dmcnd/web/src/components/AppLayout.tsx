@@ -6,7 +6,7 @@ import { useSent } from '../lib/hooks/useSent';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
-import { readThemePref, resolveTheme, readDensity, type ThemePref } from '../lib/theme';
+import { readThemePref, resolveTheme, readDensity, writeThemePref, type ThemePref } from '../lib/theme';
 import { logout as apiLogout } from '../lib/api/client';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
@@ -133,7 +133,7 @@ export function AppLayout() {
 
   const theme = resolveTheme(themePref);
 
-  useEffect(() => { localStorage.setItem('dmcn_theme', themePref); }, [themePref]);
+  useEffect(() => { writeThemePref(themePref); }, [themePref]);
   useEffect(() => { localStorage.setItem('dmcn_density', compact ? 'compact' : 'comfortable'); }, [compact]);
   useEffect(() => { if (!isMobile) { setDrawerOpen(false); setSearchOpen(false); } }, [isMobile]);
   // Search/filter only applies to the mail list; reset it when leaving mail.

@@ -1,15 +1,27 @@
-// Shared light/dark + density preferences. The app shell owns the live toggles
-// and persists them here; every other screen reads the same keys so the whole app
-// stays visually consistent without a global provider.
+// Light/dark + density preferences. The app shell owns the live toggles and persists
+// them here; every other screen goes through these accessors so the whole app stays
+// visually consistent without a global provider.
+//
+// These are DEVICE-local, not account-level — the counterpart of api/settingsStore.ts,
+// which keeps the preferences that should follow the user (signature, compose default)
+// in the personal KV instead. The key strings live in this file only, so a caller
+// cannot quietly write a different key than the shell reads.
 
 export type Theme = 'light' | 'dark';
 export type ThemePref = 'light' | 'dark' | 'system';
 
+const THEME_KEY = 'dmcn_theme';
+const DENSITY_KEY = 'dmcn_density';
+
 // readThemePref returns the raw stored preference (including "system"); anything
 // not explicitly light/dark means "follow the OS".
 export function readThemePref(): ThemePref {
-  const saved = localStorage.getItem('dmcn_theme');
+  const saved = localStorage.getItem(THEME_KEY);
   return saved === 'light' || saved === 'dark' ? saved : 'system';
+}
+
+export function writeThemePref(pref: ThemePref): void {
+  try { localStorage.setItem(THEME_KEY, pref); } catch { /* ignore */ }
 }
 
 // resolveTheme maps a preference to the concrete theme to apply.
@@ -22,6 +34,12 @@ export function readTheme(): Theme {
   return resolveTheme(readThemePref());
 }
 
-export function readDensity(): 'compact' | 'comfortable' {
-  return localStorage.getItem('dmcn_density') === 'compact' ? 'compact' : 'comfortable';
+export type Density = 'compact' | 'comfortable';
+
+export function readDensity(): Density {
+  return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
+}
+
+export function writeDensity(density: Density): void {
+  try { localStorage.setItem(DENSITY_KEY, density); } catch { /* ignore */ }
 }

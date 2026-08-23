@@ -16,6 +16,7 @@ import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
 import { MessageReader } from '../components/MessageReader';
+import type { ComposeReplyTo } from '../components/ComposeDialog';
 import type { MailOutletContext } from '../components/AppLayout';
 
 // The open protocol carries no control messages (device pairing + countersign requests are
@@ -69,24 +70,37 @@ function groupSent(previews: Preview[]): Row[] {
 
 const SWIPE_W = 176; // px revealed by swiping a row left on mobile (Archive + Delete)
 
-function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen, onDelete, onArchive, onToggleStar, onHover }: {
-  msg: Preview; sent: boolean; mobile: boolean; hovered: boolean;
-  read: boolean; starred: boolean; inArchive: boolean;
+function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inArchive, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover }: {
+  msg: Preview; sent: boolean; unknownSender?: boolean; mobile: boolean; hovered: boolean;
+  read: boolean; starred: boolean; inArchive: boolean; nameFor: (address: string) => string;
   onOpen: () => void; onDelete: () => void; onArchive: () => void; onToggleStar: () => void; onHover: (h: boolean) => void;
 }) {
   // Unread applies to received mail only (you don't "read" your own Sent copy).
   const unread = !sent && !read;
+  // Informational hint: this sender isn't in your contacts/allowlist yet. Purely a glanceable cue
+  // — it grants NO access (the reader gates at read time), so it's fine that it's cheap and
+  // address-based.
+  const newSenderTag = unknownSender ? (
+    <span title="Sender isn't in your contacts yet" style={{
+      flex: 'none', alignSelf: 'center', fontSize: 'var(--text-2xs)', fontWeight: 600, letterSpacing: '0.02em',
+      textTransform: 'uppercase', color: 'var(--text-muted)', background: 'var(--surface-sunken)',
+      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0 5px', lineHeight: '15px',
+    }}>New</span>
+  ) : null;
   const nameWeight = unread ? 700 : 500;
   // For a sent message the "who" is the full recipient audience (To + Cc); the label
   // shows the whole list. Falls back to the singular recipientAddress for pre-feature
   // messages with no lists.
+  // Every address goes through nameFor, so a contact shows under the name its owner
+  // gave it — but the underlying ADDRESS is what routing, pinning and the title tip use.
   const recipientList = msg.to.length || msg.cc.length ? [...msg.to, ...msg.cc] : [msg.recipientAddress];
-  const who = sent ? recipientList[0] : msg.senderAddress;
-  const sentLabel = `To: ${recipientList.join(', ')}`;
+  const whoAddress = sent ? recipientList[0] : msg.senderAddress;
+  const who = nameFor(whoAddress);
+  const sentLabel = `To: ${recipientList.map(nameFor).join(', ')}`;
   // Which network the counterparty is on — the one bit worth a glance per row. For
   // received mail the header's signing key is compared against the directory, so a
   // bridged message claiming a DMCN address cannot wear the shield.
-  const kind = useCounterpartyKind(who, sent ? '' : msg.senderPublicKey);
+  const kind = useCounterpartyKind(whoAddress, sent ? '' : msg.senderPublicKey);
   const [dx, setDx] = useState(0);
   const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false });
 
@@ -135,9 +149,10 @@ function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen,
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
               {unread && <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: 'var(--brand)', alignSelf: 'center' }} />}
               <span style={{ alignSelf: 'center', display: 'inline-flex', marginRight: 2 }}><KindIcon kind={kind} size={14} /></span>
-              <span title={sent ? recipientList.join(', ') : who} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span title={sent ? recipientList.join(', ') : whoAddress} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sent ? sentLabel : who}
               </span>
+              {newSenderTag}
               {starred && <Icon name="star-fill" size={14} style={{ color: 'var(--warning)', flex: 'none' }} />}
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flex: 'none' }}>{formatWhen(msg.sentAt)}</span>
             </div>
@@ -166,9 +181,10 @@ function MailRow({ msg, sent, mobile, hovered, read, starred, inArchive, onOpen,
           person, and putting it here keeps the subject column a single readable run. */}
       <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
         <KindIcon kind={kind} size={14} />
-        <span title={sent ? recipientList.join(', ') : who} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span title={sent ? recipientList.join(', ') : whoAddress} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sent ? `To: ${who}` : who}
         </span>
+        {newSenderTag}
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 'none', maxWidth: '45%' }}>
@@ -209,7 +225,7 @@ export function InboxMain() {
   const { isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
   const { knownFolderIds, labelById, folderById } = useLabels();
   const { address } = useAuth();
-  const { contactByAddress } = useContacts();
+  const { contactByAddress, nameFor } = useContacts();
   const { filter: mailFilter } = useMailFilter();
   const isMobile = useIsMobile();
   const { folder, filter, openCompose } = useOutletContext<MailOutletContext>();
@@ -226,6 +242,11 @@ export function InboxMain() {
   const q = filter.trim().toLowerCase();
   const matchesQ = (m: Preview) =>
     !q || `${m.senderAddress} ${m.recipientAddress} ${[...m.to, ...m.cc].join(' ')} ${m.subject} ${m.snippet}`.toLowerCase().includes(q);
+
+  // Trust category (§14.2): allowlisted senders land in the Inbox; unknown senders
+  // in Pending; blocked senders appear in neither (dropped at the relay). Declared out
+  // here because the row renderer also uses it for the informational "New" tag.
+  const catOf = (m: Preview) => categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
 
   let rows: Row[];
   if (folder === 'sent') {
@@ -245,9 +266,6 @@ export function InboxMain() {
     // A message is "filed" only if its folderId names a folder that still exists —
     // so deleting a folder returns its messages to the Inbox with no flag cleanup.
     const isFiled = (h: string) => { const f = folderOf(h); return !!f && knownFolderIds.has(f); };
-    // Trust category (§14.2): allowlisted senders land in the Inbox; unknown senders
-    // in Pending; blocked senders appear in neither (dropped at the relay).
-    const catOf = (m: Preview) => categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
     const inFolder = (m: Preview) => {
       // A message I sent is a Sent item, hidden from received views — unless I'm also
       // a recipient (I mailed myself), where this mailbox copy is genuine received mail.
@@ -292,9 +310,11 @@ export function InboxMain() {
   const toggleArchive = (m: Preview) => setFlag(m.hash, { archived: !isArchived(m.hash) });
   const toggleStar = (m: Preview) => setFlag(m.hash, { starred: !isStarred(m.hash) });
 
-  const handleReply = (m: Preview) => {
+  // The reader builds the reply payload (it holds the decrypted body needed to quote
+  // the original); the list just closes the reader and opens the composer with it.
+  const handleReply = (replyTo: ComposeReplyTo) => {
     setOpenHash(null);
-    openCompose({ to: m.senderAddress, subject: m.subject });
+    openCompose(replyTo);
   };
 
   const pending = !!error && error.includes('POLICY_PENDING');
@@ -372,11 +392,13 @@ export function InboxMain() {
                   key={msg.hash}
                   msg={msg}
                   sent={folder === 'sent'}
+                  unknownSender={folder !== 'sent' && catOf(msg) === 'pending'}
                   mobile={isMobile}
                   hovered={hovered === msg.hash}
                   read={isRead(msg.hash)}
                   starred={isStarred(msg.hash)}
                   inArchive={folder === 'archive'}
+                  nameFor={nameFor}
                   onOpen={() => openRow(msg)}
                   onDelete={() => doDelete(hashes)}
                   onArchive={() => toggleArchive(msg)}

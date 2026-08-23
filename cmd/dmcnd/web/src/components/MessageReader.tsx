@@ -10,6 +10,7 @@ import { Badge, Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
 import { lookupIdentity } from '../lib/api/client';
 import { verifyBridgeAttestation, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
+import { verifyDeliveryReceipt, RECEIPT_CONTENT_TYPE, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
 import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust';
 import { senderTrustView } from '../lib/trust/trustView';
 import { useContacts } from '../lib/hooks/useContacts';
@@ -17,6 +18,10 @@ import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
 import type { DecryptedAttachment } from '../lib/crypto/split';
 import { HtmlMessageBody } from './HtmlMessageBody';
+import type { ComposeReplyTo } from './ComposeDialog';
+import { sanitizeOutgoing } from '../lib/html/sanitize';
+import { fromPlainText, escapeHtml } from '../lib/html/fromPlainText';
+import { directoryFacts } from '../lib/trust/pinnedKey';
 import { fromHex } from '../lib/crypto/keys';
 
 // attestationView maps a bridged-message verdict to its display treatment. Only a
@@ -64,6 +69,29 @@ function formatTime(sec: number): string {
   return new Date(sec * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+// receiptView maps a delivery-receipt verdict to its display treatment: a verified receipt shows
+// the bridge's delivered/failed outcome; an unverified one is a warning.
+function receiptView(r: DeliveryReceiptView): {
+  variant: 'success' | 'warning' | 'danger';
+  icon: 'shield-check' | 'alert-triangle';
+  label: string;
+  detail: string;
+} {
+  if (!r.verified) {
+    return {
+      variant: 'warning',
+      icon: 'alert-triangle',
+      label: 'Unverified receipt',
+      detail: `This delivery receipt could not be verified${r.reason ? ` (${r.reason})` : ''}.`,
+    };
+  }
+  const who = r.recipientEmail || 'the recipient';
+  if (r.delivered) {
+    return { variant: 'success', icon: 'shield-check', label: 'Delivered', detail: `The bridge delivered your message to ${who}.` };
+  }
+  return { variant: 'danger', icon: 'alert-triangle', label: 'Delivery failed', detail: `The bridge could not deliver your message to ${who}${r.errorDetail ? `: ${r.errorDetail}` : ''}.` };
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
@@ -74,6 +102,7 @@ function formatBytes(n: number): string {
 // legacy source) are consumed elsewhere and hidden from the user-facing list.
 const INTERNAL_ATTACHMENT_TYPES = new Set<string>([
   CLASSIFICATION_CONTENT_TYPE,
+  RECEIPT_CONTENT_TYPE,
   'message/rfc822', // original.eml — raw legacy email preserved by the bridge
 ]);
 function userAttachments(all: DecryptedAttachment[]): DecryptedAttachment[] {
@@ -114,7 +143,7 @@ export interface MessageReaderProps {
   msg: Preview;
   sentView: boolean;
   onBack: () => void;
-  onReply: (msg: Preview) => void;
+  onReply: (replyTo: ComposeReplyTo) => void;
   /** Tighter padding + smaller title on mobile. */
   mobile?: boolean;
   /** Overrides the mailbox body fetch — used for Sent messages, which read their
@@ -139,7 +168,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const { labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } = useFlags();
   const { labels, folders, labelById } = useLabels();
   const { address } = useAuth();
-  const { contactByAddress, allowlist, pinKey, ready: contactsReady } = useContacts();
+  const { contactByAddress, nameFor, allowlist, pinKey, ready: contactsReady } = useContacts();
   const { filter: mailFilter, blockSender, ready: filterReady } = useMailFilter();
 
   // Extrinsic assignment for this message (labels are many; folder is single).
@@ -168,6 +197,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // Per-file "download anyway" acknowledgments for a sender who isn't trusted yet.
   const [ackedDownloads, setAckedDownloads] = useState<Set<number>>(new Set());
   const [attestation, setAttestation] = useState<BridgeAttestation | null>(null);
+  // A bridge delivery receipt for a message I sent out to the legacy world. By default the
+  // bridge only returns one when delivery FAILED, so this is usually a bounce.
+  const [receipt, setReceipt] = useState<DeliveryReceiptView | null>(null);
   // Native-sender trust (§14): anchors the signature-verified header key to the
   // directory + the owner's allowlist. Independent of the body fetch.
   const [nativeTrust, setNativeTrust] = useState<SenderTrust | null>(null);
@@ -182,6 +214,51 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // changes, not when a poll hands back a fresh (but equal) contacts array.
   const contactSig = senderContact ? `${senderContact.provenance ?? ''}:${senderContact.ed25519Pub ?? ''}` : '';
 
+  // buildReply assembles the payload the composer needs: recipients (Reply vs Reply All),
+  // the Gmail-style quoted original, and the threading metadata (continue the thread +
+  // reference this message). Everything it reads is already in scope here.
+  const me = address?.toLowerCase();
+  const notMe = (a: string) => a.toLowerCase() !== me;
+  const dedupe = (arr: string[]): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const a of arr) { const k = a.toLowerCase(); if (a && !seen.has(k)) { seen.add(k); out.push(a); } }
+    return out;
+  };
+  const buildReply = (all: boolean): ComposeReplyTo => {
+    // Reply to the sender; on my OWN message, reply to the original recipients instead.
+    const primary = sentByMe ? dedupe([...msg.to, ...msg.cc].filter(notMe)) : dedupe([msg.senderAddress].filter(notMe));
+    const to = primary.length ? primary : [msg.senderAddress];
+    // Reply All adds every other original recipient (To+Cc) as Cc, minus me and the To set.
+    // msg.bcc is ignored — it's only present on my own Sent copy, never on received mail.
+    const cc = all
+      ? dedupe([...msg.to, ...msg.cc]).filter(notMe).filter(a => !to.some(t => t.toLowerCase() === a.toLowerCase()))
+      : [];
+    // Gmail-style quoted original, in both renderings — the composer picks the one that
+    // matches its mode. Omitted until the body has loaded, so an early Reply just opens
+    // with an empty body.
+    const who = senderContact?.name ? `${senderContact.name} <${msg.senderAddress}>` : msg.senderAddress;
+    const when = `${formatDate(msg.sentAt)} at ${formatTime(msg.sentAt)}`;
+    const quote = body != null
+      ? `On ${when}, ${who} wrote:\n` + body.split('\n').map(l => (l ? `> ${l}` : '>')).join('\n')
+      : undefined;
+    // The HTML quote re-emits the ORIGINAL sender's markup, so it goes back through the
+    // outgoing allowlist first — we must never sign and send another party's unfiltered
+    // HTML. Inline images are dropped: their cid: references point at the original
+    // message's attachments, which this new message doesn't carry.
+    let quoteHtml: string | undefined;
+    if (body != null) {
+      const inner = htmlBody ? sanitizeOutgoing(htmlBody).html.replace(/<img\b[^>]*>/gi, '') : fromPlainText(body);
+      quoteHtml =
+        `<div>On ${escapeHtml(when)}, ${escapeHtml(who)} wrote:</div>` +
+        `<blockquote>${inner}</blockquote>`;
+    }
+    return { to, cc, subject: msg.subject, quote, quoteHtml, replyToId: msg.messageId, threadId: msg.threadId };
+  };
+  // Show Reply All only when it would add recipients beyond the plain reply (a la Gmail).
+  const replyAll = buildReply(true);
+  const showReplyAll = (replyAll.cc?.length ?? 0) > 0;
+
   // Sent records from the personal store carry their own body (no mailbox fetch, no
   // bridge attestation). Otherwise fetch + verify the body on open (the inbox only
   // holds previews); for bridged legacy mail, verify the bridge's signed
@@ -193,6 +270,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     setHtmlBody(null);
     setAttachments([]);
     setAttestation(null);
+    setReceipt(null);
     fetchFull(msg.hash)
       .then(full => {
         if (cancelled) return;
@@ -202,6 +280,12 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
         verifyBridgeAttestation(full.attachments)
           .then(a => { if (!cancelled) setAttestation(a); })
           .catch(() => { /* unexpected: treat as non-bridged, show no badge */ });
+        // The receipt is signed by the BRIDGE, which is the sender of this message, so the
+        // already-verified header key is what it must be bound to.
+        const senderPub = msg.senderPublicKey ? fromHex(msg.senderPublicKey) : null;
+        verifyDeliveryReceipt(full.attachments, senderPub)
+          .then(r => { if (!cancelled) setReceipt(r); })
+          .catch(() => { /* not a receipt, or unreadable: show no badge */ });
       })
       .catch(err => { if (!cancelled) setBodyError(err instanceof Error ? err.message : 'Failed to load message body'); });
     return () => { cancelled = true; };
@@ -224,11 +308,12 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   }, [msg.hash, msg.senderAddress, msg.senderPublicKey, ownMessage, contactSig]);
 
   const av = attestation ? attestationView(attestation) : null;
+  const rv = receipt ? receiptView(receipt) : null;
   // Native trust badge/callout — suppressed when a bridge attestation is shown
   // (bridged legacy mail: the DMCN "sender" is the bridge, not the real author), and
   // held back until the allowlist + filter are loaded so it resolves straight to the
   // correct verdict instead of flashing "unknown" first.
-  const tv = contactsReady && filterReady && !av && nativeTrust ? senderTrustView(nativeTrust) : null;
+  const tv = contactsReady && filterReady && !av && !rv && nativeTrust ? senderTrustView(nativeTrust) : null;
 
   // Pending-queue category (§14.2). Your own Sent copies are never gated. Blocked/
   // pending senders' bodies stay behind the gate until trusted or revealed. trustReady
@@ -251,14 +336,22 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // message changes, so nothing from the previous message lingers.
   useEffect(() => { setRevealed(false); setNativeTrust(null); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
 
-  // Lazy key-pin (§14.1.2): once a message from an allowlisted-but-unpinned contact
-  // verifies as allowlisted (header key == directory key), record the keys so a
-  // later unsigned change is detectable. Runs at most once per unpinned contact.
+  // Lazy key-pin (§14.1.2): once a message from an unpinned contact verifies with the
+  // header key matching the directory key, record the facts so a later unsigned change
+  // is detectable. Runs at most once per unpinned contact.
+  //
+  // `domain_verified` counts as well as `allowlisted`. Requiring allowlisting meant a
+  // contact added by hand on the Contacts page — no provenance, no pinned key — never
+  // gained key-change protection no matter how much mail passed between you. Both kinds
+  // already establish that header key == directory key, which is the only precondition a
+  // pin needs; allowlisting is a statement about trusting the person, not about whether
+  // the key we just saw is the one the directory served.
   useEffect(() => {
-    if (ownMessage || nativeTrust?.kind !== 'allowlisted' || !senderContact || senderContact.ed25519Pub) return;
+    const pinnable = nativeTrust?.kind === 'allowlisted' || nativeTrust?.kind === 'domain_verified';
+    if (ownMessage || !pinnable || !senderContact || senderContact.ed25519Pub) return;
     let cancelled = false;
     lookupIdentity(msg.senderAddress)
-      .then(dir => { if (!cancelled) return pinKey(msg.senderAddress, dir.ed25519_pub, dir.x25519_pub); })
+      .then(dir => { if (!cancelled) return pinKey(msg.senderAddress, directoryFacts(dir)); })
       .catch(() => { /* best effort */ });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- senderContact tracked via contactSig
@@ -274,10 +367,12 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
         name: senderContact?.name || msg.senderAddress,
         fingerprint: dir.fingerprint,
         provenance: 'user_approved',
-        // Pin the DIRECTORY key: if it disagrees with the header key (impersonation),
-        // the sender stays pending rather than being trusted into the inbox.
-        ed25519Pub: dir.ed25519_pub,
-        x25519Pub: dir.x25519_pub,
+        // Pin the DIRECTORY facts: if the key disagrees with the header key
+        // (impersonation), the sender stays pending rather than being trusted into the
+        // inbox. Trusting is a deliberate decision, so this REPLACES any pin this
+        // device holds and advances the repin sequence (useContacts.allowlist) — it is
+        // the "re-verify after a rotation" path.
+        ...directoryFacts(dir),
       });
     } catch { /* leave pending; the badge already flags any problem */ }
     finally { setActioning(false); }
@@ -305,6 +400,11 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // Sent copy — recipient copies never carry it.
   const toList = msg.to.length ? msg.to : msg.recipientAddress ? [msg.recipientAddress] : [];
   const counterparty = sentView ? toList[0] ?? '' : msg.senderAddress;
+  // The name the owner gave this person, when they gave one. The ADDRESS stays the
+  // identity everywhere it matters (routing, pinning, the title tip) — this is only
+  // the label, and it must match what the mail list shows for the same person.
+  const counterpartyName = nameFor(counterparty);
+  const namedCounterparty = counterpartyName !== counterparty;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-page)' }}>
@@ -331,22 +431,25 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             </h1>
             <Badge variant="brand" icon={<Icon name="lock" size={12} />}>Encrypted</Badge>
             {av && <Badge variant={av.variant} icon={<Icon name={av.icon} size={12} />}>{av.label}</Badge>}
+            {rv && <Badge variant={rv.variant} icon={<Icon name={rv.icon} size={12} />}>{rv.label}</Badge>}
             {tv && <Badge variant={tv.variant} icon={<Icon name={tv.icon} size={12} />}>{tv.label}</Badge>}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-5)' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div title={sentView ? toList.join(', ') : counterparty} style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {sentView ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.join(', ')}</span></> : counterparty}
+                {sentView
+                  ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span></>
+                  : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterparty}</span>}</>}
               </div>
               {!sentView && toList.length > 0 && (
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  To {toList.join(', ')}
+                <div title={toList.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  To {toList.map(nameFor).join(', ')}
                 </div>
               )}
               {msg.cc.length > 0 && (
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Cc {msg.cc.join(', ')}
+                <div title={msg.cc.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Cc {msg.cc.map(nameFor).join(', ')}
                 </div>
               )}
               {msg.bcc.length > 0 && (
@@ -358,7 +461,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 {sentByMe ? 'from me' : 'to me'} &middot; {formatDate(msg.sentAt)} &middot; {formatTime(msg.sentAt)}
               </div>
             </div>
-            <IconButton aria-label="Reply" onClick={() => onReply(msg)}><Icon name="reply" /></IconButton>
+            <IconButton aria-label="Reply" onClick={() => onReply(buildReply(false))}><Icon name="reply" /></IconButton>
+            {showReplyAll && (
+              <IconButton aria-label="Reply all" onClick={() => onReply(replyAll)}><Icon name="reply-all" /></IconButton>
+            )}
           </div>
 
           {(labels.length > 0 || folders.length > 0 || appliedLabels.length > 0 || currentFolder) && (
@@ -492,13 +598,20 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
 
           <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
             <Icon name="shield-check" size={16} />
-            End-to-end encrypted over dmcn — only you and {counterparty} can read this.
+            End-to-end encrypted over dmcn — only you and {counterpartyName} can read this.
           </div>
 
           {av && (
             <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${av.variant}-subtle)`, color: `var(--${av.variant === 'success' ? 'success' : av.variant === 'warning' ? 'warning' : 'danger'})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
               <Icon name={av.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
               <span>{av.detail}</span>
+            </div>
+          )}
+
+          {rv && (
+            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${rv.variant}-subtle)`, color: `var(--${rv.variant})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+              <Icon name={rv.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
+              <span>{rv.detail}</span>
             </div>
           )}
 
@@ -510,7 +623,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
           )}
 
           <div style={{ marginTop: 'var(--space-6)', display: 'flex', gap: 'var(--space-2)' }}>
-            <Button variant="secondary" leftIcon={<Icon name="reply" size={16} />} onClick={() => onReply(msg)}>Reply</Button>
+            <Button variant="secondary" leftIcon={<Icon name="reply" size={16} />} onClick={() => onReply(buildReply(false))}>Reply</Button>
+            {showReplyAll && (
+              <Button variant="secondary" leftIcon={<Icon name="reply-all" size={16} />} onClick={() => onReply(replyAll)}>Reply all</Button>
+            )}
           </div>
         </div>
       </div>

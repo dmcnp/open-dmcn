@@ -6,10 +6,11 @@ import { lookupIdentity, sendMessage } from '../lib/api/client';
 import { encryptSplit, type SplitEnvelope, type AttachmentInput } from '../lib/crypto/split';
 import { encodeSplitEnvelope } from '../lib/crypto/protobuf';
 import { signWithKey } from '../lib/crypto/sign';
-import { toBase64, fromBase64, toHex } from '../lib/crypto/keys';
+import { toBase64, fromBase64, toHex, fromHex } from '../lib/crypto/keys';
 import { SentStore } from '../lib/api/sentStore';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useContacts, type Contact } from '../lib/hooks/useContacts';
+import { checkPin, changedFacts, contactFacts, directoryFacts, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
 import { DEFAULT_DOMAIN } from '../lib/config';
 import { Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
@@ -19,8 +20,21 @@ import { toPlainText } from '../lib/html/toPlainText';
 import { fromPlainText } from '../lib/html/fromPlainText';
 
 export interface ComposeReplyTo {
-  to: string;
+  // One or more recipients: a plain Reply carries just the sender; Reply All carries
+  // the sender plus every other original recipient (see MessageReader.buildReply).
+  to: string[];
+  cc?: string[];
+  // Raw subject; the "Re:" prefix is applied below.
   subject: string;
+  // Prebuilt Gmail-style quoted original, placed below the signature. `quote` is the
+  // plain-text form; `quoteHtml` the HTML one (sanitized, cid: images dropped). The
+  // composer picks whichever matches its current mode.
+  quote?: string;
+  quoteHtml?: string;
+  // Threading metadata (hex): the original's messageId -> header replyToId, and the
+  // original's threadId -> continue that thread. Empty/all-zero => start a fresh thread.
+  replyToId?: string;
+  threadId?: string;
 }
 
 // How a recipient can receive this message, driving the chip's shield:
@@ -89,26 +103,47 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const { address } = useAuth();
   const { keys } = useKeys();
   const { settings } = useSettings();
-  const { contacts } = useContacts();
+  const { contacts, contactByAddress, nameFor, pinKey } = useContacts();
 
   // Three recipient classes with standard email semantics. To/Cc are visible to
   // everyone; Bcc is only recorded on the sender's own Sent copy (see handleSend).
-  const [to, setTo] = useState<string[]>(replyTo?.to ? [replyTo.to] : []);
-  const [cc, setCc] = useState<string[]>([]);
+  const [to, setTo] = useState<string[]>(replyTo?.to ?? []);
+  const [cc, setCc] = useState<string[]>(replyTo?.cc ?? []);
   const [bcc, setBcc] = useState<string[]>([]);
   const [pendingTo, setPendingTo] = useState('');
   const [pendingCc, setPendingCc] = useState('');
   const [pendingBcc, setPendingBcc] = useState('');
-  const [showCcBcc, setShowCcBcc] = useState(false);
+  // Reveal Cc/Bcc up front when a Reply All prefilled Cc recipients.
+  const [showCcBcc, setShowCcBcc] = useState(!!replyTo?.cc?.length);
   const [subject, setSubject] = useState(replyTo?.subject ? `Re: ${replyTo.subject.replace(/^Re:\s*/i, '')}` : '');
-  const [body, setBody] = useState('');
+
+  // A reply prefills the composer with the quoted original, signature ABOVE the quote
+  // (top-posted). Both renderings are built the same way so switching modes keeps the
+  // same shape; the leading blank line is where the user types.
+  const plainScaffold = (sig: string): string => {
+    if (!replyTo && !sig) return '';
+    const quote = replyTo?.quote ?? '';
+    return '\n\n' + (sig ? sig + (quote ? '\n\n' + quote : '') : quote);
+  };
+  const htmlScaffold = (sig: string): string => {
+    const quote = replyTo?.quoteHtml ?? '';
+    if (!replyTo && !sig) return '';
+    const out = ['<div><br></div>'];
+    if (sig) out.push(fromPlainText(sig));
+    if (quote) out.push('<div><br></div>', quote);
+    return out.join('');
+  };
+
+  const [body, setBody] = useState(() => plainScaffold(settings.signature ?? ''));
   // Rich (HTML) is the default for every compose; the account setting flips the STARTING
   // mode and the footer toggle overrides it for this message only.
   const [richMode, setRichMode] = useState(() => settings.composePlainText !== true);
   const editorRef = useRef<RichTextEditorHandle>(null);
   // The editor is uncontrolled and reads this only when it mounts, so it doubles as the
   // seed for a plain -> rich switch (which is exactly when it mounts).
-  const richInitial = useRef('');
+  const richInitial = useRef(htmlScaffold(settings.signature ?? ''));
+  // Set once the user edits either body, so a late-loading settings doc never clobbers it.
+  const dirtyRef = useRef(false);
   // Holds the HTML from before a rich -> plain switch, so switching back is lossless as
   // long as the plain text was not edited in between.
   const stashedHtml = useRef<string | null>(null);
@@ -128,6 +163,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const recipientInput = useRef<HTMLInputElement>(null);
   // Per-recipient classification (keyed by lowercased address) for the chip shields.
   const [recipientInfo, setRecipientInfo] = useState<Record<string, RecipientKind>>({});
+  // What the directory currently publishes for each recipient, recorded as they are typed
+  // so a pin mismatch surfaces BEFORE the message is written, not after.
+  const [recipientKeys, setRecipientKeys] = useState<Record<string, PinnedFacts>>({});
 
   // inspectRecipient resolves a recipient once: records whether it's a DMCN identity
   // or a legacy (non-DMCN) address, and turns on onion delivery when the record or its
@@ -142,6 +180,16 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       // message is sealed to the bridge and leaves the network as ordinary email. Say so, rather
       // than showing it as a DMCN identity because a lookup happened to return 200.
       setRecipientInfo(m => ({ ...m, [key]: rec.legacy ? 'legacy' : 'dmcn' }));
+      if (rec.legacy) return; // a bridge, not a correspondent — nothing to pin
+
+      const facts = directoryFacts(rec);
+      setRecipientKeys(m => ({ ...m, [key]: facts }));
+      const contact = contactByAddress(addr);
+      if (contact && !contact.ed25519Pub) {
+        // First confirmed sighting of an existing contact's key — pin it, so a LATER swap
+        // is detectable. pinKey is a no-op if this device already holds a pin for them.
+        void pinKey(addr, facts);
+      }
     } catch {
       // Unresolvable in either direction — not a DMCN identity, and no bridge to carry it.
       // handleSend surfaces the send error.
@@ -155,17 +203,30 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Prefill the composing signature (synced setting) for a NEW message, once the
-  // setting loads — but never clobber a reply or text the user already typed.
+  // The settings doc syncs asynchronously, so it can land after the composer opened.
+  // Both effects below re-seed only while the body is UNTOUCHED — a slow load must never
+  // overwrite what the user has already typed.
+
+  // Starting mode from the account preference (system default is rich).
+  const modeApplied = useRef(false);
+  useEffect(() => {
+    if (modeApplied.current || settings.composePlainText === undefined) return;
+    modeApplied.current = true;
+    if (!dirtyRef.current) setRichMode(settings.composePlainText !== true);
+  }, [settings.composePlainText]);
+
+  // Prefill the composing signature. For a NEW message the signature goes at the top of an
+  // empty body; for a REPLY it's spliced ABOVE the quoted original (top-posted).
   const sigApplied = useRef(false);
   useEffect(() => {
-    if (sigApplied.current) return;
-    if (replyTo) { sigApplied.current = true; return; }
-    if (settings.signature) {
-      setBody(b => (b === '' ? '\n\n' + settings.signature : b));
-      sigApplied.current = true;
-    }
-  }, [settings.signature, replyTo]);
+    if (sigApplied.current || !settings.signature) return;
+    sigApplied.current = true;
+    if (dirtyRef.current) return;
+    setBody(plainScaffold(settings.signature));
+    richInitial.current = htmlScaffold(settings.signature);
+    editorRef.current?.setHTML(richInitial.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.signature]);
 
   // commitPending trims + de-dupes the field's pending text into its chip list and
   // returns the resulting list (so a send triggered before blur still sees it).
@@ -287,6 +348,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   // The HTML is stashed so switching straight back restores it; once the plain text has
   // actually been edited, the edit wins and the formatting is genuinely gone.
   const toggleMode = () => {
+    dirtyRef.current = true;
     if (richMode) {
       const html = editorRef.current?.getHTML() ?? '';
       stashedHtml.current = html;
@@ -345,9 +407,14 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     const messageId = crypto.getRandomValues(new Uint8Array(16));
     messageId[6] = (messageId[6] & 0x0f) | 0x40;
     messageId[8] = (messageId[8] & 0x3f) | 0x80;
-    const threadId = crypto.getRandomValues(new Uint8Array(16));
-    threadId[6] = (threadId[6] & 0x0f) | 0x40;
-    threadId[8] = (threadId[8] & 0x3f) | 0x80;
+    // A reply continues the original thread and references it; a new compose starts a
+    // fresh thread. Both ride the signed header (portable to the bridge as
+    // In-Reply-To/References). A pre-feature original has an all-zero threadId hex —
+    // treat that as absent and start fresh.
+    const threadId = replyTo?.threadId && !/^0*$/.test(replyTo.threadId)
+      ? fromHex(replyTo.threadId)
+      : newUuid();
+    const replyToId = replyTo?.replyToId ? fromHex(replyTo.replyToId) : undefined;
     const sentAt = Math.floor(Date.now() / 1000);
 
     // Derive both renderings ONCE, before the recipient loop, so every copy (recipients
@@ -385,6 +452,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       version: 1,
       messageId,
       threadId,
+      replyToId,
       senderAddress: selfAddress,
       senderPublicKey: k.ed25519Public,
       senderSignKey: k.ed25519Sign,
@@ -404,6 +472,16 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       const acceptHashes: Record<string, string> = {};
       for (const rcpt of allRecipients) {
         const recipient = await lookupIdentity(rcpt);
+        // Refuse rather than warn: the harm here is sealing a message to a key the recipient does
+        // not hold, which is unrecoverable once sent. A pinned mismatch means either they rotated
+        // (harmless, and re-verifying clears it) or someone else now holds the address — and we
+        // cannot tell which from here, so the safe default is to stop.
+        if (checkPin(contactByAddress(rcpt), directoryFacts(recipient)) === 'changed') {
+          throw new Error(
+            pinnedKeyWarning(rcpt) +
+            ' If the change is legitimate, remove them from your contacts and add them again — that pins the new key.',
+          );
+        }
         const recipientX25519 = fromBase64(recipient.x25519_pub);
 
         // Recipient copy: CEK wrapped only for them, STORE'd to their relay
@@ -453,6 +531,27 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
   const inputReset = { border: 'none', outline: 'none', background: 'transparent', font: 'inherit' } as const;
 
+  // Recipients whose key no longer matches the one we pinned. Sending to them is BLOCKED in
+  // handleSend, so this banner is the explanation for a send that is about to be refused, not a
+  // soft advisory — hence naming the addresses rather than a generic "some recipients".
+  const changedKeyRecipients = [...to, ...cc, ...bcc]
+    .map(a => a.trim())
+    .filter(a => a && checkPin(contactByAddress(a), recipientKeys[a.toLowerCase()]) === 'changed');
+  // Recipients whose KEYS still match but whose pinned properties moved. Not a send blocker: no
+  // message is mis-sealed by it, so refusing would be the wrong trade. Still shown, because
+  // adminKeyCustody flipping on is a domain asserting that an admin now holds this account's
+  // keys — an operator-side change no key comparison can see.
+  const changedRecordRecipients = [...to, ...cc, ...bcc]
+    .map(a => a.trim())
+    .filter(a => a && checkPin(contactByAddress(a), recipientKeys[a.toLowerCase()]) === 'record_changed');
+  const changedRecordDetail = (() => {
+    const first = changedRecordRecipients[0];
+    if (!first) return '';
+    const pinned = contactFacts(contactByAddress(first));
+    const seen = recipientKeys[first.toLowerCase()];
+    return pinned && seen ? changedFacts(pinned, seen).join(' and ') : '';
+  })();
+
   // Any legacy (non-DMCN) recipient means the message can't be end-to-end encrypted
   // for everyone — surfaced as a warning above the footer.
   const hasLegacy = [...to, ...cc, ...bcc].some(a => recipientInfo[a.trim().toLowerCase()] === 'legacy');
@@ -497,6 +596,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         mobile={mobile}
         inputRef={recipientInput}
         contacts={contacts}
+        nameFor={nameFor}
         onPick={pickRecipient(to, setTo, setPendingTo)}
         recipientInfo={recipientInfo}
         rightSlot={!showCcBcc ? (
@@ -522,6 +622,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             placeholder="Carbon copy"
             mobile={mobile}
             contacts={contacts}
+            nameFor={nameFor}
             onPick={pickRecipient(cc, setCc, setPendingCc)}
             recipientInfo={recipientInfo}
           />
@@ -536,6 +637,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             placeholder="Blind carbon copy — hidden from other recipients"
             mobile={mobile}
             contacts={contacts}
+            nameFor={nameFor}
             onPick={pickRecipient(bcc, setBcc, setPendingBcc)}
             recipientInfo={recipientInfo}
           />
@@ -559,12 +661,13 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           initialHtml={richInitial.current}
           placeholder="Write something — it's encrypted before it leaves your device."
           mobile={mobile}
+          onDirty={() => { dirtyRef.current = true; }}
           onInsertImage={addInlineImage}
         />
       ) : (
         <textarea
           value={body}
-          onChange={e => setBody(e.target.value)}
+          onChange={e => { dirtyRef.current = true; setBody(e.target.value); }}
           placeholder="Write something — it's encrypted before it leaves your device."
           style={{ ...inputReset, resize: 'none', fontSize: mobile ? 16 : 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', padding: 'var(--space-4)', minHeight: mobile ? 0 : 200, flex: 1 }}
         />
@@ -598,6 +701,31 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
       {error && (
         <div style={{ padding: 'var(--space-2) var(--space-4)', color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{error}</div>
+      )}
+
+      {/* A pinned key that no longer matches. Rendered above every other banner: it is the
+          only one that blocks sending, and because "end-to-end encrypted" sitting alone under a
+          swapped key would be technically true and dangerously misleading. */}
+      {changedKeyRecipients.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--danger-subtle)', color: 'var(--text-body)' }}>
+          <Icon name="alert-triangle" size={15} style={{ color: 'var(--danger)', flex: 'none', marginTop: 2 }} />
+          <span>
+            The signing key for {changedKeyRecipients.join(', ')} has changed since you verified them.
+            Sending is blocked until you confirm the change out of band — it may be a normal rotation,
+            or someone else may now hold the address.
+          </span>
+        </div>
+      )}
+
+      {changedRecordRecipients.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--warning-subtle)', color: 'var(--text-body)' }}>
+          <Icon name="alert-triangle" size={15} style={{ color: 'var(--warning)', flex: 'none', marginTop: 2 }} />
+          <span>
+            The {changedRecordDetail || 'identity record'} for {changedRecordRecipients.join(', ')} changed
+            since you verified them. Their keys are unchanged, so this message is still sealed to the same
+            person — confirm the change is expected.
+          </span>
+        </div>
       )}
 
       {/* Legacy-recipient warning: some recipients can't receive E2E-encrypted mail. */}
@@ -660,12 +788,14 @@ interface RecipientFieldProps {
   onPick: (value: string) => void;
   /** Per-recipient classification (lowercased address → kind) for the chip shields. */
   recipientInfo: Record<string, RecipientKind>;
+  /** Shared display-name resolver, so a suggestion reads the same as the mail list. */
+  nameFor: (address: string) => string;
 }
 
 const MAX_SUGGESTIONS = 6;
 
 /** A chip-list recipient input row (To / Cc / Bcc share this), with contact type-ahead. */
-function RecipientField({ label, values, onRemove, pending, setPending, onKey, onBlur, placeholder, mobile, inputRef, rightSlot, contacts, onPick, recipientInfo }: RecipientFieldProps) {
+function RecipientField({ label, values, onRemove, pending, setPending, onKey, onBlur, placeholder, mobile, inputRef, rightSlot, contacts, onPick, recipientInfo, nameFor }: RecipientFieldProps) {
   const localRef = useRef<HTMLInputElement>(null);
   const ref = inputRef ?? localRef;
   const [focused, setFocused] = useState(false);
@@ -762,8 +892,8 @@ function RecipientField({ label, values, onRemove, pending, setPending, onKey, o
               }}
             >
               <div style={{ minWidth: 0, flex: 1 }}>
-                {c.name && (
-                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                {nameFor(c.address) !== c.address && (
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameFor(c.address)}</div>
                 )}
                 <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address}</div>
               </div>

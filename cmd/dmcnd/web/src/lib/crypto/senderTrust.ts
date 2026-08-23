@@ -13,6 +13,7 @@
 import { fromBase64 } from './keys';
 import type { IdentityLookupResponse } from '../api/client';
 import type { ContactRecord, TrustProvenance } from '../api/contactStore';
+import { changedFacts, contactFacts, directoryFacts } from '../trust/pinnedKey';
 
 // TIER_DOMAIN_DNS mirrors identity.TierDomainDNS (Go) — a domain-anchored,
 // countersigned identity. Kept in step with crypto/bridgeAttest.ts.
@@ -27,7 +28,8 @@ export type SenderTrustKind =
   | 'domain_verified'       // not allowlisted, but domain-countersigned (tier ≥ DomainDNS)
   | 'unknown_pending'       // valid signature, registered, but no trust decision yet
   | 'key_mismatch'          // header key ≠ the directory's published key (danger)
-  | 'key_changed'           // header key ≠ the key we pinned for this contact (danger)
+  | 'key_changed'           // a KEY differs from the one we pinned for this contact (danger)
+  | 'record_changed'        // keys hold, but a pinned property of the record changed (warning)
   | 'identity_unverifiable' // directory says a claimed countersignature failed (danger)
   | 'directory_missing';    // sender not resolvable in the directory (warning)
 
@@ -101,13 +103,34 @@ export async function evaluateSenderTrust(
     return { kind: 'key_mismatch', fingerprint: dir.fingerprint, reason: 'signing key does not match the directory' };
   }
 
-  // Pinned-key rotation: the directory agrees with the header, but it differs from
-  // the key we pinned when this contact was allowlisted → treat as an unsigned
-  // rotation (§14.1.2). Safe default: surface as danger and keep the sender pending
-  // until re-verified. (Distinguishing a *signed* rotation needs directory rotation
-  // lineage — see plan A4.)
-  if (contact?.ed25519Pub && !base64Eq(senderPublicKey, contact.ed25519Pub)) {
-    return { kind: 'key_changed', fingerprint: dir.fingerprint, reason: 'this contact’s key has changed — re-verify before trusting' };
+  // Pinned-identity check: the directory agrees with the header, but it may differ from
+  // what we pinned when this contact was confirmed → treat as an unsigned rotation
+  // (§14.1.2). Safe default: surface as danger and keep the sender pending until
+  // re-verified. (Distinguishing a *signed* rotation needs directory rotation lineage —
+  // see plan A4.)
+  //
+  // The pin comes off the contact record, which useContacts has already reconciled
+  // against this device's local pin store — so this comparison is against what THIS
+  // device observed, not against a value the relay could have rolled back.
+  const pinned = contactFacts(contact);
+  if (pinned) {
+    // Signing key, compared against the key that actually signed this header.
+    if (!base64Eq(senderPublicKey, pinned.ed25519Pub)) {
+      return { kind: 'key_changed', fingerprint: dir.fingerprint, reason: 'this contact’s signing key has changed — re-verify before trusting' };
+    }
+    // Encryption key, compared against the directory (a received header carries no
+    // X25519 key). This is the key mail to them gets sealed to, so a swap here is the
+    // one that decides who can read a reply — it was pinned but never checked before.
+    if (pinned.x25519Pub && pinned.x25519Pub !== dir.x25519_pub) {
+      return { kind: 'key_changed', fingerprint: dir.fingerprint, reason: 'this contact’s encryption key has changed — re-verify before trusting' };
+    }
+    // Properties: keys hold, but something else we pinned moved. Notably a domain
+    // turning ON admin key custody, which no key comparison can see because no user
+    // key changes — the operator flips a DAR policy bit.
+    const moved = changedFacts(pinned, directoryFacts(dir));
+    if (moved.length > 0) {
+      return { kind: 'record_changed', fingerprint: dir.fingerprint, reason: `this contact’s ${moved.join(' and ')} changed since you verified them` };
+    }
   }
 
   // Allowlisted: any contact (contacts ARE the allowlist). Provenance labels the

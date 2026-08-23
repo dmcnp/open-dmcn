@@ -12,7 +12,7 @@ import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
 import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, type LocalKeystore } from '../lib/crypto/localKeystore';
 import { isStoragePersisted, requestPersistentStorage } from '../lib/crypto/storage';
 import { isStaySignedIn, setStaySignedIn } from '../lib/sessionLifetime';
-import { readTheme, readDensity, type ThemePref } from '../lib/theme';
+import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, type ThemePref, type Density } from '../lib/theme';
 import { APP_VERSION } from '../lib/config';
 import { PageShell } from '../components/PageShell';
 import { BlockedSenders } from '../components/BlockedSenders';
@@ -203,12 +203,10 @@ export function Settings() {
       setErr(e instanceof Error ? e.message : 'password change failed');
     } finally { setBusy(false); }
   };
-  // Appearance prefs live in the same localStorage keys the shell reads.
-  const [themePref, setThemePref] = useState<ThemePref>(() => {
-    const saved = localStorage.getItem('dmcn_theme');
-    return saved === 'light' || saved === 'dark' ? saved : 'system';
-  });
-  const [density, setDensity] = useState<'compact' | 'comfortable'>(() => readDensity());
+  // Appearance prefs live in the same localStorage keys the shell reads (lib/theme.ts
+  // owns the key strings, so these can't drift apart).
+  const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
+  const [density, setDensity] = useState<Density>(readDensity);
 
   // Effective light/dark for the standalone live page preview.
   const effectiveTheme = themePref === 'system' ? readTheme() : themePref;
@@ -216,12 +214,12 @@ export function Settings() {
   // Write the preference synchronously, then notify the shell to re-read it (so the
   // raw "system" pref is preserved and the shell re-themes immediately).
   const applyTheme = (t: ThemePref) => {
-    localStorage.setItem('dmcn_theme', t);
+    writeThemePref(t);
     setThemePref(t);
     onAppearanceChange();
   };
-  const applyDensity = (d: 'compact' | 'comfortable') => {
-    localStorage.setItem('dmcn_density', d);
+  const applyDensity = (d: Density) => {
+    writeDensity(d);
     setDensity(d);
     onAppearanceChange();
   };
