@@ -439,11 +439,42 @@ SMTP, so whoever answers a <code>bridge=</code> token reads the plaintext. Poiso
 become that peer.</p>
 <p>Actually sending is still opt-in and off by default, and wants a DKIM key. Generate one and
 publish what it prints — the command outputs the whole SPF/DKIM/DMARC set:</p>
-<pre><code class="language-bash">dmcndcli bridge dkim-keygen --domain mesh.example --out dkim.pem
+<pre><code class="language-bash">dmcndcli bridge dkim-keygen --domain mesh.example \
+  --host mail.mesh.example --ip &lt;public-ip&gt; --out dkim.pem
 </code></pre>
-<pre><code>  ; DKIM — public key for selector &quot;dmcn&quot; (split into 255-byte strings)
-  dmcn._domainkey.mesh.example.  IN TXT  &quot;v=DKIM1; k=rsa; p=MIIBIjANBg…&quot;
-  ; SPF, DMARC and the PTR guidance are printed alongside it.
+<p><strong><code>--domain</code> is the domain mail is <em>from</em>, not the host it runs on.</strong> If addresses are
+<code>user@mesh.example</code> then <code>d=mesh.example</code>, even when the bridge and the webmail live on
+<code>mail.mesh.example</code>. DMARC compares <code>d=</code> against the <code>From:</code> header, and the bridge rewrites
+<code>From:</code> to <code>@&lt;domain&gt;</code> — so putting DKIM on the subdomain makes every message fail DMARC while
+looking perfectly configured. The two roles split like this:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>Name</th>
+<th>Records</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the <strong>domain</strong> mail is from</td>
+<td><code>mesh.example</code></td>
+<td>SPF, DKIM (<code>d=</code>), DMARC</td>
+</tr>
+<tr>
+<td>the <strong>host</strong> running the bridge</td>
+<td><code>mail.mesh.example</code></td>
+<td>MX target, EHLO, PTR</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>--host</code> sets the second (defaults to the domain, for a single-name setup) and <code>--ip</code> fills in the
+SPF and PTR lines so the output is pasteable. It prints the full set:</p>
+<pre><code>  merten.vg.                  IN MX   10 mail.merten.vg.
+  merten.vg.                  IN TXT  &quot;v=spf1 ip4:203.0.113.7 -all&quot;
+  dmcn._domainkey.merten.vg.  IN TXT  &quot;v=DKIM1; k=rsa; p=MIIBIjANBg…&quot;
+  _dmarc.merten.vg.           IN TXT  &quot;v=DMARC1; p=quarantine; …&quot;
+  ; plus the PTR requirement, which is set at your provider, not in this zone
 </code></pre>
 <p>Then:</p>
 <pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_CREDENTIAL=bridge.cred \

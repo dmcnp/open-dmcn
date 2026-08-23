@@ -166,10 +166,17 @@ func txtChunks(s string) string {
 	return strings.Join(parts, " ")
 }
 
-// DeliverabilityDNS renders the DNS records an operator must publish so the bridge's outbound
-// mail passes SPF, DKIM, and DMARC, plus the reverse-DNS (PTR) requirement that lives outside
-// the domain's own zone. signer may be nil (DKIM section then points at `dkim-keygen`); an
-// empty publicIP renders a placeholder.
+// DeliverabilityDNS renders the DNS records an operator must publish for the bridge to exchange
+// mail with the legacy world: MX so mail can arrive, SPF/DKIM/DMARC so what leaves is accepted,
+// and the reverse-DNS (PTR) requirement that lives outside the domain's own zone.
+//
+// signer may be nil (the DKIM section then points at `dkim-keygen`); an empty publicIP or helo
+// renders a placeholder or falls back to the domain.
+//
+// Note which name goes where, because it is the thing operators get wrong: SPF, DKIM (d=) and
+// DMARC all hang off bridgeDomain, because DMARC alignment compares them against the From: header,
+// which the bridge rewrites to @bridgeDomain. The MX target, the HELO name and the PTR are the
+// HOST — often a subdomain like mail.example.com — and have nothing to do with alignment.
 func DeliverabilityDNS(bridgeDomain, selector string, signer *DKIMSigner, helo, publicIP string) string {
 	ip := publicIP
 	if ip == "" {
@@ -179,7 +186,10 @@ func DeliverabilityDNS(bridgeDomain, selector string, signer *DKIMSigner, helo, 
 		helo = bridgeDomain
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Outbound-mail deliverability — publish these DNS records for %s:\n\n", bridgeDomain)
+	fmt.Fprintf(&b, "Bridge mail DNS — publish these records for %s:\n\n", bridgeDomain)
+
+	fmt.Fprintf(&b, "  ; MX — where legacy mail for @%s is delivered (inbound)\n", bridgeDomain)
+	fmt.Fprintf(&b, "  %s.\tIN MX\t10 %s.\n\n", bridgeDomain, helo)
 
 	fmt.Fprintf(&b, "  ; SPF — authorize the bridge's sending IP (envelope MAIL FROM is @%s)\n", bridgeDomain)
 	fmt.Fprintf(&b, "  %s.\tIN TXT\t\"v=spf1 ip4:%s -all\"\n\n", bridgeDomain, ip)

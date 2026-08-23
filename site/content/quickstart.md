@@ -321,13 +321,30 @@ Actually sending is still opt-in and off by default, and wants a DKIM key. Gener
 publish what it prints — the command outputs the whole SPF/DKIM/DMARC set:
 
 ```bash
-dmcndcli bridge dkim-keygen --domain mesh.example --out dkim.pem
+dmcndcli bridge dkim-keygen --domain mesh.example \
+  --host mail.mesh.example --ip <public-ip> --out dkim.pem
 ```
 
+**`--domain` is the domain mail is *from*, not the host it runs on.** If addresses are
+`user@mesh.example` then `d=mesh.example`, even when the bridge and the webmail live on
+`mail.mesh.example`. DMARC compares `d=` against the `From:` header, and the bridge rewrites
+`From:` to `@<domain>` — so putting DKIM on the subdomain makes every message fail DMARC while
+looking perfectly configured. The two roles split like this:
+
+| | Name | Records |
+|---|---|---|
+| the **domain** mail is from | `mesh.example` | SPF, DKIM (`d=`), DMARC |
+| the **host** running the bridge | `mail.mesh.example` | MX target, EHLO, PTR |
+
+`--host` sets the second (defaults to the domain, for a single-name setup) and `--ip` fills in the
+SPF and PTR lines so the output is pasteable. It prints the full set:
+
 ```
-  ; DKIM — public key for selector "dmcn" (split into 255-byte strings)
-  dmcn._domainkey.mesh.example.  IN TXT  "v=DKIM1; k=rsa; p=MIIBIjANBg…"
-  ; SPF, DMARC and the PTR guidance are printed alongside it.
+  merten.vg.                  IN MX   10 mail.merten.vg.
+  merten.vg.                  IN TXT  "v=spf1 ip4:203.0.113.7 -all"
+  dmcn._domainkey.merten.vg.  IN TXT  "v=DKIM1; k=rsa; p=MIIBIjANBg…"
+  _dmarc.merten.vg.           IN TXT  "v=DMARC1; p=quarantine; …"
+  ; plus the PTR requirement, which is set at your provider, not in this zone
 ```
 
 Then:
