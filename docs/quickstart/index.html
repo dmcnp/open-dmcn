@@ -510,6 +510,14 @@ as forgery, where an absent one merely reads as unauthenticated.</p>
 captures it in memory instead of sending it, so installing the daemon never starts emitting live
 mail at anyone. Turn it on and you want a DKIM key too — unsigned mail from a new host is filtered
 almost everywhere.</p>
+<p><strong>What bridged mail looks like in the client.</strong> An inbound legacy message is attributed to the
+person who actually sent it — <code>someone@gmail.com</code>, not the bridge — and the bridge's signed
+SPF/DKIM/DMARC verdict for that address is what makes the attribution meaningful. The reader shows
+it as a verified legacy sender, and marks it unanchored, because a legacy address has no DMCN
+identity to check the signing key against.</p>
+<p>Outbound, you hear about <strong>failures only</strong>. A non-delivery notice arrives from <code>mailer-daemon@</code>
+your domain with the reason in the body; a successful send produces no mail, the way email has
+always worked. The signed receipt is on the bridge's audit trail either way.</p>
 <p><strong>On the TLS to other mail servers.</strong> Outbound STARTTLS is <em>opportunistic</em>: encrypted where the
 receiving server offers it, and the certificate is deliberately not verified. That is what every
 production MTA does, and the reason is that the alternative to unverified TLS is cleartext, not

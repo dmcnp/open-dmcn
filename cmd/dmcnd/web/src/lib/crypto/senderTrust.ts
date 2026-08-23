@@ -79,6 +79,16 @@ export async function evaluateSenderTrust(
     return { kind: 'directory_missing', reason: 'sender not found in the directory' };
   }
 
+  // A legacy (non-DMCN) sender: the lookup resolved this domain's BRIDGE, not a correspondent,
+  // and there is no published identity key to compare against. Anchoring is impossible by
+  // definition, so say that — the alternative is comparing the signing key against an absent one
+  // and reporting a key MISMATCH, which reads as an impersonation attempt on perfectly ordinary
+  // bridged mail. What vouches for a legacy sender is the bridge's signed SPF/DKIM/DMARC
+  // attestation (crypto/bridgeAttest.ts), not the directory.
+  if (dir.legacy) {
+    return { kind: 'directory_missing', reason: 'sent from outside DMCN, via a bridge' };
+  }
+
   // A claimed countersignature that failed to verify (revoked/unauthorized) — the
   // directory actively distrusts this identity. Mirrors bridgeAttest gap #9.
   if (dir.identity_unverifiable) {

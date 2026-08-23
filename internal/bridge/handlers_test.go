@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mertenvg/logr/v2"
 
@@ -459,5 +460,101 @@ func TestSplitEnvelopeYieldsAWorkingReceipt(t *testing.T) {
 	}
 	if pt.SenderAddress != "alice@dmcn.localhost" {
 		t.Errorf("sender address = %q, so the receipt would be addressed wrongly", pt.SenderAddress)
+	}
+}
+
+// TestInboundAttributesTheLegacySender is what a mail client actually shows. Inbound mail was
+// attributed to the bridge, whose "address" is now a libp2p peer ID — so every bridged message
+// appeared to come from the same unreadable correspondent, and who actually wrote survived only
+// inside the classification record.
+//
+// The bridge signs the message, so this address is a claim rather than a proof. The attestation is
+// what backs it: a recipient checks the bridge's credential and its SPF/DKIM/DMARC verdict for
+// this exact address before the name means anything. Attributing the mail to the bridge instead
+// discards the identity the bridge just verified.
+func TestInboundAttributesTheLegacySender(t *testing.T) {
+	recipientKP := mustKeyPair(t)
+	bridgeKP := mustKeyPair(t)
+	var delivered *message.PlaintextMessage
+
+	h := bridge.NewInboundHandler(bridge.InboundConfig{
+		BridgeKP:     bridgeKP,
+		BridgeAddr:   tBridgeAddr,
+		AuthVerifier: &bridge.StubAuthVerifier{},
+		Lookup: func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+			return recordFor(addr, recipientKP), nil
+		},
+		Deliver: func(_ context.Context, _ *identity.IdentityRecord, env *message.EncryptedEnvelope) error {
+			sh, err := message.DecryptHeader(env, recipientKP.X25519Private, recipientKP.X25519Public)
+			if err != nil {
+				return err
+			}
+			delivered = &message.PlaintextMessage{
+				SenderAddress:    sh.Header.SenderAddress,
+				RecipientAddress: sh.Header.RecipientAddress,
+			}
+			return nil
+		},
+		BridgeDomain: "bridge.localhost",
+		DMCNDomain:   "dmcn.localhost",
+		Log:          testLog(),
+	})
+
+	raw := []byte("From: someone@gmail.com\r\nSubject: hello\r\n\r\nbody\r\n")
+	if err := h.HandleMessage(context.Background(), "203.0.113.9", "someone@gmail.com", "alice@bridge.localhost", raw); err != nil {
+		t.Fatalf("inbound: %v", err)
+	}
+	if delivered == nil {
+		t.Fatal("nothing was delivered")
+	}
+	if delivered.SenderAddress != "someone@gmail.com" {
+		t.Errorf("sender = %q, want the legacy sender — a peer ID or bridge address tells the reader nothing",
+			delivered.SenderAddress)
+	}
+}
+
+// TestOnlyFailuresProduceANotice: a success receipt per message would put a second message in the
+// sender's own mailbox for every one they write. Email has never worked that way — a DSN is for
+// non-delivery — and the signed success receipt still exists on the audit trail regardless.
+func TestOnlyFailuresProduceANotice(t *testing.T) {
+	if !bridge.ShouldNotifySenderForTest(&bridge.BridgeDeliveryReceipt{Success: false}) {
+		t.Error("a delivery FAILURE produced no notice — the sender would never learn about it")
+	}
+	if bridge.ShouldNotifySenderForTest(&bridge.BridgeDeliveryReceipt{Success: true}) {
+		t.Error("a delivery SUCCESS produced a notice — that is a second message per message sent")
+	}
+	if bridge.ShouldNotifySenderForTest(nil) {
+		t.Error("no receipt produced a notice")
+	}
+}
+
+// TestFailureNoticeIsReadableWithoutTheAttachment covers the other half of the complaint: the body
+// said "Message delivery receipt attached." and nothing else, so the reader had to open a binary
+// blob to learn what had happened.
+func TestFailureNoticeIsReadableWithoutTheAttachment(t *testing.T) {
+	body := bridge.DeliveryFailureBodyForTest(&bridge.BridgeDeliveryReceipt{
+		RecipientEmail: "someone@example.com",
+		Success:        false,
+		ErrorDetail:    "550 mailbox unavailable",
+		DeliveredAt:    time.Now().UTC(),
+	}, "Quarterly numbers")
+
+	for _, want := range []string{"someone@example.com", "Quarterly numbers", "550 mailbox unavailable"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the notice does not mention %q:\n%s", want, body)
+		}
+	}
+}
+
+// TestFailureNoticeComesFromMailerDaemon: the bridge has no mailbox, and a libp2p peer ID in the
+// From line is meaningless to a reader. MAILER-DAEMON is what mail users have recognised as "the
+// system, not a person" for decades, and it is a reserved local-part so nobody can register it.
+func TestFailureNoticeComesFromMailerDaemon(t *testing.T) {
+	got := bridge.MailerDaemonAddressForTest("merten.vg")
+	if got != "mailer-daemon@merten.vg" {
+		t.Errorf("notice sender = %q, want mailer-daemon@merten.vg", got)
+	}
+	if strings.HasPrefix(got, "12D3Koo") {
+		t.Error("the notice is addressed from a peer ID")
 	}
 }

@@ -143,8 +143,17 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 	// 6. Build the DMCN PlaintextMessage from the parsed MIME, preserving the real subject, body
 	// content type, attachments, and threading. Fall back to the raw source as the body if the
 	// message doesn't parse (or carries no body), so a malformed message is never dropped.
+	// The sender is the LEGACY sender, not the bridge. A mail client shows this field, and a
+	// libp2p peer ID tells the reader nothing about who wrote to them — worse, it makes every
+	// bridged message look like it came from the same correspondent.
+	//
+	// The bridge signs the message, so the address here is a CLAIM rather than a proof, and the
+	// classification record is what backs it: a recipient verifies the bridge's credential and
+	// its SPF/DKIM/DMARC verdict for exactly this address before treating the name as meaningful.
+	// That is the whole point of the attestation — attributing the mail to the bridge instead
+	// would throw away the identity the bridge just went to the trouble of checking.
 	msg, err := message.NewPlaintextMessage(
-		h.bridgeAddr,
+		from,
 		dmcnAddr,
 		fmt.Sprintf("Bridged message from %s", from),
 		"",

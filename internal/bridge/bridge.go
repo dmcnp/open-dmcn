@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mertenvg/logr/v2"
@@ -73,17 +74,19 @@ type Config struct {
 
 // Bridge is the SMTP-DMCN bridge node.
 type Bridge struct {
-	node      *node.Node
-	bridgeKP  *identity.IdentityKeyPair
-	inbound   *InboundHandler
-	outbound  *OutboundHandler
-	deliver   DeliverFunc // routes finished envelopes (inbound + receipts) to recipients
-	smtp      *SMTPServer
-	auditFile *FileAuditLog // non-nil when an audit log file is open; closed on Stop
-	poll      time.Duration
-	log       logr.Logger
-	ctx       context.Context
-	cancel    context.CancelFunc
+	node     *node.Node
+	bridgeKP *identity.IdentityKeyPair
+	inbound  *InboundHandler
+	outbound *OutboundHandler
+	// dmcnDomain is this bridge's DMCN side, used to address delivery-failure notices.
+	dmcnDomain string
+	deliver    DeliverFunc // routes finished envelopes (inbound + receipts) to recipients
+	smtp       *SMTPServer
+	auditFile  *FileAuditLog // non-nil when an audit log file is open; closed on Stop
+	poll       time.Duration
+	log        logr.Logger
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // New creates the SMTP bridge over an already-running DMCN node it SHARES with the daemon. The
@@ -207,17 +210,18 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 	smtpSrv := NewSMTPServer(ctx, cfg.SMTPListenAddr, inbound, cfg.BridgeDomain, limits, tlsOpts, proxyPolicy, l)
 
 	return &Bridge{
-		node:      n,
-		bridgeKP:  bridgeKP,
-		inbound:   inbound,
-		outbound:  outbound,
-		deliver:   deliver,
-		smtp:      smtpSrv,
-		auditFile: auditFile,
-		poll:      cfg.PollInterval,
-		log:       l,
-		ctx:       ctx,
-		cancel:    cancel,
+		node:       n,
+		bridgeKP:   bridgeKP,
+		inbound:    inbound,
+		outbound:   outbound,
+		dmcnDomain: cfg.DMCNDomain,
+		deliver:    deliver,
+		smtp:       smtpSrv,
+		auditFile:  auditFile,
+		poll:       cfg.PollInterval,
+		log:        l,
+		ctx:        ctx,
+		cancel:     cancel,
 	}, nil
 }
 
@@ -317,7 +321,11 @@ func (b *Bridge) deliverOne(env *message.EncryptedEnvelope) bool {
 		b.log.Warnf("outbound handling failed: %v", deliverErr)
 		return false
 	}
-	if receipt != nil {
+	// Only failures come back to the sender. Email has always worked this way — a DSN is for
+	// non-delivery, and nobody expects a note confirming each message arrived — and a receipt per
+	// successful send would put a second message in the sender's own mailbox for every one they
+	// write. The signed success receipt still exists on the audit trail; it just is not mail.
+	if shouldNotifySender(receipt) {
 		b.sendReceipt(b.ctx, env, receipt)
 	}
 	return true
@@ -347,11 +355,20 @@ func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.Encrypted
 		return
 	}
 
+	// From MAILER-DAEMON, not the bridge's peer ID. The bridge has no mailbox by design, and a
+	// libp2p peer ID in the From line tells the reader nothing; MAILER-DAEMON is what every mail
+	// user has recognised as "the system, not a person" for forty years. It resolves to no DMCN
+	// identity, which the client reports honestly as unanchored rather than as a real sender.
+	//
+	// The body says what happened in full. The signed receipt is still attached — that is the
+	// verifiable artifact, and a client can check it against the bridge's credential — but the
+	// message has to be readable without parsing an attachment, which "Message delivery receipt
+	// attached." was not.
 	msg, err := message.NewPlaintextMessage(
-		b.inbound.bridgeAddr,
+		mailerDaemonAddress(b.dmcnDomain),
 		pt.SenderAddress,
-		"Delivery Receipt",
-		"Message delivery receipt attached.",
+		fmt.Sprintf("Delivery failed: %s", receipt.RecipientEmail),
+		deliveryFailureBody(receipt, pt.Subject),
 		b.bridgeKP.Ed25519Public,
 	)
 	if err != nil {
@@ -516,3 +533,42 @@ func buildSMTPTLS(cfg Config) (*smtpTLS, error) {
 // NOTE (open-dmcn): the bridge no longer loads/generates its own keys — the daemon provisions
 // the bridge identity (from its seed keystore) and passes the key pair into New. The former
 // loadOrGenerateBridgeKeys helper is omitted.
+
+// mailerDaemonAddress is the conventional sender for an automated delivery notice. Reserved in a
+// domain's default local-parts, so it cannot be registered by a user and mistaken for one.
+func mailerDaemonAddress(dmcnDomain string) string {
+	if dmcnDomain == "" {
+		return "mailer-daemon@localhost"
+	}
+	return "mailer-daemon@" + dmcnDomain
+}
+
+// deliveryFailureBody renders the human half of a non-delivery notice: what failed, to whom, and
+// why, in the terms the sender used rather than the bridge's.
+func deliveryFailureBody(receipt *BridgeDeliveryReceipt, originalSubject string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Your message could not be delivered to %s.\n\n", receipt.RecipientEmail)
+	if originalSubject != "" {
+		fmt.Fprintf(&b, "Subject: %s\n", originalSubject)
+	}
+	fmt.Fprintf(&b, "Attempted: %s\n\n", receipt.DeliveredAt.Format(time.RFC1123Z))
+	if receipt.ErrorDetail != "" {
+		fmt.Fprintf(&b, "Reason: %s\n\n", receipt.ErrorDetail)
+	}
+	b.WriteString("This message left the DMCN network at a bridge and was handed to ordinary " +
+		"email, where delivery failed. The signed receipt is attached.\n")
+	return b.String()
+}
+
+// shouldNotifySender reports whether a delivery outcome is worth telling the sender about.
+// Failures only — see deliverOne.
+func shouldNotifySender(receipt *BridgeDeliveryReceipt) bool {
+	return receipt != nil && !receipt.Success
+}
+
+// Test hooks for the external test package.
+func ShouldNotifySenderForTest(r *BridgeDeliveryReceipt) bool { return shouldNotifySender(r) }
+func DeliveryFailureBodyForTest(r *BridgeDeliveryReceipt, subject string) string {
+	return deliveryFailureBody(r, subject)
+}
+func MailerDaemonAddressForTest(domain string) string { return mailerDaemonAddress(domain) }
