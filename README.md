@@ -75,7 +75,8 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DMCND_DOMAIN` | `localhost` | the DMCN domain this daemon serves |
+| `DMCND_DOMAIN` | `localhost` | the DMCN domain addresses belong to (`user@<domain>`) |
+| `DMCND_WEB_HOST` | `$DMCND_DOMAIN` | hostname the web client is served on and certificated for — set it to serve webmail at `mail.example.com` while addresses stay `user@example.com`. Never affects addresses |
 | `DMCND_LISTEN` | `:443` (`:8080` in dev) | webmail listen address — 443 because autocert's ACME challenge only works there; dev serves plain HTTP, so it defaults off an HTTPS-conventional port |
 | `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/7400` (ephemeral in dev) | libp2p listen multiaddr — this port goes into your published `seed=`, so it must be stable |
 | `DMCND_DATA_DIR` | `data` | mailbox/record store, sessions, node key, petition queue |

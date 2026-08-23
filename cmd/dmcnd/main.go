@@ -248,7 +248,7 @@ func main() {
 	// HTTP server + embedded SPA.
 	srv := server.New(server.Config{
 		ListenAddr: cfg.httpListen,
-		Domain:     cfg.domain,
+		Domain:     cfg.webHost,
 		TLSCert:    cfg.tlsCert,
 		TLSKey:     cfg.tlsKey,
 		DevMode:    cfg.devMode,
@@ -314,7 +314,8 @@ func main() {
 			// localhost is a secure context in browsers even over plain HTTP, so WebCrypto works.
 			serr = srv.Start("", "")
 		default:
-			serr = srv.StartAutocert(cfg.domain, filepath.Join(cfg.dataDir, "certs"))
+			// Both names: whichever the operator actually points at this node gets a cert.
+			serr = srv.StartAutocert([]string{cfg.webHost, cfg.domain}, filepath.Join(cfg.dataDir, "certs"))
 		}
 		if serr != nil {
 			log.Errorf("server error: %v", serr)
@@ -327,14 +328,14 @@ func main() {
 	// why dev and production listen on different ports.
 	switch {
 	case cfg.tlsCert != "" && cfg.tlsKey != "":
-		log.Infof("dmcnd webmail listening on https://%s (domain %s)", listenURLHost(cfg.httpListen, cfg.domain), cfg.domain)
+		log.Infof("dmcnd webmail listening on https://%s (mail for @%s)", listenURLHost(cfg.httpListen, cfg.webHost), cfg.domain)
 	case cfg.devMode:
-		log.Infof("dmcnd webmail listening on http://%s (domain %s)", listenURLHost(cfg.httpListen, "localhost"), cfg.domain)
+		log.Infof("dmcnd webmail listening on http://%s (mail for @%s)", listenURLHost(cfg.httpListen, "localhost"), cfg.domain)
 		log.Warnf("dev mode serves PLAIN HTTP — no TLS. Open the http:// URL above explicitly; " +
 			"a browser left to guess the scheme will try https:// and fail. localhost is still a " +
 			"secure context, so Web Crypto works.")
 	default:
-		log.Infof("dmcnd webmail listening on https://%s (domain %s, autocert)", listenURLHost(cfg.httpListen, cfg.domain), cfg.domain)
+		log.Infof("dmcnd webmail listening on https://%s (mail for @%s, autocert)", listenURLHost(cfg.httpListen, cfg.webHost), cfg.domain)
 	}
 
 	sigCh := make(chan os.Signal, 1)
@@ -356,9 +357,14 @@ func main() {
 
 // config holds the daemon's resolved runtime configuration (all from DMCND_* env vars).
 type config struct {
-	httpListen      string
-	nodeListen      string
-	domain          string
+	httpListen string
+	nodeListen string
+	domain     string
+	// webHost is the hostname the web client is served on, for TLS and the CORS origin. It
+	// defaults to domain, and differs when an operator wants addresses at the apex
+	// (user@example.com) but the client on a subdomain (mail.example.com) — the ordinary email
+	// arrangement. It never affects addresses, which always come from domain.
+	webHost         string
 	dataDir         string
 	identityKeyPath string
 	tlsCert         string
@@ -394,6 +400,7 @@ func loadConfig() config {
 		httpListen:       envOr("DMCND_LISTEN", defaultHTTPListen(devMode)),
 		nodeListen:       envOr("DMCND_NODE_LISTEN", defaultNodeListen(devMode)),
 		domain:           envOr("DMCND_DOMAIN", "localhost"),
+		webHost:          os.Getenv("DMCND_WEB_HOST"),
 		dataDir:          envOr("DMCND_DATA_DIR", "data"),
 		identityKeyPath:  identityKeyPath(envOr("DMCND_DATA_DIR", "data")),
 		tlsCert:          os.Getenv("DMCND_TLS_CERT"),
@@ -429,6 +436,9 @@ func loadConfig() config {
 		} else {
 			c.petitionTTL = d
 		}
+	}
+	if c.webHost == "" {
+		c.webHost = c.domain
 	}
 	pi := envOr("DMCND_POLL_INTERVAL", "10s")
 	d, err := time.ParseDuration(pi)

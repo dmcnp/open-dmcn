@@ -178,6 +178,12 @@ Lose it and no address on the domain can ever be issued or rotated again. There 
 path except publishing a new `fp=` and having every correspondent re-verify you, and nobody can
 re-issue it for you.
 
+**Serving the client on a subdomain.** Addresses come from `DMCND_DOMAIN`, but the client does not
+have to be served there. Set `DMCND_WEB_HOST=mail.example.com` and webmail is served — and
+certificated — on that name while addresses stay `user@example.com`, the arrangement ordinary email
+has always had. Point the subdomain at the node; the apex only needs the `_dmcn` TXT record. Both
+names are whitelisted for autocert, so the apex keeps working if you point it here too.
+
 **6. [node]** Start the daemon.
 
 ```bash
@@ -240,7 +246,8 @@ Everything is environment-driven. These are the ones you'll actually touch:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DMCND_DOMAIN` | `localhost` | the domain this daemon serves |
+| `DMCND_DOMAIN` | `localhost` | the domain addresses belong to (`user@<domain>`) |
+| `DMCND_WEB_HOST` | `$DMCND_DOMAIN` | hostname the web client is served on, if not the domain itself |
 | `DMCND_LISTEN` | `:443` (`:8080` in dev) | webmail listen address |
 | `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/7400` (ephemeral in dev) | libp2p listen address — the port in your published `seed=` |
 | `DMCND_DATA_DIR` | `data` | mailboxes, records, the node key |

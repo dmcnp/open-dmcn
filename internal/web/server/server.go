@@ -5,6 +5,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -43,6 +44,11 @@ type FrontendConfig struct {
 	RegistrationClosed bool
 	// SignupURL is where would-be registrants are sent when RegistrationClosed.
 	SignupURL string
+	// Domain is the HOSTNAME this client is served on — used for the CORS origin and the TLS
+	// certificate. It is NOT necessarily the DMCN domain: addresses may be user@example.com while
+	// the client is served from mail.example.com. FrontendConfig.DefaultDomain carries the DMCN
+	// domain, which is what addresses are formed from.
+	//
 	// DomainRootPub is this domain's root Ed25519 public key, base64. Public by construction —
 	// it is what the domain's _dmcn DNS fingerprint commits to. The SPA uses it to verify a
 	// bridge's credential itself, so the server cannot influence whether bridged mail looks
@@ -304,16 +310,32 @@ func (s *Server) Start(certFile, keyFile string) error {
 	return s.httpServer.ListenAndServe()
 }
 
-// StartAutocert begins listening with automatic TLS certificates from
-// Let's Encrypt via the ACME protocol.
-func (s *Server) StartAutocert(domain, cacheDir string) error {
+// StartAutocert begins listening with automatic TLS certificates from Let's Encrypt via the ACME
+// protocol, for every name in hosts.
+//
+// More than one, because the hostname serving the webmail need not be the DMCN domain: addresses
+// can be user@example.com while the client lives at mail.example.com, exactly as ordinary email
+// separates the two. A name that never arrives over SNI costs nothing, so both are whitelisted and
+// whichever the operator actually points at this node works.
+func (s *Server) StartAutocert(hosts []string, cacheDir string) error {
+	seen := map[string]bool{}
+	var allow []string
+	for _, h := range hosts {
+		if h = strings.TrimSpace(strings.ToLower(h)); h != "" && !seen[h] {
+			seen[h] = true
+			allow = append(allow, h)
+		}
+	}
+	if len(allow) == 0 {
+		return fmt.Errorf("autocert: no hostname to obtain a certificate for")
+	}
 	m := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(domain),
+		HostPolicy: autocert.HostWhitelist(allow...),
 		Cache:      autocert.DirCache(cacheDir),
 	}
 	s.httpServer.TLSConfig = m.TLSConfig()
-	s.log.Info("starting HTTPS server with autocert", logr.M("addr", s.httpServer.Addr), logr.M("domain", domain))
+	s.log.Info("starting HTTPS server with autocert", logr.M("addr", s.httpServer.Addr), logr.M("hosts", strings.Join(allow, ", ")))
 	return s.httpServer.ListenAndServeTLS("", "")
 }
 
