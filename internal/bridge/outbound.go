@@ -25,36 +25,54 @@ type outboundLimiter interface {
 // omitted. Outbound is bounded by the flat per-sender hourly limiter below; a self-host is its own
 // send authority.
 
-// outboundDedupMax bounds the set of recently-delivered message IDs kept for
-// idempotency before it is reset (PoC-grade; a persistent store would replace
-// this post-PoC alongside durable relay storage).
+// outboundDedupMax bounds the set of recently-delivered deliveries kept for idempotency before it
+// is reset (PoC-grade; a persistent store would replace this alongside durable relay storage).
 const outboundDedupMax = 4096
 
-// messageDedup tracks message IDs already delivered, so a duplicate or replayed
-// envelope is not delivered to the legacy recipient twice.
+// deliveryKey identifies one delivery: a message TO a particular recipient.
+//
+// Keying on the message ID alone was wrong, and wrong in a way that silently lost mail. A client
+// composing to several people seals one copy per recipient, and every copy carries the SAME
+// message ID — that is what makes them one conversation. So a message addressed to two legacy
+// recipients looked like a redelivery of itself, and everyone after the first was dropped as a
+// duplicate, with a SUCCESS receipt to the sender.
+//
+// Recipient is the legacy address, lowercased: what is being deduplicated is "did this message
+// already reach this person", and SMTP addresses are not case-sensitive in the domain.
+type deliveryKey struct {
+	id        [16]byte
+	recipient string
+}
+
+// messageDedup tracks deliveries already made, so a duplicate or replayed envelope is not
+// delivered to the same legacy recipient twice.
 type messageDedup struct {
 	mu   sync.Mutex
-	seen map[[16]byte]struct{}
+	seen map[deliveryKey]struct{}
 }
 
 func newMessageDedup() *messageDedup {
-	return &messageDedup{seen: make(map[[16]byte]struct{})}
+	return &messageDedup{seen: make(map[deliveryKey]struct{})}
 }
 
-func (d *messageDedup) seenBefore(id [16]byte) bool {
+func (d *messageDedup) key(id [16]byte, recipient string) deliveryKey {
+	return deliveryKey{id: id, recipient: strings.ToLower(strings.TrimSpace(recipient))}
+}
+
+func (d *messageDedup) seenBefore(id [16]byte, recipient string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	_, ok := d.seen[id]
+	_, ok := d.seen[d.key(id, recipient)]
 	return ok
 }
 
-func (d *messageDedup) mark(id [16]byte) {
+func (d *messageDedup) mark(id [16]byte, recipient string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if len(d.seen) >= outboundDedupMax {
-		d.seen = make(map[[16]byte]struct{})
+		d.seen = make(map[deliveryKey]struct{})
 	}
-	d.seen[id] = struct{}{}
+	d.seen[d.key(id, recipient)] = struct{}{}
 }
 
 // OutboundHandler processes DMCN messages addressed to legacy email
@@ -203,11 +221,12 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 		}
 	}
 
-	// 7. Idempotency: never deliver the same DMCN message twice. A duplicate or
-	// replayed envelope returns a success receipt without re-delivering (and
-	// without consuming rate-limit quota).
+	// 7. Idempotency: never deliver the same DMCN message to the same recipient twice. A
+	// duplicate or replayed envelope returns a success receipt without re-delivering (and without
+	// consuming rate-limit quota). Scoped per RECIPIENT — one compose to several people is one
+	// message ID with several copies, and treating those as duplicates drops all but the first.
 	msgID := pt.MessageID
-	if h.dedup.seenBefore(msgID) {
+	if h.dedup.seenBefore(msgID, recipientAddr) {
 		h.log.Infof("skipping duplicate outbound delivery of %x to %s", msgID, recipientAddr)
 		return h.makeReceipt(msgID, recipientAddr, nil)
 	}
@@ -227,7 +246,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 		h.log.Warnf("outbound delivery failed to %s: %v", recipientAddr, deliverErr)
 		h.audit.Record(AuditEvent{Action: "outbound.deliver", From: senderAddr, To: recipientAddr, Success: false, Detail: deliverErr.Error()})
 	} else {
-		h.dedup.mark(msgID) // mark delivered only on success, so failures can retry
+		h.dedup.mark(msgID, recipientAddr) // only on success, so failures can retry
 		h.log.Infof("outbound message delivered from %s to %s via SMTP", senderAddr, recipientAddr)
 		h.audit.Record(AuditEvent{Action: "outbound.deliver", From: senderAddr, To: recipientAddr, Success: true})
 	}

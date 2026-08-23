@@ -558,3 +558,78 @@ func TestFailureNoticeComesFromMailerDaemon(t *testing.T) {
 		t.Error("the notice is addressed from a peer ID")
 	}
 }
+
+// TestMultiRecipientIsNotADuplicate is the regression for silently lost mail.
+//
+// A client composing to several people seals one copy per recipient, and every copy carries the
+// same message ID — that is what makes them one conversation. The outbound dedup keyed on message
+// ID alone, so a message addressed to two legacy recipients looked like a redelivery of itself:
+// the first was sent, the rest were dropped, and the sender got a SUCCESS receipt for each.
+//
+// Seen live on 23 Aug 2026 — a message to one DMCN and two legacy addresses reached Gmail and was
+// skipped for Outlook.
+func TestMultiRecipientIsNotADuplicate(t *testing.T) {
+	bridgeKP := mustKeyPair(t)
+	senderKP := mustKeyPair(t)
+	deliverer := &bridge.StubSMTPDeliverer{}
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, deliverer, bridgeKP)
+
+	// One compose, two legacy recipients: same message ID, different addresses.
+	msg, err := message.NewPlaintextMessage("alice@dmcn.localhost", "", "Hello both", "body", senderKP.Ed25519Public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rcpt := range []string{"one@gmail.com", "two@outlook.com"} {
+		copyMsg := *msg // same MessageID, per-recipient copy — exactly what the client sends
+		copyMsg.RecipientAddress = rcpt
+		sh, content, serr := message.Split(&copyMsg, senderKP.Ed25519Private)
+		if serr != nil {
+			t.Fatal(serr)
+		}
+		env, eerr := message.EncryptSplit(sh, content,
+			[]message.RecipientInfo{{DeviceID: senderKP.DeviceID, X25519Pub: bridgeKP.X25519Public}},
+			senderKP.Ed25519Private)
+		if eerr != nil {
+			t.Fatal(eerr)
+		}
+		if _, herr := h.HandleEnvelope(context.Background(), env); herr != nil {
+			t.Fatalf("delivery to %s: %v", rcpt, herr)
+		}
+	}
+
+	if len(deliverer.Messages) != 2 {
+		t.Fatalf("delivered %d of 2 recipients — the second was dropped as a duplicate", len(deliverer.Messages))
+	}
+	got := map[string]bool{}
+	for _, m := range deliverer.Messages {
+		got[m.To] = true
+	}
+	for _, want := range []string{"one@gmail.com", "two@outlook.com"} {
+		if !got[want] {
+			t.Errorf("%s never received the message", want)
+		}
+	}
+}
+
+// TestReplayToTheSameRecipientIsStillSuppressed keeps the property the dedup exists for: the
+// bridge polls its mailbox, so a message whose delete or ACK failed must not be sent twice.
+func TestReplayToTheSameRecipientIsStillSuppressed(t *testing.T) {
+	bridgeKP := mustKeyPair(t)
+	senderKP := mustKeyPair(t)
+	deliverer := &bridge.StubSMTPDeliverer{}
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, deliverer, bridgeKP)
+
+	env := splitSealedToBridge(t, senderKP, bridgeKP, "alice@dmcn.localhost", "ext@gmail.com", "body")
+	for i := 0; i < 3; i++ {
+		if _, err := h.HandleEnvelope(context.Background(), env); err != nil {
+			t.Fatalf("attempt %d: %v", i, err)
+		}
+	}
+	if len(deliverer.Messages) != 1 {
+		t.Fatalf("the same envelope was delivered %d times, want once", len(deliverer.Messages))
+	}
+}
