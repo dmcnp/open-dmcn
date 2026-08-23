@@ -545,6 +545,13 @@ func mailerDaemonAddress(dmcnDomain string) string {
 
 // deliveryFailureBody renders the human half of a non-delivery notice: what failed, to whom, and
 // why, in the terms the sender used rather than the bridge's.
+//
+// It deliberately does NOT mention the attached receipt. The signed blob rides along for a client
+// that wants to verify it, but this reader shows no attachments at all, so pointing at one is
+// pointing at something invisible. (The product's client renders a verified delivered/failed badge
+// from that attachment instead, and addresses the notice from the legacy recipient so it threads
+// with the conversation — a better fit there, and a worse one here, where a notice apparently
+// written by the recipient would just be confusing.)
 func deliveryFailureBody(receipt *BridgeDeliveryReceipt, originalSubject string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Your message could not be delivered to %s.\n\n", receipt.RecipientEmail)
@@ -556,7 +563,7 @@ func deliveryFailureBody(receipt *BridgeDeliveryReceipt, originalSubject string)
 		fmt.Fprintf(&b, "Reason: %s\n\n", receipt.ErrorDetail)
 	}
 	b.WriteString("This message left the DMCN network at a bridge and was handed to ordinary " +
-		"email, where delivery failed. The signed receipt is attached.\n")
+		"email, where delivery failed.\n")
 	return b.String()
 }
 
