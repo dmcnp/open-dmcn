@@ -11,7 +11,13 @@ import (
 	webapi "dmcn.dev/open-dmcn/internal/web/api"
 )
 
-// provisionIdentity is the operator-side half of self-service registration: given a verified,
+// provisionIdentity is DEV-ONLY, and structurally so: it needs rootKP, and a live daemon has no
+// root key to pass. Self-service registration means the operator signs on demand, which means the
+// signing key is online — the exact posture the live path exists to avoid. On a live domain the
+// equivalent is the petition queue, where the root signs offline and the node only parks the
+// result (internal/petition).
+//
+// It is the operator-side half of self-service registration: given a verified,
 // self-signed IdentityRecord for this node's domain, attach the operator routing attestation
 // (RelayHints = this node, signed by the domain root) and publish it to the fleet. This is the
 // same operator step as the boot seed (seedIdentity), for a browser-provided record. The daemon

@@ -43,6 +43,15 @@ type FrontendConfig struct {
 	RegistrationClosed bool
 	// SignupURL is where would-be registrants are sent when RegistrationClosed.
 	SignupURL string
+	// DomainRootPub is this domain's root Ed25519 public key, base64. Public by construction —
+	// it is what the domain's _dmcn DNS fingerprint commits to. The SPA uses it to verify a
+	// bridge's credential itself, so the server cannot influence whether bridged mail looks
+	// trustworthy.
+	DomainRootPub string
+	// PetitionMode marks a live self-hosted domain whose root key is offline: nobody can
+	// self-register, but anyone can PETITION for a mailbox and have an admin assign one. The
+	// register page becomes the petition flow rather than a closed screen.
+	PetitionMode bool
 }
 
 // Config holds HTTP server configuration.
@@ -123,6 +132,7 @@ func (s *Server) RegisterAPI(
 	ident *api.IdentityHandler,
 	mailbox *api.MailboxHandler,
 	reg *api.RegisterHandler,
+	pet *api.PetitionHandler,
 	authMiddleware func(http.HandlerFunc) http.HandlerFunc,
 	frontendFS fs.FS,
 	frontendConfig FrontendConfig,
@@ -135,8 +145,24 @@ func (s *Server) RegisterAPI(
 	s.mux.Handle("POST /api/v1/import/challenge", rateLimiter(http.HandlerFunc(auth.HandleImportChallenge)))
 	s.mux.Handle("POST /api/v1/import", rateLimiter(http.HandlerFunc(auth.HandleImport)))
 	s.mux.Handle("GET /api/v1/relay-hints", rateLimiter(http.HandlerFunc(ident.HandleRelayHints)))
+	// Registration and petitions are mutually exclusive, and which one is routed is decided
+	// by whether the domain root key is on this machine. Dev mode holds the root and can mint
+	// addresses on demand, so /register exists. A live domain does not, so it does not — the
+	// route is absent rather than disabled, and there is no code path that could mint an
+	// address without the offline root having signed for it.
 	if reg != nil {
 		s.mux.Handle("POST /api/v1/register", rateLimiter(http.HandlerFunc(reg.HandleRegister)))
+	}
+	if pet != nil {
+		s.mux.Handle("POST /api/v1/petition", rateLimiter(http.HandlerFunc(pet.HandleCreate)))
+		s.mux.Handle("GET /api/v1/petition/status", rateLimiter(http.HandlerFunc(pet.HandleStatus)))
+		s.mux.Handle("POST /api/v1/petition/complete", rateLimiter(http.HandlerFunc(pet.HandleComplete)))
+		// Operator surface. Not behind authMiddleware: a session proves a MAILBOX key, and
+		// these need the DOMAIN ROOT — a different, offline key that never logs in anywhere.
+		// Each call carries its own one-shot root signature instead.
+		s.mux.Handle("POST /api/v1/admin/challenge", rateLimiter(http.HandlerFunc(pet.HandleAdminChallenge)))
+		s.mux.Handle("POST /api/v1/admin/petition/get", rateLimiter(http.HandlerFunc(pet.HandleAdminGet)))
+		s.mux.Handle("POST /api/v1/admin/petition/assign", rateLimiter(http.HandlerFunc(pet.HandleAdminAssign)))
 	}
 
 	// Authenticated endpoints.
@@ -168,6 +194,8 @@ type indexData struct {
 	AccountURL         string
 	RegistrationClosed string
 	SignupURL          string
+	PetitionMode       string
+	DomainRootPub      string
 }
 
 // spaHandler serves the embedded SPA: it returns the requested file when one
@@ -193,6 +221,10 @@ func spaHandler(fsys fs.FS, cfg FrontendConfig) http.HandlerFunc {
 	if cfg.RegistrationClosed {
 		registrationClosed = "true"
 	}
+	petitionMode := ""
+	if cfg.PetitionMode {
+		petitionMode = "true"
+	}
 	serveIndex := func(w http.ResponseWriter, r *http.Request) {
 		if tpl == nil {
 			http.NotFound(w, r)
@@ -209,6 +241,8 @@ func spaHandler(fsys fs.FS, cfg FrontendConfig) http.HandlerFunc {
 			AccountURL:         cfg.AccountURL,
 			RegistrationClosed: registrationClosed,
 			SignupURL:          cfg.SignupURL,
+			PetitionMode:       petitionMode,
+			DomainRootPub:      cfg.DomainRootPub,
 		}); err != nil {
 			http.Error(w, "failed to render index", http.StatusInternalServerError)
 			return

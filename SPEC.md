@@ -184,14 +184,46 @@ can require onion delivery, in which case relays reject direct STOREs with
 
 ## 7. SMTP bridge (optional capability)
 
-An implementation may operate an SMTP↔DMCN bridge (`bridge_capability` on its identity
-record). Inbound legacy mail is authenticated (SPF/DKIM/DMARC) at the bridge, and the
-verdict travels as a signed **`BridgeClassificationRecord`** attachment
-(`application/x-dmcn-bridge-classification`) inside the sealed envelope — verified by the
-recipient's client against the bridge's published identity, never by trusting the relay.
-Outbound delivery returns a signed **`BridgeDeliveryReceipt`**. These are message
-payloads, not wire ops: the bridge speaks the same core relay protocol as everyone else.
-Honest edge: mail crossing a bridge is TLS-in-transit on the legacy side, not
+An implementation may operate an SMTP↔DMCN bridge. A bridge is **infrastructure, not a
+correspondent**: it has no DMCN address and no directory entry. It is a peer whose key
+carries a `bridge` credential (§5) issued by the domain authority, and that credential is
+the whole basis on which anyone believes it.
+
+Inbound legacy mail is authenticated (SPF/DKIM/DMARC) at the bridge, and the verdict
+travels as a signed **`BridgeClassificationRecord`** attachment
+(`application/x-dmcn-bridge-classification`) inside the sealed envelope. Outbound delivery
+returns a signed **`BridgeDeliveryReceipt`**. Both carry the bridge's `bridge` credential,
+so a recipient verifies an attestation with no lookup at all:
+
+1. the record's signature is valid for the key it carries;
+2. the attached credential is signed by the domain authority root and grants `bridge`; and
+3. that credential's subject **is** the key that signed the record.
+
+Step 3 is load-bearing. A credential is public — it travels in every message the bridge
+signs — so without binding it to the signer, anyone could attach a real bridge's credential
+to their own attestation.
+
+The credential is deliberately **not** covered by `bridge_signature`: it carries its own
+issuer signature, the subject-equals-signer check defeats substitution, and the whole record
+rides inside the end-to-end-signed message that delivers it. Covering it would mean a
+credential could not be re-issued without invalidating every attestation ever made under it.
+
+`bridge_address` is the bridge's libp2p peer ID, and is informational — for display and
+logs. It is not an address anyone can send to.
+
+**Discovery (outbound).** A domain advertises its bridge with a `bridge=` token in its
+`_dmcn` TXT record — a multiaddr including `/p2p/<peerID>`, the DMCN analogue of an MX
+record. A sender resolves the token, fetches that peer's self-anchored `RelayDescriptor`,
+and requires it to carry a `bridge` credential whose subject is that peer, before sealing
+anything to the descriptor's X25519 key.
+
+The DNS token discovers; the credential decides. That separation matters more here than for
+`seed=`: a relay only ever holds sealed envelopes, but a bridge **decrypts** outbound mail in
+order to hand it to SMTP, so whoever answers a `bridge=` token reads the plaintext. A domain
+that advertises no `bridge=` simply cannot send outside DMCN.
+
+These are message payloads, not wire ops: the bridge speaks the same core relay protocol as
+everyone else. Honest edge: mail crossing a bridge is TLS-in-transit on the legacy side, not
 end-to-end encrypted.
 
 ## 8. Extension points (how everything else attaches)

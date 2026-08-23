@@ -188,6 +188,10 @@ which is the same mechanism that recovers a lost or compromised account. It cann
 was already sent to you — that is sealed to a key it never had — but it can take over what arrives
 next. So the operator you should think hard about is whoever holds the root for your domain, and if
 that is you, there isn't one.</p>
+<p>That key is not supposed to be on the server, and on a live domain the reference daemon does not
+have it: the operator mints it on their own machine and the node only ever receives the signed
+record it produced. Which means breaching the server is not the same as holding the root — an
+attacker who owns the box can deny you service, but cannot mint or re-point addresses.</p>
 <p>The goal isn't a world with no operators. It's that picking one hands them as little as possible,
 and leaving costs you a routing change and nothing else.</p>
 <h2 id="is-it-production-ready">Is it production ready?<a class="hash" href="#is-it-production-ready" aria-label="Link to this section">#</a></h2>

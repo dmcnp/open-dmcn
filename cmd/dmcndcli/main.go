@@ -1,28 +1,32 @@
-// Binary dmcndcli is the small standalone operator tool for a dmcnd deployment. The daemon does
-// almost everything itself — it seeds its domain at boot and provisions accounts through the web UI
-// — so this CLI covers only the few operator tasks that happen OUTSIDE the running process:
+// Binary dmcndcli is the operator tool for a dmcnd deployment, and — on a live domain — the only
+// thing that can issue anything.
 //
-//	peer-id   print the libp2p peer ID for an identity key (for seed multiaddrs / peer allowlisting)
-//	dns       print the _dmcn.<domain> TXT record the operator must publish for federation
-//	remove-address
-//	          root-sign a tombstone freeing an address, so it can be bound to a new key
+// It is meant to run on a DIFFERENT machine from the node, ideally one that stays offline. The
+// domain root key is created here and never leaves: the node is given a signed bundle of public
+// material and has no way to mint an address on its own, so breaching the node does not get an
+// attacker the ability to create or re-point mailboxes.
 //
-// It reads the same on-disk state the daemon uses (the persistent identity key, the seed keystore),
-// so its output matches what the daemon runs with.
+//	domain init      mint the domain root, sign its authority record, print the DNS record
+//	domain publish   push that record to a running node (the only step that talks to the node)
+//	domain dns       reprint the DNS record from the existing root
+//	petition show    look up one mailbox petition by the code its petitioner gave you
+//	petition assign  assign an address to a petitioned key, signing with the offline root
+//	bridge issue     sign the credential that lets a node act as an SMTP bridge for the domain
+//	remove-address   root-sign a tombstone freeing an address, so it can be bound to a new key
+//	peer-id          print the libp2p peer ID for an identity key
+//
+// The node's own `dmcnd peer-id` covers the peer ID on the node side; the copy here is for keys
+// held on this machine.
 package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"dmcn.dev/open-dmcn/internal/core/identity"
-	"dmcn.dev/open-dmcn/internal/keystore"
 	"dmcn.dev/open-dmcn/internal/node"
 )
 
@@ -35,8 +39,12 @@ func main() {
 	switch os.Args[1] {
 	case "peer-id":
 		err = cmdPeerID(os.Args[2:])
-	case "dns":
-		err = cmdDNS(os.Args[2:])
+	case "domain":
+		err = dispatchDomain(os.Args[2:])
+	case "petition":
+		err = dispatchPetition(os.Args[2:])
+	case "bridge":
+		err = dispatchBridge(os.Args[2:])
 	case "remove-address":
 		err = cmdRemoveAddress(os.Args[2:])
 	case "-h", "--help", "help":
@@ -56,25 +64,92 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `dmcndcli — operator tool for a dmcnd deployment
 
-Usage:
-  dmcndcli peer-id --identity <path>
-        Print the libp2p peer ID for an identity key (created if missing). Use it to build the
-        node's seed multiaddr (/ip4/<host>/tcp/<port>/p2p/<peerID>) or to allowlist a peer.
+Run this on a machine that is NOT the node. It holds your domain's root key; the node never does.
 
-  dmcndcli dns --domain <domain> [--data-dir <dir>] [--seed <multiaddr>]...
-        Print the _dmcn.<domain> TXT record to publish in DNS so other domains can resolve and
-        federate with yours. Reads the domain root key from the daemon's seed keystore.
+Usage:
+  dmcndcli domain init --domain <domain> --seed <multiaddr>... [--keystore root.enc]
+        Mint the domain root key HERE and sign its authority record, then print the _dmcn TXT
+        record to publish. Touches no network. Run 'dmcnd peer-id' on the node for the --seed
+        multiaddr.
+
+  dmcndcli domain publish --domain <domain> --peers <multiaddr>[,...]
+        Push the signed authority record to a running daemon, which will not serve the domain
+        until it has one. Sends only the public record — the root key stays here. Safe to re-run.
+
+  dmcndcli domain dns --domain <domain> --seed <multiaddr>...
+        Reprint the _dmcn TXT record from the existing root. Mints nothing, touches no network.
+
+  dmcndcli petition show --domain <domain> --url <daemon-url> --code <12 digits>
+        Look up one pending mailbox petition. By code only: there is no queue to browse, which is
+        what keeps unwanted petitions from being work.
+
+  dmcndcli petition assign --address <local@domain> --url <daemon-url> --code <12 digits>
+        Give a petitioned key an address, signed with the offline root. The petitioner does not
+        choose their address — you do. Their browser picks it up by itself.
+
+  dmcndcli bridge issue --domain <domain> --peer <peerID> [--out bridge.cred]
+        Sign the credential that lets a node act as an SMTP bridge for the domain. A bridge has
+        no email address — recipients trust its SPF/DKIM/DMARC verdicts through this credential.
+        Needs only the peer ID, so it runs offline: an Ed25519 peer ID contains its public key.
 
   dmcndcli remove-address --address <local@domain> --peers <multiaddr>[,...] [--pubkey <hex>] [--yes]
         Root-sign and publish a tombstone for an address's current key, freeing the address to be
-        registered again with a fresh key. This is the ONLY way to recover an address whose key was
-        lost or compromised: the daemon refuses any record that re-binds a live address to a
-        different key unless the domain root has tombstoned the incumbent. Reads the domain root key
-        from the daemon's seed keystore, so it must run on the host holding it.
+        bound to a fresh one. This is the ONLY way to recover an address whose key was lost or
+        compromised: the daemon refuses any record that re-binds a live address to a different key
+        unless the domain root has tombstoned the incumbent.
 
-Environment: DMCND_IDENTITY, DMCND_DOMAIN, DMCND_DATA_DIR, DMCND_SEED_PASSPHRASE, DMCND_PEERS are
-used as defaults for the matching flags.
+  dmcndcli peer-id --identity <path>
+        Print the libp2p peer ID for an identity key on THIS machine (created if missing). For the
+        node's own peer ID, run 'dmcnd peer-id' there.
+
+Environment: DMCND_DOMAIN, DMCND_URL, DMCND_PEERS, DMCND_IDENTITY, DMCND_ROOT_KEYSTORE and
+DMCND_ROOT_PASSPHRASE are used as defaults for the matching flags.
 `)
+}
+
+// dispatchDomain routes the domain sub-commands.
+func dispatchDomain(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("domain needs a sub-command: init, publish, dns")
+	}
+	switch args[0] {
+	case "init":
+		return cmdDomainInit(args[1:])
+	case "publish":
+		return cmdDomainPublish(args[1:])
+	case "dns":
+		return cmdDomainDNS(args[1:])
+	default:
+		return fmt.Errorf("unknown domain sub-command %q (want init, publish or dns)", args[0])
+	}
+}
+
+// dispatchBridge routes the bridge sub-commands.
+func dispatchBridge(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("bridge needs a sub-command: issue")
+	}
+	switch args[0] {
+	case "issue":
+		return cmdBridgeIssue(args[1:])
+	default:
+		return fmt.Errorf("unknown bridge sub-command %q (want issue)", args[0])
+	}
+}
+
+// dispatchPetition routes the petition sub-commands.
+func dispatchPetition(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("petition needs a sub-command: show, assign")
+	}
+	switch args[0] {
+	case "show":
+		return cmdPetitionShow(args[1:])
+	case "assign":
+		return cmdPetitionAssign(args[1:])
+	default:
+		return fmt.Errorf("unknown petition sub-command %q (want show or assign)", args[0])
+	}
 }
 
 // cmdPeerID prints the peer ID for a persistent identity key, creating the key if it does not exist
@@ -98,60 +173,6 @@ func cmdPeerID(args []string) error {
 	}
 	fmt.Println(id.String())
 	return nil
-}
-
-// cmdDNS prints the _dmcn.<domain> TXT record an operator publishes so other domains can resolve
-// (and federate with) theirs: the DAR fingerprint (trust anchor) plus any seed multiaddrs.
-func cmdDNS(args []string) error {
-	fs := flag.NewFlagSet("dns", flag.ExitOnError)
-	domain := fs.String("domain", os.Getenv("DMCND_DOMAIN"), "the DMCN domain this daemon serves")
-	dataDir := fs.String("data-dir", envOr("DMCND_DATA_DIR", "data"), "daemon data dir (holds seed-keystore.json)")
-	passphrase := fs.String("seed-passphrase", envOr("DMCND_SEED_PASSPHRASE", "dmcnd-dev-seed"), "seed keystore passphrase")
-	var seeds multiFlag
-	fs.Var(&seeds, "seed", "a public seed multiaddr ending in /p2p/<peerID> (repeatable)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *domain == "" {
-		return fmt.Errorf("--domain is required (or set DMCND_DOMAIN)")
-	}
-
-	fp, err := domainFingerprint(*dataDir, *passphrase, *domain)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(dmcnTXT(*domain, fp, seeds))
-	if len(seeds) == 0 {
-		fmt.Fprintf(os.Stderr, "\nfingerprint: %s\nnote: no --seed given — add your node's public seed multiaddr(s) so peers can dial it, e.g.\n  dmcndcli dns --domain %s --seed /ip4/<public-ip>/tcp/<port>/p2p/$(dmcndcli peer-id --identity <key>)\n", fp, *domain)
-	}
-	return nil
-}
-
-// domainFingerprint loads the domain root key from the daemon's seed keystore and returns its DAR
-// fingerprint (the DNS trust anchor). The keystore path + root-key alias MUST match cmd/dmcnd/seed.go.
-func domainFingerprint(dataDir, passphrase, domain string) (string, error) {
-	ksPath := filepath.Join(dataDir, "seed-keystore.json")
-	ks := keystore.New(ksPath, passphrase)
-	root, err := ks.Load("__domain_root__@" + domain)
-	if err != nil {
-		return "", fmt.Errorf("load domain root key for %s from %s: %w\n(has the daemon seeded this domain? check --data-dir / --seed-passphrase)", domain, ksPath, err)
-	}
-	dar, err := identity.NewDomainAuthorityRecord(domain, root, time.Now())
-	if err != nil {
-		return "", fmt.Errorf("build DAR: %w", err)
-	}
-	return dar.Fingerprint(), nil
-}
-
-// dmcnTXT renders the _dmcn.<domain> TXT record: the v1 verification prefix, the root-key
-// fingerprint (fp=), and one seed= token per bootstrap multiaddr.
-func dmcnTXT(domain, fp string, seeds []string) string {
-	val := "dmcn-verification=v1; fp=" + fp
-	for _, s := range seeds {
-		val += "; seed=" + s
-	}
-	return fmt.Sprintf("_dmcn.%s.  TXT  %q", domain, val)
 }
 
 // multiFlag collects a repeatable string flag.

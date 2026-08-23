@@ -13,22 +13,26 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"dmcn.dev/open-dmcn/internal/web/api"
-	"dmcn.dev/open-dmcn/internal/webcore"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/web/api"
+	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
 // fakeRelayRouter records which delivery path HandleSend took (direct STORE vs onion).
 type fakeRelayRouter struct {
 	storeCalls int
 	onionCalls int
+	// lastHints records the relay hints a STORE was routed to, so a test can assert WHERE mail
+	// went and not merely that it went somewhere.
+	lastHints []string
 }
 
 func (f *fakeRelayRouter) ConnectPeer(string) error { return nil }
 
-func (f *fakeRelayRouter) StorePreSignedOnPeer(_ context.Context, _, _ string, _ []byte, _ *message.EncryptedEnvelope) ([32]byte, error) {
+func (f *fakeRelayRouter) StorePreSignedOnPeer(_ context.Context, hint, _ string, _ []byte, _ *message.EncryptedEnvelope) ([32]byte, error) {
 	f.storeCalls++
+	f.lastHints = append(f.lastHints, hint)
 	return [32]byte{}, nil
 }
 
@@ -249,5 +253,88 @@ func TestHandleSend_FailoverStoresOnce(t *testing.T) {
 	}
 	if n := sendStore(t, func(context.Context, string) bool { return false }); n != 1 {
 		t.Fatalf("failover (false): stored on %d relays, want 1", n)
+	}
+}
+
+// --- outbound to the legacy email world -------------------------------------------------------
+//
+// A legacy recipient has no DMCN identity to resolve, so the send is routed to this domain's
+// bridge instead: the client has already sealed the envelope to the bridge's key, and the bridge
+// reads the real destination out of the decrypted message. These tests pin the routing decision,
+// which is the part that used to not exist — composing to an ordinary email address simply
+// returned "recipient not found".
+
+const legacyBridgeHint = "/ip4/10.0.0.9/tcp/7400/p2p/12D3KooWBridge"
+
+// sendToLegacy drives HandleSend for a recipient the directory cannot resolve.
+func sendToLegacy(t *testing.T, withBridge bool, verifyRouting func(context.Context, *identity.IdentityRecord) error) (*fakeRelayRouter, int) {
+	t.Helper()
+	ss, _ := webcore.NewSessionStore([]byte("test-session-signing-secret-32by"), time.Hour, "")
+	lookup := func(context.Context, string) (*identity.IdentityRecord, error) {
+		return nil, fmt.Errorf("not found") // gmail.com has no _dmcn record and never will
+	}
+	router := &fakeRelayRouter{}
+	h := api.NewMessageHandler(nil, lookup, router, nil, verifyRouting, logr.With(logr.M("test", true)))
+	if withBridge {
+		h.SetBridgeResolver(func(context.Context) ([32]byte, string, error) {
+			return [32]byte{7}, legacyBridgeHint, nil
+		})
+	}
+
+	body := fmt.Sprintf(`{"sender_address":"alice@dmcn.me","sender_signature":"AAAA","envelope":%q,"recipient_address":"someone@gmail.com"}`, validEnvelopeB64(t))
+	req, _ := authedRequest(t, "POST", "/api/v1/messages/send", body, ss, "alice@dmcn.me")
+	rr := httptest.NewRecorder()
+	h.HandleSend(rr, req)
+	return router, rr.Code
+}
+
+// TestHandleSend_RoutesLegacyRecipientToTheBridge is the whole point: mail to an ordinary email
+// address now goes somewhere instead of being refused.
+func TestHandleSend_RoutesLegacyRecipientToTheBridge(t *testing.T) {
+	router, code := sendToLegacy(t, true, nil)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if router.storeCalls != 1 {
+		t.Fatalf("storeCalls = %d, want 1", router.storeCalls)
+	}
+	if len(router.lastHints) != 1 || router.lastHints[0] != legacyBridgeHint {
+		t.Errorf("stored to %v, want the bridge hint %s", router.lastHints, legacyBridgeHint)
+	}
+}
+
+// TestHandleSend_LegacyWithoutABridgeIsRefused keeps the failure honest on a deployment that runs
+// no bridge: unreachable, rather than silently dropped or stored somewhere useless.
+func TestHandleSend_LegacyWithoutABridgeIsRefused(t *testing.T) {
+	router, code := sendToLegacy(t, false, nil)
+	if code == http.StatusOK {
+		t.Fatal("a legacy recipient was accepted with no bridge configured")
+	}
+	if router.storeCalls != 0 {
+		t.Errorf("stored %d time(s) despite having nowhere to send", router.storeCalls)
+	}
+}
+
+// TestHandleSend_LegacySkipsRoutingVerification pins a deliberate exception. Routing verification
+// checks that a recipient's relay hints are attested by a routing credential — but a legacy
+// recipient has no record and therefore no such credential, so running the check would reject
+// every outbound-to-legacy message. The bridge is credential-verified during discovery instead,
+// which is a stronger claim: it proves the peer may act as a bridge, not merely that a record
+// was well-formed.
+func TestHandleSend_LegacySkipsRoutingVerification(t *testing.T) {
+	called := false
+	deny := func(context.Context, *identity.IdentityRecord) error {
+		called = true
+		return fmt.Errorf("no routing credential")
+	}
+	router, code := sendToLegacy(t, true, deny)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if called {
+		t.Error("routing verification ran for a legacy recipient, which can never have a routing credential")
+	}
+	if router.storeCalls != 1 {
+		t.Errorf("storeCalls = %d, want 1", router.storeCalls)
 	}
 }

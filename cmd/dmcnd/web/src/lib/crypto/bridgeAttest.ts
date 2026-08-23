@@ -1,16 +1,32 @@
-// Client-side verification of a bridged legacy email's authentication
-// attestation (gap #6). A bridge runs SPF/DKIM/DMARC at ingest and signs the
-// verdict into a BridgeClassificationRecord attachment; the recipient trusts
-// that verdict only after confirming, here in the browser, that:
-//   1. the record's signature is valid for the key it carries, and
-//   2. that key belongs to a directory-registered identity with bridge_capability.
-// The web backend never sees plaintext, so this check runs entirely client-side
-// over the already-decrypted attachment.
-import { decodeBridgeClassification } from './protobuf';
+// Client-side verification of a bridged legacy email's authentication attestation.
+//
+// A bridge runs SPF/DKIM/DMARC when legacy mail arrives and signs the verdict into a
+// BridgeClassificationRecord attachment. The recipient trusts that verdict only after confirming,
+// here in the browser, that:
+//   1. the record is signed by the key it carries, and
+//   2. that key holds a credential, signed by the domain's root, saying it may act as a bridge.
+//
+// A bridge has NO email address and no directory entry. It is infrastructure — a peer that
+// translates between SMTP and DMCN — so there is nothing to look up: everything needed is in the
+// record plus the domain root key, which is public and published in DNS as the domain's fingerprint.
+// The previous version resolved a `bridge@<domain>` mailbox and read a `bridge_capability` flag off
+// it, which made a trust decision depend on a live directory lookup the server could influence.
+//
+// The web backend never sees plaintext, so this runs entirely client-side over the decrypted
+// attachment.
+import { decodeBridgeClassification, decodeCredentialFromClassification } from './protobuf';
 import { verify } from './sign';
 import { fromBase64 } from './keys';
+import { DOMAIN_ROOT_PUB } from '../config';
 
 export const CLASSIFICATION_CONTENT_TYPE = 'application/x-dmcn-bridge-classification';
+
+// ROLE_BRIDGE mirrors identity.RoleBridge (Go).
+const ROLE_BRIDGE = 'bridge';
+
+// CRED_CTX domain-separates a credential signature. Must match identity.ctxCredential (Go):
+// "dmcn-credential-v1\0".
+const CRED_CTX: Uint8Array = new TextEncoder().encode('dmcn-credential-v1\0');
 
 export enum BridgeTrustTier {
   Unspecified = 0,
@@ -19,22 +35,9 @@ export enum BridgeTrustTier {
   Suspicious = 3,
 }
 
-// TIER_DOMAIN_DNS mirrors identity.TierDomainDNS (Go) — a domain-anchored
-// identity (countersigned by its Domain Authority).
-export const TIER_DOMAIN_DNS = 2;
-
-// DirectoryEntry is the subset of an identity lookup this check needs.
-export interface DirectoryEntry {
-  ed25519_pub: string; // base64 (std)
-  bridge_capability?: boolean;
-  verified_tier?: number; // cryptographically verified tier (not self-claimed)
-  identity_unverifiable?: boolean; // claimed countersignature failed (revoked/invalid)
-}
-
 export interface BridgeAttestation {
-  verified: boolean; // signature valid AND signer is a registered bridge whose key matches
+  verified: boolean; // signature valid AND the signer holds a root-signed bridge credential
   trustTier: BridgeTrustTier; // bridge-asserted tier; meaningful only when verified
-  domainAnchored: boolean; // signer is countersigned by its domain authority (verified tier >= DomainDNS)
   smtpFrom: string; // original legacy sender, for display
   reason?: string; // why verification failed
 }
@@ -51,13 +54,11 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
-// verifyBridgeAttestation inspects a decrypted message's attachments. It returns
-// null when the message is not a bridged legacy email (no classification record),
-// or a verdict describing whether the bridge attestation can be trusted. lookup
-// resolves a DMCN address against the public-key directory.
+// verifyBridgeAttestation inspects a decrypted message's attachments. It returns null when the
+// message is not a bridged legacy email (no classification record), or a verdict describing
+// whether the bridge's account of it can be trusted.
 export async function verifyBridgeAttestation(
-  attachments: AttachmentLike[],
-  lookup: (address: string) => Promise<DirectoryEntry>
+  attachments: AttachmentLike[]
 ): Promise<BridgeAttestation | null> {
   const att = attachments.find((a) => a.contentType === CLASSIFICATION_CONTENT_TYPE);
   if (!att) return null; // not a bridged message
@@ -66,41 +67,72 @@ export async function verifyBridgeAttestation(
   try {
     ({ record, signableBytes } = await decodeBridgeClassification(att.content));
   } catch {
-    return { verified: false, domainAnchored: false, trustTier: BridgeTrustTier.Unspecified, smtpFrom: '', reason: 'malformed classification record' };
+    return { verified: false, trustTier: BridgeTrustTier.Unspecified, smtpFrom: '', reason: 'malformed classification record' };
   }
 
-  const base = { trustTier: record.trustTier as BridgeTrustTier, domainAnchored: false, smtpFrom: record.smtpFrom };
+  const base = { trustTier: record.trustTier as BridgeTrustTier, smtpFrom: record.smtpFrom };
 
   // 1. The record must be signed by the key it carries.
   let sigOk = false;
   try {
     sigOk = await verify(record.bridgePublicKey, signableBytes, record.bridgeSignature);
   } catch {
-    sigOk = false; // malformed key/signature → treat as unverified, never throw
+    sigOk = false; // malformed key/signature → unverified, never throw
   }
   if (!sigOk) return { ...base, verified: false, reason: 'invalid bridge signature' };
 
-  // 2. Anchor the signer to the directory: it must be a registered bridge whose
-  //    published key matches the one in the record. Without this, a valid
-  //    self-signature from any key would render as a trusted badge.
-  let dir: DirectoryEntry;
+  // 2. That key must hold a bridge credential from this domain's root. Without a configured root
+  //    there is nothing to check against, and saying "verified" would be a lie.
+  if (!DOMAIN_ROOT_PUB) {
+    return { ...base, verified: false, reason: 'no domain root key configured to verify the bridge against' };
+  }
+  let cred;
   try {
-    dir = await lookup(record.bridgeAddress);
+    cred = await decodeCredentialFromClassification(att.content);
   } catch {
-    return { ...base, verified: false, reason: 'bridge identity not found in directory' };
+    cred = null;
   }
-  if (!dir.bridge_capability) {
-    return { ...base, verified: false, reason: 'signer is not a registered bridge' };
+  if (!cred) return { ...base, verified: false, reason: 'no bridge credential' };
+
+  // The credential's own signature, by the domain root.
+  let rootPub: Uint8Array;
+  try {
+    rootPub = fromBase64(DOMAIN_ROOT_PUB);
+  } catch {
+    return { ...base, verified: false, reason: 'malformed domain root key' };
   }
-  if (!bytesEqual(fromBase64(dir.ed25519_pub), record.bridgePublicKey)) {
-    return { ...base, verified: false, reason: 'bridge key does not match directory' };
+  if (!bytesEqual(cred.credential.issuerPub ?? new Uint8Array(), rootPub)) {
+    return { ...base, verified: false, reason: 'bridge credential was not issued by this domain' };
   }
-  // Revocation: the bridge claimed a domain countersignature that failed to
-  // verify (binding tombstoned, countersigner no longer authorized). Always
-  // reject — a revoked bridge must never be trusted (gap #9).
-  if (dir.identity_unverifiable) {
-    return { ...base, verified: false, reason: 'bridge identity revoked or unverifiable' };
+  const credBytes = new Uint8Array(CRED_CTX.length + cred.signableBytes.length);
+  credBytes.set(CRED_CTX, 0);
+  credBytes.set(cred.signableBytes, CRED_CTX.length);
+  let credOk = false;
+  try {
+    credOk = await verify(rootPub, credBytes, cred.credential.signature);
+  } catch {
+    credOk = false;
+  }
+  if (!credOk) return { ...base, verified: false, reason: 'bridge credential signature invalid' };
+
+  // 3. It must actually grant the bridge role — a routing or address credential is not authority
+  //    to vouch for legacy mail.
+  if (!(cred.credential.roles ?? []).includes(ROLE_BRIDGE)) {
+    return { ...base, verified: false, reason: 'credential does not carry the bridge role' };
+  }
+  // 4. And it must be FOR the key that signed this record. A credential is public — it travels in
+  //    every message the bridge signs — so without this anyone could staple a real one to their own.
+  if (!bytesEqual(cred.credential.subject ?? new Uint8Array(), record.bridgePublicKey)) {
+    return { ...base, verified: false, reason: 'bridge credential is for a different key' };
+  }
+  // 5. Validity window, when the issuer set one.
+  const now = Math.floor(Date.now() / 1000);
+  if (cred.credential.notAfter && now > cred.credential.notAfter) {
+    return { ...base, verified: false, reason: 'bridge credential has expired' };
+  }
+  if (cred.credential.effectiveFrom && now < cred.credential.effectiveFrom) {
+    return { ...base, verified: false, reason: 'bridge credential is not yet valid' };
   }
 
-  return { ...base, verified: true, domainAnchored: (dir.verified_tier ?? 0) >= TIER_DOMAIN_DNS };
+  return { ...base, verified: true };
 }

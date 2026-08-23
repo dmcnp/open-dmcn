@@ -51,7 +51,7 @@ go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest   # operator CLI
 # Dev: plain HTTP on localhost (a secure context for Web Crypto) and DNS anchoring stubbed,
 # so a throwaway domain works without publishing real records.
 DMCND_DEV=true dmcnd
-# → open http://localhost:8080 in dev (https://localhost:8443 in production);
+# → open http://localhost:8080 in dev (https://<domain> in production);
 #   the daemon prints the exact URL on startup. Register at /register.
 ```
 
@@ -73,20 +73,21 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | Variable | Default | Purpose |
 |---|---|---|
 | `DMCND_DOMAIN` | `localhost` | the DMCN domain this daemon serves |
-| `DMCND_LISTEN` | `:8443` (`:8080` in dev) | webmail listen address — dev serves plain HTTP, so it defaults off the HTTPS-conventional port |
-| `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/0` | libp2p listen multiaddr |
-| `DMCND_DATA_DIR` | `data` | mailbox/record store, sessions, seed keystore |
-| `DMCND_IDENTITY` | — | persistent libp2p identity key (stable peer ID) |
+| `DMCND_LISTEN` | `:443` (`:8080` in dev) | webmail listen address — 443 because autocert's ACME challenge only works there; dev serves plain HTTP, so it defaults off an HTTPS-conventional port |
+| `DMCND_NODE_LISTEN` | `/ip4/0.0.0.0/tcp/7400` (ephemeral in dev) | libp2p listen multiaddr — this port goes into your published `seed=`, so it must be stable |
+| `DMCND_DATA_DIR` | `data` | mailbox/record store, sessions, node key, petition queue |
+| `DMCND_IDENTITY` | `<data-dir>/node.key` | persistent libp2p identity key — the peer ID is published in DNS, so it must survive restarts |
+| `DMCND_PETITION_TTL` | `24h` | how long an unclaimed mailbox petition survives |
 | `DMCND_TLS_CERT` / `DMCND_TLS_KEY` | — | TLS cert/key; absent + not dev ⇒ autocert |
 | `DMCND_DEV` | `false` | plain-HTTP-on-localhost + stub DAR DNS anchoring |
 | `DMCND_PEERS` | — | bootstrap/discovery peer multiaddrs (federation) |
 | `DMCND_ALLOWED_PEERS` | `*` in dev, else deny | libp2p federation allow-set (`*` = open) |
 | `DMCND_STATIC_DNS` | — | static `_dmcn` pins for peer domains (DNS-free federation / seed-pin) |
 | `DMCND_POLL_INTERVAL` | `10s` | webmail mailbox poll cadence |
-| `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the keystore holding the domain root + bridge keys |
+| `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the DEV domain root keystore. A live daemon never creates a keystore, so this applies to dev only |
 | `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge |
 | `DMCND_BRIDGE_SMTP_LISTEN` | `:2525` | bridge SMTP listen address |
-| `DMCND_BRIDGE_ADDRESS` | `bridge@<domain>` | the bridge's own DMCN address |
+| `DMCND_BRIDGE_CREDENTIAL` | — | the bridge's root-signed `bridge` credential (`dmcndcli bridge issue`). Without it the bridge runs but its verdicts are unverifiable |
 | `DMCND_BRIDGE_DOMAIN` | `<domain>` | the legacy (SMTP) domain the bridge represents |
 | `DMCND_BRIDGE_AUDIT_LOG` | — | append-only JSON audit log path |
 | `DMCND_BRIDGE_AUTH_MODE` | `dns` | inbound verification: `dns` (real SPF/DKIM/DMARC) or `stub` (no checks — offline dev only) |
@@ -106,25 +107,43 @@ wrong or hostile fleet is a denial-of-service risk, never a forgery vector.
 
 ### Operator CLI (`dmcndcli`)
 
-The daemon configures itself (it seeds its domain at boot and provisions accounts through
-the web UI), so `cmd/dmcndcli` is deliberately tiny — just the operator tasks that happen
-*outside* the running process. It reads the daemon's on-disk state, so its output matches
-what the daemon runs with.
+`dmcndcli` runs on a **different machine from the node** — ideally one that stays offline. It
+holds the domain root key, and the node never does: the node is given a signed authority record
+and has no way to mint an address by itself, so breaching it does not let an attacker create or
+re-point mailboxes. A live daemon serves nothing until it has been handed that record, rather than
+falling back to minting a root for itself.
 
 ```bash
-# The _dmcn TXT record to publish so other domains can federate with yours:
-dmcndcli dns --domain mesh.example --data-dir data \
-  --seed /ip4/<public-ip>/tcp/7400/p2p/$(dmcndcli peer-id --identity data/node.key)
+# Bring a domain into existence: mint the root HERE and sign its authority record, then print
+# the DNS record to publish. Touches no network.
+dmcndcli domain init --domain mesh.example \
+  --seed /ip4/<public-ip>/tcp/7400/p2p/$(ssh node dmcnd peer-id) \
+  --keystore root.enc --passphrase '<high-entropy>'
 #   → _dmcn.mesh.example.  TXT  "dmcn-verification=v1; fp=<40-hex>; seed=/ip4/…/p2p/…"
 
-# The libp2p peer ID for an identity key (created if missing) — for seed multiaddrs / allowlisting:
-dmcndcli peer-id --identity data/node.key
+# Hand that record to a running daemon, which serves nothing until it has one. Sends only the
+# signed public record — the root key stays here. Safe to re-run.
+dmcndcli domain publish --domain mesh.example --peers /ip4/<host>/tcp/7400/p2p/<peer-id>
 
-# Free an address whose key was lost, compromised or squatted, so it can be registered again.
+# Reprint the DNS record from the existing root — new seed address, moved node. Mints nothing.
+# --bridge advertises which peer carries mail to/from the legacy email world (the DMCN analogue
+# of an MX record); without it your users cannot send to ordinary email addresses.
+dmcndcli domain dns --domain mesh.example \
+  --seed /ip4/<new-ip>/tcp/7400/p2p/<peer-id> --bridge /ip4/<new-ip>/tcp/7400/p2p/<peer-id>
+
+# Give someone a mailbox. They petition from the web UI and read you the 12-digit code out of
+# band; that contact IS the authorization. They do not choose their address — you do.
+dmcndcli petition assign --code 0428-9173-5560 --address alice@mesh.example \
+  --url https://mesh.example --keystore root.enc
+
+# Free an address whose key was lost, compromised or squatted, so it can be bound again.
 # Root-only, and the ONLY recovery path: the daemon refuses any record that re-binds a live
 # address to a different key unless the domain root has tombstoned the incumbent.
 dmcndcli remove-address --address alice@mesh.example --peers /ip4/127.0.0.1/tcp/7400/p2p/<peerID>
 ```
+
+On the node itself, `dmcnd peer-id` prints its libp2p peer ID (creating the key if missing) —
+that is the only thing you need from the node in order to sign its domain's authority record.
 
 ## Layout
 

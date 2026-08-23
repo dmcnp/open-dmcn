@@ -35,16 +35,16 @@ function attestationView(a: BridgeAttestation): {
     };
   }
   const who = a.smtpFrom || 'the sender';
-  // The bridge's own anchoring is orthogonal to the legacy-sender tier; note it
-  // so the reader knows whether the attesting bridge is domain-verified.
-  const bridgeNote = a.domainAnchored ? ' The bridge is domain-anchored.' : ' Note: this bridge is not domain-anchored.';
+  // No separate "is the bridge itself anchored?" note any more. Reaching this point already means
+  // the bridge holds a credential signed by its domain's root — there is no half-trusted state
+  // left to caveat, and the old note invited readers to weigh something already decided.
   switch (a.trustTier) {
     case BridgeTrustTier.VerifiedLegacy:
-      return { variant: 'success', icon: 'shield-check', label: 'Verified legacy sender', detail: `A verified bridge confirmed SPF/DKIM/DMARC for ${who}.${bridgeNote}` };
+      return { variant: 'success', icon: 'shield-check', label: 'Verified legacy sender', detail: `A verified bridge confirmed SPF/DKIM/DMARC for ${who}.` };
     case BridgeTrustTier.Suspicious:
-      return { variant: 'danger', icon: 'alert-triangle', label: 'Suspicious legacy sender', detail: `Legacy authentication failed for ${who} — this sender may be forged.${bridgeNote}` };
+      return { variant: 'danger', icon: 'alert-triangle', label: 'Suspicious legacy sender', detail: `Legacy authentication failed for ${who} — this sender may be forged.` };
     default:
-      return { variant: 'warning', icon: 'alert-triangle', label: 'Unverified legacy sender', detail: `${who}'s domain did not fully authenticate this message.${bridgeNote}` };
+      return { variant: 'warning', icon: 'alert-triangle', label: 'Unverified legacy sender', detail: `${who}'s domain did not fully authenticate this message.` };
   }
 }
 
@@ -142,7 +142,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       .then(full => {
         if (cancelled) return;
         setBody(full.bodyText);
-        verifyBridgeAttestation(full.attachments, lookupIdentity)
+        verifyBridgeAttestation(full.attachments)
           .then(a => { if (!cancelled) setAttestation(a); })
           .catch(() => { /* unexpected: treat as non-bridged, show no badge */ });
       })

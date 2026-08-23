@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // Config holds configuration for the SMTP bridge. In the reference daemon the bridge SHARES the
@@ -22,7 +24,15 @@ type Config struct {
 	SMTPListenAddr string // SMTP listen address (default ":2525")
 	BridgeDomain   string // default domain for bridge email addresses
 	DMCNDomain     string // default domain for DMCN addresses
-	BridgeAddress  string // bridge's own DMCN address
+	// BridgeAddress is the bridge's libp2p PEER ID — informational, carried into its signed
+	// records for display and logs. A bridge has NO DMCN email address: it is infrastructure,
+	// and recipients trust it via Credential, not via a directory entry.
+	BridgeAddress string
+	// Credential is the bridge's root-signed credential (role "bridge"). It travels inside every
+	// classification record and delivery receipt the bridge signs, and is the whole basis on
+	// which a recipient believes them. Without it the bridge still runs, but everything it
+	// asserts is unverifiable, so New warns.
+	Credential *identity.Credential
 	// Profiles adds extra {bridge↔dmcn} domain pairs a single bridge serves (hosted
 	// multi-tenant). The default {BridgeDomain, DMCNDomain} pair is always served too.
 	Profiles     []DomainProfile
@@ -112,15 +122,20 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 		return nil, fmt.Errorf("bridge: nil bridge key pair (the daemon must provision the bridge identity)")
 	}
 
-	// Warn loudly if the bridge identity is not domain-anchored. Recipients that require
-	// domain-anchored bridges will reject its signed classification attestations until it is
-	// countersigned by a Domain Authority. (The daemon published the record; here we just check.)
-	if rec, lerr := n.Lookup(ctx, cfg.BridgeAddress); lerr != nil {
-		l.Warnf("bridge identity %s not resolvable yet: %v", cfg.BridgeAddress, lerr)
-	} else if tier, verr := n.Registry().VerifyManagedIdentity(ctx, rec); verr != nil || tier < identity.TierDomainDNS {
-		l.Warnf("bridge identity %s is NOT domain-anchored (verified tier %d): recipients enforcing anchoring will reject its attestations until it is countersigned by a Domain Authority", cfg.BridgeAddress, tier)
-	} else {
-		l.Successf("bridge identity domain-anchored (tier %d)", tier)
+	// A bridge with no credential can still relay mail, but nothing it signs can be believed:
+	// every recipient checking an attestation will reject it for want of one. Say so plainly
+	// rather than letting the failure surface later as unexplained distrust in someone's inbox.
+	switch {
+	case cfg.Credential == nil:
+		l.Warnf("no bridge credential: this bridge's signed SPF/DKIM/DMARC verdicts CANNOT be " +
+			"verified by recipients and will be treated as untrusted. Issue one with " +
+			"`dmcndcli bridge issue` and point DMCND_BRIDGE_CREDENTIAL at it")
+	case !cfg.Credential.HasRole(identity.RoleBridge):
+		l.Warnf("the configured credential does not carry the %q role — recipients will reject this bridge's attestations", identity.RoleBridge)
+	case !bytes.Equal(cfg.Credential.Subject, bridgeKP.Ed25519Public):
+		l.Warnf("the configured bridge credential is for a different key than this node's — recipients will reject this bridge's attestations")
+	default:
+		l.Successf("bridge credential loaded (subject %x…, domain %s)", cfg.Credential.Subject[:6], cfg.Credential.Domain)
 	}
 
 	// Audit log: use a caller-supplied sink, else open an append-only file if a
@@ -147,6 +162,7 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 	inbound := NewInboundHandler(InboundConfig{
 		BridgeKP:     bridgeKP,
 		BridgeAddr:   cfg.BridgeAddress,
+		Credential:   cfg.Credential,
 		AuthVerifier: cfg.AuthVerifier,
 		Lookup:       n.Registry().Lookup,
 		Deliver:      deliver,
@@ -160,6 +176,7 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 	outbound := NewOutboundHandler(OutboundConfig{
 		BridgeKP:             bridgeKP,
 		BridgeAddr:           cfg.BridgeAddress,
+		Credential:           cfg.Credential,
 		Deliverer:            cfg.Deliverer,
 		Lookup:               n.Registry().Lookup,
 		BridgeDomain:         cfg.BridgeDomain,
@@ -232,29 +249,78 @@ func (b *Bridge) pollLoop() {
 	}
 }
 
+// processPending picks up mail addressed to the bridge and hands it to SMTP.
+//
+// It reads BOTH of the relay's stores, and has to. A STORE lands in the durable mailbox when the
+// envelope is split and this node hosts mailboxes, and in the in-flight store otherwise — and a
+// self-hosted daemon is always a mailbox host while browser-composed mail is always split, so
+// polling only the in-flight store meant outbound mail sat in the mailbox forever. That went
+// unnoticed for as long as nothing could discover the bridge to send to it in the first place.
 func (b *Bridge) processPending() {
-	// Read directly from the relay's message store (no stream dial needed)
+	rxHex := fmt.Sprintf("%x", b.bridgeKP.X25519Public[:])
+
+	// In-flight store: unsplit envelopes, and anything stored before a mailbox existed.
 	store := b.node.Relay().Store()
-	bridgeXPubHex := fmt.Sprintf("%x", b.bridgeKP.X25519Public[:])
-	envs, hashes := store.Fetch(bridgeXPubHex)
-
+	envs, hashes := store.Fetch(rxHex)
 	for i, env := range envs {
-		receipt, deliverErr := b.outbound.HandleEnvelope(b.ctx, env)
-		if deliverErr != nil && receipt == nil {
-			b.log.Warnf("outbound handling failed: %v", deliverErr)
-			continue
-		}
-
-		// ACK the envelope directly in the store
-		if err := store.Ack(hashes[i]); err != nil {
-			b.log.Warnf("ack failed for %x: %v", hashes[i], err)
-		}
-
-		// Send delivery receipt back to sender
-		if receipt != nil {
-			b.sendReceipt(b.ctx, env, receipt)
+		if b.deliverOne(env) {
+			if err := store.Ack(hashes[i]); err != nil {
+				b.log.Warnf("ack failed for %x: %v", hashes[i], err)
+			}
 		}
 	}
+
+	// Durable mailbox: the normal path for split envelopes.
+	b.processMailbox(b.ctx, rxHex)
+}
+
+// processMailbox drains split envelopes addressed to the bridge out of the durable mailbox.
+func (b *Bridge) processMailbox(ctx context.Context, rxHex string) {
+	mbox := b.node.Relay().Mailbox()
+	if mbox == nil {
+		return
+	}
+	entries, _, err := mbox.List(ctx, rxHex, 0, "")
+	if err != nil {
+		b.log.Warnf("outbound: list mailbox: %v", err)
+		return
+	}
+	for _, entry := range entries {
+		var hash [32]byte
+		copy(hash[:], entry.Hash)
+		body, berr := mbox.GetBody(ctx, rxHex, hash)
+		if berr != nil {
+			b.log.Warnf("outbound: fetch body %x: %v", hash, berr)
+			continue
+		}
+		env, eerr := relay.EnvelopeFromParts(entry, body)
+		if eerr != nil {
+			b.log.Warnf("outbound: rebuild envelope %x: %v", hash, eerr)
+			continue
+		}
+		if !b.deliverOne(env) {
+			continue
+		}
+		// Delete only after a delivery attempt that produced a receipt. A message left in
+		// place would be retried forever; one deleted on a transport error would be lost.
+		if derr := mbox.Delete(ctx, rxHex, hash); derr != nil {
+			b.log.Warnf("outbound: delete %x after delivery: %v", hash, derr)
+		}
+	}
+}
+
+// deliverOne runs one envelope through the outbound handler and returns whether it is finished
+// with — i.e. whether the bridge reached a verdict it can report, success or failure alike.
+func (b *Bridge) deliverOne(env *message.EncryptedEnvelope) bool {
+	receipt, deliverErr := b.outbound.HandleEnvelope(b.ctx, env)
+	if deliverErr != nil && receipt == nil {
+		b.log.Warnf("outbound handling failed: %v", deliverErr)
+		return false
+	}
+	if receipt != nil {
+		b.sendReceipt(b.ctx, env, receipt)
+	}
+	return true
 }
 
 func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.EncryptedEnvelope, receipt *BridgeDeliveryReceipt) {

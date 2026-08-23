@@ -155,6 +155,11 @@ was already sent to you — that is sealed to a key it never had — but it can 
 next. So the operator you should think hard about is whoever holds the root for your domain, and if
 that is you, there isn't one.
 
+That key is not supposed to be on the server, and on a live domain the reference daemon does not
+have it: the operator mints it on their own machine and the node only ever receives the signed
+record it produced. Which means breaching the server is not the same as holding the root — an
+attacker who owns the box can deny you service, but cannot mint or re-point addresses.
+
 The goal isn't a world with no operators. It's that picking one hands them as little as possible,
 and leaving costs you a routing change and nothing else.
 

@@ -63,9 +63,18 @@ message IdentityRecord {
   reserved 16, 17, 18;
   reserved "policy", "policy_flags", "guardian_policy";
 
-  // Bridge capability flag — true if this identity operates as a bridge node.
-  // See whitepaper Section 15.6.
-  bool bridge_capability = 19;
+  // DEPRECATED, always false. A bridge is infrastructure and has no identity record at all:
+  // it is a peer whose key carries a `bridge` credential, and recipients verify its
+  // attestations against that credential (see BridgeClassificationRecord.bridge_credential in
+  // bridge.proto, and SPEC.md §7). This flag existed when a bridge held a `bridge@<domain>`
+  // mailbox that clients looked up to decide whether to believe its SPF/DKIM/DMARC verdict —
+  // which made a trust decision depend on a directory lookup rather than on a signature.
+  //
+  // The field is retained rather than removed because it is covered by the owner
+  // self-signature: dropping it would change signable_bytes and invalidate every identity
+  // record ever signed. Implementations MUST NOT set it and MUST NOT treat it as a trust
+  // signal. Do not reuse field 19 for anything else.
+  bool bridge_capability = 19 [deprecated = true];
 
   // Domain Authority countersignature (whitepaper Section 13.2). Present when a
   // domain authority — directly, or via a delegated sub-authority — vouches for

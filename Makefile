@@ -22,12 +22,16 @@ build-cli:
 build-web:
 	cd $(WEB) && npm ci && npm run build
 
-# proto-web regenerates the browser protobuf bundle (dmcn.js) from the CORE protos only —
-# identity + message + relay. It MUST list every proto in the bundle; a partial run silently
-# drops whole namespaces. bridge.js is a separate single-proto module — regenerate it manually.
+# proto-web regenerates the browser protobuf bundle (dmcn.js). It MUST list every proto in the
+# bundle; a partial run silently drops whole namespaces.
+#
+# bridge.proto is in here deliberately. It used to be a separate hand-regenerated bridge.js, which
+# meant it was generated from bridge.proto ALONE — so the dmcn.identity.Credential it imports never
+# resolved, and the browser could not see the bridge credential at all. One bundle, one command, no
+# "regenerate it manually" step to forget.
 PBJS = cd $(WEB) && npx -y -p protobufjs-cli@1.1.3 pbjs -t static-module -w es6 -p ../../../proto
 PBTS = cd $(WEB) && npx -y -p protobufjs-cli@1.1.3 pbts
-CORE_PROTOS = ../../../proto/identity.proto ../../../proto/message.proto ../../../proto/relay.proto
+CORE_PROTOS = ../../../proto/identity.proto ../../../proto/message.proto ../../../proto/relay.proto ../../../proto/bridge.proto
 
 proto-web:
 	$(PBJS) -o src/lib/proto/dmcn.js $(CORE_PROTOS)

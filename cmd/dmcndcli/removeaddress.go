@@ -6,13 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
-	"dmcn.dev/open-dmcn/internal/keystore"
 	"dmcn.dev/open-dmcn/internal/node"
 )
 
@@ -24,19 +22,19 @@ import (
 // tombstone for the incumbent key exists. That rule is what stops anyone who can push a record from
 // silently re-binding a live address to their own key — but it also means an address whose key is
 // lost, compromised or squatted CANNOT be recovered without this ceremony. Hence root-only, and
-// hence it lives in the operator CLI rather than the web UI.
+// hence it lives in the operator CLI rather than the web UI — on the machine holding the root key,
+// which is not the node.
 //
 // Ordering matters and is deliberate: the tombstone is published FIRST, so the old key is dead even
-// if the operator never gets around to re-registering. Re-registration then happens through the
-// normal web sign-up flow with a fresh key.
+// if the operator never gets around to re-binding the address. The address is then re-bound the
+// same way any address is: the new holder petitions from the web UI and you assign it to them.
 func cmdRemoveAddress(args []string) error {
 	fs := flag.NewFlagSet("remove-address", flag.ExitOnError)
 	address := fs.String("address", "", "the address to free (local@domain)")
-	dataDir := fs.String("data-dir", envOr("DMCND_DATA_DIR", "data"), "daemon data dir (holds seed-keystore.json)")
-	passphrase := fs.String("seed-passphrase", envOr("DMCND_SEED_PASSPHRASE", "dmcnd-dev-seed"), "seed keystore passphrase")
 	peers := fs.String("peers", os.Getenv("DMCND_PEERS"), "comma-separated seed multiaddrs of the running daemon")
 	pubkeyHex := fs.String("pubkey", "", "hex Ed25519 key to tombstone (default: the address's currently published key)")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	rf := addRootFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -51,10 +49,9 @@ func cmdRemoveAddress(args []string) error {
 		return fmt.Errorf("--peers is required (or set DMCND_PEERS) — the running daemon to publish through")
 	}
 
-	ksPath := filepath.Join(*dataDir, "seed-keystore.json")
-	root, err := keystore.New(ksPath, *passphrase).Load("__domain_root__@" + domain)
+	root, err := rf.load(domain)
 	if err != nil {
-		return fmt.Errorf("load domain root key for %s from %s: %w\n(only the domain root may free an address)", domain, ksPath, err)
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -129,7 +126,7 @@ func cmdRemoveAddress(args []string) error {
 		return fmt.Errorf("publish removal record: %w", err)
 	}
 	fmt.Printf("tombstoned %s for %s (revision %d, accepted by %d node(s))\n", hex.EncodeToString(victim), *address, rm.Revision, accepted)
-	fmt.Println("the address can now be registered again with a fresh key through the web sign-up flow")
+	fmt.Println("the address is now free. To re-bind it, have the new holder petition from the web UI\nand run: dmcndcli petition assign --code <their code> --address " + *address)
 	return nil
 }
 

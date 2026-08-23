@@ -89,10 +89,13 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     try {
       const rec = await lookupIdentity(addr);
       if (rec.require_onion) setOnion(true);
-      setRecipientInfo(m => ({ ...m, [key]: 'dmcn' }));
+      // A legacy lookup succeeds, but what it resolves is the BRIDGE, not a correspondent: the
+      // message is sealed to the bridge and leaves the network as ordinary email. Say so, rather
+      // than showing it as a DMCN identity because a lookup happened to return 200.
+      setRecipientInfo(m => ({ ...m, [key]: rec.legacy ? 'legacy' : 'dmcn' }));
     } catch {
-      // Not resolvable in the DMCN directory → a legacy address reachable only via a
-      // bridge, which cannot be end-to-end encrypted. handleSend surfaces send errors.
+      // Unresolvable in either direction — not a DMCN identity, and no bridge to carry it.
+      // handleSend surfaces the send error.
       setRecipientInfo(m => ({ ...m, [key]: 'legacy' }));
     }
   };

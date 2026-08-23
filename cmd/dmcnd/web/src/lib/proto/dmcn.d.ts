@@ -2513,6 +2513,12 @@ export namespace dmcn {
 
             /** AttachmentRecord content */
             content?: (Uint8Array|null);
+
+            /** AttachmentRecord contentId */
+            contentId?: (string|null);
+
+            /** AttachmentRecord disposition */
+            disposition?: (string|null);
         }
 
         /** Represents an AttachmentRecord. */
@@ -2541,6 +2547,12 @@ export namespace dmcn {
 
             /** AttachmentRecord content. */
             public content: Uint8Array;
+
+            /** AttachmentRecord contentId. */
+            public contentId: string;
+
+            /** AttachmentRecord disposition. */
+            public disposition: string;
 
             /**
              * Creates a new AttachmentRecord instance using the specified properties.
@@ -2655,6 +2667,9 @@ export namespace dmcn {
 
             /** PlaintextMessage replyToId */
             replyToId?: (Uint8Array|null);
+
+            /** PlaintextMessage alternatives */
+            alternatives?: (dmcn.message.IMessageBody[]|null);
         }
 
         /** Represents a PlaintextMessage. */
@@ -2698,6 +2713,9 @@ export namespace dmcn {
 
             /** PlaintextMessage replyToId. */
             public replyToId: Uint8Array;
+
+            /** PlaintextMessage alternatives. */
+            public alternatives: dmcn.message.IMessageBody[];
 
             /**
              * Creates a new PlaintextMessage instance using the specified properties.
@@ -3184,6 +3202,9 @@ export namespace dmcn {
 
             /** MessageContent attachments */
             attachments?: (dmcn.message.IAttachmentRecord[]|null);
+
+            /** MessageContent alternatives */
+            alternatives?: (dmcn.message.IMessageBody[]|null);
         }
 
         /** Represents a MessageContent. */
@@ -3200,6 +3221,9 @@ export namespace dmcn {
 
             /** MessageContent attachments. */
             public attachments: dmcn.message.IAttachmentRecord[];
+
+            /** MessageContent alternatives. */
+            public alternatives: dmcn.message.IMessageBody[];
 
             /**
              * Creates a new MessageContent instance using the specified properties.
@@ -8309,6 +8333,343 @@ export namespace dmcn {
 
             /**
              * Gets the default type url for StoreInit
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+    }
+
+    /** Namespace bridge. */
+    namespace bridge {
+
+        /** BridgeTrustTier enum. */
+        enum BridgeTrustTier {
+            BRIDGE_TRUST_TIER_UNSPECIFIED = 0,
+            BRIDGE_TRUST_TIER_VERIFIED_LEGACY = 1,
+            BRIDGE_TRUST_TIER_UNVERIFIED_LEGACY = 2,
+            BRIDGE_TRUST_TIER_SUSPICIOUS = 3
+        }
+
+        /** SPFResult enum. */
+        enum SPFResult {
+            SPF_RESULT_UNSPECIFIED = 0,
+            SPF_RESULT_PASS = 1,
+            SPF_RESULT_FAIL = 2,
+            SPF_RESULT_SOFTFAIL = 3,
+            SPF_RESULT_NEUTRAL = 4
+        }
+
+        /** DKIMResult enum. */
+        enum DKIMResult {
+            DKIM_RESULT_UNSPECIFIED = 0,
+            DKIM_RESULT_PASS = 1,
+            DKIM_RESULT_FAIL = 2
+        }
+
+        /** DMARCResult enum. */
+        enum DMARCResult {
+            DMARC_RESULT_UNSPECIFIED = 0,
+            DMARC_RESULT_PASS = 1,
+            DMARC_RESULT_FAIL = 2
+        }
+
+        /** Properties of a BridgeClassificationRecord. */
+        interface IBridgeClassificationRecord {
+
+            /** BridgeClassificationRecord bridgeAddress */
+            bridgeAddress?: (string|null);
+
+            /** BridgeClassificationRecord bridgePublicKey */
+            bridgePublicKey?: (Uint8Array|null);
+
+            /** BridgeClassificationRecord smtpFrom */
+            smtpFrom?: (string|null);
+
+            /** BridgeClassificationRecord smtpSenderIp */
+            smtpSenderIp?: (string|null);
+
+            /** BridgeClassificationRecord spfResult */
+            spfResult?: (dmcn.bridge.SPFResult|null);
+
+            /** BridgeClassificationRecord dkimResult */
+            dkimResult?: (dmcn.bridge.DKIMResult|null);
+
+            /** BridgeClassificationRecord dmarcResult */
+            dmarcResult?: (dmcn.bridge.DMARCResult|null);
+
+            /** BridgeClassificationRecord reputationScore */
+            reputationScore?: (number|null);
+
+            /** BridgeClassificationRecord trustTier */
+            trustTier?: (dmcn.bridge.BridgeTrustTier|null);
+
+            /** BridgeClassificationRecord classifiedAt */
+            classifiedAt?: (number|Long|null);
+
+            /** BridgeClassificationRecord bridgeSignature */
+            bridgeSignature?: (Uint8Array|null);
+
+            /** BridgeClassificationRecord bridgeCredential */
+            bridgeCredential?: (dmcn.identity.ICredential|null);
+        }
+
+        /** Represents a BridgeClassificationRecord. */
+        class BridgeClassificationRecord implements IBridgeClassificationRecord {
+
+            /**
+             * Constructs a new BridgeClassificationRecord.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.bridge.IBridgeClassificationRecord);
+
+            /** BridgeClassificationRecord bridgeAddress. */
+            public bridgeAddress: string;
+
+            /** BridgeClassificationRecord bridgePublicKey. */
+            public bridgePublicKey: Uint8Array;
+
+            /** BridgeClassificationRecord smtpFrom. */
+            public smtpFrom: string;
+
+            /** BridgeClassificationRecord smtpSenderIp. */
+            public smtpSenderIp: string;
+
+            /** BridgeClassificationRecord spfResult. */
+            public spfResult: dmcn.bridge.SPFResult;
+
+            /** BridgeClassificationRecord dkimResult. */
+            public dkimResult: dmcn.bridge.DKIMResult;
+
+            /** BridgeClassificationRecord dmarcResult. */
+            public dmarcResult: dmcn.bridge.DMARCResult;
+
+            /** BridgeClassificationRecord reputationScore. */
+            public reputationScore: number;
+
+            /** BridgeClassificationRecord trustTier. */
+            public trustTier: dmcn.bridge.BridgeTrustTier;
+
+            /** BridgeClassificationRecord classifiedAt. */
+            public classifiedAt: (number|Long);
+
+            /** BridgeClassificationRecord bridgeSignature. */
+            public bridgeSignature: Uint8Array;
+
+            /** BridgeClassificationRecord bridgeCredential. */
+            public bridgeCredential?: (dmcn.identity.ICredential|null);
+
+            /**
+             * Creates a new BridgeClassificationRecord instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns BridgeClassificationRecord instance
+             */
+            public static create(properties?: dmcn.bridge.IBridgeClassificationRecord): dmcn.bridge.BridgeClassificationRecord;
+
+            /**
+             * Encodes the specified BridgeClassificationRecord message. Does not implicitly {@link dmcn.bridge.BridgeClassificationRecord.verify|verify} messages.
+             * @param message BridgeClassificationRecord message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.bridge.IBridgeClassificationRecord, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified BridgeClassificationRecord message, length delimited. Does not implicitly {@link dmcn.bridge.BridgeClassificationRecord.verify|verify} messages.
+             * @param message BridgeClassificationRecord message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.bridge.IBridgeClassificationRecord, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a BridgeClassificationRecord message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns BridgeClassificationRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.bridge.BridgeClassificationRecord;
+
+            /**
+             * Decodes a BridgeClassificationRecord message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns BridgeClassificationRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.bridge.BridgeClassificationRecord;
+
+            /**
+             * Verifies a BridgeClassificationRecord message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a BridgeClassificationRecord message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns BridgeClassificationRecord
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.bridge.BridgeClassificationRecord;
+
+            /**
+             * Creates a plain object from a BridgeClassificationRecord message. Also converts values to other types if specified.
+             * @param message BridgeClassificationRecord
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.bridge.BridgeClassificationRecord, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this BridgeClassificationRecord to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for BridgeClassificationRecord
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a BridgeDeliveryReceipt. */
+        interface IBridgeDeliveryReceipt {
+
+            /** BridgeDeliveryReceipt originalMessageId */
+            originalMessageId?: (Uint8Array|null);
+
+            /** BridgeDeliveryReceipt recipientEmail */
+            recipientEmail?: (string|null);
+
+            /** BridgeDeliveryReceipt bridgeAddress */
+            bridgeAddress?: (string|null);
+
+            /** BridgeDeliveryReceipt deliveredAt */
+            deliveredAt?: (number|Long|null);
+
+            /** BridgeDeliveryReceipt success */
+            success?: (boolean|null);
+
+            /** BridgeDeliveryReceipt errorDetail */
+            errorDetail?: (string|null);
+
+            /** BridgeDeliveryReceipt bridgeSignature */
+            bridgeSignature?: (Uint8Array|null);
+
+            /** BridgeDeliveryReceipt bridgeCredential */
+            bridgeCredential?: (dmcn.identity.ICredential|null);
+        }
+
+        /** Represents a BridgeDeliveryReceipt. */
+        class BridgeDeliveryReceipt implements IBridgeDeliveryReceipt {
+
+            /**
+             * Constructs a new BridgeDeliveryReceipt.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.bridge.IBridgeDeliveryReceipt);
+
+            /** BridgeDeliveryReceipt originalMessageId. */
+            public originalMessageId: Uint8Array;
+
+            /** BridgeDeliveryReceipt recipientEmail. */
+            public recipientEmail: string;
+
+            /** BridgeDeliveryReceipt bridgeAddress. */
+            public bridgeAddress: string;
+
+            /** BridgeDeliveryReceipt deliveredAt. */
+            public deliveredAt: (number|Long);
+
+            /** BridgeDeliveryReceipt success. */
+            public success: boolean;
+
+            /** BridgeDeliveryReceipt errorDetail. */
+            public errorDetail: string;
+
+            /** BridgeDeliveryReceipt bridgeSignature. */
+            public bridgeSignature: Uint8Array;
+
+            /** BridgeDeliveryReceipt bridgeCredential. */
+            public bridgeCredential?: (dmcn.identity.ICredential|null);
+
+            /**
+             * Creates a new BridgeDeliveryReceipt instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns BridgeDeliveryReceipt instance
+             */
+            public static create(properties?: dmcn.bridge.IBridgeDeliveryReceipt): dmcn.bridge.BridgeDeliveryReceipt;
+
+            /**
+             * Encodes the specified BridgeDeliveryReceipt message. Does not implicitly {@link dmcn.bridge.BridgeDeliveryReceipt.verify|verify} messages.
+             * @param message BridgeDeliveryReceipt message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.bridge.IBridgeDeliveryReceipt, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified BridgeDeliveryReceipt message, length delimited. Does not implicitly {@link dmcn.bridge.BridgeDeliveryReceipt.verify|verify} messages.
+             * @param message BridgeDeliveryReceipt message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.bridge.IBridgeDeliveryReceipt, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a BridgeDeliveryReceipt message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns BridgeDeliveryReceipt
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.bridge.BridgeDeliveryReceipt;
+
+            /**
+             * Decodes a BridgeDeliveryReceipt message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns BridgeDeliveryReceipt
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.bridge.BridgeDeliveryReceipt;
+
+            /**
+             * Verifies a BridgeDeliveryReceipt message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a BridgeDeliveryReceipt message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns BridgeDeliveryReceipt
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.bridge.BridgeDeliveryReceipt;
+
+            /**
+             * Creates a plain object from a BridgeDeliveryReceipt message. Also converts values to other types if specified.
+             * @param message BridgeDeliveryReceipt
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.bridge.BridgeDeliveryReceipt, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this BridgeDeliveryReceipt to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for BridgeDeliveryReceipt
              * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns The default type url
              */

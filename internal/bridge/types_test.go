@@ -6,6 +6,11 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 )
 
+// tBridgePeerID stands in for the bridge's libp2p peer ID. A bridge has no email address, so
+// this field is informational — a fixture using an email would model a shape the protocol no
+// longer has.
+const tBridgePeerID = "12D3KooWBridgeTestPeerIDFixture0000000000000000"
+
 func TestClassificationRecordSignVerify(t *testing.T) {
 	pub, priv, err := crypto.GenerateEd25519KeyPair()
 	if err != nil {
@@ -13,7 +18,7 @@ func TestClassificationRecordSignVerify(t *testing.T) {
 	}
 
 	rec := &BridgeClassificationRecord{
-		BridgeAddress:   "bridge@bridge.localhost",
+		BridgeAddress:   tBridgePeerID,
 		BridgePublicKey: pub,
 		SMTPFrom:        "sender@gmail.com",
 		SMTPSenderIP:    "1.2.3.4",
@@ -40,7 +45,7 @@ func TestClassificationRecordTamper(t *testing.T) {
 	}
 
 	rec := &BridgeClassificationRecord{
-		BridgeAddress:   "bridge@bridge.localhost",
+		BridgeAddress:   tBridgePeerID,
 		BridgePublicKey: pub,
 		SMTPFrom:        "sender@gmail.com",
 		TrustTier:       TrustTierVerifiedLegacy,
@@ -63,7 +68,7 @@ func TestClassificationRecordMarshalRoundTrip(t *testing.T) {
 	}
 
 	rec := &BridgeClassificationRecord{
-		BridgeAddress:   "bridge@bridge.localhost",
+		BridgeAddress:   tBridgePeerID,
 		BridgePublicKey: pub,
 		SMTPFrom:        "sender@gmail.com",
 		SMTPSenderIP:    "10.0.0.1",

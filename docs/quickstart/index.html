@@ -95,9 +95,12 @@ no Node step.</p>
 
 DMCND_DEV=true dmcnd
 </code></pre>
-<p>Open <code>http://localhost:8443</code> and register an account. Dev mode serves plain HTTP on localhost
-— still a secure context, so Web Crypto works — and stubs the DNS anchoring, so you don't
-need real records to poke at it.</p>
+<p>Open <code>http://localhost:8080</code> and register an account — the daemon prints that exact URL on
+startup, so you can copy it rather than typing a scheme. Dev mode serves plain <strong>HTTP</strong> on
+<code>:8080</code>; production serves HTTPS on <code>:443</code>, and the ports differ deliberately so a browser is
+never guessing which scheme applies.</p>
+<p>Plain HTTP is fine here: localhost is a secure context, so Web Crypto works. Dev mode also
+stubs the DNS anchoring, so you don't need real records to poke at it.</p>
 <p>To watch mail move between two accounts, register a second one in a private window: keys live
 in browser storage, so a separate profile is a separate account. Or just send to yourself —
 the round trip is the same.</p>
@@ -113,26 +116,167 @@ go build -o bin/dmcnd ./cmd/dmcnd
 record, and only the signed <em>public</em> record reaches the server. Every operation is signed
 client-side, so a fetch is authorised by answering a 32-byte challenge with a signature — not
 by presenting a password the server could store.</p>
-<p>The daemon holds no account private key. Not an encrypted one, not a recoverable one, none.
-The only keys it mints are the domain's own — the root key behind its authority record, and
-the SMTP bridge's identity if you turn the bridge on. Neither can read anyone's mail.</p>
+<p>The daemon holds no account private key. Not an encrypted one, not a recoverable one, none.</p>
+<p>In dev mode it does mint the domain's own root key, locally, so that one command gets you a
+working domain. On a real domain it does not: the root is created on your machine and the node
+only ever receives the signed record it produced. See below — that difference is the reason the
+setup has two halves.</p>
 <p>Put a proxy in front of it and watch the traffic: sealed envelopes, padded to fixed size
 classes, and a header you can list without touching a body.</p>
 <h2 id="point-a-real-domain-at-it">Point a real domain at it<a class="hash" href="#point-a-real-domain-at-it" aria-label="Link to this section">#</a></h2>
-<p>Other domains find yours through DNS. The operator CLI prints the exact record:</p>
-<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest
+<p>Two machines, and the split between them is the point.</p>
+<p>The <strong>node</strong> holds its own libp2p key and a signed copy of your domain's authority record. The
+<strong>machine you run <code>dmcndcli</code> on</strong> holds the domain root key, and never gives it up. Only three
+things ever cross the gap: a peer ID, a signed authority record, and signatures. No private key
+moves.</p>
+<p>That matters because the root key is what every other domain checks your records against. A node
+that holds it is a node whose compromise mints addresses on your domain; a node that doesn't,
+isn't. <code>dmcnd</code> used to mint the root on the node — one command, and your trust anchor lived on an
+internet-facing box. It no longer will: a live daemon has no way to create an authority record, so
+it waits until you hand it one and serves nothing until then.</p>
+<p>(&quot;Offline&quot; here means <em>not the node</em>. The machine running <code>dmcndcli</code> still has to reach the daemon
+over HTTPS. A genuinely air-gapped root would need the signing step carried across by hand, which
+the format allows and the CLI does not yet do.)</p>
+<p><strong>1. [node]</strong> Install the daemon and get its peer ID. Set the libp2p port first — it goes into DNS
+and is awkward to change later.</p>
+<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
 
-dmcndcli dns --domain mesh.example --data-dir data \
-  --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/$(dmcndcli peer-id --identity data/node.key)
+export DMCND_DOMAIN=mesh.example
+export DMCND_NODE_LISTEN=/ip4/0.0.0.0/tcp/7400
+dmcnd peer-id
 </code></pre>
+<p><strong>2. [admin]</strong> On a different machine — ideally one that stays offline — install the CLI.</p>
+<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest
+</code></pre>
+<p><strong>3. [admin]</strong> Mint the root and sign the domain's authority record. This touches no network.</p>
+<pre><code class="language-bash">dmcndcli domain init --domain mesh.example \
+  --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/&lt;peer-id from step 1&gt; \
+  --keystore root.enc --passphrase '&lt;high-entropy&gt;'
+</code></pre>
+<p>It prints the DNS record. The authority record it signs sets two things that are easy to miss and
+load-bearing: countersigning is required (so an address is unusable until the root has attested it)
+and the reserved local-parts are seeded (so <code>postmaster@</code> and <code>countersign@</code> are not first-come).</p>
+<p><strong>4. [admin]</strong> Publish the TXT record it printed.</p>
 <pre><code>_dmcn.mesh.example.  TXT  &quot;dmcn-verification=v1; fp=&lt;40-hex&gt;; seed=/ip4/…/p2p/…&quot;
 </code></pre>
-<p><code>fp=</code> is your domain's trust anchor — the first 20 bytes of <code>SHA-256(ed25519_pub ‖ x25519_pub)</code> of its root key. Anyone resolving an address on your domain checks what your
-server hands them against that fingerprint, so they never have to trust the server itself.</p>
-<p>Two daemons on two domains then interoperate the way email already does: resolve the
-recipient's domain, dial a seed, fetch the signed record, store the sealed envelope. For a
-local cluster with no real DNS, list the peer anchors in a <code>DMCND_STATIC_DNS</code> file instead —
-the resolver checks it before DNS, so you can exercise the whole path offline.</p>
+<p><code>fp=</code> is your domain's trust anchor — the first 20 bytes of <code>SHA-256(ed25519_pub ‖ x25519_pub)</code> of
+its root key. Anyone resolving an address on your domain checks what your server hands them
+against that fingerprint, so they never have to trust the server itself.</p>
+<p><strong>5. [admin]</strong> Back up <code>root.enc</code> offline, and keep the passphrase somewhere else.</p>
+<p>Lose it and no address on the domain can ever be issued or rotated again. There is no recovery
+path except publishing a new <code>fp=</code> and having every correspondent re-verify you, and nobody can
+re-issue it for you.</p>
+<p><strong>6. [node]</strong> Start the daemon.</p>
+<pre><code class="language-bash">dmcnd
+</code></pre>
+<p>It will report that it has no authority record and wait, serving nothing — no webmail, no
+petitions. That is the point: with no authority record the reader-side address check has nothing to
+enforce and would fail open, so the daemon declines to be a domain rather than be a permissive one.</p>
+<p><strong>7. [admin]</strong> Hand it the record.</p>
+<pre><code class="language-bash">dmcndcli domain publish --domain mesh.example \
+  --peers /ip4/&lt;host&gt;/tcp/7400/p2p/&lt;peer-id&gt; --keystore root.enc
+</code></pre>
+<p>This is the same record push <code>remove-address</code> uses, and it sends only the signed public record —
+the root key stays where it is. The daemon picks it up within a few seconds and starts serving. It
+is stored persistently, so this is a one-time step: restarts skip it.</p>
+<p><strong>8. [you]</strong> Get yourself a mailbox — through the same flow as everyone else, below. You are the
+admin, so you assign your own.</p>
+<h3 id="give-someone-a-mailbox">Give someone a mailbox<a class="hash" href="#give-someone-a-mailbox" aria-label="Link to this section">#</a></h3>
+<p>There is no sign-up form on a live domain, because there is no key here that could create an
+address. Instead:</p>
+<ul>
+<li>
+<p><strong>[them]</strong> They open your domain in a browser and ask for a mailbox. Their keys are generated
+and stay in that browser; only the public half is sent. They get a 12-digit code.</p>
+</li>
+<li>
+<p><strong>[out of band]</strong> They read you the code, however they normally reach you. <strong>That contact is the
+authorization</strong> — there is no allowlist to maintain and no queue to triage, because a petition is
+worth nothing until you act on a code somebody gave you.</p>
+</li>
+<li>
+<p><strong>[admin]</strong> You assign an address:</p>
+<pre><code class="language-bash">dmcndcli petition assign --code 0428-9173-5560 --address them@mesh.example \
+  --url https://mesh.example --keystore root.enc --passphrase '&lt;…&gt;'
+</code></pre>
+</li>
+<li>
+<p><strong>[them]</strong> Their browser picks the address up on its own and the mailbox opens. You never have
+to recite it, and you never handle their keys.</p>
+</li>
+</ul>
+<p>Two properties make this safe rather than merely convenient. <strong>The petitioner cannot choose their
+address</strong> — you do — so there is nothing in a petition worth taking, and one you ignore simply
+expires (24h by default, <code>DMCND_PETITION_TTL</code>). And <strong>the code alone is not enough</strong>: completing a
+petition requires the private key the browser proved it held, so an overheard code gets an
+eavesdropper nothing.</p>
+<p>To free an address later — a lost key, someone leaving — <code>dmcndcli remove-address</code> publishes a
+root-signed tombstone, after which the address can be petitioned for again.</p>
+<h3 id="ports">Ports<a class="hash" href="#ports" aria-label="Link to this section">#</a></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Port</th>
+<th>Direction</th>
+<th>What for</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>7400</code> (<code>DMCND_NODE_LISTEN</code>)</td>
+<td>inbound</td>
+<td>libp2p federation — <strong>this is the port in your published <code>seed=</code></strong></td>
+<td>any live domain</td>
+</tr>
+<tr>
+<td><code>443</code> (<code>DMCND_LISTEN</code>)</td>
+<td>inbound</td>
+<td>webmail, and the ACME challenge for its certificate</td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>25</code></td>
+<td>inbound</td>
+<td>SMTP — your domain's MX</td>
+<td>bridge enabled</td>
+</tr>
+<tr>
+<td><code>25</code></td>
+<td><strong>outbound</strong></td>
+<td>delivering to other providers' mail servers</td>
+<td><code>DMCND_BRIDGE_DELIVERY_MODE=smtp</code></td>
+</tr>
+<tr>
+<td><code>53</code></td>
+<td>outbound</td>
+<td>DNS: other domains' <code>_dmcn</code> anchors, and MX lookups</td>
+<td>always</td>
+</tr>
+<tr>
+<td>ephemeral</td>
+<td>outbound</td>
+<td>dialling other domains' seeds</td>
+<td>always</td>
+</tr>
+</tbody>
+</table></div>
+<p>Three of these catch people out:</p>
+<ul>
+<li><strong>Many hosting providers block outbound port 25 by default</strong> and want a support ticket before
+they'll open it. A bridge that receives fine but never delivers is usually this, not a DMCN bug.</li>
+<li><strong>Inbound 25 needs privileges</strong> (<code>setcap CAP_NET_BIND_SERVICE</code>, or systemd <code>AmbientCapabilities</code>),
+as does 443. The bridge's own default is <code>:2525</code>, which is convenient for testing and which no
+sending mail server will ever try — set <code>DMCND_BRIDGE_SMTP_LISTEN=:25</code> for a real MX.</li>
+<li><strong>Automatic certificates only work on 443.</strong> Let's Encrypt performs its challenge there and
+nowhere else, so the daemon refuses to start if you point <code>DMCND_LISTEN</code> somewhere else without
+also supplying <code>DMCND_TLS_CERT</code>/<code>DMCND_TLS_KEY</code>. Terminating TLS at a proxy is fine — bring your
+own certificate, or run the proxy in front and give the daemon one it can use.</li>
+</ul>
+<p>Two daemons on two domains then interoperate the way email already does: resolve the recipient's
+domain, dial a seed, fetch the signed record, store the sealed envelope. For a local cluster with
+no real DNS, list the peer anchors in a <code>DMCND_STATIC_DNS</code> file instead — the resolver checks it
+before DNS, so you can exercise the whole path offline.</p>
 <h2 id="configuration">Configuration<a class="hash" href="#configuration" aria-label="Link to this section">#</a></h2>
 <p>Everything is environment-driven. These are the ones you'll actually touch:</p>
 <div class="table-wrap"><table>
@@ -151,18 +295,33 @@ the resolver checks it before DNS, so you can exercise the whole path offline.</
 </tr>
 <tr>
 <td><code>DMCND_LISTEN</code></td>
-<td><code>:8443</code></td>
+<td><code>:443</code> (<code>:8080</code> in dev)</td>
 <td>webmail listen address</td>
+</tr>
+<tr>
+<td><code>DMCND_NODE_LISTEN</code></td>
+<td><code>/ip4/0.0.0.0/tcp/7400</code> (ephemeral in dev)</td>
+<td>libp2p listen address — the port in your published <code>seed=</code></td>
 </tr>
 <tr>
 <td><code>DMCND_DATA_DIR</code></td>
 <td><code>data</code></td>
-<td>mailboxes, records, keys</td>
+<td>mailboxes, records, the node key</td>
+</tr>
+<tr>
+<td><code>DMCND_IDENTITY</code></td>
+<td><code>&lt;data-dir&gt;/node.key</code></td>
+<td>libp2p identity — keeps the peer ID stable across restarts</td>
+</tr>
+<tr>
+<td><code>DMCND_PETITION_TTL</code></td>
+<td><code>24h</code></td>
+<td>how long an unclaimed mailbox petition survives</td>
 </tr>
 <tr>
 <td><code>DMCND_DEV</code></td>
 <td><code>false</code></td>
-<td>plain HTTP on localhost, stubbed DNS anchoring</td>
+<td>plain HTTP on localhost, local root key, stubbed DNS anchoring</td>
 </tr>
 <tr>
 <td><code>DMCND_PEERS</code></td>
@@ -186,21 +345,51 @@ the <a href="https://github.com/dmcnp/open-dmcn#configuration-dmcnd_-environment
 <p>Note the federation default: <strong>deny</strong>. Outside dev mode a node admits no peers until you
 either allowlist them or hand them a valid credential.</p>
 <h2 id="the-smtp-bridge">The SMTP bridge<a class="hash" href="#the-smtp-bridge" aria-label="Link to this section">#</a></h2>
-<pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true dmcnd
+<p>A bridge is <strong>infrastructure, not a correspondent</strong>. It has no mailbox and no address you can
+send to: it is your node, wearing a second hat, holding a credential from your domain root that
+says it may vouch for legacy mail. That credential is the only thing that makes anything it says
+believable, so issue it first — offline, alongside the rest of the ceremony:</p>
+<pre><code class="language-bash"># [admin] one signature over the node's own public key. The peer ID is enough: an Ed25519 peer
+# ID contains its key, so this needs no contact with the node.
+dmcndcli bridge issue --domain mesh.example --peer &lt;peer-id&gt; --keystore root.enc --out bridge.cred
+
+# [node]
+DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_CREDENTIAL=/path/to/bridge.cred dmcnd
 </code></pre>
 <p>Inbound legacy mail gets checked with real SPF/DKIM/DMARC at the bridge, and the verdict travels
-as a signed attachment <em>inside</em> the sealed envelope. So the recipient's client verifies the
-bridge's attestation against the bridge's own published identity, rather than trusting
-whichever relay carried it.</p>
-<p>Outbound is opt-in and off by default:</p>
-<pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_DELIVERY_MODE=smtp DMCND_BRIDGE_DKIM_KEY=dkim.pem dmcnd
+as a signed attachment <em>inside</em> the sealed envelope, together with that credential. The
+recipient's client verifies three things without asking any server anything: the verdict is
+signed by the key it names, that key holds a <code>bridge</code> credential from the domain root, and the
+credential is <em>for that key</em> — so a real bridge's credential cannot be stapled to someone else's
+attestation.</p>
+<p>Start the bridge without a credential and it still relays mail, but every recipient will treat
+its verdicts as unverified. The daemon says so at startup rather than letting you find out from
+someone else's inbox.</p>
+<p>Outbound — your users writing to ordinary email addresses — needs one more thing: a <code>bridge=</code>
+token in your <code>_dmcn</code> record, so a sender can find out which peer carries mail off the network.
+It is the DMCN analogue of an MX record, and usually the same address as your <code>seed=</code>:</p>
+<pre><code class="language-bash">dmcndcli domain dns --domain mesh.example \
+  --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/&lt;peer-id&gt; \
+  --bridge /ip4/&lt;public-ip&gt;/tcp/7400/p2p/&lt;peer-id&gt;
+</code></pre>
+<p>DNS only <em>discovers</em> the bridge; the credential decides whether to use it. A sender resolves the
+<code>bridge=</code> endpoint, fetches that peer's signed descriptor, and checks it carries a <code>bridge</code>
+credential from your domain root before sealing anything to it. That check is not a formality: a
+relay only ever holds sealed envelopes, but a bridge decrypts outbound mail in order to hand it to
+SMTP, so whoever answers a <code>bridge=</code> token reads the plaintext. Poisoning your DNS is not enough to
+become that peer.</p>
+<p>Actually sending is still opt-in and off by default:</p>
+<pre><code class="language-bash">DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_CREDENTIAL=bridge.cred \
+  DMCND_BRIDGE_DELIVERY_MODE=smtp DMCND_BRIDGE_DKIM_KEY=dkim.pem dmcnd
 </code></pre>
 <p>Without <code>DMCND_BRIDGE_DELIVERY_MODE=smtp</code> the bridge accepts and translates outbound mail but
 captures it in memory instead of sending it, so installing the daemon never starts emitting live
 mail at anyone. Turn it on and you want a DKIM key too — unsigned mail from a new host is filtered
 almost everywhere.</p>
 <p><strong>The honest bits.</strong> Mail crossing a bridge is TLS-in-transit on the legacy side, not end-to-end
-encrypted; a bridge is there for interoperability, not security, and mail that stays inside DMCN
+encrypted — and outbound is worse than that phrase suggests: the bridge <em>decrypts</em> your message to
+hand it to SMTP, so it reads the plaintext. The compose window says so when a recipient is not a
+DMCN address. A bridge is there for interoperability, not security, and mail that stays inside DMCN
 never leaves the sender's device unsealed. And SPF, DKIM and DMARC are only meaningful if the DNS
 they read is real — <code>DMCND_BRIDGE_AUTH_MODE=stub</code> exists for offline development and turns the
 verdict into a rubber stamp, so never run it anywhere real mail arrives.</p>

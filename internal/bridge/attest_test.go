@@ -1,145 +1,231 @@
 package bridge_test
 
 import (
-	"errors"
+	"crypto/ed25519"
+	"strings"
 	"testing"
+	"time"
 
 	"dmcn.dev/open-dmcn/internal/bridge"
 	"dmcn.dev/open-dmcn/internal/core/identity"
-	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
-// signedClassification builds a classification record signed by bridgeKP.
-func signedClassification(t *testing.T, bridgeKP *identity.IdentityKeyPair, tier bridge.BridgeTrustTier) *bridge.BridgeClassificationRecord {
+// attest_test.go covers the one question a recipient asks about bridged mail: should I believe
+// this bridge's account of who sent it?
+//
+// The answer is entirely self-contained — the classification record carries a credential signed by
+// the bridge domain's root, and that credential names the key that signed the record. There is no
+// directory lookup and no bridge mailbox involved, which is why these tests need neither.
+
+const attestDomain = "mesh.example"
+
+func mustKP(t *testing.T) *identity.IdentityKeyPair {
 	t.Helper()
-	rec := bridge.NewClassificationRecord(tBridgeAddr, bridgeKP.Ed25519Public, "ext@gmail.com",
-		&bridge.AuthResult{SPF: bridge.SPFPass, DKIM: bridge.DKIMPass, DMARC: bridge.DMARCPass}, tier)
+	kp, err := identity.GenerateIdentityKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return kp
+}
+
+// issueBridgeCred signs a `bridge` credential for subject, as `dmcndcli bridge issue` does.
+func issueBridgeCred(t *testing.T, root *identity.IdentityKeyPair, subject ed25519.PublicKey, roles ...string) *identity.Credential {
+	t.Helper()
+	if len(roles) == 0 {
+		roles = []string{identity.RoleBridge}
+	}
+	cred := &identity.Credential{
+		Version:  1,
+		Subject:  subject,
+		Domain:   attestDomain,
+		Roles:    roles,
+		IssuedAt: time.Now().UTC(),
+	}
+	if err := cred.Sign(root); err != nil {
+		t.Fatalf("sign credential: %v", err)
+	}
+	return cred
+}
+
+// signedClassification builds a classification record signed by bridgeKP and carrying cred.
+func signedClassification(t *testing.T, bridgeKP *identity.IdentityKeyPair, cred *identity.Credential) *bridge.BridgeClassificationRecord {
+	t.Helper()
+	rec := bridge.NewClassificationRecord(
+		"12D3KooWFakePeerID", bridgeKP.Ed25519Public, "sender@legacy.example",
+		&bridge.AuthResult{SPF: bridge.SPFPass, DKIM: bridge.DKIMPass, DMARC: bridge.DMARCPass},
+		bridge.TrustTierVerifiedLegacy,
+	)
+	rec.BridgeCredential = cred
 	if err := rec.Sign(bridgeKP.Ed25519Private); err != nil {
 		t.Fatalf("sign classification: %v", err)
 	}
 	return rec
 }
 
-// bridgeRecord builds a registry identity record for the bridge.
-func bridgeRecord(addr string, kp *identity.IdentityKeyPair, capable bool, tier identity.VerificationTier) *identity.IdentityRecord {
-	return &identity.IdentityRecord{
-		Address:          addr,
-		Ed25519Public:    kp.Ed25519Public,
-		X25519Public:     kp.X25519Public,
-		VerificationTier: tier,
-		BridgeCapability: capable,
+// TestAttestationAcceptsACredentialledBridge is the happy path: a bridge the domain root
+// authorised, signing its own verdict.
+func TestAttestationAcceptsACredentialledBridge(t *testing.T) {
+	root, bridgeKP := mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, issueBridgeCred(t, root, bridgeKP.Ed25519Public))
+
+	v := bridge.VerifyClassificationAttestation(rec, root.Ed25519Public)
+	if !v.Verified {
+		t.Fatalf("a properly credentialled bridge was rejected: %s", v.Reason)
+	}
+	if v.TrustTier != bridge.TrustTierVerifiedLegacy {
+		t.Errorf("trust tier = %v, want verified-legacy", v.TrustTier)
 	}
 }
 
-func TestVerifyClassificationAttestation(t *testing.T) {
-	bridgeKP := mustKeyPair(t)
-	otherKP := mustKeyPair(t)
-	rec := signedClassification(t, bridgeKP, bridge.TrustTierVerifiedLegacy)
-	const noMin = identity.TierUnverified
+// TestAttestationNeedsACredential pins that a bare signature proves nothing. Anyone can generate a
+// keypair and sign a record claiming a legacy sender passed DMARC; the credential is the only
+// thing that makes it an assertion by a bridge rather than by a stranger.
+func TestAttestationNeedsACredential(t *testing.T) {
+	root, bridgeKP := mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, nil)
 
-	t.Run("valid anchored", func(t *testing.T) {
-		v := bridge.VerifyClassificationAttestation(rec, trustFor(tBridgeAddr, bridgeKP, true, identity.TierDomainDNS), noMin)
-		if !v.Verified {
-			t.Fatalf("expected verified, reason=%q", v.Reason)
-		}
-		if v.TrustTier != bridge.TrustTierVerifiedLegacy {
-			t.Fatalf("trust tier = %d", v.TrustTier)
-		}
-		if v.BridgeTier != identity.TierDomainDNS || !v.DomainAnchored {
-			t.Fatalf("bridge tier = %d anchored=%v", v.BridgeTier, v.DomainAnchored)
-		}
-	})
-
-	t.Run("unanchored allowed under lenient policy", func(t *testing.T) {
-		v := bridge.VerifyClassificationAttestation(rec, trustFor(tBridgeAddr, bridgeKP, true, identity.TierUnverified), noMin)
-		if !v.Verified {
-			t.Fatalf("unanchored bridge should verify under lenient policy, reason=%q", v.Reason)
-		}
-		if v.DomainAnchored {
-			t.Fatal("tier-0 bridge must not be reported as domain-anchored")
-		}
-	})
-
-	t.Run("unanchored rejected when anchoring required", func(t *testing.T) {
-		v := bridge.VerifyClassificationAttestation(rec, trustFor(tBridgeAddr, bridgeKP, true, identity.TierUnverified), identity.TierDomainDNS)
-		if v.Verified {
-			t.Fatal("unanchored bridge must be rejected when minTier=TierDomainDNS")
-		}
-	})
-
-	t.Run("revoked always rejected even under lenient policy", func(t *testing.T) {
-		trust := bridge.BridgeTrust{
-			Record:       bridgeRecord(tBridgeAddr, bridgeKP, true, identity.TierUnverified),
-			VerifiedTier: identity.TierUnverified,
-			VerifyErr:    errors.New("registry: binding removed by domain"),
-		}
-		if v := bridge.VerifyClassificationAttestation(rec, trust, noMin); v.Verified {
-			t.Fatal("a revoked/unverifiable bridge must never verify")
-		}
-	})
-
-	t.Run("nil record", func(t *testing.T) {
-		if v := bridge.VerifyClassificationAttestation(nil, trustFor(tBridgeAddr, bridgeKP, true, identity.TierDomainDNS), noMin); v.Verified {
-			t.Fatal("nil record must not verify")
-		}
-	})
-
-	t.Run("bridge not in registry", func(t *testing.T) {
-		if v := bridge.VerifyClassificationAttestation(rec, bridge.BridgeTrust{}, noMin); v.Verified {
-			t.Fatal("unresolved bridge must not verify")
-		}
-	})
-
-	t.Run("not a bridge", func(t *testing.T) {
-		v := bridge.VerifyClassificationAttestation(rec, trustFor(tBridgeAddr, bridgeKP, false, identity.TierDomainDNS), noMin)
-		if v.Verified {
-			t.Fatal("a non-BridgeCapability signer must not verify")
-		}
-	})
-
-	t.Run("key mismatch", func(t *testing.T) {
-		v := bridge.VerifyClassificationAttestation(rec, trustFor(tBridgeAddr, otherKP, true, identity.TierDomainDNS), noMin)
-		if v.Verified {
-			t.Fatal("key mismatch must not verify")
-		}
-	})
-
-	t.Run("tampered signature", func(t *testing.T) {
-		bad := *rec
-		bad.TrustTier = bridge.TrustTierSuspicious // changes signed bytes, sig no longer valid
-		v := bridge.VerifyClassificationAttestation(&bad, trustFor(tBridgeAddr, bridgeKP, true, identity.TierDomainDNS), noMin)
-		if v.Verified {
-			t.Fatal("tampered record must not verify")
-		}
-	})
+	v := bridge.VerifyClassificationAttestation(rec, root.Ed25519Public)
+	if v.Verified {
+		t.Fatal("a classification record with no credential was trusted")
+	}
+	if !strings.Contains(v.Reason, "credential") {
+		t.Errorf("unhelpful reason: %s", v.Reason)
+	}
 }
 
-// trustFor builds a BridgeTrust for a bridge resolved at the given tier (no error).
-func trustFor(addr string, kp *identity.IdentityKeyPair, capable bool, tier identity.VerificationTier) bridge.BridgeTrust {
-	return bridge.BridgeTrust{Record: bridgeRecord(addr, kp, capable, tier), VerifiedTier: tier}
+// TestAttestationRejectsAStolenCredential is the substitution attack the subject==signer check
+// exists for. A real bridge's credential is public — it travels in every message it signs — so an
+// attacker can copy one. Stapling it to their own signed record must not work.
+func TestAttestationRejectsAStolenCredential(t *testing.T) {
+	root, realBridge, attacker := mustKP(t), mustKP(t), mustKP(t)
+	stolen := issueBridgeCred(t, root, realBridge.Ed25519Public)
+
+	// The attacker signs their own verdict, but attaches the real bridge's credential.
+	rec := signedClassification(t, attacker, stolen)
+
+	v := bridge.VerifyClassificationAttestation(rec, root.Ed25519Public)
+	if v.Verified {
+		t.Fatal("a record signed by one key but carrying another key's credential was trusted")
+	}
+	if !strings.Contains(v.Reason, "subject") {
+		t.Errorf("reason does not point at the subject mismatch: %s", v.Reason)
+	}
 }
 
-func TestClassificationFromAttachments(t *testing.T) {
-	bridgeKP := mustKeyPair(t)
-	rec := signedClassification(t, bridgeKP, bridge.TrustTierVerifiedLegacy)
+// TestAttestationRejectsAnotherDomainsRoot keeps the anchor exact. A credential signed by some
+// other domain's root says nothing about this one, even though it is a perfectly valid credential.
+func TestAttestationRejectsAnotherDomainsRoot(t *testing.T) {
+	ourRoot, theirRoot, bridgeKP := mustKP(t), mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, issueBridgeCred(t, theirRoot, bridgeKP.Ed25519Public))
+
+	if v := bridge.VerifyClassificationAttestation(rec, ourRoot.Ed25519Public); v.Verified {
+		t.Fatal("a credential signed by a different domain's root was accepted")
+	}
+}
+
+// TestAttestationRequiresTheBridgeRole stops any credential the root ever signed — a routing
+// credential, an address credential — from doubling as bridge authority.
+func TestAttestationRequiresTheBridgeRole(t *testing.T) {
+	root, bridgeKP := mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, issueBridgeCred(t, root, bridgeKP.Ed25519Public, identity.RoleRouting))
+
+	v := bridge.VerifyClassificationAttestation(rec, root.Ed25519Public)
+	if v.Verified {
+		t.Fatal("a routing credential was accepted as bridge authority")
+	}
+	if !strings.Contains(v.Reason, "bridge role") {
+		t.Errorf("unhelpful reason: %s", v.Reason)
+	}
+}
+
+// TestAttestationRejectsATamperedVerdict is the point of signing the record at all: the verdict
+// must not be editable in flight by whoever is carrying it.
+func TestAttestationRejectsATamperedVerdict(t *testing.T) {
+	root, bridgeKP := mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, issueBridgeCred(t, root, bridgeKP.Ed25519Public))
+
+	rec.TrustTier = bridge.TrustTierSuspicious // change the claim without re-signing
+	if v := bridge.VerifyClassificationAttestation(rec, root.Ed25519Public); v.Verified {
+		t.Fatal("an edited trust tier survived verification")
+	}
+}
+
+// TestAttestationSurvivesTheWire covers the credential actually round-tripping through protobuf —
+// it rides in a field the bridge signature deliberately does not cover, so a marshalling bug here
+// would silently strip it and turn every bridged message untrusted.
+func TestAttestationSurvivesTheWire(t *testing.T) {
+	root, bridgeKP := mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, issueBridgeCred(t, root, bridgeKP.Ed25519Public))
+
 	raw, err := rec.Marshal()
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
+	got, err := bridge.UnmarshalClassificationRecord(raw)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.BridgeCredential == nil {
+		t.Fatal("the credential did not survive the round trip")
+	}
+	if v := bridge.VerifyClassificationAttestation(got, root.Ed25519Public); !v.Verified {
+		t.Fatalf("a round-tripped record no longer verifies: %s", v.Reason)
+	}
+}
 
-	atts := []message.AttachmentRecord{
-		{ContentType: "text/plain", Content: []byte("hi")},
-		{ContentType: bridge.ClassificationContentType, Content: raw},
-	}
-	got, ok := bridge.ClassificationFromAttachments(atts)
-	if !ok {
-		t.Fatal("expected to find a classification attachment")
-	}
-	if got.BridgeAddress != tBridgeAddr {
-		t.Fatalf("bridge address = %q", got.BridgeAddress)
+// TestDeliveryReceiptVerification covers the outbound direction. Without it a receipt is an
+// unauthenticated claim that mail was delivered, which is worth nothing to the sender relying on
+// it — and worse than nothing if it falsely claims success.
+func TestDeliveryReceiptVerification(t *testing.T) {
+	root, bridgeKP, attacker := mustKP(t), mustKP(t), mustKP(t)
+	cred := issueBridgeCred(t, root, bridgeKP.Ed25519Public)
+
+	mk := func(signer *identity.IdentityKeyPair, c *identity.Credential) *bridge.BridgeDeliveryReceipt {
+		r := &bridge.BridgeDeliveryReceipt{
+			RecipientEmail:   "someone@legacy.example",
+			BridgeAddress:    "12D3KooWFakePeerID",
+			DeliveredAt:      time.Now().UTC().Truncate(time.Second),
+			Success:          true,
+			BridgeCredential: c,
+		}
+		if err := r.Sign(signer.Ed25519Private); err != nil {
+			t.Fatalf("sign receipt: %v", err)
+		}
+		return r
 	}
 
-	if _, ok := bridge.ClassificationFromAttachments(atts[:1]); ok {
-		t.Fatal("must not find a classification attachment when absent")
+	if v := bridge.VerifyDeliveryReceipt(mk(bridgeKP, cred), root.Ed25519Public); !v.Verified {
+		t.Fatalf("a genuine receipt was rejected: %s", v.Reason)
+	} else if !v.Success {
+		t.Error("verdict lost the success flag")
+	}
+	if v := bridge.VerifyDeliveryReceipt(mk(bridgeKP, nil), root.Ed25519Public); v.Verified {
+		t.Error("a receipt with no credential was trusted")
+	}
+	// An attacker's receipt carrying the real bridge's credential: the signature will not match
+	// the credential's subject.
+	if v := bridge.VerifyDeliveryReceipt(mk(attacker, cred), root.Ed25519Public); v.Verified {
+		t.Error("a receipt signed by a key other than the credential's subject was trusted")
+	}
+	if v := bridge.VerifyDeliveryReceipt(nil, root.Ed25519Public); v.Verified {
+		t.Error("a nil receipt verified")
+	}
+}
+
+// TestNoBridgeMailboxAnywhere is the regression guard for what this change removed. A bridge used
+// to hold `bridge@<domain>` and be looked up in the directory like a correspondent, which is what
+// made attestation verification depend on a live registry and forced infrastructure to be
+// provisioned like a person. If an address creeps back into these records, this fails.
+func TestNoBridgeMailboxAnywhere(t *testing.T) {
+	root, bridgeKP := mustKP(t), mustKP(t)
+	rec := signedClassification(t, bridgeKP, issueBridgeCred(t, root, bridgeKP.Ed25519Public))
+
+	if strings.Contains(rec.BridgeAddress, "@") {
+		t.Errorf("BridgeAddress %q looks like an email address; it must be a libp2p peer ID", rec.BridgeAddress)
+	}
+	// And verification must not consult anything but the record and the domain root — proven by
+	// the fact that every test here passes one keypair and no registry at all.
+	if v := bridge.VerifyClassificationAttestation(rec, root.Ed25519Public); !v.Verified {
+		t.Fatalf("verification needed something beyond the record and the root: %s", v.Reason)
 	}
 }

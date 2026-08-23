@@ -247,8 +247,19 @@ type IdentityRecord struct {
 	VerificationTier VerificationTier       `protobuf:"varint,8,opt,name=verification_tier,json=verificationTier,proto3,enum=dmcn.identity.VerificationTier" json:"verification_tier,omitempty"`
 	Attestations     []*AttestationRecord   `protobuf:"bytes,9,rep,name=attestations,proto3" json:"attestations,omitempty"`
 	SelfSignature    []byte                 `protobuf:"bytes,10,opt,name=self_signature,json=selfSignature,proto3" json:"self_signature,omitempty"` // 64 bytes Ed25519 sig over all preceding fields
-	// Bridge capability flag — true if this identity operates as a bridge node.
-	// See whitepaper Section 15.6.
+	// DEPRECATED, always false. A bridge is infrastructure and has no identity record at all:
+	// it is a peer whose key carries a `bridge` credential, and recipients verify its
+	// attestations against that credential (see BridgeClassificationRecord.bridge_credential in
+	// bridge.proto, and SPEC.md §7). This flag existed when a bridge held a `bridge@<domain>`
+	// mailbox that clients looked up to decide whether to believe its SPF/DKIM/DMARC verdict —
+	// which made a trust decision depend on a directory lookup rather than on a signature.
+	//
+	// The field is retained rather than removed because it is covered by the owner
+	// self-signature: dropping it would change signable_bytes and invalidate every identity
+	// record ever signed. Implementations MUST NOT set it and MUST NOT treat it as a trust
+	// signal. Do not reuse field 19 for anything else.
+	//
+	// Deprecated: Marked as deprecated in identity.proto.
 	BridgeCapability bool `protobuf:"varint,19,opt,name=bridge_capability,json=bridgeCapability,proto3" json:"bridge_capability,omitempty"`
 	// Domain Authority countersignature (whitepaper Section 13.2). Present when a
 	// domain authority — directly, or via a delegated sub-authority — vouches for
@@ -390,6 +401,7 @@ func (x *IdentityRecord) GetSelfSignature() []byte {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in identity.proto.
 func (x *IdentityRecord) GetBridgeCapability() bool {
 	if x != nil {
 		return x.BridgeCapability
@@ -1873,7 +1885,7 @@ const file_identity_proto_rawDesc = "" +
 	"attestedAt\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\a \x01(\x03R\texpiresAt\x12\x1c\n" +
-	"\tsignature\x18\b \x01(\fR\tsignature\"\xbe\b\n" +
+	"\tsignature\x18\b \x01(\fR\tsignature\"\xc2\b\n" +
 	"\x0eIdentityRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12,\n" +
@@ -1888,8 +1900,8 @@ const file_identity_proto_rawDesc = "" +
 	"\x11verification_tier\x18\b \x01(\x0e2\x1f.dmcn.identity.VerificationTierR\x10verificationTier\x12D\n" +
 	"\fattestations\x18\t \x03(\v2 .dmcn.identity.AttestationRecordR\fattestations\x12%\n" +
 	"\x0eself_signature\x18\n" +
-	" \x01(\fR\rselfSignature\x12+\n" +
-	"\x11bridge_capability\x18\x13 \x01(\bR\x10bridgeCapability\x127\n" +
+	" \x01(\fR\rselfSignature\x12/\n" +
+	"\x11bridge_capability\x18\x13 \x01(\bB\x02\x18\x01R\x10bridgeCapability\x127\n" +
 	"\x17domain_countersignature\x18\x14 \x01(\fR\x16domainCountersignature\x126\n" +
 	"\x17domain_countersigned_at\x18\x15 \x01(\x03R\x15domainCountersignedAt\x12>\n" +
 	"\x1bdomain_countersigner_pubkey\x18\x16 \x01(\fR\x19domainCountersignerPubkey\x12#\n" +

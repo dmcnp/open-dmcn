@@ -62,6 +62,7 @@ func (d *messageDedup) mark(id [16]byte) {
 type OutboundHandler struct {
 	bridgeKP       *identity.IdentityKeyPair
 	bridgeAddr     string
+	credential     *identity.Credential
 	deliverer      SMTPDeliverer
 	lookup         LookupFunc
 	profiles       *profileSet     // bridge↔dmcn domain mapping (one or more pairs)
@@ -76,6 +77,9 @@ type OutboundHandler struct {
 type OutboundConfig struct {
 	BridgeKP   *identity.IdentityKeyPair
 	BridgeAddr string
+	// Credential is the bridge's root-signed `bridge` credential, stamped into every delivery
+	// receipt so the DMCN sender can verify it without a directory lookup.
+	Credential *identity.Credential
 	Deliverer  SMTPDeliverer
 	Lookup     LookupFunc
 	// BridgeDomain/DMCNDomain are the default (single-profile) pair; Profiles adds more
@@ -126,6 +130,7 @@ func NewOutboundHandler(cfg OutboundConfig) *OutboundHandler {
 	return &OutboundHandler{
 		bridgeKP:       cfg.BridgeKP,
 		bridgeAddr:     cfg.BridgeAddr,
+		credential:     cfg.Credential,
 		deliverer:      cfg.Deliverer,
 		lookup:         cfg.Lookup,
 		profiles:       profiles,
@@ -141,25 +146,24 @@ func NewOutboundHandler(cfg OutboundConfig) *OutboundHandler {
 // verifies the sender, delivers the message via SMTP, and returns a
 // signed delivery receipt.
 func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.EncryptedEnvelope) (*BridgeDeliveryReceipt, error) {
-	// 1. Decrypt
-	sm, err := message.Decrypt(env, h.bridgeKP.X25519Private, h.bridgeKP.X25519Public)
+	// 1. Decrypt AND verify the sender signature. Both formats are accepted and each is verified
+	// the way it was signed — see decryptForBridge. Split envelopes are the normal shape for
+	// anything a browser composes; handling only the older single-blob form meant every real
+	// outbound message failed AEAD authentication here, which stayed invisible for as long as
+	// nothing could discover the bridge to send to it.
+	pt, err := decryptForBridge(env, h.bridgeKP)
 	if err != nil {
 		return nil, fmt.Errorf("bridge: decrypt: %w", err)
-	}
-
-	// 2. Verify sender signature
-	if err := sm.Verify(); err != nil {
-		return nil, fmt.Errorf("bridge: verify sender: %w", err)
 	}
 
 	// 3. Log warning — PRD requirement: bridge must log when decrypting
 	// message content for outbound delivery.
 	h.log.Warnf("TRUST DISCLOSURE: decrypting message from %s for outbound SMTP delivery to %s",
-		sm.Plaintext.SenderAddress, sm.Plaintext.RecipientAddress)
+		pt.SenderAddress, pt.RecipientAddress)
 
 	// 4. Verify sender exists in registry (the lookup is the existence check; the record itself
 	// is no longer needed after dropping the fleet send-rate counter).
-	senderAddr := sm.Plaintext.SenderAddress
+	senderAddr := pt.SenderAddress
 	if _, err := h.lookup(ctx, senderAddr); err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrSenderNotFound, senderAddr, err)
 	}
@@ -170,7 +174,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 	// any legacy address.
 	if !h.senderAuthorized(senderAddr) {
 		h.log.Warnf("rejecting outbound from unauthorized sender %s (domain not served by this bridge)", senderAddr)
-		h.audit.Record(AuditEvent{Action: "outbound.reject", From: senderAddr, To: sm.Plaintext.RecipientAddress, Detail: "sender not authorized"})
+		h.audit.Record(AuditEvent{Action: "outbound.reject", From: senderAddr, To: pt.RecipientAddress, Detail: "sender not authorized"})
 		return nil, fmt.Errorf("%w: %s", ErrSenderNotAuthorized, senderAddr)
 	}
 
@@ -179,7 +183,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 	bridgeDomain, dmcnDomain := h.profiles.forDMCNDomain(domainOf(senderAddr))
 
 	// 6. Check recipient is a legacy address
-	recipientAddr := sm.Plaintext.RecipientAddress
+	recipientAddr := pt.RecipientAddress
 	if !IsLegacyAddress(recipientAddr, bridgeDomain, dmcnDomain) {
 		return nil, fmt.Errorf("%w: %s", ErrNotLegacyAddress, recipientAddr)
 	}
@@ -190,7 +194,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 	// legitimately contain newlines and is not checked here.
 	smtpFrom := DMCNToSMTPFrom(senderAddr, bridgeDomain)
 	for _, f := range []struct{ name, val string }{
-		{"sender", smtpFrom}, {"recipient", recipientAddr}, {"subject", sm.Plaintext.Subject},
+		{"sender", smtpFrom}, {"recipient", recipientAddr}, {"subject", pt.Subject},
 	} {
 		if hasHeaderInjection(f.val) {
 			h.log.Warnf("rejecting outbound from %s: header injection in %s", senderAddr, f.name)
@@ -202,7 +206,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 	// 7. Idempotency: never deliver the same DMCN message twice. A duplicate or
 	// replayed envelope returns a success receipt without re-delivering (and
 	// without consuming rate-limit quota).
-	msgID := sm.Plaintext.MessageID
+	msgID := pt.MessageID
 	if h.dedup.seenBefore(msgID) {
 		h.log.Infof("skipping duplicate outbound delivery of %x to %s", msgID, recipientAddr)
 		return h.makeReceipt(msgID, recipientAddr, nil)
@@ -218,7 +222,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 
 	// 9. Deliver via SMTP (smtpFrom validated in step 6b). The full message is passed so the
 	// deliverer renders a faithful MIME body — content type, attachments, and threading headers.
-	deliverErr := h.deliverer.Deliver(ctx, smtpFrom, recipientAddr, &sm.Plaintext)
+	deliverErr := h.deliverer.Deliver(ctx, smtpFrom, recipientAddr, pt)
 	if deliverErr != nil {
 		h.log.Warnf("outbound delivery failed to %s: %v", recipientAddr, deliverErr)
 		h.audit.Record(AuditEvent{Action: "outbound.deliver", From: senderAddr, To: recipientAddr, Success: false, Detail: deliverErr.Error()})
@@ -243,6 +247,7 @@ func (h *OutboundHandler) makeReceipt(msgID [16]byte, recipient string, deliverE
 		OriginalMessageID: msgID,
 		RecipientEmail:    recipient,
 		BridgeAddress:     h.bridgeAddr,
+		BridgeCredential:  h.credential,
 		DeliveredAt:       time.Now().UTC(),
 		Success:           deliverErr == nil,
 	}
@@ -265,4 +270,52 @@ func (h *OutboundHandler) senderAuthorized(senderAddr string) bool {
 // of a single RFC5322 header field — CR, LF, or NUL.
 func hasHeaderInjection(s string) bool {
 	return strings.ContainsAny(s, "\r\n\x00")
+}
+
+// decryptForBridge opens an envelope addressed to the bridge in whichever format it arrived in,
+// verifies the sender signature, and returns the plaintext.
+//
+// Verification is inside this function on purpose. The two formats sign different things — the
+// older one signs the whole plaintext, a split one signs the HEADER — so a caller that decrypted
+// first and verified afterwards would have to know which shape it got, and would eventually check
+// the wrong signature against the wrong bytes. Reassembling the split parts into a PlaintextMessage
+// does not weaken anything: the header signature covers BodyHash and BodyContentAddress, and
+// DecryptBody refuses a body that does not match them.
+func decryptForBridge(env *message.EncryptedEnvelope, kp *identity.IdentityKeyPair) (*message.PlaintextMessage, error) {
+	if !env.IsSplit() {
+		sm, err := message.Decrypt(env, kp.X25519Private, kp.X25519Public)
+		if err != nil {
+			return nil, err
+		}
+		if err := sm.Verify(); err != nil {
+			return nil, fmt.Errorf("verify sender: %w", err)
+		}
+		return &sm.Plaintext, nil
+	}
+
+	sh, err := message.DecryptHeader(env, kp.X25519Private, kp.X25519Public)
+	if err != nil {
+		return nil, fmt.Errorf("header: %w", err)
+	}
+	if err := sh.Verify(); err != nil {
+		return nil, fmt.Errorf("verify sender: %w", err)
+	}
+	content, err := message.DecryptBody(env, &sh.Header, kp.X25519Private, kp.X25519Public)
+	if err != nil {
+		return nil, fmt.Errorf("body: %w", err)
+	}
+	h := sh.Header
+	return &message.PlaintextMessage{
+		Version:          h.Version,
+		MessageID:        h.MessageID,
+		ThreadID:         h.ThreadID,
+		SenderAddress:    h.SenderAddress,
+		SenderPublicKey:  h.SenderPublicKey,
+		RecipientAddress: h.RecipientAddress,
+		SentAt:           h.SentAt,
+		Subject:          h.Subject,
+		Body:             content.Body,
+		Attachments:      content.Attachments,
+		ReplyToID:        h.ReplyToID,
+	}, nil
 }

@@ -37,7 +37,7 @@ func TestBridgeFold(t *testing.T) {
 
 	seeds := newSeedStore(t.TempDir(), "test-pass")
 	now := time.Now()
-	rootKP, err := seeds.seedDomain(ctx, n, dmcnDomain, now)
+	rootKP, err := seeds.seedDomainDev(ctx, n, dmcnDomain, now)
 	if err != nil {
 		t.Fatalf("seed domain: %v", err)
 	}
@@ -46,17 +46,23 @@ func TestBridgeFold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed alice: %v", err)
 	}
-	// The bridge's own identity (BridgeCapability + routing credential).
-	bridgeKP, err := seeds.seedBridgeIdentity(ctx, n, rootKP, "bridge@"+dmcnDomain, now)
+	// The bridge has no identity of its own: it signs with the node's key and is trusted through
+	// a root-signed `bridge` credential.
+	bridgeKP, err := bridgeInfraKeys(n)
 	if err != nil {
-		t.Fatalf("seed bridge identity: %v", err)
+		t.Fatalf("bridge infra keys: %v", err)
+	}
+	bridgeCred, err := bridgeCredential(n, rootKP, config{devMode: true, domain: dmcnDomain}, now)
+	if err != nil {
+		t.Fatalf("bridge credential: %v", err)
 	}
 
 	// Fold the bridge onto the shared node. Port :0 so the SMTP listener picks a free port; we
 	// drive the inbound handler directly rather than over a socket.
 	br, err := bridge.New(ctx, n, bridgeKP, bridge.Config{
 		SMTPListenAddr: "127.0.0.1:0",
-		BridgeAddress:  "bridge@" + dmcnDomain,
+		BridgeAddress:  n.PeerID().String(),
+		Credential:     bridgeCred,
 		BridgeDomain:   bridgeDomain,
 		DMCNDomain:     dmcnDomain,
 	}, log)

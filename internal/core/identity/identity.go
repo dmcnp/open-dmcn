@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
-	"dmcn.dev/open-dmcn/dmcnpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -162,6 +162,11 @@ type IdentityRecord struct {
 	ExpiresAt        time.Time // zero = no expiry
 	RelayHints       []string
 	VerificationTier VerificationTier
+	// BridgeCapability is DEPRECATED and always false. A bridge is infrastructure and has no
+	// identity record: it is a peer whose key carries a `bridge` credential, verified per
+	// SPEC.md §7. The field survives only because it is covered by the owner self-signature —
+	// removing it would change signableBytes and invalidate every record ever signed. Do not
+	// set it, and do not treat it as a trust signal.
 	BridgeCapability bool
 	RequireOnion     bool // mailbox owner requires inbound mail via onion routing
 	// Revision is the owner-signed monotonic version of the identity core, bumped on every

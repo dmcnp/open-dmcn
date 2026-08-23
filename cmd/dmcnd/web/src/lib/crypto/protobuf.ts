@@ -4,7 +4,6 @@
 // byte-identical to Go's deterministic marshaling (verified). The getRoot()/
 // lookupType() shim keeps the existing helper call sites below unchanged.
 import { dmcn } from '../proto/dmcn.js';
-import { dmcn as bridgeProto } from '../proto/bridge.js';
 
 interface StaticType {
   create(props: unknown): unknown;
@@ -432,12 +431,49 @@ export interface BridgeClassificationFields {
 export async function decodeBridgeClassification(
   data: Uint8Array
 ): Promise<{ record: BridgeClassificationFields; signableBytes: Uint8Array }> {
-  const T = bridgeProto.bridge.BridgeClassificationRecord;
+  const T = dmcn.bridge.BridgeClassificationRecord;
   const msg = T.decode(data);
   // longs:Number keeps classified_at a plain number; bytes stay Uint8Array.
   const record = T.toObject(msg, { longs: Number }) as BridgeClassificationFields;
-  // Remove the signature own-property, then re-encode → the signed-over bytes.
-  delete (msg as Record<string, unknown>).bridgeSignature;
+  // Remove the signature AND the credential, then re-encode → the signed-over bytes.
+  //
+  // The credential (field 12) must come out as well: Go signs fields 1-10 only, deliberately, so
+  // that a bridge credential can be re-issued without invalidating every attestation it ever
+  // made. Leaving it in here would make the browser compute different signed bytes than the
+  // bridge did, and every bridged message would render as forged.
+  const own = msg as unknown as Record<string, unknown>;
+  delete own.bridgeSignature;
+  delete own.bridgeCredential;
   const signableBytes = T.encode(msg).finish() as Uint8Array;
   return { record, signableBytes };
+}
+
+// CredentialFields is the subset of a dmcn.identity.Credential this client reads.
+export interface CredentialFields {
+  subject: Uint8Array;
+  domain: string;
+  roles: string[];
+  issuerPub: Uint8Array;
+  signature: Uint8Array;
+  notAfter?: number;
+  effectiveFrom?: number;
+}
+
+// decodeCredentialFromClassification pulls the bridge credential out of a classification record
+// and returns its fields alongside the exact bytes its issuer signed (the credential minus its
+// signature), so the browser can verify it against a domain root key.
+export async function decodeCredentialFromClassification(
+  data: Uint8Array
+): Promise<{ credential: CredentialFields; signableBytes: Uint8Array } | null> {
+  const T = dmcn.bridge.BridgeClassificationRecord;
+  const msg = T.decode(data) as unknown as Record<string, unknown>;
+  const cred = msg.bridgeCredential;
+  if (!cred) return null;
+
+  const C = dmcn.identity.Credential;
+  const credential = C.toObject(cred as never, { longs: Number }) as unknown as CredentialFields;
+  // Same trick as above: drop the signature own-property and re-encode.
+  delete (cred as Record<string, unknown>).signature;
+  const signableBytes = C.encode(cred as never).finish() as Uint8Array;
+  return { credential, signableBytes };
 }

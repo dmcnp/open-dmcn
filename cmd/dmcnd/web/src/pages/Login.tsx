@@ -12,14 +12,17 @@ import { workingKeyRef } from '../lib/sessionLifetime';
 import { AuthShell } from '../components/AuthShell';
 import { Button, IconButton, Input } from '../ds';
 import { Icon } from '../components/Icon';
-import { REGISTRATION_CLOSED, SIGNUP_URL } from '../lib/config';
+import { REGISTRATION_CLOSED, SIGNUP_URL, PETITION_MODE } from '../lib/config';
 
 // The "create an account" affordance. On the consumer front door it links the
 // in-app register page; on a closed (business) instance it points at the public
 // signup front door instead — or disappears when none is configured.
-function CreateAccountLink({ label }: { label: string }) {
+// CreateAccountLink points at whatever "get an account here" means for this deployment. On a
+// live domain nothing is created on demand — you ask an admin — so the wording has to change with
+// it, or the link promises something the page cannot do.
+function CreateAccountLink({ label, petitionLabel }: { label: string; petitionLabel: string }) {
   if (!REGISTRATION_CLOSED) {
-    return <Link to="/register" style={linkStyle}>{label}</Link>;
+    return <Link to="/register" style={linkStyle}>{PETITION_MODE ? petitionLabel : label}</Link>;
   }
   if (!SIGNUP_URL) return null;
   return <a href={SIGNUP_URL} style={linkStyle}>{label}</a>;
@@ -123,15 +126,17 @@ export function Login() {
       <AuthShell
         title="Set up this device"
         subtitle="There's no identity stored in this browser yet."
-        footer={<>New to DMCN? <CreateAccountLink label="Create an account" /></>}
+        footer={<>New to DMCN? <CreateAccountLink label="Create an account" petitionLabel="Ask for a mailbox" /></>}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
             Your keys never leave your devices, so there's nothing on the server to sign
             in with. Bring an existing identity onto this browser:
           </p>
-          <Link to="/pair"><Button size="lg" fullWidth>Add this device (pairing)</Button></Link>
-          <Link to="/import"><Button size="lg" variant="secondary" fullWidth>Import a backup or keystore</Button></Link>
+          {/* No pairing link: device pairing is a product-client feature and open-dmcn omits it
+              deliberately, so /pair routes nowhere. Importing a backup is the whole of onboarding
+              an existing identity here. */}
+          <Link to="/import"><Button size="lg" fullWidth>Import a backup or keystore</Button></Link>
         </div>
       </AuthShell>
     );
@@ -143,9 +148,8 @@ export function Login() {
       subtitle="Unlock an identity stored on this device."
       footer={
         <span>
-          Add another: <CreateAccountLink label="create" />
+          Add another: <CreateAccountLink label="create" petitionLabel="ask for a mailbox" />
           {' · '}<Link to="/import" style={linkStyle}>import</Link>
-          {' · '}<Link to="/pair" style={linkStyle}>pair a device</Link>
         </span>
       }
     >

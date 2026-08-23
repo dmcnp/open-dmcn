@@ -11,8 +11,8 @@ import (
 
 	"github.com/mertenvg/logr/v2"
 
-	"dmcn.dev/open-dmcn/internal/web/api"
 	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/web/api"
 )
 
 func TestHandleRelayHints(t *testing.T) {
@@ -53,17 +53,25 @@ func TestHandleRelayHints(t *testing.T) {
 	}
 }
 
-func TestHandleLookup_ReportsBridgeCapability(t *testing.T) {
+// TestHandleLookup_DoesNotReportBridgeCapability is a regression guard, not a feature test.
+//
+// The directory used to expose bridge_capability so a client could decide whether to believe a
+// bridged message's SPF/DKIM/DMARC verdict. That made a trust decision depend on a lookup the
+// server answers — and it only existed because a bridge used to hold a `bridge@<domain>` mailbox.
+// A bridge is infrastructure with no email address now, and its verdicts are verified against a
+// root-signed credential carried inside the message itself. Re-adding this field would quietly
+// reintroduce a server-controlled trust signal.
+func TestHandleLookup_DoesNotReportBridgeCapability(t *testing.T) {
 	kp, err := identity.GenerateIdentityKeyPair()
 	if err != nil {
 		t.Fatalf("keygen: %v", err)
 	}
 	rec := &identity.IdentityRecord{
-		Address:          "bridge@bridge.localhost",
+		Address:          "someone@bridge.localhost",
 		Ed25519Public:    kp.Ed25519Public,
 		X25519Public:     kp.X25519Public,
 		VerificationTier: identity.TierDomainDNS,
-		BridgeCapability: true,
+		BridgeCapability: true, // even when the record itself claims it
 	}
 	h := api.NewIdentityHandler(
 		func(context.Context, string) (*identity.IdentityRecord, error) { return rec, nil },
@@ -73,7 +81,7 @@ func TestHandleLookup_ReportsBridgeCapability(t *testing.T) {
 		logr.With(logr.M("test", true)),
 	)
 
-	req := httptest.NewRequest("GET", "/api/v1/identity/lookup?address=bridge@bridge.localhost", nil)
+	req := httptest.NewRequest("GET", "/api/v1/identity/lookup?address=someone@bridge.localhost", nil)
 	rr := httptest.NewRecorder()
 	h.HandleLookup(rr, req)
 
@@ -84,8 +92,8 @@ func TestHandleLookup_ReportsBridgeCapability(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if bc, ok := resp["bridge_capability"].(bool); !ok || !bc {
-		t.Fatalf("bridge_capability = %v (ok=%v), want true", resp["bridge_capability"], ok)
+	if _, present := resp["bridge_capability"]; present {
+		t.Error("the directory still exposes bridge_capability — bridge trust must come from the credential in the message, not from the server")
 	}
 }
 

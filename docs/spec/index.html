@@ -280,14 +280,40 @@ to its own bucket classes. A mailbox (<code>require_onion</code>) or domain (<co
 can require onion delivery, in which case relays reject direct STOREs with
 <code>ONION_REQUIRED</code>.</p>
 <h2 id="7-smtp-bridge-optional-capability">7. SMTP bridge (optional capability)<a class="hash" href="#7-smtp-bridge-optional-capability" aria-label="Link to this section">#</a></h2>
-<p>An implementation may operate an SMTP↔DMCN bridge (<code>bridge_capability</code> on its identity
-record). Inbound legacy mail is authenticated (SPF/DKIM/DMARC) at the bridge, and the
-verdict travels as a signed <strong><code>BridgeClassificationRecord</code></strong> attachment
-(<code>application/x-dmcn-bridge-classification</code>) inside the sealed envelope — verified by the
-recipient's client against the bridge's published identity, never by trusting the relay.
-Outbound delivery returns a signed <strong><code>BridgeDeliveryReceipt</code></strong>. These are message
-payloads, not wire ops: the bridge speaks the same core relay protocol as everyone else.
-Honest edge: mail crossing a bridge is TLS-in-transit on the legacy side, not
+<p>An implementation may operate an SMTP↔DMCN bridge. A bridge is <strong>infrastructure, not a
+correspondent</strong>: it has no DMCN address and no directory entry. It is a peer whose key
+carries a <code>bridge</code> credential (§5) issued by the domain authority, and that credential is
+the whole basis on which anyone believes it.</p>
+<p>Inbound legacy mail is authenticated (SPF/DKIM/DMARC) at the bridge, and the verdict
+travels as a signed <strong><code>BridgeClassificationRecord</code></strong> attachment
+(<code>application/x-dmcn-bridge-classification</code>) inside the sealed envelope. Outbound delivery
+returns a signed <strong><code>BridgeDeliveryReceipt</code></strong>. Both carry the bridge's <code>bridge</code> credential,
+so a recipient verifies an attestation with no lookup at all:</p>
+<ol>
+<li>the record's signature is valid for the key it carries;</li>
+<li>the attached credential is signed by the domain authority root and grants <code>bridge</code>; and</li>
+<li>that credential's subject <strong>is</strong> the key that signed the record.</li>
+</ol>
+<p>Step 3 is load-bearing. A credential is public — it travels in every message the bridge
+signs — so without binding it to the signer, anyone could attach a real bridge's credential
+to their own attestation.</p>
+<p>The credential is deliberately <strong>not</strong> covered by <code>bridge_signature</code>: it carries its own
+issuer signature, the subject-equals-signer check defeats substitution, and the whole record
+rides inside the end-to-end-signed message that delivers it. Covering it would mean a
+credential could not be re-issued without invalidating every attestation ever made under it.</p>
+<p><code>bridge_address</code> is the bridge's libp2p peer ID, and is informational — for display and
+logs. It is not an address anyone can send to.</p>
+<p><strong>Discovery (outbound).</strong> A domain advertises its bridge with a <code>bridge=</code> token in its
+<code>_dmcn</code> TXT record — a multiaddr including <code>/p2p/&lt;peerID&gt;</code>, the DMCN analogue of an MX
+record. A sender resolves the token, fetches that peer's self-anchored <code>RelayDescriptor</code>,
+and requires it to carry a <code>bridge</code> credential whose subject is that peer, before sealing
+anything to the descriptor's X25519 key.</p>
+<p>The DNS token discovers; the credential decides. That separation matters more here than for
+<code>seed=</code>: a relay only ever holds sealed envelopes, but a bridge <strong>decrypts</strong> outbound mail in
+order to hand it to SMTP, so whoever answers a <code>bridge=</code> token reads the plaintext. A domain
+that advertises no <code>bridge=</code> simply cannot send outside DMCN.</p>
+<p>These are message payloads, not wire ops: the bridge speaks the same core relay protocol as
+everyone else. Honest edge: mail crossing a bridge is TLS-in-transit on the legacy side, not
 end-to-end encrypted.</p>
 <h2 id="8-extension-points-how-everything-else-attaches">8. Extension points (how everything else attaches)<a class="hash" href="#8-extension-points-how-everything-else-attaches" aria-label="Link to this section">#</a></h2>
 <p>The core deliberately defines the <em>attachment surfaces</em> for extensions rather than the

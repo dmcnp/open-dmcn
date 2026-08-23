@@ -16,8 +16,20 @@ type IdentityHandler struct {
 	verifyManaged func(ctx context.Context, rec *identity.IdentityRecord) (identity.VerificationTier, error)
 	requiresOnion func(ctx context.Context, rec *identity.IdentityRecord) bool
 	relayHints    func(ctx context.Context, address string) ([]string, error)
+	// resolveBridge finds this domain's outbound bridge for legacy (non-DMCN) recipients.
+	// Optional: nil means the deployment has no bridge and legacy addresses stay unroutable.
+	resolveBridge BridgeResolver
 	log           logr.Logger
 }
+
+// BridgeResolver discovers the outbound bridge for a sender domain: where to STORE mail bound for
+// the legacy email world, and the key to seal it under. See node.ResolveBridge.
+type BridgeResolver func(ctx context.Context) (x25519Pub [32]byte, multiaddr string, err error)
+
+// SetBridgeResolver installs the outbound-bridge resolver. Wired separately from the constructor
+// because a self-hosted daemon only knows whether it HAS a bridge after its domain and credential
+// are in place, which is after the handlers are built.
+func (h *IdentityHandler) SetBridgeResolver(f BridgeResolver) { h.resolveBridge = f }
 
 // NewIdentityHandler creates a new IdentityHandler. verifyManaged (optional, may
 // be nil) cryptographically verifies a countersigned record's tier against the
@@ -78,6 +90,19 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 
 	rec, err := h.lookup(r.Context(), address)
 	if err != nil {
+		// Not a DMCN identity. It may still be reachable as ordinary email, through this
+		// domain's bridge — so answer with the bridge's key and address rather than a flat
+		// "not found". The client then seals to the bridge and STOREs there exactly as it
+		// would for any recipient; the bridge reads the real destination out of the decrypted
+		// message and hands it to SMTP.
+		//
+		// The recipient's own domain is irrelevant here: gmail.com has no _dmcn record and
+		// never will. What is resolved is OUR bridge, and it is credential-verified before
+		// anything is sealed to it — which matters, because unlike a relay a bridge sees the
+		// plaintext.
+		if h.legacyLookup(w, r, address) {
+			return
+		}
 		h.log.Error("identity lookup failed", logr.M("error", err.Error()), logr.M("address", address))
 		writeError(w, http.StatusNotFound, "identity not found")
 		return
@@ -117,9 +142,35 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		"verification_tier":     int(rec.VerificationTier),
 		"verified_tier":         verifiedTier,
 		"identity_unverifiable": unverifiable,
-		// bridge_capability lets clients confirm a classification record's signer
-		// is a registered bridge before trusting its legacy-auth verdict (gap #6).
-		"bridge_capability": rec.BridgeCapability,
-		"require_onion":     requireOnion,
+		"require_onion":         requireOnion,
 	})
+}
+
+// legacyLookup answers a lookup for an address that is not a DMCN identity, by pointing the client
+// at this domain's outbound bridge. It reports whether it wrote a response.
+//
+// The reply deliberately mirrors a normal lookup — an x25519 key to seal to and relay hints to
+// STORE to — so the compose path needs no special case. What differs is `legacy: true`, which the
+// client uses to say plainly that this message leaves the network: it is end-to-end encrypted to
+// the bridge, and ordinary email from there on.
+func (h *IdentityHandler) legacyLookup(w http.ResponseWriter, r *http.Request, address string) bool {
+	if h.resolveBridge == nil {
+		return false // no bridge on this deployment; a legacy address is simply unreachable
+	}
+	xPub, ma, err := h.resolveBridge(r.Context())
+	if err != nil {
+		h.log.Warn("no outbound bridge for a legacy recipient",
+			logr.M("address", address), logr.M("error", err.Error()))
+		return false
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"address":     address,
+		"legacy":      true,
+		"x25519_pub":  base64.StdEncoding.EncodeToString(xPub[:]),
+		"relay_hints": []string{ma},
+		// No ed25519_pub: there is no DMCN identity behind a legacy address, and inventing one
+		// would let the UI imply a verified sender where none exists.
+		"verified_tier": int(identity.TierUnverified),
+	})
+	return true
 }

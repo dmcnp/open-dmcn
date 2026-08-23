@@ -142,8 +142,10 @@ func (n *Node) buildSignedDescriptor() *identity.RelayDescriptor {
 		Revision:     uint64(time.Now().Unix()), // monotonic across restarts
 		Domain:       n.domain,
 	}
-	// Credential PKI: carry our node credential so route selection can verify our relay
-	// trust without connecting to us (Subject == our peer ID, so it can't be swapped).
+	// Credential PKI: carry our credential so route selection — and outbound-bridge discovery
+	// — can verify us without connecting first (Subject == our peer ID, so it cannot be
+	// swapped). One key per peer means one credential, which may carry several roles: a node
+	// that is also this domain's SMTP bridge advertises a single credential granting both.
 	if n.credential != nil {
 		desc.Credential = n.credential
 	}
@@ -190,6 +192,40 @@ func (n *Node) announceDomains() []string {
 		add(n.domain)
 	}
 	return out
+}
+
+// SetDescriptorCredential sets the credential this node advertises in its RelayDescriptor and
+// republishes immediately.
+//
+// It exists because some credentials cannot be known at node.New time. A self-hosted daemon
+// receives its domain's authority record over the wire after startup, and only then can load the
+// `bridge` credential anchored on it — but the descriptor was already published, so without a
+// republish the node would advertise no credential and be undiscoverable as a bridge until the
+// 30-minute refresh.
+//
+// A peer that is both a relay and a bridge should hold ONE credential carrying both roles, so
+// replacing a credential that has roles the new one lacks is almost always a misconfiguration
+// rather than an intent, and says so.
+func (n *Node) SetDescriptorCredential(cred *identity.Credential) {
+	if cred == nil {
+		return
+	}
+	if old := n.credential; old != nil {
+		for _, r := range old.Roles {
+			if !cred.HasRole(r) {
+				n.log.Warnf("replacing this node's advertised credential drops the %q role; "+
+					"a peer that is both a relay and a bridge wants a single credential granting both", r)
+			}
+		}
+	}
+	n.credential = cred
+	if desc := n.buildSignedDescriptor(); desc != nil && n.records != nil {
+		if err := n.records.PutRelayDescriptor(n.ctx, desc); err != nil {
+			n.log.Warnf("relay descriptor: republish after credential change failed: %v", err)
+			return
+		}
+		n.log.Successf("relay descriptor republished with the %v credential", cred.Roles)
+	}
 }
 
 func (n *Node) publishRelayDescriptor() {

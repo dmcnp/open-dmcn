@@ -23,7 +23,7 @@ func TestEmitClassificationGolden(t *testing.T) {
 	pub := priv.Public().(ed25519.PublicKey)
 
 	rec := &BridgeClassificationRecord{
-		BridgeAddress:   "bridge@bridge.localhost",
+		BridgeAddress:   tBridgePeerID,
 		BridgePublicKey: pub,
 		SMTPFrom:        "alice@gmail.com",
 		SMTPSenderIP:    "203.0.113.7",

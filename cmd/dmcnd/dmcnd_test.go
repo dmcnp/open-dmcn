@@ -42,7 +42,7 @@ func TestDaemonInProcessRoundTrip(t *testing.T) {
 	// Seed the domain + alice + bob (mirrors what main() does at boot).
 	seeds := newSeedStore(t.TempDir(), "test-pass")
 	now := time.Now()
-	rootKP, err := seeds.seedDomain(ctx, n, domain, now)
+	rootKP, err := seeds.seedDomainDev(ctx, n, domain, now)
 	if err != nil {
 		t.Fatalf("seed domain: %v", err)
 	}

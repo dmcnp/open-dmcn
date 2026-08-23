@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"time"
 
-	"dmcn.dev/open-dmcn/internal/core/crypto"
-	"dmcn.dev/open-dmcn/internal/core/message"
-	"dmcn.dev/open-dmcn/dmcnpb"
 	"google.golang.org/protobuf/proto"
+
+	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
+	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // protoMarshal is the protobuf marshaling function, overridable for testing.
@@ -140,8 +142,11 @@ const ReceiptContentType = "application/x-dmcn-bridge-delivery-receipt"
 // BridgeClassificationRecord is a signed attestation by a bridge node
 // describing the authentication outcome of an inbound legacy email.
 type BridgeClassificationRecord struct {
+	// BridgeAddress is the bridge's libp2p PEER ID, and is informational — for display and
+	// logs. A bridge has no DMCN email address: it is infrastructure, not a correspondent, and
+	// what makes its verdict trustworthy is BridgeCredential, not a directory entry.
 	BridgeAddress   string
-	BridgePublicKey ed25519.PublicKey // 32 bytes
+	BridgePublicKey ed25519.PublicKey // 32 bytes; == BridgeCredential.Subject
 	SMTPFrom        string
 	SMTPSenderIP    string
 	SPFResult       SPFResult
@@ -151,6 +156,16 @@ type BridgeClassificationRecord struct {
 	TrustTier       BridgeTrustTier
 	ClassifiedAt    time.Time
 	BridgeSignature [64]byte
+
+	// BridgeCredential is the bridge's operator-signed credential (role "bridge"). Its subject
+	// is BridgePublicKey, so a recipient verifies the credential against the domain's root key
+	// and thereby confirms the signer really is a bridge that root authorised.
+	//
+	// Deliberately NOT covered by BridgeSignature: it carries its own signature from the root,
+	// the subject==signer binding defeats any swap, and the whole record rides inside the
+	// end-to-end-signed DMCN message that delivers it. Signing it too would only mean the
+	// credential could not be re-issued without re-signing every historical attestation.
+	BridgeCredential *identity.Credential
 }
 
 // Sign computes and sets BridgeSignature over all fields except the signature.
@@ -207,17 +222,18 @@ func (r *BridgeClassificationRecord) signableBytes() ([]byte, error) {
 // ToProto converts the record to its protobuf representation.
 func (r *BridgeClassificationRecord) ToProto() *dmcnpb.BridgeClassificationRecord {
 	return &dmcnpb.BridgeClassificationRecord{
-		BridgeAddress:   r.BridgeAddress,
-		BridgePublicKey: r.BridgePublicKey,
-		SmtpFrom:        r.SMTPFrom,
-		SmtpSenderIp:    r.SMTPSenderIP,
-		SpfResult:       dmcnpb.SPFResult(r.SPFResult),
-		DkimResult:      dmcnpb.DKIMResult(r.DKIMResult),
-		DmarcResult:     dmcnpb.DMARCResult(r.DMARCResult),
-		ReputationScore: r.ReputationScore,
-		TrustTier:       dmcnpb.BridgeTrustTier(r.TrustTier),
-		ClassifiedAt:    r.ClassifiedAt.Unix(),
-		BridgeSignature: r.BridgeSignature[:],
+		BridgeAddress:    r.BridgeAddress,
+		BridgePublicKey:  r.BridgePublicKey,
+		SmtpFrom:         r.SMTPFrom,
+		SmtpSenderIp:     r.SMTPSenderIP,
+		SpfResult:        dmcnpb.SPFResult(r.SPFResult),
+		DkimResult:       dmcnpb.DKIMResult(r.DKIMResult),
+		DmarcResult:      dmcnpb.DMARCResult(r.DMARCResult),
+		ReputationScore:  r.ReputationScore,
+		TrustTier:        dmcnpb.BridgeTrustTier(r.TrustTier),
+		ClassifiedAt:     r.ClassifiedAt.Unix(),
+		BridgeSignature:  r.BridgeSignature[:],
+		BridgeCredential: credToProto(r.BridgeCredential),
 	}
 }
 
@@ -237,6 +253,7 @@ func ClassificationRecordFromProto(pb *dmcnpb.BridgeClassificationRecord) *Bridg
 		ClassifiedAt:    time.Unix(pb.ClassifiedAt, 0).UTC(),
 	}
 	copy(r.BridgeSignature[:], pb.BridgeSignature)
+	r.BridgeCredential = credFromProto(pb.BridgeCredential)
 	return r
 }
 
@@ -260,11 +277,18 @@ func UnmarshalClassificationRecord(data []byte) (*BridgeClassificationRecord, er
 type BridgeDeliveryReceipt struct {
 	OriginalMessageID [16]byte
 	RecipientEmail    string
-	BridgeAddress     string
-	DeliveredAt       time.Time
-	Success           bool
-	ErrorDetail       string
-	BridgeSignature   [64]byte
+	// BridgeAddress is the bridge's libp2p PEER ID, informational — see
+	// BridgeClassificationRecord.BridgeAddress.
+	BridgeAddress   string
+	DeliveredAt     time.Time
+	Success         bool
+	ErrorDetail     string
+	BridgeSignature [64]byte
+
+	// BridgeCredential lets the DMCN sender verify this receipt the same way a recipient
+	// verifies a classification record. Subject == the signing key; not covered by
+	// BridgeSignature, for the same reasons.
+	BridgeCredential *identity.Credential
 }
 
 // Sign computes and sets BridgeSignature over all fields except the signature.
@@ -325,6 +349,7 @@ func (r *BridgeDeliveryReceipt) ToProto() *dmcnpb.BridgeDeliveryReceipt {
 		Success:           r.Success,
 		ErrorDetail:       r.ErrorDetail,
 		BridgeSignature:   r.BridgeSignature[:],
+		BridgeCredential:  credToProto(r.BridgeCredential),
 	}
 }
 
@@ -340,6 +365,7 @@ func DeliveryReceiptFromProto(pb *dmcnpb.BridgeDeliveryReceipt) *BridgeDeliveryR
 	}
 	copy(r.OriginalMessageID[:], pb.OriginalMessageId)
 	copy(r.BridgeSignature[:], pb.BridgeSignature)
+	r.BridgeCredential = credFromProto(pb.BridgeCredential)
 	return r
 }
 
@@ -356,4 +382,26 @@ func UnmarshalDeliveryReceipt(data []byte) (*BridgeDeliveryReceipt, error) {
 		return nil, fmt.Errorf("bridge: unmarshal receipt: %w", err)
 	}
 	return DeliveryReceiptFromProto(pb), nil
+}
+
+// credToProto / credFromProto convert the attached bridge credential. A record with no
+// credential round-trips as nil rather than erroring: verification rejects it (see
+// VerifyClassificationAttestation), which is where that decision belongs — a parser that
+// refuses to decode would deny a reader the chance to say WHY the attestation is untrusted.
+func credToProto(c *identity.Credential) *dmcnpb.Credential {
+	if c == nil {
+		return nil
+	}
+	return c.ToProto()
+}
+
+func credFromProto(pb *dmcnpb.Credential) *identity.Credential {
+	if pb == nil {
+		return nil
+	}
+	c, err := identity.CredentialFromProto(pb)
+	if err != nil {
+		return nil
+	}
+	return c
 }

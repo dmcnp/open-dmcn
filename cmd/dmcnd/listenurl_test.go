@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 // TestListenURLHost covers the forms a listen address actually takes in config. A bare
 // ":8443" or a wildcard bind is not something a reader can paste into a browser, and the
@@ -20,19 +23,33 @@ func TestListenURLHost(t *testing.T) {
 	}
 }
 
-// TestDefaultHTTPListenSplit pins that dev and production listen on different ports, and why:
-// dev serves cleartext, and :8443 conventionally means HTTPS. A cold-install run in Aug 2026
-// hit exactly this — the browser tried https:// against a plain-HTTP :8443 and the failure
-// read as a broken daemon. Collapsing these back to one port reintroduces that.
+// TestDefaultHTTPListenSplit pins that dev and production listen on different ports, and why.
+//
+// Dev serves cleartext, and :8443 conventionally means HTTPS. A cold-install run in Aug 2026 hit
+// exactly that — the browser tried https:// against a plain-HTTP :8443 and the failure read as a
+// broken daemon. Collapsing these back to one port reintroduces it.
+//
+// Production must be :443 specifically. Automatic certificates are the default there, and ACME
+// performs the TLS-ALPN-01 challenge against 443 and nowhere else, so any other port produces a
+// daemon that starts, claims autocert, and then fails every handshake.
 func TestDefaultHTTPListenSplit(t *testing.T) {
 	dev, prod := defaultHTTPListen(true), defaultHTTPListen(false)
 	if dev == prod {
 		t.Fatalf("dev and production share port %s — dev serves plain HTTP and must not sit on an HTTPS-conventional port", dev)
 	}
-	if prod != ":8443" {
-		t.Errorf("production default = %q, want :8443", prod)
+	if prod != ":443" {
+		t.Errorf("production default = %q, want :443 — autocert cannot complete a challenge anywhere else", prod)
 	}
 	if dev == ":8443" || dev == ":443" {
 		t.Errorf("dev default %q is an HTTPS-conventional port but dev serves cleartext", dev)
+	}
+}
+
+// TestDefaultProductionListenSatisfiesTheAutocertGuard keeps the default and the startup check in
+// agreement. main.go refuses to start when autocert is selected on a port ACME cannot reach; if
+// the default itself trips that check, a fresh install fails on the happy path.
+func TestDefaultProductionListenSatisfiesTheAutocertGuard(t *testing.T) {
+	if _, port, err := net.SplitHostPort(defaultHTTPListen(false)); err != nil || port != "443" {
+		t.Fatalf("the production default %q does not satisfy the autocert guard in main.go", defaultHTTPListen(false))
 	}
 }

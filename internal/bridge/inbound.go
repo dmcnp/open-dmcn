@@ -24,6 +24,7 @@ type LookupFunc func(ctx context.Context, address string) (*identity.IdentityRec
 type InboundHandler struct {
 	bridgeKP     *identity.IdentityKeyPair
 	bridgeAddr   string
+	credential   *identity.Credential
 	authVerifier AuthVerifier
 	lookup       LookupFunc
 	deliver      DeliverFunc
@@ -34,8 +35,11 @@ type InboundHandler struct {
 
 // InboundConfig configures the inbound handler.
 type InboundConfig struct {
-	BridgeKP     *identity.IdentityKeyPair
-	BridgeAddr   string
+	BridgeKP   *identity.IdentityKeyPair
+	BridgeAddr string
+	// Credential is the bridge's root-signed `bridge` credential, stamped into every
+	// classification record so recipients can verify the verdict without a directory lookup.
+	Credential   *identity.Credential
 	AuthVerifier AuthVerifier
 	Lookup       LookupFunc
 	Deliver      DeliverFunc
@@ -58,6 +62,7 @@ func NewInboundHandler(cfg InboundConfig) *InboundHandler {
 	return &InboundHandler{
 		bridgeKP:     cfg.BridgeKP,
 		bridgeAddr:   cfg.BridgeAddr,
+		credential:   cfg.Credential,
 		authVerifier: cfg.AuthVerifier,
 		lookup:       cfg.Lookup,
 		deliver:      cfg.Deliver,
@@ -106,6 +111,9 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 
 	// 3. Construct and sign classification record
 	classRec := NewClassificationRecord(h.bridgeAddr, h.bridgeKP.Ed25519Public, from, authResult, tier)
+	// The credential is what makes the verdict believable; without it the record is just a
+	// signature by an unknown key.
+	classRec.BridgeCredential = h.credential
 	if err := classRec.Sign(h.bridgeKP.Ed25519Private); err != nil {
 		return fmt.Errorf("bridge: sign classification: %w", err)
 	}

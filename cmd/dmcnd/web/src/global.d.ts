@@ -22,6 +22,12 @@ type Env = {
   REGISTRATION_CLOSED: string;
   /** Where to send would-be registrants when registration is closed here. */
   SIGNUP_URL: string;
+  /** This domain's root Ed25519 public key, base64. Public: it is what the _dmcn fingerprint
+   *  commits to. Used client-side to verify a bridge's credential. */
+  DOMAIN_ROOT_PUB: string;
+  /** "true" on a live self-hosted domain whose root key is offline: nobody can self-register,
+   *  so /register becomes the petition flow (ask an admin for a mailbox). */
+  PETITION_MODE: string;
 };
 
 declare const env: Env;

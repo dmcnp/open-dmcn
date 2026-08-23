@@ -30,6 +30,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/node"
 	"dmcn.dev/open-dmcn/internal/p2plog"
+	"dmcn.dev/open-dmcn/internal/petition"
 	webapi "dmcn.dev/open-dmcn/internal/web/api"
 	"dmcn.dev/open-dmcn/internal/web/server"
 	"dmcn.dev/open-dmcn/internal/webcore"
@@ -46,6 +47,16 @@ var (
 func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "version" {
 		fmt.Println("dmcnd", version)
+		return
+	}
+	// peer-id has to work BEFORE the daemon can start. A live domain refuses to boot without a
+	// bundle, the bundle is built on the admin's machine, and building it needs the seed
+	// multiaddr — which needs this peer ID. Bare stdout so it drops into a shell substitution.
+	if len(os.Args) >= 2 && os.Args[1] == "peer-id" {
+		if err := printPeerID(); err != nil {
+			fmt.Fprintln(os.Stderr, "dmcnd:", err)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -91,59 +102,75 @@ func main() {
 	defer n.Close()
 	log.Infof("node up: peer ID %s, serving domain %s", n.PeerID(), cfg.domain)
 
-	// Seed the domain: root key + DAR + the static _dmcn anchor pointing the resolver here.
-	// ONLY the domain's own operator keys are minted here. Accounts are created in the
-	// browser at /register, which generates the keypair client-side and sends only the
-	// signed public record — so the daemon never holds an account private key.
-	// The domain root key is the trust anchor every other domain checks records against, and
-	// on dmcnd it lives on THIS box rather than an offline ceremony machine — a deliberate
-	// simplification for a single-binary self-host, but one that makes the passphrase load
-	// bearing. The default is published in this source file, so leaving it on a real domain
-	// means the at-rest copy and any backup of it are protected by a value anyone can read.
-	if !cfg.devMode && cfg.seedPassphrase == defaultSeedPassphrase {
-		log.Warnf("DMCND_SEED_PASSPHRASE is unset, so the domain root key in %s is encrypted with "+
-			"the PUBLIC default passphrase. Anyone who obtains that file obtains %s. Set "+
-			"DMCND_SEED_PASSPHRASE to a high-entropy value and back the file up somewhere offline — "+
-			"losing it loses the domain's trust anchor, and no one can re-issue it for you.",
-			filepath.Join(cfg.dataDir, "seed-keystore.json"), cfg.domain)
-	}
-	seeds := newSeedStore(cfg.dataDir, cfg.seedPassphrase)
+	// Bring up the domain. Which branch runs decides where the domain root key lives, and that
+	// is the single most consequential choice in a deployment — see cmd/dmcnd/seed.go.
 	now := time.Now()
-	rootKP, err := seeds.seedDomain(ctx, n, cfg.domain, now)
-	if err != nil {
-		fatalf("seed domain %s: %v", cfg.domain, err)
+	var (
+		rootKP *identity.IdentityKeyPair // dev only; nil on a live domain, deliberately
+		dar    *identity.DomainAuthorityRecord
+		seeds  *seedStore
+	)
+	if cfg.devMode {
+		seeds = newSeedStore(cfg.dataDir, cfg.seedPassphrase)
+		rootKP, err = seeds.seedDomainDev(ctx, n, cfg.domain, now)
+		if err != nil {
+			fatalf("seed domain %s: %v", cfg.domain, err)
+		}
+	} else {
+		// The authority record is pushed here from the machine holding the root, so the node has
+		// to be listening before it can be given its own domain. Nothing user-facing starts until
+		// it arrives; on every restart after the first it is already in the persistent store.
+		if dar, err = awaitDomainAuthority(ctx, n, cfg.domain); err != nil {
+			fatalf("waiting for the domain authority record: %v", err)
+		}
+		if err = adoptDomain(n, dar); err != nil {
+			fatalf("adopt domain %s: %v", cfg.domain, err)
+		}
 	}
 
-	// Optional SMTP bridge, folded onto the shared node. The daemon provisions the bridge's DMCN
-	// identity (BridgeCapability + routing credential), then hands the node + key pair to the
-	// bridge, which owns only the SMTP<->DMCN translation. Inbound auth runs real SPF/DKIM/DMARC by
+	// The petition queue: how addresses come into existence on a live domain. Dev mode has the
+	// root here and registers self-service instead, so it has no queue.
+	var petitions *petition.Store
+	if !cfg.devMode {
+		petitions, err = petition.NewStore(filepath.Join(cfg.dataDir, "petitions.json"), cfg.petitionTTL)
+		if err != nil {
+			fatalf("open petition queue: %v", err)
+		}
+		if pending := petitions.Pending(now); pending > 0 {
+			log.Infof("petition queue: %d pending (TTL %s)", pending, cfg.petitionTTL)
+		}
+	}
+
+	// Optional SMTP bridge, folded onto the shared node. It has no identity of its own: it signs
+	// with the node's key and is trusted through a root-signed `bridge` credential, so all the
+	// daemon does here is hand it that credential and let it own the SMTP<->DMCN translation. Inbound auth runs real SPF/DKIM/DMARC by
 	// default; outbound delivery defaults to the in-memory stub so a fresh install never sends live
 	// mail until the operator opts in (DMCND_BRIDGE_DELIVERY_MODE=smtp).
+	bridgeUp := false
 	if cfg.bridgeEnabled {
-		bridgeKP, berr := seeds.seedBridgeIdentity(ctx, n, rootKP, cfg.bridgeAddress, now)
-		if berr != nil {
-			fatalf("seed bridge identity %s: %v", cfg.bridgeAddress, berr)
+		if cred, berr := bridgeCredential(n, rootKP, cfg, now); berr != nil {
+			// A bridge whose verdicts nobody can verify is worse than no bridge: it would
+			// relay mail and attach attestations that every recipient rejects. The daemon
+			// still serves DMCN mail, so this degrades rather than refusing to boot.
+			log.Errorf("SMTP bridge NOT started: %v", berr)
+		} else {
+			// Advertise it before serving: senders discover this node as a bridge by reading the
+			// credential out of its relay descriptor, so a bridge that is running but not
+			// advertised is one nobody can route to.
+			n.SetDescriptorCredential(cred)
+			// Advertise ourselves as the domain's bridge in the local _dmcn mirror, so this
+			// daemon's own users can discover it. The operator publishes the same `bridge=`
+			// token in real DNS for everyone else (`dmcndcli domain dns --bridge`).
+			if aerr := anchorSelf(n, cfg.domain, domainFingerprint(dar, rootKP), true); aerr != nil {
+				log.Warnf("could not advertise this node as the domain bridge: %v", aerr)
+			}
+			br, serr := startBridge(ctx, n, cred, cfg)
+			if serr != nil {
+				fatalf("%v", serr)
+			}
+			defer br.Stop()
+			bridgeUp = true
 		}
-		bcfg := bridge.Config{
-			SMTPListenAddr: cfg.bridgeSMTPListen,
-			BridgeAddress:  cfg.bridgeAddress,
-			BridgeDomain:   cfg.bridgeDomain,
-			DMCNDomain:     cfg.domain,
-			AuditLogPath:   os.Getenv("DMCND_BRIDGE_AUDIT_LOG"),
-		}
-		if berr := applyBridgeModes(&bcfg, cfg, log); berr != nil {
-			fatalf("%v", berr)
-		}
-		br, berr := bridge.New(ctx, n, bridgeKP, bcfg, log)
-		if berr != nil {
-			fatalf("start bridge: %v", berr)
-		}
-		if berr := br.Start(); berr != nil {
-			fatalf("start bridge SMTP: %v", berr)
-		}
-		defer br.Stop()
-		log.Infof("SMTP bridge folded in: %s listening on %s (bridge domain %s ↔ dmcn domain %s)",
-			cfg.bridgeAddress, cfg.bridgeSMTPListen, cfg.bridgeDomain, cfg.domain)
 	}
 
 	// Sessions: stateless HS256 JWTs (persisted signing secret) + a persisted revocation
@@ -182,12 +209,23 @@ func main() {
 		return n.Relay().StoreLocal(ctx, senderAddr, signature, env)
 	}
 
-	// Self-service registration: the browser generates keys and self-signs an IdentityRecord;
-	// the daemon (operator) attaches a root-signed routing credential and publishes it — the same
-	// operator step as the boot seed, just for a browser-provided record. Zero-knowledge holds: the
-	// daemon only ever sees the signed public record.
-	provision := func(ctx context.Context, rec *identity.IdentityRecord) (string, error) {
-		return provisionIdentity(ctx, n, rootKP, cfg.domain, rec, time.Now())
+	// Two mutually exclusive ways an address can come into existence, chosen by where the root
+	// key is. Dev holds the root, so the browser self-registers and the daemon signs immediately.
+	// A live domain does not hold it, so there is simply no code path here that can mint an
+	// address — the petition queue parks the request until the offline root has signed for it.
+	var regHandler *webapi.RegisterHandler
+	var petHandler *webapi.PetitionHandler
+	if cfg.devMode {
+		provision := func(ctx context.Context, rec *identity.IdentityRecord) (string, error) {
+			return provisionIdentity(ctx, n, rootKP, cfg.domain, rec, time.Now())
+		}
+		regHandler = webapi.NewRegisterHandler(provision, log)
+	} else {
+		publish := func(ctx context.Context, rec *identity.IdentityRecord) error {
+			_, perr := n.PublishIdentity(ctx, rec)
+			return perr
+		}
+		petHandler = webapi.NewPetitionHandler(petitions, cfg.domain, rootPubOf(dar), n.RelayHints, publish, log)
 	}
 
 	// API handlers. Login/import prove key possession against the fleet-resolved record; the
@@ -197,7 +235,6 @@ func main() {
 	msgHandler := webapi.NewMessageHandler(storeLocal, registryLookup, newInProcRouter(n), replicates, nil, log)
 	identHandler := webapi.NewIdentityHandler(registryLookup, verifyManaged, requiresOnion, relayHints, log)
 	mailboxHandler := webapi.NewMailboxHandler(newInProcRelay(n, registryLookup), log)
-	regHandler := webapi.NewRegisterHandler(provision, log)
 
 	// HTTP server + embedded SPA.
 	srv := server.New(server.Config{
@@ -219,9 +256,45 @@ func main() {
 		Domains:        cfg.domain,
 		DevMode:        cfg.devMode,
 		PollIntervalMs: int(cfg.pollInterval.Milliseconds()),
+		// On a live domain the register page asks for a mailbox instead of creating one.
+		PetitionMode:  !cfg.devMode,
+		DomainRootPub: domainRootPub(dar, rootKP),
 	}
+	// Outbound to the legacy email world. Wired only when this daemon actually runs a bridge:
+	// without it a non-DMCN recipient stays unreachable and says so, rather than failing
+	// somewhere deeper with a less useful error.
+	if bridgeUp {
+		resolve := func(rctx context.Context) ([32]byte, string, error) {
+			ep, rerr := n.ResolveBridge(rctx, cfg.domain)
+			if rerr != nil {
+				return [32]byte{}, "", rerr
+			}
+			return ep.X25519Public, ep.Multiaddr, nil
+		}
+		identHandler.SetBridgeResolver(resolve)
+		msgHandler.SetBridgeResolver(resolve)
+	}
+
 	authMiddleware := webcore.AuthMiddleware(sessionStore)
-	srv.RegisterAPI(authHandler, msgHandler, identHandler, mailboxHandler, regHandler, authMiddleware, subFS, frontendConfig)
+	srv.RegisterAPI(authHandler, msgHandler, identHandler, mailboxHandler, regHandler, petHandler, authMiddleware, subFS, frontendConfig)
+
+	// Autocert can only work on :443. StartAutocert installs the manager's TLSConfig, which
+	// answers the TLS-ALPN-01 challenge — and ACME performs that challenge against port 443, full
+	// stop. On the default :8443 the daemon would come up, log "listening with autocert", and then
+	// fail every TLS handshake forever, which reads as a broken binary rather than a wrong port.
+	// Refuse instead, and name all three ways out.
+	if cfg.tlsCert == "" && cfg.tlsKey == "" && !cfg.devMode {
+		if _, port, perr := net.SplitHostPort(cfg.httpListen); perr != nil || port != "443" {
+			fatalf("DMCND_LISTEN is %q, but automatic certificates need port 443 — Let's Encrypt performs "+
+				"its challenge there and nowhere else, so the daemon would start and then fail every TLS "+
+				"handshake.\n"+
+				"  Pick one:\n"+
+				"    DMCND_LISTEN=:443                       let the daemon get its own certificate\n"+
+				"    DMCND_TLS_CERT=… DMCND_TLS_KEY=…        bring your own (any port, e.g. behind a proxy)\n"+
+				"    DMCND_DEV=true                          local testing over plain HTTP",
+				cfg.httpListen)
+		}
+	}
 
 	go func() {
 		var serr error
@@ -286,13 +359,18 @@ type config struct {
 	peers           []string
 	allowedPeers    []string
 	seedPassphrase  string
+	// bundlePath is the offline-signed domain bundle a live domain is served from. Empty is a
+	// startup error outside dev mode: without it there is no DAR, and minting one here would
+	// put the domain root back on the node.
+	bundlePath  string
+	petitionTTL time.Duration
 
 	// SMTP bridge (opt-in). When enabled, the daemon folds an SMTP↔DMCN bridge onto its shared
 	// node: inbound legacy email is signed+encrypted into DMCN mailboxes, and DMCN mail to the
 	// bridge is delivered outbound over SMTP.
 	bridgeEnabled    bool
 	bridgeSMTPListen string
-	bridgeAddress    string // bridge's DMCN address (default bridge@<domain>)
+	bridgeCredential string // path to the bridge's root-signed `bridge` credential
 	bridgeAuthMode   string // "dns" = real SPF/DKIM/DMARC on inbound, "stub" = no checks (dev only)
 	bridgeDelivery   string // "smtp" = real MX lookup + STARTTLS outbound, "stub" = in-memory (default)
 	bridgeDKIMKey    string // PEM private key path; without it outbound mail is unsigned
@@ -305,16 +383,17 @@ func loadConfig() config {
 	devMode := envBool("DMCND_DEV")
 	c := config{
 		httpListen:       envOr("DMCND_LISTEN", defaultHTTPListen(devMode)),
-		nodeListen:       envOr("DMCND_NODE_LISTEN", "/ip4/0.0.0.0/tcp/0"),
+		nodeListen:       envOr("DMCND_NODE_LISTEN", defaultNodeListen(devMode)),
 		domain:           envOr("DMCND_DOMAIN", "localhost"),
 		dataDir:          envOr("DMCND_DATA_DIR", "data"),
-		identityKeyPath:  os.Getenv("DMCND_IDENTITY"),
+		identityKeyPath:  identityKeyPath(envOr("DMCND_DATA_DIR", "data")),
 		tlsCert:          os.Getenv("DMCND_TLS_CERT"),
 		tlsKey:           os.Getenv("DMCND_TLS_KEY"),
 		devMode:          devMode,
 		peers:            splitList(os.Getenv("DMCND_PEERS")),
 		allowedPeers:     splitList(os.Getenv("DMCND_ALLOWED_PEERS")),
 		seedPassphrase:   envOr("DMCND_SEED_PASSPHRASE", defaultSeedPassphrase),
+		bundlePath:       os.Getenv("DMCND_BUNDLE"),
 		bridgeEnabled:    envBool("DMCND_BRIDGE_ENABLED"),
 		bridgeAuthMode:   envOr("DMCND_BRIDGE_AUTH_MODE", "dns"),
 		bridgeDelivery:   envOr("DMCND_BRIDGE_DELIVERY_MODE", "stub"),
@@ -322,12 +401,8 @@ func loadConfig() config {
 		bridgeDKIMSel:    envOr("DMCND_BRIDGE_DKIM_SELECTOR", "dmcn"),
 		bridgeHELO:       os.Getenv("DMCND_BRIDGE_HELO"),
 		bridgeSMTPListen: envOr("DMCND_BRIDGE_SMTP_LISTEN", ":2525"),
-		bridgeAddress:    os.Getenv("DMCND_BRIDGE_ADDRESS"),
+		bridgeCredential: os.Getenv("DMCND_BRIDGE_CREDENTIAL"),
 		bridgeDomain:     os.Getenv("DMCND_BRIDGE_DOMAIN"),
-	}
-	// Bridge address + SMTP domain default to the served domain.
-	if c.bridgeAddress == "" {
-		c.bridgeAddress = "bridge@" + envOr("DMCND_DOMAIN", "localhost")
 	}
 	if c.bridgeDomain == "" {
 		c.bridgeDomain = envOr("DMCND_DOMAIN", "localhost")
@@ -336,6 +411,15 @@ func loadConfig() config {
 	// deployments set DMCND_ALLOWED_PEERS explicitly (empty ⇒ deny-by-default).
 	if len(c.allowedPeers) == 0 && devMode {
 		c.allowedPeers = []string{"*"}
+	}
+	c.petitionTTL = petition.DefaultTTL
+	if v := os.Getenv("DMCND_PETITION_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			log.Warnf("DMCND_PETITION_TTL %q is not a positive duration — using %s", v, petition.DefaultTTL)
+		} else {
+			c.petitionTTL = d
+		}
 	}
 	pi := envOr("DMCND_POLL_INTERVAL", "10s")
 	d, err := time.ParseDuration(pi)
@@ -446,23 +530,46 @@ func listenURLHost(listen, host string) string {
 
 // defaultHTTPListen picks the webmail port when DMCND_LISTEN is unset.
 //
-// Dev serves plain HTTP, so it defaults to :8080 rather than :8443. Port 8443 conventionally
-// means HTTPS: serving cleartext there invites both the reader and the browser to assume TLS
-// that is not on offer, and the resulting connection error reads as a broken daemon rather
-// than a wrong scheme. It is worse for anyone also running a hosted DMCN mail client, which
-// serves real HTTPS on 8443 — their browser may hold a cached upgrade for localhost:8443 that
-// no amount of documentation undoes.
+// Dev serves plain HTTP, so it defaults to :8080 rather than an HTTPS-conventional port. Serving
+// cleartext on 8443 invites both the reader and the browser to assume TLS that is not on offer,
+// and the resulting connection error reads as a broken daemon rather than a wrong scheme. It is
+// worse for anyone also running a hosted DMCN mail client on 8443, whose browser may hold a
+// cached upgrade for localhost:8443 that no amount of documentation undoes.
 //
-// Production keeps :8443, where the port and the scheme agree. An explicit DMCND_LISTEN wins
-// in either mode.
+// Production defaults to :443, because that is the only port automatic certificates can work on:
+// Let's Encrypt performs the TLS-ALPN-01 challenge against 443 and nowhere else. The previous
+// :8443 default could never obtain a certificate — the daemon started, announced autocert, and
+// then failed every handshake. Binding 443 needs privileges (setcap CAP_NET_BIND_SERVICE, or
+// systemd's AmbientCapabilities); an operator terminating TLS elsewhere sets DMCND_LISTEN and
+// DMCND_TLS_CERT/KEY explicitly.
 func defaultHTTPListen(devMode bool) string {
 	if devMode {
 		return ":8080"
 	}
-	return ":8443"
+	return ":443"
 }
 
-// defaultSeedPassphrase protects the domain root keystore when DMCND_SEED_PASSPHRASE is
-// unset. It is fine for dev and wrong for a real domain, so startup warns when a
-// non-dev daemon is still using it.
+// defaultNodeListen picks the libp2p listen address when DMCND_NODE_LISTEN is unset.
+//
+// Live domains get a FIXED port. The old default was /tcp/0 — an OS-assigned ephemeral port —
+// while the quickstart told operators to publish /tcp/7400 in their _dmcn seed= record. Followed
+// as written that publishes permanent DNS data pointing at a port nothing is listening on, and the
+// real port changes on every restart, so the failure shows up later and looks like a federation
+// bug rather than a config one. A published address has to be a stable one.
+//
+// Dev keeps the ephemeral port: nothing is published there, and a fixed one would stop two local
+// instances running side by side, which is exactly what dev mode is for.
+func defaultNodeListen(devMode bool) string {
+	if devMode {
+		return "/ip4/0.0.0.0/tcp/0"
+	}
+	return "/ip4/0.0.0.0/tcp/7400"
+}
+
+// defaultSeedPassphrase protects the DEV domain root keystore when DMCND_SEED_PASSPHRASE is unset.
+//
+// It no longer needs a startup warning, because it no longer protects anything on a live domain:
+// the root is on the operator's machine and the bridge derives its keys from the node, so a live
+// daemon never creates a keystore at all. This value is dev-only, and dev's root key is a
+// throwaway for a throwaway domain.
 const defaultSeedPassphrase = "dmcnd-dev-seed"

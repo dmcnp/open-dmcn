@@ -19,7 +19,10 @@ import (
 // the slow end-to-end integration test skips are covered fast.
 
 const (
-	tBridgeAddr   = "bridge@bridge.localhost"
+	// tBridgeAddr stands in for the bridge's libp2p peer ID. A bridge has no email address, so
+	// this field is informational — a fixture using an email would model a shape the protocol
+	// no longer has.
+	tBridgeAddr   = "12D3KooWBridgeTestPeerIDFixture0000000000000000"
 	tBridgeDomain = "bridge.localhost"
 	tDMCNDomain   = "dmcn.localhost"
 )
@@ -220,6 +223,87 @@ func sealedToBridge(t *testing.T, senderKP, bridgeKP *identity.IdentityKeyPair, 
 		t.Fatalf("encrypt: %v", err)
 	}
 	return env
+}
+
+// splitSealedToBridge builds the SPLIT form of the same envelope — header and body sealed
+// separately, with the sender signature over the header. This is what a browser actually produces,
+// and what the outbound path could not read until Aug 2026: message.Decrypt only understands the
+// older single-blob form, so every real outbound message failed AEAD authentication. It went
+// unnoticed because nothing could discover the bridge in order to send to it.
+func splitSealedToBridge(t *testing.T, senderKP, bridgeKP *identity.IdentityKeyPair, sender, recipient, body string) *message.EncryptedEnvelope {
+	t.Helper()
+	msg, err := message.NewPlaintextMessage(sender, recipient, "Re: Hello", body, senderKP.Ed25519Public)
+	if err != nil {
+		t.Fatalf("compose: %v", err)
+	}
+	sh, content, err := message.Split(msg, senderKP.Ed25519Private)
+	if err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	env, err := message.EncryptSplit(sh, content,
+		[]message.RecipientInfo{{DeviceID: senderKP.DeviceID, X25519Pub: bridgeKP.X25519Public}},
+		senderKP.Ed25519Private)
+	if err != nil {
+		t.Fatalf("encrypt split: %v", err)
+	}
+	if !env.IsSplit() {
+		t.Fatal("built a non-split envelope; this test would not cover what it claims to")
+	}
+	return env
+}
+
+// TestOutboundDeliversASplitEnvelope is the regression for that bug: the shape a browser sends
+// must be deliverable, and its sender signature — which covers the HEADER, not the plaintext —
+// must be verified rather than skipped.
+func TestOutboundDeliversASplitEnvelope(t *testing.T) {
+	bridgeKP := mustKeyPair(t)
+	senderKP := mustKeyPair(t)
+	const body = "sent from a browser"
+	env := splitSealedToBridge(t, senderKP, bridgeKP, "alice@dmcn.localhost", "ext@gmail.com", body)
+	deliverer := &bridge.StubSMTPDeliverer{}
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, deliverer, bridgeKP)
+
+	receipt, err := h.HandleEnvelope(context.Background(), env)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if !receipt.Success {
+		t.Fatalf("expected success, detail=%q", receipt.ErrorDetail)
+	}
+	if len(deliverer.Messages) != 1 {
+		t.Fatalf("expected one delivery, got %d", len(deliverer.Messages))
+	}
+	got := deliverer.Messages[0]
+	if got.To != "ext@gmail.com" {
+		t.Errorf("delivered to %q", got.To)
+	}
+	// The body lives in the separately-sealed half, so a header-only decrypt would silently
+	// deliver an empty message rather than fail.
+	if !strings.Contains(got.Body, body) {
+		t.Errorf("body did not survive the split round trip: %q", got.Body)
+	}
+}
+
+// TestOutboundRejectsATamperedSplitBody keeps the verification honest across the reassembly: the
+// sender signs the header, and the header commits to the body — so swapping the body must fail.
+func TestOutboundRejectsATamperedSplitBody(t *testing.T) {
+	bridgeKP := mustKeyPair(t)
+	senderKP := mustKeyPair(t)
+	env := splitSealedToBridge(t, senderKP, bridgeKP, "alice@dmcn.localhost", "ext@gmail.com", "original")
+	other := splitSealedToBridge(t, senderKP, bridgeKP, "alice@dmcn.localhost", "ext@gmail.com", "swapped in")
+	env.EncryptedBody = other.EncryptedBody
+	env.BodyNonce = other.BodyNonce
+	env.BodyTag = other.BodyTag
+
+	h := newOutbound(func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+		return recordFor(addr, senderKP), nil
+	}, &bridge.StubSMTPDeliverer{}, bridgeKP)
+
+	if _, err := h.HandleEnvelope(context.Background(), env); err == nil {
+		t.Fatal("a swapped body was accepted — the header's commitment to the body is not being checked")
+	}
 }
 
 func TestOutboundRejectsUndecryptableEnvelope(t *testing.T) {

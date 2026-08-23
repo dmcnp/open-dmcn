@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/mertenvg/logr/v2"
@@ -37,7 +38,10 @@ type RelayRouter interface {
 type MessageHandler struct {
 	storePreSigned func(ctx context.Context, senderAddr string, signature []byte, env *message.EncryptedEnvelope) ([32]byte, error)
 	registryLookup func(ctx context.Context, address string) (*identity.IdentityRecord, error)
-	relayRouter    RelayRouter
+	// resolveBridge routes mail bound for the legacy email world. Optional: nil means this
+	// deployment has no bridge and legacy recipients are simply unreachable.
+	resolveBridge BridgeResolver
+	relayRouter   RelayRouter
 	// replicates reports whether the recipient's domain declares mailbox replication
 	// (DAR PolicyReplicateMailbox). nil ⇒ always failover.
 	replicates func(ctx context.Context, address string) bool
@@ -127,10 +131,19 @@ func (h *MessageHandler) HandleSend(w http.ResponseWriter, r *http.Request) {
 	// Route STORE to recipient's relay hints if recipient_address is provided.
 	var hash [32]byte
 	if req.RecipientAddress != "" && h.registryLookup != nil && h.relayRouter != nil {
+		legacy := false
 		recipientRec, lookupErr := h.registryLookup(r.Context(), req.RecipientAddress)
 		if lookupErr != nil {
-			writeError(w, http.StatusBadRequest, "recipient not found")
-			return
+			// Not a DMCN identity — try this domain's bridge, which is how mail reaches the
+			// legacy email world. The client has already sealed the envelope to the bridge's
+			// key (it got that from the same lookup), so all that is needed here is somewhere
+			// to STORE it.
+			bridgeRec, berr := h.legacyRecipient(r.Context(), req.RecipientAddress)
+			if berr != nil {
+				writeError(w, http.StatusBadRequest, "recipient not found")
+				return
+			}
+			recipientRec, legacy = bridgeRec, true
 		}
 		if len(recipientRec.RelayHints) == 0 {
 			writeError(w, http.StatusBadRequest, "recipient has no relay hints")
@@ -139,7 +152,12 @@ func (h *MessageHandler) HandleSend(w http.ResponseWriter, r *http.Request) {
 		// Routing integrity: the hints are operator-owned and unsigned by the owner, so verify
 		// they are attested by a routing credential that chains to the domain DAR before we STORE
 		// to them — otherwise a forged record could redirect this mail to attacker relays.
-		if h.verifyRouting != nil {
+		//
+		// Skipped for a legacy recipient, and not as a relaxation: there is no owner record to
+		// carry a routing credential, and the bridge those hints point at was already
+		// credential-verified during discovery — a stricter check, since it proves the peer may
+		// act as a bridge for this domain rather than merely that a record was well-formed.
+		if h.verifyRouting != nil && !legacy {
 			if err := h.verifyRouting(r.Context(), recipientRec); err != nil {
 				h.log.Warn("recipient routing verification failed", logr.M("recipient", req.RecipientAddress), logr.M("error", err.Error()))
 				writeError(w, http.StatusBadGateway, "recipient routing could not be verified")
@@ -149,7 +167,7 @@ func (h *MessageHandler) HandleSend(w http.ResponseWriter, r *http.Request) {
 
 		// Onion-route when the sender opts in or the recipient requires it. No
 		// silent downgrade: if onion is requested/required and fails, the send fails.
-		if req.Onion || recipientRec.RequireOnion {
+		if (req.Onion || recipientRec.RequireOnion) && !legacy {
 			onionHash, onionErr := h.relayRouter.SendOnionPreSigned(r.Context(), req.SenderAddress, sigBytes, recipientRec, env)
 			if onionErr != nil {
 				h.log.Error("onion send failed", logr.M("error", onionErr.Error()))
@@ -205,3 +223,25 @@ func (h *MessageHandler) HandleSend(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"envelope_hash": hex.EncodeToString(hash[:])})
 }
+
+// legacyRecipient builds the routing record for an address that is not a DMCN identity: this
+// domain's outbound bridge. It is synthetic and never published — it exists only to carry the
+// bridge's hint through the same STORE path every other recipient uses.
+func (h *MessageHandler) legacyRecipient(ctx context.Context, address string) (*identity.IdentityRecord, error) {
+	if h.resolveBridge == nil {
+		return nil, fmt.Errorf("no bridge configured, so %s is unreachable", address)
+	}
+	xPub, ma, err := h.resolveBridge(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &identity.IdentityRecord{
+		Address:      address,
+		X25519Public: xPub,
+		RelayHints:   []string{ma},
+	}, nil
+}
+
+// SetBridgeResolver installs the outbound-bridge resolver — see IdentityHandler.SetBridgeResolver
+// for why this is wired after construction.
+func (h *MessageHandler) SetBridgeResolver(f BridgeResolver) { h.resolveBridge = f }

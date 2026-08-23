@@ -144,6 +144,49 @@ export function register(req: RegisterRequest): Promise<RegisterResponse> {
   return request('POST', '/api/v1/register', req, { skipReauth: true });
 }
 
+// --- Mailbox petitions (live self-hosted domains) ----------------------------------------
+//
+// On a domain whose root key is kept offline the node cannot mint an address, so there is no
+// self-service registration. Instead the browser proves it holds a fresh keypair, gets a
+// 12-digit code, and the person reads that code to their admin out of band. The admin assigns an
+// address with the offline root; the browser learns it by polling and then self-signs a record
+// for it. The petitioner never chooses their own address — that is what makes an unclaimed
+// petition worthless and lets it simply expire.
+
+export interface PetitionRequest {
+  ed25519_pub: string;
+  x25519_pub: string;
+  proof: string; // Ed25519 over "dmcn-petition-v1\0" ‖ ed25519_pub ‖ x25519_pub
+}
+
+export interface PetitionResponse {
+  code: string;       // "0428-9173-5560"
+  expires_at: string; // RFC3339
+}
+
+export function createPetition(req: PetitionRequest): Promise<PetitionResponse> {
+  return request('POST', '/api/v1/petition', req, { skipReauth: true });
+}
+
+export interface PetitionStatusResponse {
+  status: 'pending' | 'assigned';
+  address?: string;    // set once assigned
+  expires_at?: string; // set while pending
+}
+
+export function petitionStatus(code: string): Promise<PetitionStatusResponse> {
+  return request('GET', `/api/v1/petition/status?code=${encodeURIComponent(code)}`, undefined, { skipReauth: true });
+}
+
+export interface PetitionCompleteRequest {
+  code: string;
+  identity_record: string; // base64 proto, self-signed for the ASSIGNED address
+}
+
+export function completePetition(req: PetitionCompleteRequest): Promise<RegisterResponse & { address?: string }> {
+  return request('POST', '/api/v1/petition/complete', req, { skipReauth: true });
+}
+
 export function login(address: string): Promise<LoginResponse> {
   return request('POST', '/api/v1/login', { address }, { skipReauth: true });
 }
@@ -188,14 +231,18 @@ export interface IdentityLookupResponse {
   // (revoked binding / unauthorized countersigner) — distrust such identities.
   verified_tier?: number;
   identity_unverifiable?: boolean;
-  // True when this address is a registered SMTP bridge. Used to verify a bridged
-  // message's classification attestation (see crypto/bridgeAttest.ts).
-  bridge_capability?: boolean;
+  // NOTE: there is deliberately no bridge_capability here. A bridge has no email address and no
+  // directory entry — its verdicts are verified against a root-signed credential carried in the
+  // message itself (lib/crypto/bridgeAttest.ts), never by a flag the server controls.
   // Effective onion-delivery policy (mailbox flag OR domain DAR). When true, the
   // compose UI auto-enables + locks the onion toggle; the server enforces it too.
   require_onion?: boolean;
-  // True when the address's domain declares admin key custody (DAR policy): the
-  // domain admin holds the account keys — shown as the managed-account badge.
+  // legacy marks a recipient that is NOT a DMCN identity — an ordinary email address, reachable
+  // through this domain's SMTP bridge. When true, x25519_pub and relay_hints describe the BRIDGE,
+  // not the recipient: the message is end-to-end encrypted as far as the bridge and travels as
+  // ordinary email from there. There is no ed25519_pub, because there is no identity behind it.
+  legacy?: boolean;
+  relay_hints?: string[];
 }
 
 export function lookupIdentity(address: string): Promise<IdentityLookupResponse> {

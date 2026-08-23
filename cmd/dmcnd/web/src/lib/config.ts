@@ -49,6 +49,14 @@ export const ACCOUNT_URL = envVal('ACCOUNT_URL', '').replace(/\/+$/, '');
 /** True on a business front door that offers no public signup: the register page
  *  shows a closed screen and login's "create an account" links point at SIGNUP_URL. */
 export const REGISTRATION_CLOSED = envVal('REGISTRATION_CLOSED', '') === 'true';
+// PETITION_MODE: a live self-hosted domain whose root key is offline. Nobody can self-register,
+// so the register page asks for a mailbox instead of creating one — see the petition flow.
+export const PETITION_MODE = envVal('PETITION_MODE', '') === 'true';
+// DOMAIN_ROOT_PUB is this domain's root Ed25519 public key (base64). Public by construction — it
+// is what the domain's _dmcn DNS fingerprint commits to. The client uses it to verify a bridge's
+// credential without asking the server anything, which is the point: the server must not be able
+// to influence whether a bridged message looks trustworthy.
+export const DOMAIN_ROOT_PUB = envVal('DOMAIN_ROOT_PUB', '');
 /** Where to send would-be registrants when registration is closed here. */
 export const SIGNUP_URL = envVal('SIGNUP_URL', '');
 /** Mailbox (inbox) poll cadence (ms). Defaults to 10s when unset/unrendered. New

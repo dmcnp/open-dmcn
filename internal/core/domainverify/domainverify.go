@@ -5,19 +5,19 @@
 // root authority key, optionally a fleet deferral pointer, and (for a fleet
 // domain) the bootstrap seed endpoints:
 //
-//	_dmcn.<domain>  TXT  "dmcn-verification=v1; fp=<40-hex fingerprint>[; fleet=<fleet-domain>][; seed=<multiaddr>]..."
+//		_dmcn.<domain>  TXT  "dmcn-verification=v1; fp=<40-hex fingerprint>[; fleet=<fleet-domain>][; seed=<multiaddr>]..."
 //
-//   - fp=    the root-key fingerprint — the trust anchor for the domain's DAR.
-//            Non-transferable: copying it to another domain is useless without
-//            the matching private key.
-//   - fleet= a mailbox domain that runs no nodes of its own defers hosting to
-//            this fleet domain (email's MX delegation). Discovery only, not
-//            trust: records fetched from the fleet still verify against this
-//            domain's own fp. A spoofed fleet= is DoS-only.
-//   - seed=  bootstrap endpoint multiaddrs (each ending in /p2p/<peerID>, so the
-//            libp2p handshake authenticates the endpoint). Several for
-//            round-robin/failover — never a single pin. Published at the fleet
-//            domain and shared by every mailbox domain that defers to it.
+//	  - fp=    the root-key fingerprint — the trust anchor for the domain's DAR.
+//	           Non-transferable: copying it to another domain is useless without
+//	           the matching private key.
+//	  - fleet= a mailbox domain that runs no nodes of its own defers hosting to
+//	           this fleet domain (email's MX delegation). Discovery only, not
+//	           trust: records fetched from the fleet still verify against this
+//	           domain's own fp. A spoofed fleet= is DoS-only.
+//	  - seed=  bootstrap endpoint multiaddrs (each ending in /p2p/<peerID>, so the
+//	           libp2p handshake authenticates the endpoint). Several for
+//	           round-robin/failover — never a single pin. Published at the fleet
+//	           domain and shared by every mailbox domain that defers to it.
 //
 // Seeds may be spread across multiple TXT strings (each still v1-prefixed) to fit
 // the 255-char per-string limit; Resolve aggregates them. This package performs
@@ -108,6 +108,15 @@ type Record struct {
 	Fleet string `json:"fleet,omitempty"`
 	// Seeds are the seed= bootstrap multiaddrs, aggregated across all TXT strings.
 	Seeds []string `json:"seeds,omitempty"`
+	// Bridges are the bridge= endpoints (multiaddrs including /p2p/<peerID>) that carry this
+	// domain's mail to and from the legacy email world — the DMCN analogue of an MX record.
+	//
+	// DISCOVERY ONLY. A tampered bridge= token points at a peer that cannot produce a
+	// `bridge` credential signed by the domain's root, and is rejected before anything is
+	// sealed to it. That matters more here than for seed=: a bridge decrypts outbound mail in
+	// order to hand it to SMTP, so the credential check is the confidentiality boundary, not
+	// merely a routing one.
+	Bridges []string `json:"bridges,omitempty"`
 }
 
 // Resolve looks up _dmcn.<domain> and parses every v1 record into a single
@@ -124,7 +133,7 @@ func Resolve(ctx context.Context, domain string) (*Record, error) {
 	out := &Record{}
 	found := false
 	for _, rec := range records {
-		fp, fleet, seeds, ok := parseRecord(rec)
+		fp, fleet, seeds, bridges, ok := parseRecord(rec)
 		if !ok {
 			continue
 		}
@@ -136,6 +145,7 @@ func Resolve(ctx context.Context, domain string) (*Record, error) {
 			out.Fleet = fleet
 		}
 		out.Seeds = append(out.Seeds, seeds...)
+		out.Bridges = append(out.Bridges, bridges...)
 	}
 	if !found {
 		return nil, ErrNoRecord
@@ -144,12 +154,12 @@ func Resolve(ctx context.Context, domain string) (*Record, error) {
 }
 
 // parseRecord extracts the v1 tokens from one TXT string: the upper-cased fp=, the
-// lower-cased fleet=, and any seed= values. ok is false when the string is not a
-// v1 dmcn record (so unrelated TXT records are ignored).
-func parseRecord(rec string) (fp, fleet string, seeds []string, ok bool) {
+// lower-cased fleet=, and any seed= / bridge= values. ok is false when the string is not
+// a v1 dmcn record (so unrelated TXT records are ignored).
+func parseRecord(rec string) (fp, fleet string, seeds, bridges []string, ok bool) {
 	rec = strings.TrimSpace(rec)
 	if !strings.HasPrefix(rec, scheme) {
-		return "", "", nil, false
+		return "", "", nil, nil, false
 	}
 	ok = true
 	for _, part := range strings.Split(rec, ";") {
@@ -163,16 +173,20 @@ func parseRecord(rec string) (fp, fleet string, seeds []string, ok bool) {
 			if v := strings.TrimSpace(strings.TrimPrefix(part, "seed=")); v != "" {
 				seeds = append(seeds, v)
 			}
+		case strings.HasPrefix(part, "bridge="):
+			if v := strings.TrimSpace(strings.TrimPrefix(part, "bridge=")); v != "" {
+				bridges = append(bridges, v)
+			}
 		}
 	}
-	return fp, fleet, seeds, ok
+	return fp, fleet, seeds, bridges, ok
 }
 
 // parseFingerprint extracts and upper-cases the fp= value from a
 // "dmcn-verification=v1; fp=<hex>" record, reporting whether it is a well-formed
 // v1 record carrying an fp field.
 func parseFingerprint(rec string) (string, bool) {
-	fp, _, _, ok := parseRecord(rec)
+	fp, _, _, _, ok := parseRecord(rec)
 	if !ok || fp == "" {
 		return "", false
 	}
