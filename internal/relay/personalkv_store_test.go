@@ -177,3 +177,20 @@ func TestPersonalKvBadKey(t *testing.T) {
 		t.Fatalf("valid key rejected: %v", err)
 	}
 }
+
+// TestKvDeleteMissingKeyIsNoOp pins that deleting a key that was never written succeeds.
+//
+// Legacy Sent rows (written before Sent moved to storing the sealed envelope) have a
+// "sent/<id>" entry but no "sent-body/<id>" one, and deleting such a row issues both
+// deletes. An error on the missing half would surface as a failed delete on exactly the
+// old messages the folder just started showing again.
+func TestKvDeleteMissingKeyIsNoOp(t *testing.T) {
+	ctx := context.Background()
+	d := openMailboxDS(t, t.TempDir())
+	defer d.Close()
+	kv := NewPersonalKvStore(d)
+
+	if err := kv.Delete(ctx, "aa00", "sent-body/never-written"); err != nil {
+		t.Fatalf("deleting a missing key returned %v, want nil", err)
+	}
+}

@@ -10,9 +10,10 @@
 //
 // A relay is not obliged to offer storage. One that does not answers UNSUPPORTED, and this store
 // falls back to IndexedDB for the rest of the session — a minimal relay stays usable, at the cost
-// of that account's state being single-device. The fallback is per-instance and never silent in
-// the other direction: nothing is copied up automatically, because two devices that both went
-// local would each have a divergent set and picking a winner is not ours to do.
+// of that account's state being single-device. That fallback is session-wide and SURFACED (see
+// the signal below), because silently degrading to single-device state is indistinguishable from
+// losing data. Nothing is copied up automatically in the other direction, because two devices
+// that both went local would each have a divergent set and picking a winner is not ours to do.
 //
 // A per-key monotonic version supports optional compare-and-swap for singleton documents edited
 // on more than one device.
@@ -61,14 +62,54 @@ interface KvItemResp { key: string; sealed?: string; version: number }
 interface KvListResp { items: KvItemResp[]; next_cursor?: string }
 interface KvStatResp { used_bytes: number; quota_bytes: number; count: number }
 
+// --- "this relay has no personal storage" signal -------------------------------------------
+//
+// The fallback used to be per-instance and entirely silent: each consumer (Sent, contacts,
+// flags, settings) discovered UNSUPPORTED on its own, quietly switched to IndexedDB, and the
+// person using it had no way to know their account state had stopped following them between
+// devices. The way you found out was that a second device came up empty — which reads as data
+// loss, not as a relay capability.
+//
+// So the discovery is hoisted to module scope: sticky for the session, shared by every store,
+// and observable, so the shell can say it out loud. It also saves each later consumer a doomed
+// round trip, since a new instance starts in local mode once any instance has learned it.
+//
+// Session-scoped on purpose — it is a fact about the relay we are talking to right now, and a
+// reload (or signing into an account on a different home relay) should re-test rather than
+// inherit a stale verdict.
+let relayHasNoStorage = false;
+const storageListeners = new Set<(v: boolean) => void>();
+
+/** Whether the relay declined to host personal storage, so state is device-local this session. */
+export function isStorageLocalOnly(): boolean {
+  return relayHasNoStorage;
+}
+
+/** Subscribe to the flag; returns an unsubscribe. Fires only on the false → true transition. */
+export function onStorageLocalOnly(fn: (v: boolean) => void): () => void {
+  storageListeners.add(fn);
+  return () => storageListeners.delete(fn);
+}
+
+function markStorageLocalOnly(): void {
+  if (relayHasNoStorage) return;
+  relayHasNoStorage = true;
+  for (const fn of storageListeners) fn(true);
+}
+
+/** Test hook: clears the session verdict. */
+export function resetStorageLocalOnlyForTest(): void {
+  relayHasNoStorage = false;
+}
+
 export class PersonalStore {
   private keys: WorkingKeys;
   // The owner address namespaces the LOCAL fallback's keys within the shared per-origin store.
   // The relay namespaces by mailbox key on its side, so this is only for the fallback path.
   private owner: string;
-  // Set once a relay tells us it has no storage. Sticky for the instance so every subsequent
-  // call does not pay a failed round trip first.
-  private localOnly = false;
+  // Set once a relay tells us it has no storage. Seeded from the session-wide verdict so a
+  // store created after the discovery never pays a failed round trip at all.
+  private localOnly = isStorageLocalOnly();
 
   constructor(keys: WorkingKeys) {
     this.keys = keys;
@@ -96,10 +137,16 @@ export class PersonalStore {
     });
   }
 
-  // unsupported recognises the relay saying it hosts no storage, and latches the fallback.
+  // unsupported recognises the relay saying it hosts no storage, and latches the fallback —
+  // for this instance and, so the UI can surface it, for the session.
+  //
+  // Deliberately narrow: only the definitive UNSUPPORTED/501 answer counts. A timeout or a 502
+  // means "ask again later", and treating those as "no storage here" would strand an account on
+  // device-local state because of one bad minute of network.
   private unsupported(err: unknown): boolean {
     if (err instanceof ApiError && (err.code === 'storage_unsupported' || err.status === 501)) {
       this.localOnly = true;
+      markStorageLocalOnly();
       return true;
     }
     return false;

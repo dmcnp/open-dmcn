@@ -19,6 +19,7 @@ import { BlockedSenders } from '../components/BlockedSenders';
 import type { MailOutletContext } from '../components/AppLayout';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useStorageUsage } from '../lib/hooks/useStorageUsage';
+import { useStorageMode } from '../lib/hooks/useStorageMode';
 import { Badge, Button, Input, Textarea, Switch, Tabs } from '../ds';
 import { Icon } from '../components/Icon';
 
@@ -39,10 +40,17 @@ function formatBytes(n: number): string {
 }
 
 // StorageCard surfaces the owner's per-account state usage (Sent, contacts, settings,
-// flags). In the reference client this state lives in the browser's IndexedDB, so there
-// is no relay quota and no billing — the meter just reports the local footprint.
+// flags) AND, more importantly, where that state actually lives.
+//
+// It used to state flatly that everything was "kept in this browser only, never uploaded".
+// That stopped being true when relays gained personal storage: the normal case now is that
+// this state is sealed here and synced to the home relay, so it follows the account between
+// devices. Saying otherwise was not a cosmetic slip — someone reading it would conclude their
+// sent mail was device-local when it was not, and vice versa on a relay with no storage.
+// Both modes are legitimate, so the card reports whichever one is in force.
 function StorageCard() {
   const { usage, loading } = useStorageUsage();
+  const { localOnly } = useStorageMode();
 
   return (
     <div style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
@@ -60,9 +68,20 @@ function StorageCard() {
         </p>
       )}
       <p style={{ margin: 'var(--space-3) 0 0', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-        Covers your sent mail, contacts, settings and message flags — kept in this browser only
-        (this device), never uploaded.
+        Covers your sent mail, contacts, settings and message flags.{' '}
+        {localOnly
+          ? 'This server doesn\u2019t store mailbox state, so it is kept in this browser only and won\u2019t appear on your other devices.'
+          : 'It is encrypted on this device before it is stored on your server, so it follows your account to your other devices \u2014 the server only ever holds ciphertext.'}
       </p>
+      {localOnly && (
+        <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+          <Icon name="alert-triangle" size={16} style={{ color: 'var(--warning)', flex: 'none', marginTop: 1 }} />
+          <span>
+            Nothing here is backed up. Clearing this browser\u2019s data removes your sent mail,
+            contacts and settings, and importing your identity elsewhere won\u2019t bring them along.
+          </span>
+        </div>
+      )}
     </div>
   );
 }

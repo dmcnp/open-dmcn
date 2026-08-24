@@ -26,6 +26,7 @@ import { AccountMonogram } from './AccountMonogram';
 import { Icon } from './Icon';
 import { ComposeDialog, type ComposeReplyTo } from './ComposeDialog';
 import { DEFAULT_DOMAIN } from '../lib/config';
+import { useStorageMode } from '../lib/hooks/useStorageMode';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
@@ -131,6 +132,9 @@ export function AppLayout() {
   const [compose, setCompose] = useState<{ replyTo: ComposeReplyTo | null } | null>(null);
   // Temporary (single-session) sign-in on a shared computer: nothing is stored here.
   const [ephemeral] = useState(() => { try { return sessionStorage.getItem('dmcn_ephemeral') === '1'; } catch { return false; } });
+  // Whether this relay hosts personal storage. False-by-default and flips once the first
+  // storage call comes back UNSUPPORTED, so the banner appears as soon as we actually know.
+  const { localOnly: storageLocalOnly } = useStorageMode();
 
   const theme = resolveTheme(themePref);
 
@@ -345,6 +349,24 @@ export function AppLayout() {
               {!isMobile && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={address ?? undefined}>{displayName}</span>}
             </div>
           </header>
+        )}
+
+        {/* This relay hosts no personal storage, so Sent, contacts, flags and settings are
+            being kept in THIS browser only. Said out loud because the alternative is that
+            someone opens a second device, finds an empty Sent folder, and reasonably
+            concludes their mail was lost. */}
+        {storageLocalOnly && (
+          <div style={{
+            flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+            padding: 'var(--space-2) var(--space-4)', background: 'var(--surface-sunken)',
+            borderBottom: '1px solid var(--border-default)', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
+          }}>
+            <Icon name="alert-triangle" size={15} style={{ color: 'var(--warning)', flex: 'none' }} />
+            <span style={{ flex: 1 }}>
+              This server doesn't store your mailbox state, so your sent mail, contacts and settings
+              are saved in this browser only — they won't appear on your other devices.
+            </span>
+          </div>
         )}
 
         {ephemeral && (
