@@ -12,20 +12,13 @@ import { workingKeyRef } from '../lib/sessionLifetime';
 import { AuthShell } from '../components/AuthShell';
 import { Button, IconButton, Input } from '../ds';
 import { Icon } from '../components/Icon';
-import { REGISTRATION_CLOSED, SIGNUP_URL, PETITION_MODE } from '../lib/config';
+import { PETITION_MODE } from '../lib/config';
 
-// The "create an account" affordance. On the consumer front door it links the
-// in-app register page; on a closed (business) instance it points at the public
-// signup front door instead — or disappears when none is configured.
-// CreateAccountLink points at whatever "get an account here" means for this deployment. On a
-// live domain nothing is created on demand — you ask an admin — so the wording has to change with
-// it, or the link promises something the page cannot do.
+// The "create an account" affordance. It always links the in-app register page, but on a
+// live domain nothing is created on demand — you ask an admin — so the wording has to
+// change with it, or the link promises something the page cannot do.
 function CreateAccountLink({ label, petitionLabel }: { label: string; petitionLabel: string }) {
-  if (!REGISTRATION_CLOSED) {
-    return <Link to="/register" style={linkStyle}>{PETITION_MODE ? petitionLabel : label}</Link>;
-  }
-  if (!SIGNUP_URL) return null;
-  return <a href={SIGNUP_URL} style={linkStyle}>{label}</a>;
+  return <Link to="/register" style={linkStyle}>{PETITION_MODE ? petitionLabel : label}</Link>;
 }
 
 const linkStyle = { color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 } as const;

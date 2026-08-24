@@ -34,16 +34,6 @@ type FrontendConfig struct {
 	Domains        string
 	DevMode        bool
 	PollIntervalMs int
-	// AccountURL is the base URL of the brand's funnel/account service
-	// (env.ACCOUNT_URL) — the SPA sends register/countersign/billing calls there.
-	// Empty hides those surfaces entirely.
-	AccountURL string
-	// RegistrationClosed marks a deployment that offers no public signup (the
-	// business front door): the register page shows a closed screen and login's
-	// "create an account" links point at SignupURL instead.
-	RegistrationClosed bool
-	// SignupURL is where would-be registrants are sent when RegistrationClosed.
-	SignupURL string
 	// Domain is the HOSTNAME this client is served on — used for the CORS origin and the TLS
 	// certificate. It is NOT necessarily the DMCN domain: addresses may be user@example.com while
 	// the client is served from mail.example.com. FrontendConfig.DefaultDomain carries the DMCN
@@ -68,10 +58,6 @@ type Config struct {
 	TLSKey     string
 	DevMode    bool
 	DataDir    string
-	// AccountURL is the funnel/account service origin the SPA calls cross-origin
-	// (register, billing, countersign). It is added to the CSP connect-src so the
-	// browser permits those calls; empty means no account service is configured.
-	AccountURL string
 }
 
 // Server wraps the standard library HTTP server with DMCN routing.
@@ -90,14 +76,11 @@ func New(cfg Config, logger logr.Logger) *Server {
 	if cfg.Domain != "" {
 		origins = []string{"https://" + cfg.Domain}
 	}
-	var extraConnect []string
-	if cfg.AccountURL != "" {
-		extraConnect = []string{cfg.AccountURL}
-	}
-	// The reference client is self-contained, so the CSP stays strict same-origin.
+	// The reference client is self-contained, so the CSP stays strict same-origin —
+	// there is no external account service to widen connect-src for.
 	// FrameSelf: the reader renders HTML mail inside a same-origin sandboxed srcdoc
 	// iframe, which frame-src 'none' would block outright.
-	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, ExtraConnectSrc: extraConnect, FrameSelf: true})
+	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, FrameSelf: true})
 	handler := csp(webcore.CORSMiddleware(cfg.DevMode, origins)(mux))
 	return &Server{
 		httpServer: &http.Server{
@@ -193,17 +176,14 @@ func (s *Server) RegisterAPI(
 // indexData is the html/template payload rendered into the SPA shell. Nonce is
 // per request; the rest is deploy config exposed to the app as the global `env`.
 type indexData struct {
-	Nonce              string
-	Version            string
-	DefaultDomain      string
-	Domains            string
-	DevMode            string
-	PollIntervalMs     int
-	AccountURL         string
-	RegistrationClosed string
-	SignupURL          string
-	PetitionMode       string
-	DomainRootPub      string
+	Nonce          string
+	Version        string
+	DefaultDomain  string
+	Domains        string
+	DevMode        string
+	PollIntervalMs int
+	PetitionMode   string
+	DomainRootPub  string
 }
 
 // spaHandler serves the embedded SPA: it returns the requested file when one
@@ -225,10 +205,6 @@ func spaHandler(fsys fs.FS, cfg FrontendConfig) http.HandlerFunc {
 	if cfg.DevMode {
 		devMode = "true"
 	}
-	registrationClosed := ""
-	if cfg.RegistrationClosed {
-		registrationClosed = "true"
-	}
 	petitionMode := ""
 	if cfg.PetitionMode {
 		petitionMode = "true"
@@ -240,17 +216,14 @@ func spaHandler(fsys fs.FS, cfg FrontendConfig) http.HandlerFunc {
 		}
 		var buf bytes.Buffer
 		if err := tpl.Execute(&buf, indexData{
-			Nonce:              webcore.NonceFromContext(r.Context()),
-			Version:            cfg.Version,
-			DefaultDomain:      cfg.DefaultDomain,
-			Domains:            cfg.Domains,
-			DevMode:            devMode,
-			PollIntervalMs:     cfg.PollIntervalMs,
-			AccountURL:         cfg.AccountURL,
-			RegistrationClosed: registrationClosed,
-			SignupURL:          cfg.SignupURL,
-			PetitionMode:       petitionMode,
-			DomainRootPub:      cfg.DomainRootPub,
+			Nonce:          webcore.NonceFromContext(r.Context()),
+			Version:        cfg.Version,
+			DefaultDomain:  cfg.DefaultDomain,
+			Domains:        cfg.Domains,
+			DevMode:        devMode,
+			PollIntervalMs: cfg.PollIntervalMs,
+			PetitionMode:   petitionMode,
+			DomainRootPub:  cfg.DomainRootPub,
 		}); err != nil {
 			http.Error(w, "failed to render index", http.StatusInternalServerError)
 			return

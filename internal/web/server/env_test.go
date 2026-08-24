@@ -8,13 +8,16 @@ import (
 	"testing/fstest"
 )
 
-// TestSPAEnvRendering locks in the account-service env plumbing: the SPA shell
-// carries ACCOUNT_URL / REGISTRATION_CLOSED / SIGNUP_URL from FrontendConfig, and
-// leaves them empty when unset (open consumer posture).
+// TestSPAEnvRendering locks in the shell's runtime-config plumbing: index.html is an
+// html/template, so one embedded frontend build is configured per deployment by what the
+// server renders into `env`. PETITION_MODE and DOMAIN_ROOT_PUB are the two that change
+// behaviour — the first decides whether the register page creates a mailbox or asks for
+// one, the second is what the client verifies a bridge credential against — so a silent
+// rendering regression in either is a functional bug, not a cosmetic one.
 func TestSPAEnvRendering(t *testing.T) {
 	fsys := fstest.MapFS{
 		"index.html": {Data: []byte(
-			`ACCOUNT_URL:'{{ .AccountURL }}';REGISTRATION_CLOSED:'{{ .RegistrationClosed }}';SIGNUP_URL:'{{ .SignupURL }}'`)},
+			`DEFAULT_DOMAIN:'{{ .DefaultDomain }}';PETITION_MODE:'{{ .PetitionMode }}';DOMAIN_ROOT_PUB:'{{ .DomainRootPub }}'`)},
 	}
 
 	render := func(cfg FrontendConfig) string {
@@ -27,25 +30,26 @@ func TestSPAEnvRendering(t *testing.T) {
 		return rec.Body.String()
 	}
 
-	// Business posture: registration closed, signup pointed at the funnel service.
+	// Live domain: the root key is offline, so the register page petitions rather than registers.
 	body := render(FrontendConfig{
-		AccountURL:         "https://get.dmcn.email",
-		RegistrationClosed: true,
-		SignupURL:          "https://get.dmcn.email",
+		DefaultDomain: "mesh.example",
+		PetitionMode:  true,
+		DomainRootPub: "dGVzdC1yb290LWtleQ==",
 	})
 	for _, want := range []string{
-		"ACCOUNT_URL:'https://get.dmcn.email'",
-		"REGISTRATION_CLOSED:'true'",
-		"SIGNUP_URL:'https://get.dmcn.email'",
+		"DEFAULT_DOMAIN:'mesh.example'",
+		"PETITION_MODE:'true'",
+		"DOMAIN_ROOT_PUB:'dGVzdC1yb290LWtleQ=='",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("shell missing %q in %q", want, body)
 		}
 	}
 
-	// Default posture: everything empty (frontend falls back to open behavior).
+	// Unset: every value renders empty rather than as a literal template action, so the
+	// frontend's own defaults apply.
 	body = render(FrontendConfig{})
-	for _, want := range []string{"ACCOUNT_URL:''", "REGISTRATION_CLOSED:''", "SIGNUP_URL:''"} {
+	for _, want := range []string{"DEFAULT_DOMAIN:''", "PETITION_MODE:''", "DOMAIN_ROOT_PUB:''"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("shell missing %q in %q", want, body)
 		}

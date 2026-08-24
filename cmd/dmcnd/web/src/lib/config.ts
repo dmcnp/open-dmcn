@@ -42,13 +42,6 @@ export const DOMAINS: string[] = (() => {
 })();
 /** True when the backend reports dev mode. */
 export const IS_DEV = envVal('DEV_MODE', '') === 'true';
-/** Base URL of the account/funnel service (dmcn-b2c) that owns registration,
- *  countersigning, and billing. Empty ⇒ those calls go same-origin (raw vite dev
- *  proxies them to the local b2c service; see vite.config.ts). */
-export const ACCOUNT_URL = envVal('ACCOUNT_URL', '').replace(/\/+$/, '');
-/** True on a business front door that offers no public signup: the register page
- *  shows a closed screen and login's "create an account" links point at SIGNUP_URL. */
-export const REGISTRATION_CLOSED = envVal('REGISTRATION_CLOSED', '') === 'true';
 // PETITION_MODE: a live self-hosted domain whose root key is offline. Nobody can self-register,
 // so the register page asks for a mailbox instead of creating one — see the petition flow.
 export const PETITION_MODE = envVal('PETITION_MODE', '') === 'true';
@@ -57,8 +50,6 @@ export const PETITION_MODE = envVal('PETITION_MODE', '') === 'true';
 // credential without asking the server anything, which is the point: the server must not be able
 // to influence whether a bridged message looks trustworthy.
 export const DOMAIN_ROOT_PUB = envVal('DOMAIN_ROOT_PUB', '');
-/** Where to send would-be registrants when registration is closed here. */
-export const SIGNUP_URL = envVal('SIGNUP_URL', '');
 /** Mailbox (inbox) poll cadence (ms). Defaults to 10s when unset/unrendered. New
  *  mail arrives externally, so the inbox is the one thing that needs frequent polling. */
 export const POLL_INTERVAL_MS = Number(envVal('POLL_INTERVAL_MS', '10000')) || 10000;
