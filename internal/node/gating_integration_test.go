@@ -41,7 +41,7 @@ func waitFor(d time.Duration, cond func() bool) bool {
 
 // TestFederationGating verifies credential-gated participation (deny-by-default). There is no
 // hard connection gater anymore, so connections are OPEN — but a peer that is neither in the
-// static allow-set nor credentialed never gains PARTICIPATION (DHT routing-table admission).
+// static allow-set nor credentialed never gains PARTICIPATION (peer discovery + relay streams).
 // A and B allowlist each other (the static escape hatch); C (open) is admitted by neither even
 // though it can connect.
 func TestFederationGating(t *testing.T) {

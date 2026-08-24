@@ -35,8 +35,8 @@ func Classify(result *AuthResult) BridgeTrustTier {
 // failure: a DMARC evaluation failure under a published p=reject policy (which
 // also covers "SPF fail with no aligned DKIM under reject"). A bare invalid DKIM
 // signature, an SPF softfail, or a DMARC failure under p=none/p=quarantine is
-// delivered and surfaced as suspicious instead — matching the whitepaper's
-// "drop on hard authentication failure" rule (§11.3.2) without over-blocking
+// delivered and surfaced as suspicious instead — the "drop on hard authentication
+// failure" rule (SPEC.md §7) without over-blocking
 // legitimate mail whose domain owner has not opted into enforcement.
 func ShouldReject(result *AuthResult) bool {
 	return result.DMARC == DMARCFail && result.DMARCPolicy == DMARCPolicyReject

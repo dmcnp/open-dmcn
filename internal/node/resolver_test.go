@@ -19,10 +19,10 @@ func mustKP(t *testing.T) *identity.IdentityKeyPair {
 	return kp
 }
 
-// TestResolveViaFleetDeferral runs the full DHT-free resolution path: a mailbox domain
+// TestResolveViaFleetDeferral runs the full resolution path: a mailbox domain
 // (dmcn.email) that runs no nodes and defers to a fleet domain (dmcnmail.com), whose seed serves
 // the signed DAR + IdentityRecord. It exercises DNS discovery → deferral → dial → fetch → verify,
-// including the signed-fleet_domain == DNS-fleet= enforcement, all with NO DHT.
+// including the signed-fleet_domain == DNS-fleet= enforcement.
 func TestResolveViaFleetDeferral(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -104,10 +104,9 @@ func TestResolveViaFleetDeferral(t *testing.T) {
 	}
 }
 
-// TestLookupViaStaticDNSNoDHT validates the Stage-2 flipped read path end-to-end: with a static
-// _dmcn config (no real DNS) and an EMPTY DHT, n.Lookup resolves an address purely via the fleet
-// resolver — proving the resolver serves reads, not the DHT fallback.
-func TestLookupViaStaticDNSNoDHT(t *testing.T) {
+// TestLookupViaStaticDNS validates the read path end-to-end: with a static _dmcn config (no real
+// DNS), n.Lookup resolves an address purely via the fleet resolver.
+func TestLookupViaStaticDNS(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -147,16 +146,16 @@ func TestLookupViaStaticDNSNoDHT(t *testing.T) {
 	}
 	defer client.Close()
 
-	// The client's DHT is empty, so a successful Lookup proves the resolver served it.
+	// The client holds no records of its own, so a successful Lookup proves the resolver served it.
 	got, err := client.Lookup(ctx, "alice@acme.example")
 	if err != nil {
-		t.Fatalf("Lookup via resolver (empty DHT): %v", err)
+		t.Fatalf("Lookup via resolver: %v", err)
 	}
 	if got.Address != "alice@acme.example" || got.Verify() != nil {
 		t.Fatalf("resolved wrong/invalid record: %s", got.Address)
 	}
 
-	// ResolveDAR (the DAR read path) also works from static DNS with no DHT.
+	// ResolveDAR (the DAR read path) also works from static DNS.
 	rdar, err := client.ResolveDAR(ctx, "acme.example")
 	if err != nil || rdar.Domain != "acme.example" {
 		t.Fatalf("ResolveDAR = (%v, %v)", rdar, err)

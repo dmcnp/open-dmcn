@@ -166,7 +166,7 @@ func (n *Node) buildSignedDescriptor() *identity.RelayDescriptor {
 // publishRelayDescriptor refreshes this relay's signed onion descriptor in its local RecordStore
 // (signed by the node's libp2p identity key, verifiable from the peer ID); peers fetch it via the
 // relay GetRelayDescriptor fleet op. Runs in the background on an interval so the descriptor's
-// revision stays fresh. No DHT.
+// revision stays fresh.
 // announceDomains is the set of domains this node serves as a relay for: every credential domain it
 // holds, plus the operator-permitted (concrete) customer domains — so a hosted customer's placement
 // discovers this fleet relay. Falls back to the primary domain.
@@ -234,7 +234,7 @@ func (n *Node) publishRelayDescriptor() {
 	defer ticker.Stop()
 	for {
 		// Refresh the fleet-served descriptor in the local RecordStore (revision bumps on each
-		// rebuild); peers fetch it via the relay GetRelayDescriptor op. No DHT publish.
+		// rebuild); peers fetch it via the relay GetRelayDescriptor op — nothing is published.
 		if desc := n.buildSignedDescriptor(); desc != nil && n.records != nil {
 			if err := n.records.PutRelayDescriptor(n.ctx, desc); err != nil {
 				if first {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -104,7 +104,7 @@ func TestSignedMessageWrongKey(t *testing.T) {
 	}
 }
 
-// PRD Test 3: Round-trip — compose PlaintextMessage → Sign → Encrypt to one
+// Round-trip — compose PlaintextMessage → Sign → Encrypt to one
 // recipient → Decrypt → Verify signature succeeds, plaintext matches.
 func TestMessageRoundTrip(t *testing.T) {
 	// Generate sender and recipient identities
@@ -153,7 +153,7 @@ func TestMessageRoundTrip(t *testing.T) {
 	}
 }
 
-// PRD Test 4: Multi-device — Encrypt to three recipients → each can
+// Multi-device — Encrypt to three recipients → each can
 // independently Decrypt and verify.
 func TestMultiDevice(t *testing.T) {
 	senderKP, _ := identity.GenerateIdentityKeyPair()
@@ -202,7 +202,7 @@ func TestMultiDevice(t *testing.T) {
 	}
 }
 
-// PRD Test 5: Wrong key — Decrypt with a key not in Recipients returns
+// Wrong key — Decrypt with a key not in Recipients returns
 // a typed error, not a panic.
 func TestWrongKey(t *testing.T) {
 	senderKP, _ := identity.GenerateIdentityKeyPair()
@@ -231,7 +231,7 @@ func TestWrongKey(t *testing.T) {
 	}
 }
 
-// PRD Test 6: Tamper — mutating EncryptedPayload causes Decrypt to
+// Tamper — mutating EncryptedPayload causes Decrypt to
 // return an authentication error.
 func TestPayloadTamper(t *testing.T) {
 	senderKP, _ := identity.GenerateIdentityKeyPair()
@@ -263,7 +263,7 @@ func TestPayloadTamper(t *testing.T) {
 	}
 }
 
-// PRD Test 7: RatchetPubKey — serialise and deserialise an EncryptedEnvelope
+// RatchetPubKey — serialise and deserialise an EncryptedEnvelope
 // and confirm RatchetPubKey is present as 32 zero bytes.
 func TestRatchetPubKey(t *testing.T) {
 	senderKP, _ := identity.GenerateIdentityKeyPair()

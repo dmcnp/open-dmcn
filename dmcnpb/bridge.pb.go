@@ -23,7 +23,7 @@ const (
 
 // BridgeTrustTier represents the trust classification assigned to an
 // inbound legacy email message by the bridge node.
-// See whitepaper Section 15.6.2.
+// See SPEC.md §7.
 type BridgeTrustTier int32
 
 const (
@@ -234,7 +234,7 @@ func (DMARCResult) EnumDescriptor() ([]byte, []int) {
 
 // BridgeClassificationRecord is a signed attestation by a bridge node
 // describing the authentication outcome of an inbound legacy email.
-// See whitepaper Section 15.6.2.
+// See SPEC.md §7.
 type BridgeClassificationRecord struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	BridgeAddress   string                 `protobuf:"bytes,1,opt,name=bridge_address,json=bridgeAddress,proto3" json:"bridge_address,omitempty"`         // the bridge's libp2p peer ID (informational; the bridge has no DMCN email address)

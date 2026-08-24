@@ -8,7 +8,7 @@ option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
 
 // BridgeTrustTier represents the trust classification assigned to an
 // inbound legacy email message by the bridge node.
-// See whitepaper Section 15.6.2.
+// See SPEC.md §7.
 enum BridgeTrustTier {
   BRIDGE_TRUST_TIER_UNSPECIFIED = 0;
   BRIDGE_TRUST_TIER_VERIFIED_LEGACY = 1;
@@ -41,7 +41,7 @@ enum DMARCResult {
 
 // BridgeClassificationRecord is a signed attestation by a bridge node
 // describing the authentication outcome of an inbound legacy email.
-// See whitepaper Section 15.6.2.
+// See SPEC.md §7.
 message BridgeClassificationRecord {
   string bridge_address = 1;       // the bridge's libp2p peer ID (informational; the bridge has no DMCN email address)
   bytes bridge_public_key = 2;     // 32 bytes Ed25519 signer key == bridge_credential.subject == the peer ID's key

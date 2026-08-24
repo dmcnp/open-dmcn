@@ -1,8 +1,6 @@
 // Package keystore provides encrypted on-disk storage for identity key material.
 // The keystore file is encrypted with AES-256-GCM using a key derived from
 // a user-supplied passphrase via HKDF-SHA256.
-//
-// See PRD Section 5.3.
 package keystore
 
 import (

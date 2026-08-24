@@ -8,9 +8,9 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
-	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/registry"
 )
 

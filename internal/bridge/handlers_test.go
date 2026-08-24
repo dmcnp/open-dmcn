@@ -110,7 +110,7 @@ func TestInboundAuthError(t *testing.T) {
 func TestInboundRecipientNotFound(t *testing.T) {
 	store := &capturingStore{}
 	lookup := func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
-		return nil, errors.New("not in DHT")
+		return nil, errors.New("no record for that address")
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
@@ -334,7 +334,7 @@ func TestOutboundSenderNotFound(t *testing.T) {
 	env := sealedToBridge(t, senderKP, bridgeKP, "alice@dmcn.localhost", "ext@gmail.com", "hi")
 	deliverer := &bridge.StubSMTPDeliverer{}
 	h := newOutbound(func(context.Context, string) (*identity.IdentityRecord, error) {
-		return nil, errors.New("not in DHT")
+		return nil, errors.New("no record for that address")
 	}, deliverer, bridgeKP)
 
 	receipt, err := h.HandleEnvelope(context.Background(), env)

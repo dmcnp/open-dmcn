@@ -11,8 +11,8 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
-// memSource is an in-memory RecordSource for tests: the DHT is gone, so verification reads its
-// DARs/records/removals/blocklists from these maps (the fleet resolver is stubbed by them).
+// memSource is an in-memory RecordSource for tests: verification reads its
+// DARs/records/removals/blocklists from these maps (they stub the fleet resolver).
 type memSource struct {
 	dars     map[string]*identity.DomainAuthorityRecord
 	recs     map[string]*identity.IdentityRecord
@@ -53,7 +53,7 @@ func (m *memSource) source() *RecordSource {
 	}
 }
 
-// makeReg returns a DHT-free verification registry backed by an in-memory source (okDNS anchor) plus
+// makeReg returns a verification registry backed by an in-memory source (okDNS anchor) plus
 // the source so a test can populate the DARs/records/removals it verifies against.
 func makeReg(t *testing.T) (*Registry, *memSource) {
 	t.Helper()

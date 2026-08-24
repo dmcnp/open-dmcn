@@ -1,5 +1,5 @@
 // Package relay implements the DMCN relay node protocol for message
-// storage and delivery. See whitepaper Section 15.4.2 and PRD Section 5.2.
+// storage and delivery. See SPEC.md §5.
 package relay
 
 import (
@@ -15,8 +15,8 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // relayStorePrefix namespaces durable relay-store keys in a (possibly shared)

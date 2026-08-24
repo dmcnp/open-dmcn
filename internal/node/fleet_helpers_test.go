@@ -11,7 +11,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/node"
 )
 
-// Test harness for the DHT-free fleet: helpers to build serving (mailbox) nodes that hold a
+// Test harness for the fleet: helpers to build serving (mailbox) nodes that hold a
 // RecordStore, publish a domain's DAR + records across the fleet, and point every node's static
 // _dmcn at the fleet so Lookup/Resolve works. Records are written to EVERY node's store (full
 // replication) so a resolver reaches the record on whichever seed it dials.
@@ -100,8 +100,8 @@ func fleetDNSFromDAR(domain string, dar *identity.DomainAuthorityRecord, servers
 	return map[string]domainverify.Record{domain: {Fingerprint: dar.Fingerprint(), Seeds: seeds}}
 }
 
-// putRec replicates a signed IdentityRecord to every serving node's RecordStore (the DHT-free
-// stand-in for a registration that fanned out to the whole fleet). Registry().Lookup reads the
+// putRec replicates a signed IdentityRecord to every serving node's RecordStore (the stand-in
+// for a registration that fanned out to the whole fleet). Registry().Lookup reads the
 // RecordStore local-first, so a serving node that holds the record resolves it without static DNS.
 func putRec(t *testing.T, ctx context.Context, rec *identity.IdentityRecord, nodes ...*node.Node) {
 	t.Helper()

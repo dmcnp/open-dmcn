@@ -10,7 +10,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
-// IdentityHandler handles DHT identity lookup requests.
+// IdentityHandler handles identity lookup requests.
 type IdentityHandler struct {
 	lookup        func(ctx context.Context, address string) (*identity.IdentityRecord, error)
 	verifyManaged func(ctx context.Context, rec *identity.IdentityRecord) (identity.VerificationTier, error)
@@ -111,7 +111,7 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	// verified_tier is the cryptographically verified tier (vs the self-claimed
 	// verification_tier). We only run the full DAR/DNS/removal verification when
 	// the record actually carries an address credential — otherwise it can't exceed
-	// its self-claimed tier and the extra DHT/DNS round-trips are pointless.
+	// its self-claimed tier and the extra fleet/DNS round-trips are pointless.
 	// identity_unverifiable means the record CARRIED an address credential that
 	// failed to verify (revoked binding, unauthorized issuer, broken DAR/DNS
 	// chain) — clients should distrust such an identity (gap #7/#9).

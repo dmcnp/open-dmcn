@@ -1,6 +1,5 @@
-// Package node provides a combined DMCN node that runs a DHT registry and
-// relay service in a single process. This is the PoC development node
-// described in PRD Section 5.3.
+// Package node provides a combined DMCN node that runs the identity registry and
+// relay service in a single process.
 package node
 
 import (
@@ -47,7 +46,7 @@ type Config struct {
 	// out. Empty (the default) keeps libp2p's own detection, which is right when the public
 	// address is on an interface.
 	AnnounceAddrs        []string
-	Peers                []string // multiaddr strings of infra peers: DHT entry points + cluster discovery seeds
+	Peers                []string // multiaddr strings of infra peers: bootstrap entry points + cluster discovery seeds
 	KeystorePath         string   // path to encrypted keystore file
 	Passphrase           string   // passphrase for keystore encryption
 	IdentityKeyPath      string   // optional path to a persistent libp2p identity key (created if missing); empty means an ephemeral identity
@@ -55,18 +54,19 @@ type Config struct {
 	Mailbox              bool     // opt into the durable mailbox role (requires DataDir); persists messages hold-until-deleted
 	MailboxCapacityBytes uint64   // optional mailbox capacity in bytes (0 = unbounded), reported via STAT for load-aware placement
 	StorageQuotaBytes    uint64   // optional per-account TOTAL storage quota in bytes — mail + personal-KV (0 = unbounded); node default, raised per account by a RoleQuota grant
-	ClientOnly           bool     // run as a pure client: DHT client mode + no relay server handlers (web backend, CLI commands)
+	ClientOnly           bool     // run as a pure client: no relay server handlers, no record store (web backend, CLI commands)
 	DisableOnionRelay    bool     // opt out of forwarding onion traffic for others (--no-onion-relay); relays forward by default
 	// OnionForwardJitter, when > 0, adds a random per-hop delay in [0, jitter)
 	// before forwarding/delivering onion packets (timing-correlation hardening).
 	OnionForwardJitter time.Duration
 
-	// AllowedPeers gates which libp2p peers may federate (connect, enter the DHT
-	// routing table, use peer discovery, open relay streams). Entries are bare
-	// base58 peer IDs or full multiaddrs. The allow-set also includes the
-	// configured Peers (auto-trusted). Empty ⇒ deny-by-default (AllowNone). A
-	// single "*" entry opts into open mode (AllowAll). In Credential-PKI mode this
-	// static allow-set is only an escape hatch; trust comes from presented credentials.
+	// AllowedPeers gates which libp2p peers may federate (connect, take part in
+	// peer discovery, open relay streams). Entries are bare base58 peer IDs or
+	// full multiaddrs. Empty ⇒ deny-by-default (AllowNone). A single "*" entry
+	// opts into open mode (AllowAll). Peers is NOT folded in: a configured
+	// bootstrap peer earns no participation rights by being dialable. In
+	// Credential-PKI mode this static allow-set is only an escape hatch; trust
+	// comes from presented credentials.
 	AllowedPeers []string
 
 	// DNSVerifier overrides the DAR DNS-anchoring verifier (defaults to a real DNS
@@ -109,7 +109,7 @@ type Config struct {
 // OperatorPubKey/PermitsDir (operator permits) and ProvisionDomain (the /dmcn/provision
 // inert-boot) — are omitted. A reference node is authoritative for its own single domain.
 
-// Node is a combined DMCN development node running DHT registry and relay.
+// Node is a combined DMCN node running the identity registry and relay.
 type Node struct {
 	host             host.Host
 	registry         *registry.Registry
@@ -120,7 +120,7 @@ type Node struct {
 	datastore        *leveldbds.Datastore // persistent store; nil when in-memory
 	relayX25519Priv  [32]byte             // onion-routing key (relays only); zero for client-only
 	relayX25519Pub   [32]byte
-	peers            []string // infra peers: DHT entry points + cluster discovery seeds
+	peers            []string // infra peers: bootstrap entry points + cluster discovery seeds
 	clientOnly       bool
 	dataDir          string                           // persistent dir (for credential persistence); empty = ephemeral
 	domain           string                           // DMCN domain this node serves (from its credential); used for relay provider announce
@@ -169,7 +169,7 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 	// Credential mode (Credential PKI): when the node holds a Credential + the DAR that
 	// anchors it, federation is gated by credentials presented at /dmcn/join rather than
 	// a static peer-ID allowlist. Connections stay OPEN (so the join/provision handshakes
-	// can run); PARTICIPATION — DHT routing-table admission, org discovery, relay streams —
+	// can run); PARTICIPATION — peer discovery and relay streams —
 	// is gated by the in-memory credentialSet. This is reentrancy-free (in-memory check).
 	// Normalize the credential set: a node may hold several {credential, DAR} bundles (one per
 	// domain it is enrolled in). The first is the primary (relay descriptor + same-domain
@@ -188,7 +188,7 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 	// and gates participation by credentialPolicy, so a credential-less node is a pure relay.
 	hasCred := cfg.Credential != nil
 	credentials := newCredentialSet()
-	// Participation (DHT routing-table admission, relay + discovery streams) is ALWAYS
+	// Participation (relay + discovery streams) is ALWAYS
 	// credential-gated: admit a peer in the static allow-set (dev `*` / explicit bootstrap) OR
 	// one that presented a valid credential at /dmcn/join. Connections stay open so the join /
 	// provision handshakes can run; there is no hard connection gater.
@@ -245,16 +245,16 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		}
 	}
 
-	// A client-only node participates as a DHT *client* (it can register and
-	// look up records by routing through server nodes, but does not serve the
-	// DHT or relay) — the right footprint for the web backend and the short-lived
-	// CLI commands, which are pure clients, not infrastructure.
+	// A client-only node is a pure consumer: it registers and looks up records by
+	// asking serving nodes, but serves neither records nor relay streams — the right
+	// footprint for the web backend and the short-lived CLI commands, which are pure
+	// clients, not infrastructure.
 	if cfg.ClientOnly && cfg.Mailbox {
 		h.Close()
 		cancel()
 		return nil, fmt.Errorf("node: client-only node cannot host a mailbox")
 	}
-	// Create the (DHT-free) identity verification registry. Records are served through the fleet
+	// Create the identity verification registry. Records are served through the fleet
 	// resolver + local RecordStore, installed as its RecordSource after the node is built.
 	var regOpts []registry.Option
 	if cfg.DNSVerifier != nil {
@@ -283,7 +283,7 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 	// Create relay with registry lookup. Opting into the mailbox role requires a
 	// persistent datastore (it is the recipient's durable, hold-until-deleted home).
 	// recStore is the node's local authoritative record store for the fleet-resolution ops
-	// (the DHT replacement). Set for serving (mailbox) nodes below; nil for pure clients.
+	// Set for serving (mailbox) nodes below; nil for pure clients.
 	var recStore *relay.RecordStore
 
 	relayOpts := []relay.Option{
@@ -312,7 +312,7 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 	if store != nil {
 		relayOpts = append(relayOpts, relay.WithMessageDatastore(store))
 	}
-	// Local authoritative record store for the fleet-resolution ops (the DHT replacement).
+	// Local authoritative record store for the fleet-resolution ops.
 	// EVERY serving node runs one — full replication means each fleet node can answer for the
 	// domains the fleet hosts, and each serves its OWN signed relay descriptor (onion routing),
 	// independent of whether it hosts a mailbox. Persistent when a datastore is available;
@@ -459,9 +459,8 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		cancel:           cancel,
 	}
 
-	// Install the DHT-free record source: every registry Lookup* (and thus every credential/DAR
-	// verification path) reads through the fleet resolver + local RecordStore. This is the ONLY
-	// record path now — the DHT is gone.
+	// Install the record source: every registry Lookup* (and thus every credential/DAR
+	// verification path) reads through the fleet resolver + local RecordStore.
 	n.registry.SetRecordSource(n.recordSource())
 
 	// A node holding its own domain credential announces as a relay provider under it.
@@ -561,7 +560,7 @@ func (n *Node) Host() host.Host {
 	return n.host
 }
 
-// Registry returns the DHT identity registry.
+// Registry returns the identity verification registry.
 func (n *Node) Registry() *registry.Registry {
 	return n.registry
 }
@@ -582,7 +581,7 @@ func (n *Node) SetStaticDNS(m map[string]domainverify.Record) {
 
 // MergeStaticDNS adds/overwrites entries in the static _dmcn map, preserving existing ones. It lets
 // a serving node register its OWN domain's anchor at boot without clobbering operator-configured peer
-// domains (the DHT-free federation seed-pin). Not safe for concurrent use — call during setup.
+// domains (the federation seed-pin). Not safe for concurrent use — call during setup.
 func (n *Node) MergeStaticDNS(m map[string]domainverify.Record) {
 	merged := map[string]domainverify.Record{}
 	for k, v := range n.staticDNS {
@@ -629,8 +628,7 @@ func (n *Node) Addrs() []string {
 
 // WaitForPeers blocks until the node has at least one connected mesh peer, or the timeout elapses.
 // A short-lived process (e.g. a CLI command) that has just dialed its bootstrap node needs a moment
-// before the connection is up; calling this before a resolve/publish avoids racing the dial. (This
-// was a DHT-routing-table wait; with the DHT gone it is a plain connectivity wait.)
+// before the connection is up; calling this before a resolve/publish avoids racing the dial.
 func (n *Node) WaitForPeers(ctx context.Context, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -734,7 +732,7 @@ func (n *Node) discoverPeers(ctx context.Context, initialPeers []string) {
 		}
 
 		// Connect using the full multiaddr first, so the peer's address is in
-		// the peerstore (and the DHT routing table) before we query it by peer ID.
+		// the peerstore before we query it by peer ID.
 		// Otherwise a CLI/client node — whose only seed is its --node peer —
 		// dials the other peers by ID with no known address ("no addresses")
 		// and never reaches them, so records register/resolve on a single node.

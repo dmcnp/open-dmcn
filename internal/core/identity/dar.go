@@ -1,4 +1,4 @@
-// Domain Authority Records and address removal records (whitepaper Section 13).
+// Domain Authority Records and address removal records (SPEC.md §2).
 //
 // A DomainAuthorityRecord declares a domain's root authority key (proven via the
 // _dmcn DNS TXT record carrying its fingerprint) plus the keys it authorizes to
@@ -31,7 +31,7 @@ const (
 	PolicyRequireCountersign uint32 = 1 << 0
 	// Bit 1 is reserved for extensions (see SPEC.md §8).
 	// PolicyRequireOnion: all addresses under the domain must receive mail via
-	// onion routing (the relay rejects direct STOREs). See whitepaper Section 15.4.
+	// onion routing (the relay rejects direct STOREs). See SPEC.md §6.
 	PolicyRequireOnion uint32 = 1 << 2
 	// PolicyReplicateMailbox declares that an address's mail should be replicated across
 	// all of its top-k routing relays rather than failover to the first reachable. When
@@ -63,7 +63,7 @@ type AuthorityKey struct {
 }
 
 // DomainAuthorityRecord declares a domain's authority key and the credentials it
-// anchors (Credential PKI). Keyed in the DHT on SHA-256(domain).
+// anchors (Credential PKI). Served by the domain's fleet, keyed on SHA-256(domain).
 type DomainAuthorityRecord struct {
 	Version                uint32
 	Domain                 string
@@ -320,8 +320,8 @@ type RemovedBinding struct {
 }
 
 // AddressRemovalRecord is the root-signed, append-only list of removed bindings
-// for one address. Keyed in the DHT on SHA-256(address). Only the domain root
-// can publish one.
+// for one address. Served by the domain's fleet, keyed on SHA-256(address).
+// Only the domain root can publish one.
 type AddressRemovalRecord struct {
 	Version         uint32
 	Domain          string

@@ -24,7 +24,7 @@ func TestCredentialModeRelayDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Three credential-mode relays (role node), meshed so they join + the DHT populates.
+	// Three credential-mode relays (role node), meshed so they join each other.
 	r1 := credNode(t, ctx, domain, root, dar, []string{identity.RoleNode}, nil)
 	defer r1.Close()
 	r2 := credNode(t, ctx, domain, root, dar, []string{identity.RoleNode}, nil)
@@ -48,8 +48,8 @@ func TestCredentialModeRelayDirectory(t *testing.T) {
 
 	// Client (role client) configured with the whole relay set as its peers — mirroring a
 	// production client seeded with the full DMCN_NODE_PEERS list. (Enumerating relays it never
-	// connected to was the DHT provider-record path; the fleet roster is the deferred replacement,
-	// so the directory is built from the relays the client is connected to.)
+	// connected to needs the fleet roster, which is deferred, so the directory is built from the
+	// relays the client is connected to.)
 	client := credNodeBoot(t, ctx, domain, root, dar, []string{identity.RoleClient}, nil,
 		[]string{r1.RelayHints()[0], r2.RelayHints()[0], r3.RelayHints()[0]})
 	defer client.Close()

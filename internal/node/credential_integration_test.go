@@ -50,7 +50,7 @@ func credNodeBoot(t *testing.T, ctx context.Context, domain string, root *identi
 		IdentityKeyPath: keyfile,
 		Credential:      cred,
 		CredentialDAR:   dar,
-		Peers:  bootstrap,
+		Peers:           bootstrap,
 		DNSVerifier:     okDNS,
 	})
 	if err != nil {

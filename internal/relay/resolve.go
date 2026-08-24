@@ -8,14 +8,14 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // resolveIdentity looks up an address's IdentityRecord LOCAL-FIRST: a serving relay is
 // authoritative for the addresses it hosts, so it answers from its own RecordStore before falling
-// back to the injected LookupFunc (resolver/DHT) for remote addresses. This avoids a network
-// round-trip (and any DHT dependency) for the relay's own accounts.
+// back to the injected LookupFunc (the fleet resolver) for remote addresses. This avoids a
+// network round-trip for the relay's own accounts.
 func (r *Relay) resolveIdentity(ctx context.Context, address string) (*identity.IdentityRecord, error) {
 	if r.records != nil {
 		if rec, err := r.records.GetIdentity(ctx, address); err == nil && rec != nil {
@@ -25,7 +25,7 @@ func (r *Relay) resolveIdentity(ctx context.Context, address string) (*identity.
 	return r.lookup(ctx, address)
 }
 
-// Fleet-resolution op handlers (the DHT replacement). Each serves a self-authenticating signed
+// Fleet-resolution op handlers. Each serves a self-authenticating signed
 // record from the node's local authoritative RecordStore. They are public, unauthenticated reads:
 // the record carries its own signature, so a reader verifies it against the domain's DNS
 // fingerprint — the node serving it is untrusted transport, never a trust root. A node with no

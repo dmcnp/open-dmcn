@@ -9,9 +9,9 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	"google.golang.org/protobuf/proto"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/identity"
-	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // Record-store datastore prefixes. These hold the self-authenticating records a fleet node
@@ -27,8 +27,8 @@ const (
 
 // RecordStore is a fleet node's node-local, authoritative copy of the self-authenticating
 // records it serves for the domains it hosts: identity records, DARs, address-removal
-// tombstones, credential blocklists, and its fleet roster. It is the DHT-independent source of
-// truth behind the fleet-resolution ops.
+// tombstones, credential blocklists, and its fleet roster. It is the source of truth behind the
+// fleet-resolution ops.
 //
 // Unlike AccountStore these records are PUBLIC (any reader may look them up) and
 // self-authenticating (signed + DNS-fingerprint-anchored), so they are stored in the clear —

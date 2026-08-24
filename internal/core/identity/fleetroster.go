@@ -21,7 +21,7 @@ type FleetNode struct {
 
 // FleetRoster is the fleet owner's root-signed, monotonic-revision list of the nodes that
 // serve the fleet, anchored to the fleet domain's DNS fingerprint (its own DAR root key).
-// It is the availability/discovery layer that replaces the DHT's provider records: a reader
+// It is the availability/discovery layer: a reader
 // bootstraps from a few DNS "seed=" endpoints, fetches this roster from any of them, and
 // learns the full authoritative node set (so discovery is not single-pinned).
 //

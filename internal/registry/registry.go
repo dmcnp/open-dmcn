@@ -1,8 +1,7 @@
-// Package registry is the DMCN identity verification service. Historically it wrapped a libp2p
-// Kademlia DHT for record storage; that DHT has been removed — records are now served
-// authoritatively by each domain's fleet and fetched via the resolver (see internal/node). This
-// package retains the reader-side verification layer (credential/DAR/routing checks + DNS anchoring)
-// and reads every record it needs through an injected, DHT-free RecordSource.
+// Package registry is the DMCN identity verification service: the reader-side layer that decides
+// whether a record may be trusted (credential/DAR/routing checks + DNS anchoring). It stores
+// nothing — records are served authoritatively by each domain's fleet, and this package reads
+// every one it needs through an injected RecordSource (wired to the resolver in internal/node).
 package registry
 
 import (
@@ -43,7 +42,7 @@ type darCacheEntry struct {
 	at  time.Time
 }
 
-// Registry is the DHT-free identity verification service. It fetches records through source and
+// Registry is the identity verification service. It fetches records through source and
 // caches DARs for the hot FETCH-path policy checks.
 type Registry struct {
 	dnsVerify DNSVerifier
@@ -374,6 +373,6 @@ func darRootKeys(dar *identity.DomainAuthorityRecord) []ed25519.PublicKey {
 	return keys
 }
 
-// Close is a no-op — the registry owns no resource now (the DHT is gone; the datastore is owned and
-// closed by the node). Retained so existing call sites keep compiling.
+// Close is a no-op — the registry owns no resources; the datastore belongs to the node, which
+// closes it. Retained so callers can treat it like any other closable service.
 func (r *Registry) Close() error { return nil }

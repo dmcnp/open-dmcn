@@ -12,11 +12,10 @@ import (
 	"dmcn.dev/open-dmcn/internal/relay"
 )
 
-// TestEndToEndAliceBob is the PRD-mandated end-to-end integration test.
-// See PRD Section 5.4.
+// TestEndToEndAliceBob is the end-to-end integration test.
 //
 // Scenario:
-//  1. Start two dmcn-node instances sharing a local DHT.
+//  1. Start two dmcn-node instances sharing a fleet.
 //  2. Generate identity alice@localhost on node-A. Register it.
 //  3. Generate identity bob@localhost on node-B. Register it.
 //  4. node-A looks up bob@localhost and retrieves his IdentityRecord. Signature validates.
@@ -45,7 +44,7 @@ func TestEndToEndAliceBob(t *testing.T) {
 	}
 	time.Sleep(300 * time.Millisecond)
 
-	// Point the fleet resolver at both nodes for the localhost domain (DHT-free resolution).
+	// Point the fleet resolver at both nodes for the localhost domain.
 	root := mustKPT(t)
 	wireFleet(t, ctx, "localhost", root, nodeA, nodeB)
 
@@ -194,7 +193,7 @@ func TestEndToEndAliceBob(t *testing.T) {
 	}
 }
 
-// TestStoreFromUnregisteredSender is the PRD-mandated rejection test.
+// TestStoreFromUnregisteredSender is the sender-authority rejection test.
 // A STORE from an unregistered identity must be rejected by the relay.
 func TestStoreFromUnregisteredSender(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -223,7 +222,7 @@ func TestStoreFromUnregisteredSender(t *testing.T) {
 		t.Fatalf("connect client → relay: %v", err)
 	}
 
-	// Generate an unregistered identity (NOT registered in DHT)
+	// Generate an unregistered identity (never published to the fleet)
 	unregKP, err := identity.GenerateIdentityKeyPair()
 	if err != nil {
 		t.Fatalf("generate key pair: %v", err)

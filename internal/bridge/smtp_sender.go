@@ -59,7 +59,7 @@ type SMTPSenderConfig struct {
 // SMTPSender is the production SMTPDeliverer: it resolves the recipient domain's MX hosts and
 // delivers an RFC 5322 message over SMTP with opportunistic (or required) STARTTLS, trying MX
 // hosts in preference order until one accepts. It is the real replacement for
-// StubSMTPDeliverer for outbound legacy-email bridging (whitepaper §12).
+// StubSMTPDeliverer for outbound legacy-email bridging (SPEC.md §7).
 type SMTPSender struct {
 	helo           string
 	port           string

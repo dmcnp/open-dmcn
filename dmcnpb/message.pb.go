@@ -22,7 +22,7 @@ const (
 )
 
 // MessageBody holds the content of a message.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 type MessageBody struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ContentType   string                 `protobuf:"bytes,1,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"` // MIME type, e.g. "text/plain"
@@ -76,7 +76,7 @@ func (x *MessageBody) GetContent() []byte {
 }
 
 // AttachmentRecord describes an attachment within a message.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 type AttachmentRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AttachmentId  []byte                 `protobuf:"bytes,1,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"` // 16 bytes UUID
@@ -178,7 +178,7 @@ func (x *AttachmentRecord) GetDisposition() string {
 }
 
 // PlaintextMessage represents a composed message before signing or encryption.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 type PlaintextMessage struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Version          uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -315,7 +315,7 @@ func (x *PlaintextMessage) GetAlternatives() []*MessageBody {
 }
 
 // SignedMessage wraps a PlaintextMessage with the sender's Ed25519 signature.
-// See whitepaper Section 15.3.2.
+// See SPEC.md §3.
 type SignedMessage struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Plaintext       *PlaintextMessage      `protobuf:"bytes,1,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
@@ -677,7 +677,7 @@ func (x *MessageContent) GetAlternatives() []*MessageBody {
 }
 
 // RecipientRecord holds the wrapped CEK for a single recipient device.
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 type RecipientRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DeviceId      []byte                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`                  // 16 bytes UUID
@@ -763,7 +763,7 @@ func (x *RecipientRecord) GetCekTag() []byte {
 }
 
 // EncryptedEnvelope is the outer transport structure for encrypted messages.
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 type EncryptedEnvelope struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Version          uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`

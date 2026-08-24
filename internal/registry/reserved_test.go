@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-
 	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 

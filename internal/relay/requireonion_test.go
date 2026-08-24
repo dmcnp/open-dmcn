@@ -8,10 +8,10 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/onion"
-	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // A direct STORE to a mailbox known to require onion delivery is rejected; the

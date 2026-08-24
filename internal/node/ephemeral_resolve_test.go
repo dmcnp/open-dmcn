@@ -18,7 +18,7 @@ import (
 // production device-pairing scenario (dmcn-web/b2c is a ClientOnly node that must resolve the
 // ephemeral mailbox to LIST it and to STORE the clone response). The DNS/DAR-anchored resolver
 // cannot reach pairing.local; the carve-out pulls the self-certifying record straight from a
-// connected fleet peer, replacing the DHT's keyed global lookup the pairing flow used to rely on.
+// connected fleet peer, which is the only lookup path a pairing address has.
 func TestResolveEphemeralNoDNS(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

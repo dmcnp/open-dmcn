@@ -5,14 +5,14 @@ package dmcn.message;
 option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
 
 // MessageBody holds the content of a message.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 message MessageBody {
   string content_type = 1;   // MIME type, e.g. "text/plain"
   bytes content = 2;         // UTF-8 encoded body text
 }
 
 // AttachmentRecord describes an attachment within a message.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 message AttachmentRecord {
   bytes attachment_id = 1;   // 16 bytes UUID
   string filename = 2;
@@ -25,7 +25,7 @@ message AttachmentRecord {
 }
 
 // PlaintextMessage represents a composed message before signing or encryption.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 message PlaintextMessage {
   uint32 version = 1;
   bytes message_id = 2;            // 16 bytes UUID
@@ -45,7 +45,7 @@ message PlaintextMessage {
 }
 
 // SignedMessage wraps a PlaintextMessage with the sender's Ed25519 signature.
-// See whitepaper Section 15.3.2.
+// See SPEC.md §3.
 message SignedMessage {
   PlaintextMessage plaintext = 1;
   bytes sender_signature = 2;     // 64 bytes Ed25519 sig over canonical serialization of plaintext
@@ -107,7 +107,7 @@ message MessageContent {
 }
 
 // RecipientRecord holds the wrapped CEK for a single recipient device.
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 message RecipientRecord {
   bytes device_id = 1;            // 16 bytes UUID
   bytes recipient_x_pub = 2;     // 32 bytes X25519 public key of recipient
@@ -118,7 +118,7 @@ message RecipientRecord {
 }
 
 // EncryptedEnvelope is the outer transport structure for encrypted messages.
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 message EncryptedEnvelope {
   uint32 version = 1;
   bytes message_id = 2;                   // 16 bytes UUID

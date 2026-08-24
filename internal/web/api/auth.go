@@ -1,7 +1,11 @@
-// Package api implements HTTP handlers for the DMCN web mail client backend.
-// Provider-plane handlers (registration, countersigning, billing) live in
-// cmd/dmcn-b2c — this client authenticates mailbox access and proxies relay
-// traffic, nothing more.
+// Package api implements the HTTP handlers for dmcnd's built-in web mail client:
+// authentication, identity lookup, message send, mailbox sync, and — depending on
+// how the domain is provisioned — either open registration (dev) or the mailbox
+// petition flow (a live domain, whose root key is not on this machine).
+//
+// The backend holds no key material and no user directory. Every identity is
+// resolved from its domain's fleet and verified by challenge-response against the
+// record's own Ed25519 key; all message crypto happens in the browser.
 package api
 
 import (
@@ -22,10 +26,10 @@ import (
 )
 
 // AuthHandler handles login, logout, and identity import. It keeps NO user
-// directory: identities are verified against the DHT registry — the system of
-// record — so any registered address can log into any client instance
-// (challenge-response with the record's Ed25519 key; the relay's FETCH auth
-// remains the real gate on mailbox access).
+// directory: identities are verified against the fleet-resolved registry record —
+// the system of record — so any registered address can log into any client
+// instance (challenge-response with the record's Ed25519 key; the relay's FETCH
+// auth remains the real gate on mailbox access).
 type AuthHandler struct {
 	sessions       *webcore.SessionStore
 	registryLookup func(ctx context.Context, address string) (*identity.IdentityRecord, error)
@@ -34,7 +38,7 @@ type AuthHandler struct {
 }
 
 // NewAuthHandler creates a new AuthHandler. registryLookup resolves an address's
-// IdentityRecord in the DHT; login and import verify possession against it.
+// IdentityRecord via its domain's fleet; login and import verify possession against it.
 func NewAuthHandler(
 	sessions *webcore.SessionStore,
 	registryLookup func(ctx context.Context, address string) (*identity.IdentityRecord, error),
@@ -48,7 +52,7 @@ func NewAuthHandler(
 	}
 }
 
-// lookupRecord resolves the address in the DHT, writing the appropriate error
+// lookupRecord resolves the address via its domain's fleet, writing the appropriate error
 // response (404 unknown / 502 lookup failure) and returning ok=false on failure.
 func (h *AuthHandler) lookupRecord(w http.ResponseWriter, r *http.Request, address string) (*identity.IdentityRecord, bool) {
 	if h.registryLookup == nil {
@@ -74,7 +78,7 @@ type loginRequest struct {
 }
 
 // HandleLogin handles the first step of login: it confirms the address is
-// registered in the DHT and returns its public key plus a challenge nonce.
+// registered on its domain's fleet and returns its public key plus a challenge nonce.
 func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Address == "" {
@@ -110,7 +114,7 @@ type loginVerifyRequest struct {
 }
 
 // HandleLoginVerify handles the second step of login: it verifies the signed
-// challenge against the DHT record's Ed25519 key and mints a session.
+// challenge against the resolved record's Ed25519 key and mints a session.
 func (h *AuthHandler) HandleLoginVerify(w http.ResponseWriter, r *http.Request) {
 	var req loginVerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -160,7 +164,7 @@ type importChallengeRequest struct {
 // HandleImportChallenge begins importing an existing (e.g. CLI-created) identity
 // into this client. It confirms the address is registered in the directory and
 // returns the authoritative public keys plus a challenge nonce; the browser
-// proves possession of the private key by signing the nonce. No DHT write occurs.
+// proves possession of the private key by signing the nonce. Nothing is published.
 func (h *AuthHandler) HandleImportChallenge(w http.ResponseWriter, r *http.Request) {
 	var req importChallengeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -200,9 +204,9 @@ type importRequest struct {
 
 // HandleImport completes an import: it verifies the signed challenge against the
 // directory's authoritative Ed25519 key (proof the caller holds the identity's
-// private key) and mints a session. With DHT-verified login there is no local
-// record to create — import is now login for an identity whose keys arrived on
-// this device out-of-band. No keys are generated, stored, or written to the DHT.
+// private key) and mints a session. Because login verifies against the resolved
+// record, there is no local record to create — import is login for an identity whose
+// keys arrived on this device out-of-band. No keys are generated, stored, or published.
 func (h *AuthHandler) HandleImport(w http.ResponseWriter, r *http.Request) {
 	var req importRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

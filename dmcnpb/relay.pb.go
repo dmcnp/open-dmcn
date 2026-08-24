@@ -316,7 +316,7 @@ type RelayRequest_StoreInit struct {
 
 type RelayRequest_OnionForward struct {
 	// Onion-routed forward: one layer for this relay to peel and forward (or
-	// deliver). See whitepaper Section 15.4.
+	// deliver). See SPEC.md §6.
 	OnionForward *OnionForwardRequest `protobuf:"bytes,8,opt,name=onion_forward,json=onionForward,proto3,oneof"`
 }
 
@@ -2012,7 +2012,7 @@ func (x *GetBlocklistResponse) GetRecord() []byte {
 }
 
 // PutRecordRequest pushes one self-authenticating record into the recipient node's RecordStore —
-// the fleet-replication path that replaces DHT writes. The receiving relay RE-VERIFIES the record
+// the fleet-replication path. The receiving relay RE-VERIFIES the record
 // (self-signature; DNS fingerprint anchor for a DAR; monotonic-revision anti-rollback) before
 // storing, so a compromised pusher cannot inject a forgery. Identity-record pushes are additionally
 // gated on the caller's 'routing' fleet grant for the record's domain (anti-spam); DAR/roster/
@@ -2121,8 +2121,8 @@ func (x *PutRecordResponse) GetReason() string {
 	return ""
 }
 
-// GetRelayDescriptorRequest resolves a relay node's onion descriptor by peer ID (the fleet-served
-// replacement for the DHT relay-descriptor lookup). The descriptor is self-anchored — signed by the
+// GetRelayDescriptorRequest resolves a relay node's onion descriptor by peer ID, served by the
+// fleet. The descriptor is self-anchored — signed by the
 // node's libp2p key, recoverable from the peer ID — so the reader verifies it without trusting the
 // server. Typically asked of the descriptor's own node.
 type GetRelayDescriptorRequest struct {

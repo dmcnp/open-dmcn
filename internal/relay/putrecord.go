@@ -7,14 +7,14 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
-// handlePutRecord is the fleet-replication ingest for a pushed record (the path that replaced DHT
-// writes). It applies the one caller-relative check — the pusher's 'routing' fleet grant, which is
-// anti-spam and cannot be evaluated inside AcceptRecord because it depends on who is asking — and
-// then defers every acceptance rule to AcceptRecord.
+// handlePutRecord is the fleet-replication ingest for a pushed record. It applies the one
+// caller-relative check — the pusher's 'routing' fleet grant, which is anti-spam and cannot be
+// evaluated inside AcceptRecord because it depends on who is asking — and then defers every
+// acceptance rule to AcceptRecord.
 //
 // The former rationale here ("DAR/roster/removal/blocklist are self-anchoring and re-verified
 // authoritatively by the reader, so a bad one is rejected there even if stored") is retired. The

@@ -22,8 +22,7 @@ func addressDomain(address string) string {
 // VerifyManagedRecord verifies an IdentityRecord's self-signature and its address/routing
 // credentials against a SUPPLIED DomainAuthorityRecord (+ optional blocklist and removal
 // tombstone), returning the effective verification tier. It is PURE — no network I/O — so it
-// verifies a fleet-served record from a fleet-served DAR without any DHT lookup, and survives
-// the DHT's removal.
+// verifies a fleet-served record from a fleet-served DAR with no lookup of its own.
 //
 // The CALLER is responsible for the two anchors this function cannot check locally:
 //   - the DAR is anchored to DNS (its Fingerprint() == the domain's _dmcn TXT), and

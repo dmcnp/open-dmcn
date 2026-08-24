@@ -21,7 +21,7 @@ import (
 // info/warn/error chatter. Call it once at process startup, before any libp2p
 // host is created. An explicit GOLOG_LOG_LEVEL in the environment is respected
 // as an override (set it to e.g. "debug" or "info" to restore libp2p logging
-// when diagnosing a transport/DHT problem).
+// when diagnosing a transport problem).
 func Silence() {
 	if os.Getenv("GOLOG_LOG_LEVEL") != "" {
 		return

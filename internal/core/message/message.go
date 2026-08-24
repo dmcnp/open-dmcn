@@ -1,5 +1,5 @@
 // Package message implements the three-layer message structure defined in
-// whitepaper Section 15.3: PlaintextMessage, SignedMessage, and EncryptedEnvelope.
+// SPEC.md §3: PlaintextMessage, SignedMessage, and EncryptedEnvelope.
 package message
 
 import (
@@ -24,14 +24,14 @@ var protoMarshal = func(m proto.Message) ([]byte, error) {
 }
 
 // MessageBody holds the content of a message.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 type MessageBody struct {
 	ContentType string // MIME type, e.g. "text/plain"
 	Content     []byte // UTF-8 encoded body text
 }
 
 // AttachmentRecord describes an attachment within a message.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 type AttachmentRecord struct {
 	AttachmentID [16]byte // random UUID
 	Filename     string
@@ -48,7 +48,7 @@ type AttachmentRecord struct {
 }
 
 // PlaintextMessage represents a composed message before signing or encryption.
-// See whitepaper Section 15.3.1.
+// See SPEC.md §3.
 type PlaintextMessage struct {
 	Version          uint32
 	MessageID        [16]byte // random UUID
@@ -203,7 +203,7 @@ func plaintextMessageFromProto(pb *dmcnpb.PlaintextMessage) *PlaintextMessage {
 }
 
 // SignedMessage wraps a PlaintextMessage with the sender's Ed25519 signature.
-// See whitepaper Section 15.3.2.
+// See SPEC.md §3.
 type SignedMessage struct {
 	Plaintext       PlaintextMessage
 	SenderSignature [64]byte
@@ -212,7 +212,7 @@ type SignedMessage struct {
 // Sign computes and sets SenderSignature over the canonical protobuf
 // serialization of the PlaintextMessage.
 //
-// See whitepaper Section 15.3.2.
+// See SPEC.md §3.
 func (sm *SignedMessage) Sign(senderPrivKey ed25519.PrivateKey) error {
 	data, err := sm.signableBytes()
 	if err != nil {
@@ -232,7 +232,7 @@ func (sm *SignedMessage) Sign(senderPrivKey ed25519.PrivateKey) error {
 // Returns ErrInvalidSignature if the signature is not valid.
 //
 // A SignedMessage with an invalid signature must never be displayed to a user.
-// See whitepaper Section 15.3.2.
+// See SPEC.md §3.
 func (sm *SignedMessage) Verify() error {
 	data, err := sm.signableBytes()
 	if err != nil {

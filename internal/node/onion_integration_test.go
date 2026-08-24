@@ -58,11 +58,11 @@ func TestSendOnionDeliversToMailbox(t *testing.T) {
 	}
 
 	client, err := node.New(ctx, node.Config{
-		AllowedPeers:   []string{"*"},
-		ListenAddr:     "/ip4/127.0.0.1/tcp/0",
-		Peers: []string{relayA.RelayHints()[0]},
-		ClientOnly:     true,
-		DNSVerifier:    okDNS,
+		AllowedPeers: []string{"*"},
+		ListenAddr:   "/ip4/127.0.0.1/tcp/0",
+		Peers:        []string{relayA.RelayHints()[0]},
+		ClientOnly:   true,
+		DNSVerifier:  okDNS,
 	})
 	if err != nil {
 		t.Fatalf("client: %v", err)

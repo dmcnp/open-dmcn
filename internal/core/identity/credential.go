@@ -10,8 +10,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/domainverify"
 )
 
 // Roles a Credential may carry. Roles combine (a user device is ["address","client"]).

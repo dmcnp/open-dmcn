@@ -14,20 +14,20 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/encoding/protodelim"
 
-	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
 // JoinProtocol is the credential-presentation handshake (Credential PKI). On connect, a
 // peer presents its Credential + the DAR that anchors it; the verifier checks it against
-// a direct DNS resolution (no DHT needed) and admits the peer to the in-memory
+// a direct DNS resolution and admits the peer to the in-memory
 // credentialSet, which gates federation participation.
 const JoinProtocol = "/dmcn/join/1.0.0"
 
 const joinTimeout = 10 * time.Second
 
 // Admitted reports whether a peer is permitted to federate (participate) with this node —
-// the deny-by-default participation gate that replaced the DHT routing-table admission. That
+// the deny-by-default participation gate. That
 // is exactly the federation policy: the peer is in the static allow-set (the dev `*` / explicit
 // bootstrap escape hatch) OR it presented a valid credential at /dmcn/join. With neither, false.
 func (n *Node) Admitted(p peer.ID) bool {

@@ -4,7 +4,7 @@
 // No cryptographic algorithm is implemented from scratch. All functions
 // return explicit errors and never panic on invalid input.
 //
-// See DMCN Whitepaper v0.2, Section 15.2 and 15.3.
+// See SPEC.md §1 and §3.
 package crypto
 
 import (
@@ -61,7 +61,7 @@ const (
 // GenerateEd25519KeyPair generates a new Ed25519 signing key pair using
 // crypto/rand as the entropy source.
 //
-// See whitepaper Section 15.2.1.
+// See SPEC.md §1.
 func GenerateEd25519KeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 	pub, priv, err := ed25519.GenerateKey(randReader)
 	if err != nil {
@@ -73,8 +73,7 @@ func GenerateEd25519KeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 // Sign produces an Ed25519 signature over the given message using the
 // provided private key.
 //
-// See whitepaper Section 15.2.2 (identity self-signature) and
-// Section 15.3.2 (message sender signature).
+// See SPEC.md §1 (identity self-signature) and §3 (message sender signature).
 func Sign(privateKey ed25519.PrivateKey, message []byte) ([]byte, error) {
 	if len(privateKey) != Ed25519PrivateKeySize {
 		return nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidKeySize, Ed25519PrivateKeySize, len(privateKey))
@@ -87,7 +86,7 @@ func Sign(privateKey ed25519.PrivateKey, message []byte) ([]byte, error) {
 // provided public key. Returns ErrInvalidSignature if the signature is
 // not valid.
 //
-// See whitepaper Section 15.2.2 and 15.3.2.
+// See SPEC.md §1 and §3.
 func Verify(publicKey ed25519.PublicKey, message, signature []byte) error {
 	if len(publicKey) != Ed25519PublicKeySize {
 		return fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidKeySize, Ed25519PublicKeySize, len(publicKey))
@@ -105,7 +104,7 @@ func Verify(publicKey ed25519.PublicKey, message, signature []byte) error {
 // The private key is 32 random bytes; the public key is derived by
 // scalar multiplication with the Curve25519 base point.
 //
-// See whitepaper Section 15.2.1.
+// See SPEC.md §1.
 func GenerateX25519KeyPair() (publicKey, privateKey [X25519KeySize]byte, err error) {
 	if _, err := io.ReadFull(randReader, privateKey[:]); err != nil {
 		return publicKey, privateKey, fmt.Errorf("crypto: x25519 key generation: %w", err)
@@ -121,7 +120,7 @@ func GenerateX25519KeyPair() (publicKey, privateKey [X25519KeySize]byte, err err
 // X25519SharedSecret performs an X25519 Diffie-Hellman key exchange,
 // computing a shared secret from a private key and a peer's public key.
 //
-// See whitepaper Section 15.3.3 (KEM pattern — CEK wrapping).
+// See SPEC.md §3 (KEM pattern — CEK wrapping).
 func X25519SharedSecret(privateKey, peerPublicKey [X25519KeySize]byte) ([X25519KeySize]byte, error) {
 	var shared [X25519KeySize]byte
 	result, err := curve25519.X25519(privateKey[:], peerPublicKey[:])
@@ -141,7 +140,7 @@ func X25519SharedSecret(privateKey, peerPublicKey [X25519KeySize]byte) ([X25519K
 //   - info: context and application-specific information
 //   - length: desired output key length in bytes
 //
-// See whitepaper Section 15.3.3 (KEM pattern — KWK derivation).
+// See SPEC.md §3 (KEM pattern — KWK derivation).
 func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 	if length <= 0 {
 		return nil, errors.New("crypto: derive key: length must be positive")
@@ -160,7 +159,7 @@ func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 //
 // The key must be exactly 32 bytes (AES-256).
 //
-// See whitepaper Section 15.3.3 (payload encryption and CEK wrapping).
+// See SPEC.md §3 (payload encryption and CEK wrapping).
 func AESGCMEncrypt(key, plaintext []byte) (nonce, ciphertext, tag []byte, err error) {
 	if len(key) != AES256KeySize {
 		return nil, nil, nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidKeySize, AES256KeySize, len(key))
@@ -196,7 +195,7 @@ func AESGCMEncrypt(key, plaintext []byte) (nonce, ciphertext, tag []byte, err er
 // nonce and authentication tag. Returns ErrDecryptionFailed if the tag
 // verification fails (indicating tampered data).
 //
-// See whitepaper Section 15.3.3 (payload decryption and CEK unwrapping).
+// See SPEC.md §3 (payload decryption and CEK unwrapping).
 func AESGCMDecrypt(key, nonce, ciphertext, tag []byte) ([]byte, error) {
 	if len(key) != AES256KeySize {
 		return nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidKeySize, AES256KeySize, len(key))
@@ -227,8 +226,7 @@ func AESGCMDecrypt(key, nonce, ciphertext, tag []byte) ([]byte, error) {
 
 // SHA256Hash computes the SHA-256 digest of the input data.
 //
-// See whitepaper Section 15.2.2 (fingerprint computation) and
-// Section 15.3.1 (attachment content hash).
+// See SPEC.md §1 (fingerprint computation) and §3 (attachment content hash).
 func SHA256Hash(data []byte) [SHA256Size]byte {
 	return sha256.Sum256(data)
 }

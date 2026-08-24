@@ -17,7 +17,7 @@ import (
 // the /dmcn/join handshake, keeping each peer's whole verified credential for the life of
 // the connection. Actions over the wire are authorized against the credential's roles and
 // grants. It is the source of truth the re-closed federation gates consult — a pure
-// in-memory check, so there is NO DHT I/O on the hot path.
+// in-memory check, so there is NO network I/O on the hot path.
 //
 // Credentials are kept in two distinct buckets by their trust ROOT, because the root decides
 // what the credential may authorize (the three-layer trust chain):

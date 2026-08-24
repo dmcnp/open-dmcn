@@ -1,7 +1,7 @@
 // Package peerpolicy decides whether a remote libp2p peer is permitted to
-// federate with this node: connect (via the ConnectionGater), enter the DHT
-// routing table, use org-peer discovery, and open relay streams. A single
-// Policy instance is the source of truth for all four gates.
+// federate with this node: connect (via the ConnectionGater), take part in
+// peer discovery, and open relay streams. A single Policy instance is the
+// source of truth for all three gates.
 //
 // This is a leaf package: it imports only the libp2p peer type so that the
 // node, registry, and relay packages can all depend on it without import

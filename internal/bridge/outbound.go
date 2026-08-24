@@ -174,7 +174,7 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 		return nil, fmt.Errorf("bridge: decrypt: %w", err)
 	}
 
-	// 3. Log warning — PRD requirement: bridge must log when decrypting
+	// 3. Log warning — the bridge must log when decrypting
 	// message content for outbound delivery.
 	h.log.Warnf("TRUST DISCLOSURE: decrypting message from %s for outbound SMTP delivery to %s",
 		pt.SenderAddress, pt.RecipientAddress)

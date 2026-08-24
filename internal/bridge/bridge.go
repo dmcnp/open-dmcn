@@ -470,7 +470,7 @@ func makeBridgeDeliver(n *node.Node, senderAddr string, senderKP *identity.Ident
 			return storeLocal(ctx, env) // legacy fallback: recipient fetches from us
 		}
 		// Routing integrity: only route to hints attested by a verified operator routing
-		// credential (RelayHints are unsigned by the owner; the DHT key is SHA256(address)),
+		// credential (RelayHints are unsigned by the owner),
 		// so a forged record can't redirect inbound legacy mail to attacker relays.
 		if err := n.Registry().VerifyRouting(ctx, recipient); err != nil {
 			return fmt.Errorf("recipient routing could not be verified: %w", err)

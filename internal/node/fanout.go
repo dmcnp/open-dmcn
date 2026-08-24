@@ -14,11 +14,11 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/registry"
 	"dmcn.dev/open-dmcn/internal/relay"
-	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 // LoadStaticDNS reads a static _dmcn config file — a JSON object mapping domain →
@@ -56,7 +56,7 @@ func (n *Node) seedOwnRecords(ctx context.Context) {
 		}
 	}
 	// A serving relay also stores its own signed onion descriptor so peers can fetch it via the
-	// fleet relay-descriptor op — the DHT-free discovery path for onion route selection.
+	// fleet relay-descriptor op — the discovery path for onion route selection.
 	if desc := n.buildSignedDescriptor(); desc != nil {
 		if err := n.records.PutRelayDescriptor(ctx, desc); err != nil {
 			n.log.Warnf("seed own relay descriptor failed: %v", err)
@@ -150,7 +150,7 @@ func (n *Node) fleetTargets(ctx context.Context) []string {
 }
 
 // FanOutRecord replicates a marshaled record of the given kind to every reachable fleet node
-// (full replication — the DHT-write replacement). It stores locally first if this node serves
+// (full replication). It stores locally first if this node serves
 // records, then PutRecords to each peer. Returns the number of nodes (incl. self) that accepted.
 // Best-effort: unreachable/rejecting nodes are logged and skipped; an all-fail is an error.
 func (n *Node) FanOutRecord(ctx context.Context, kind dmcnpb.RecordKind, record []byte) (int, error) {

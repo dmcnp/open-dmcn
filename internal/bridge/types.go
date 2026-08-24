@@ -1,7 +1,7 @@
 // Package bridge implements the SMTP-DMCN bridge protocol, allowing
 // legacy email clients to exchange messages with DMCN users.
 //
-// See PRD Section 6 and whitepaper Section 15.6.
+// See SPEC.md §7.
 package bridge
 
 import (

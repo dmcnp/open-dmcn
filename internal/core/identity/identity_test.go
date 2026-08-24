@@ -35,7 +35,7 @@ func TestGenerateIdentityKeyPair(t *testing.T) {
 	}
 }
 
-// PRD Test 1: Round-trip test — GenerateIdentityKeyPair → Sign IdentityRecord → Verify succeeds.
+// Round-trip test — GenerateIdentityKeyPair → Sign IdentityRecord → Verify succeeds.
 func TestIdentityRoundTrip(t *testing.T) {
 	kp, err := GenerateIdentityKeyPair()
 	if err != nil {
@@ -56,7 +56,7 @@ func TestIdentityRoundTrip(t *testing.T) {
 	}
 }
 
-// PRD Test 2: Tamper test — mutating any field of a signed IdentityRecord causes Verify to return an error.
+// Tamper test — mutating any field of a signed IdentityRecord causes Verify to return an error.
 func TestIdentityTamper(t *testing.T) {
 	kp, _ := GenerateIdentityKeyPair()
 	rec, _ := NewIdentityRecord("bob@example.com", kp)
@@ -154,7 +154,8 @@ func TestIssueCredentialPreservesSelfSignature(t *testing.T) {
 	}
 }
 
-// PRD Test 8: Fingerprint test — returns 40-char uppercase hex; different key pairs produce different fingerprints.
+// Fingerprint test — returns 40-char uppercase hex; different key pairs produce
+// different fingerprints.
 func TestFingerprint(t *testing.T) {
 	kp1, _ := GenerateIdentityKeyPair()
 	kp2, _ := GenerateIdentityKeyPair()

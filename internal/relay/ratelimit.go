@@ -9,7 +9,7 @@ import (
 // It tracks per-sender timestamps and rejects requests when the count in
 // the last hour exceeds the configured maximum.
 //
-// See PRD Section 5.2: maximum 100 STORE operations per hour per registered identity.
+// The default is 100 STORE operations per hour per registered identity.
 type RateLimiter struct {
 	maxPerHour int
 	window     time.Duration

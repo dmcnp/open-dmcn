@@ -37,7 +37,7 @@ var (
 )
 
 // DNSAuthVerifier performs real SPF, DKIM, and DMARC verification against DNS.
-// It is the production replacement for StubAuthVerifier (whitepaper §11.3.2).
+// It is the production replacement for StubAuthVerifier (SPEC.md §7).
 //
 // Trust note: the bridge is the only party that runs these checks, at ingest,
 // while the legacy message is in the clear. The signed BridgeClassificationRecord

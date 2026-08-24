@@ -17,8 +17,7 @@ import (
 )
 
 // ErrNotFound is returned when an address has no record on its authoritative fleet. It aliases
-// registry.ErrNotFound so existing callers that check errors.Is(err, registry.ErrNotFound) keep
-// working during the DHT migration.
+// registry.ErrNotFound so callers may check either sentinel with errors.Is.
 var ErrNotFound = registry.ErrNotFound
 
 // resolveDNS resolves a domain's _dmcn TXT record set. A package var so tests can inject fake DNS
@@ -51,8 +50,7 @@ func (n *Node) resolveDomain(ctx context.Context, domain string) (*domainverify.
 }
 
 // Resolve looks up an address's IdentityRecord authoritatively via DNS discovery + the domain's
-// fleet-served signed records, verifying entirely against the domain's DNS fingerprint — with NO
-// DHT. It is the drop-in replacement for registry.Lookup:
+// fleet-served signed records, verifying entirely against the domain's DNS fingerprint:
 //
 //  1. Resolve the mailbox domain's _dmcn TXT → fingerprint (trust anchor) + optional fleet= deferral.
 //  2. Follow the deferral to the fleet domain's _dmcn TXT → seed endpoints (bootstrap, round-robin).
@@ -72,7 +70,7 @@ func (n *Node) Resolve(ctx context.Context, address string) (*identity.IdentityR
 	// _dmcn TXT and no DAR — so the DNS/DAR-anchored path below can't reach them. They are fanned
 	// out to fleet RecordStores at pair-register time and are self-certifying, so resolve them by
 	// pulling straight from a connected fleet peer (self-signature is the only trust). This is the
-	// fleet-era replacement for the DHT's keyed global lookup the pairing flow used to rely on.
+	// the only lookup path available to the pairing flow, which has no domain to resolve against.
 	if pairing.IsEphemeralAddress(address) {
 		return n.resolveEphemeral(ctx, address)
 	}
@@ -140,7 +138,7 @@ func (n *Node) resolveVia(ctx context.Context, seed, address, domain string, mre
 		return nil, fmt.Errorf("parse identity: %w", err)
 	}
 
-	// Companion records for full verification (best-effort; absence ⇒ fail-open like the DHT path).
+	// Companion records for full verification (best-effort; absence ⇒ fail-open).
 	// Only honor a blocklist actually signed by the domain root — otherwise a hostile fleet could
 	// censor a valid credential with a forged blocklist. Same for the removal tombstone, which
 	// VerifyManagedRecord gates on RemovalIsRootSigned.
@@ -155,7 +153,7 @@ func (n *Node) resolveVia(ctx context.Context, seed, address, domain string, mre
 		removal, _ = identity.AddressRemovalRecordFromProtoBytes(rmBytes)
 	}
 
-	// Verify the record against the DAR — pure, DHT-free.
+	// Verify the record against the DAR — pure, no network I/O.
 	if _, err := identity.VerifyManagedRecord(rec, dar, blocks, removal, time.Now()); err != nil {
 		return nil, fmt.Errorf("record verification: %w", err)
 	}
@@ -300,7 +298,7 @@ func (n *Node) dnsDiscover(ctx context.Context, domain string) (*domainverify.Re
 }
 
 // ResolveDAR resolves + verifies a domain's DomainAuthorityRecord authoritatively via its fleet
-// (DNS discovery → dial seed → fetch → anchor), with NO DHT. The DHT-free replacement for
+// (DNS discovery → dial seed → fetch → anchor). The resolving counterpart to
 // registry.LookupDomainAuthority.
 func (n *Node) ResolveDAR(ctx context.Context, domain string) (*identity.DomainAuthorityRecord, error) {
 	mrec, seeds, err := n.dnsDiscover(ctx, domain)
@@ -343,7 +341,7 @@ func (n *Node) ResolveDAR(ctx context.Context, domain string) (*identity.DomainA
 }
 
 // Lookup resolves an address's IdentityRecord, RecordStore-first (a serving node's own authoritative
-// records) then the DNS-seeded fleet resolver — the unified, DHT-free read entry point for the
+// records) then the DNS-seeded fleet resolver — the unified read entry point for the
 // services. Returns ErrNotFound when the address's fleet has no record for it.
 func (n *Node) Lookup(ctx context.Context, address string) (*identity.IdentityRecord, error) {
 	return n.registry.Lookup(ctx, address)
@@ -356,14 +354,14 @@ func (n *Node) LookupDAR(ctx context.Context, domain string) (*identity.DomainAu
 
 // ResolveRelayDescriptor fetches a relay's onion descriptor from the relay's own node via the fleet
 // op (the descriptor is self-anchored — signed by the node's libp2p key, recoverable from the peer
-// ID — so it is verified without trusting the server). No DHT. Returns ErrNotFound when absent.
+// ID — so it is verified without trusting the server). Returns ErrNotFound when absent.
 func (n *Node) ResolveRelayDescriptor(ctx context.Context, peerID string) (*identity.RelayDescriptor, error) {
 	return n.registry.LookupRelayDescriptor(ctx, peerID)
 }
 
 // resolveDescriptorViaFleet fetches a relay descriptor from the local RecordStore (own peer) or the
-// peer's own node, verifying it self-anchored from the peer ID. PURE (no DHT / registry fallback),
-// so it is safe to use as the registry's DHT-free descriptor source. Returns (nil, nil) when absent.
+// peer's own node, verifying it self-anchored from the peer ID. PURE (no registry fallback), so it
+// is safe to use as the registry's descriptor source. Returns (nil, nil) when absent.
 func (n *Node) resolveDescriptorViaFleet(ctx context.Context, peerID string) (*identity.RelayDescriptor, error) {
 	pid, err := peer.Decode(peerID)
 	if err != nil {
@@ -389,7 +387,7 @@ func (n *Node) resolveDescriptorViaFleet(ctx context.Context, peerID string) (*i
 }
 
 // fleetBytes dials the domain's fleet seeds (failover) and runs fetch against the first reachable,
-// returning the raw record bytes (nil ⇒ the fleet reports the record absent). PURE (no DHT).
+// returning the raw record bytes (nil ⇒ the fleet reports the record absent).
 func (n *Node) fleetBytes(ctx context.Context, domain string, fetch func(context.Context, peer.ID) ([]byte, error)) ([]byte, error) {
 	_, seeds, err := n.dnsDiscover(ctx, domain)
 	if err != nil {
@@ -472,7 +470,7 @@ func (n *Node) resolveBlocklistViaFleet(ctx context.Context, domain string) (*id
 	return bl, nil
 }
 
-// recordSource builds the registry's DHT-free record source: every closure reads local-first
+// recordSource builds the registry's record source: every closure reads local-first
 // (RecordStore) then the fleet resolver, and NONE calls back into registry.Lookup* (no recursion).
 func (n *Node) recordSource() *registry.RecordSource {
 	return &registry.RecordSource{
@@ -492,7 +490,7 @@ func (n *Node) recordSource() *registry.RecordSource {
 }
 
 // relayDescriptorSelfValid verifies a descriptor's signature against the key recovered from its
-// peer ID (self-anchored), so a fleet-served descriptor is trusted no more than the DHT one was.
+// peer ID (self-anchored), so the node serving it is untrusted transport, never a trust root.
 func relayDescriptorSelfValid(desc *identity.RelayDescriptor) bool {
 	pid, err := peer.Decode(desc.PeerID)
 	if err != nil {

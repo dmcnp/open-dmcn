@@ -1,5 +1,5 @@
 // Package identity implements the DMCN identity layer data structures
-// and operations defined in whitepaper Section 15.2.
+// and operations defined in SPEC.md §1.
 //
 // An identity consists of an Ed25519 signing key pair and an X25519
 // key exchange pair, bound together in a self-certifying IdentityRecord.
@@ -80,15 +80,15 @@ var (
 )
 
 // VerificationTier represents the level of identity verification.
-// See whitepaper Section 15.2.2.
+// See SPEC.md §1.
 type VerificationTier int
 
 const (
 	TierUnverified VerificationTier = 0 // No verification
 	// 1 is reserved (was TierProviderHosted — removed; provider-hosted address
-	// claiming is not supported; see whitepaper Section 12 for rationale).
-	TierDomainDNS VerificationTier = 2 // Domain DNS verification (Section 12.2.1)
-	TierDANE      VerificationTier = 3 // DANE cryptographic binding (Section 12.2.2)
+	// claiming is not supported).
+	TierDomainDNS VerificationTier = 2 // Domain DNS verification (SPEC.md §1)
+	TierDANE      VerificationTier = 3 // DANE cryptographic binding (reserved)
 )
 
 // String returns a human-readable name for the verification tier.
@@ -108,7 +108,7 @@ func (t VerificationTier) String() string {
 // IdentityKeyPair holds both the Ed25519 signing pair and the X25519 key
 // exchange pair for a single identity, generated together at account creation.
 //
-// See whitepaper Section 15.2.1.
+// See SPEC.md §1.
 type IdentityKeyPair struct {
 	Ed25519Public  ed25519.PublicKey
 	Ed25519Private ed25519.PrivateKey
@@ -121,7 +121,7 @@ type IdentityKeyPair struct {
 // GenerateIdentityKeyPair generates both key pairs in a single call.
 // Private key material is never logged.
 //
-// See whitepaper Section 15.2.1.
+// See SPEC.md §1.
 func GenerateIdentityKeyPair() (*IdentityKeyPair, error) {
 	edPub, edPriv, err := crypto.GenerateEd25519KeyPair()
 	if err != nil {
@@ -152,7 +152,7 @@ func GenerateIdentityKeyPair() (*IdentityKeyPair, error) {
 // It is self-certifying: the SelfSignature field covers all other fields
 // and is produced by the identity's own Ed25519 private key.
 //
-// See whitepaper Section 15.2.2.
+// See SPEC.md §1.
 type IdentityRecord struct {
 	Version          uint32
 	Address          string // local@domain
@@ -230,7 +230,7 @@ func NewIdentityRecord(address string, kp *IdentityKeyPair) (*IdentityRecord, er
 // Sign computes and sets the SelfSignature. The signed byte sequence is
 // the canonical protobuf serialisation of all fields except SelfSignature.
 //
-// See whitepaper Section 15.2.2.
+// See SPEC.md §1.
 func (r *IdentityRecord) Sign(kp *IdentityKeyPair) error {
 	data, err := r.signableBytes()
 	if err != nil {
@@ -249,7 +249,7 @@ func (r *IdentityRecord) Sign(kp *IdentityKeyPair) error {
 // Verify validates the SelfSignature against the record's Ed25519 public key.
 // Returns nil if valid, ErrInvalidSignature if not.
 //
-// See whitepaper Section 15.2.2.
+// See SPEC.md §1.
 func (r *IdentityRecord) Verify() error {
 	data, err := r.signableBytes()
 	if err != nil {
@@ -266,7 +266,7 @@ func (r *IdentityRecord) Verify() error {
 // encoded as a 40-character uppercase hex string.
 //
 // Used for out-of-band identity verification.
-// See whitepaper Section 15.2.1.
+// See SPEC.md §1.
 func (r *IdentityRecord) Fingerprint() string {
 	return fingerprintOf(r.Ed25519Public, r.X25519Public)
 }

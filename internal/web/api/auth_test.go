@@ -13,15 +13,15 @@ import (
 	"github.com/mertenvg/logr/v2"
 	"google.golang.org/protobuf/proto"
 
-	"dmcn.dev/open-dmcn/internal/web/api"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/registry"
+	"dmcn.dev/open-dmcn/internal/web/api"
 	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
-// newTestAuthHandler builds an AuthHandler whose directory is the given DHT
-// record set — the client keeps no user store; the DHT registry IS the directory.
+// newTestAuthHandler builds an AuthHandler whose directory is the given record
+// set — the client keeps no user store; the resolved record IS the directory.
 func newTestAuthHandler(t *testing.T, records map[string]*identity.IdentityRecord) (*api.AuthHandler, *webcore.SessionStore) {
 	t.Helper()
 	ss, _ := webcore.NewSessionStore([]byte("test-session-signing-secret-32by"), time.Hour, "")
@@ -77,7 +77,7 @@ func postLoginVerify(t *testing.T, h *api.AuthHandler, address, nonceB64, sigB64
 	return rr
 }
 
-// The full DHT-verified login round-trip: the address needs only a DHT record —
+// The full login round-trip: the address needs only a published record —
 // no prior import/registration on this client instance (that's the point of
 // dropping the local directory).
 func TestHandleLogin_AndVerify(t *testing.T) {
@@ -91,7 +91,7 @@ func TestHandleLogin_AndVerify(t *testing.T) {
 	var loginResp map[string]string
 	json.NewDecoder(rr.Body).Decode(&loginResp)
 	if loginResp["ed25519_pub"] != base64.StdEncoding.EncodeToString(kp.Ed25519Public) {
-		t.Fatal("login must return the DHT record's public key")
+		t.Fatal("login must return the resolved record's public key")
 	}
 	nonce, err := base64.StdEncoding.DecodeString(loginResp["challenge_nonce"])
 	if err != nil || len(nonce) == 0 {
@@ -119,7 +119,7 @@ func TestHandleLogin_AndVerify(t *testing.T) {
 func TestHandleLogin_UnknownAddress(t *testing.T) {
 	h, _ := newTestAuthHandler(t, map[string]*identity.IdentityRecord{})
 	if rr := loginChallenge(t, h, "ghost@dmcn.me"); rr.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 for an address with no DHT record, got %d", rr.Code)
+		t.Fatalf("expected 404 for an address with no published record, got %d", rr.Code)
 	}
 }
 

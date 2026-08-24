@@ -12,7 +12,7 @@ import (
 )
 
 // TestClientOnlyNode verifies a client-only node: it can register and look up
-// records (DHT client) and use relay client methods against a server, but does
+// records and use relay client methods against a server, but does
 // not serve the relay protocol itself (no server-side handler registered).
 func TestClientOnlyNode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -22,10 +22,10 @@ func TestClientOnlyNode(t *testing.T) {
 	defer server.Close()
 
 	client, err := node.New(ctx, node.Config{
-		ListenAddr:     "/ip4/127.0.0.1/tcp/0",
-		Peers: []string{server.Addrs()[0]},
-		AllowedPeers:   []string{"*"},
-		ClientOnly:     true,
+		ListenAddr:   "/ip4/127.0.0.1/tcp/0",
+		Peers:        []string{server.Addrs()[0]},
+		AllowedPeers: []string{"*"},
+		ClientOnly:   true,
 	})
 	if err != nil {
 		t.Fatalf("create client: %v", err)
@@ -38,9 +38,9 @@ func TestClientOnlyNode(t *testing.T) {
 		t.Fatal("client should connect to server")
 	}
 
-	// DHT client works: the client registers an identity and the server resolves it.
+	// Client lookups work: the client registers an identity and the server resolves it.
 	if err := client.WaitForPeers(ctx, 5*time.Second); err != nil {
-		t.Fatalf("client wait for DHT peers: %v", err)
+		t.Fatalf("client wait for peers: %v", err)
 	}
 	kp, err := identity.GenerateIdentityKeyPair()
 	if err != nil {

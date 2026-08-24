@@ -11,7 +11,7 @@ import (
 
 // TestParityGolden pins the canonical wire encoding of the signed split-message
 // structures. The golden hex was cross-checked to be byte-identical to the
-// frontend's protobufjs encoding (cmd/dmcn-web/web/src/lib/crypto/protobuf.ts),
+// frontend's protobufjs encoding (cmd/dmcnd/web/src/lib/crypto/protobuf.ts),
 // which the header signature and body_hash depend on for Go↔browser interop. If
 // a proto field is renumbered/reordered, this fails — fix both sides together.
 func TestParityGolden(t *testing.T) {

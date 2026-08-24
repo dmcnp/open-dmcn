@@ -11,8 +11,8 @@ import (
 	dsquery "github.com/ipfs/go-datastore/query"
 	"google.golang.org/protobuf/proto"
 
-	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/message"
 )
 
 // Mailbox key layout, all under /mbox. recipientHex is the 64-char hex of the

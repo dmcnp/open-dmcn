@@ -10,9 +10,9 @@ import (
 	leveldbds "github.com/ipfs/go-ds-leveldb"
 	"google.golang.org/protobuf/proto"
 
+	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/message"
-	"dmcn.dev/open-dmcn/dmcnpb"
 )
 
 func openMailboxDS(t *testing.T, dir string) *leveldbds.Datastore {

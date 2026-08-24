@@ -1,4 +1,4 @@
-// Package onion implements DMCN onion routing (whitepaper §15.4): per-hop
+// Package onion implements DMCN onion routing (SPEC.md §6): per-hop
 // layered encryption (SealLayer/OpenLayer), fixed 3-hop packet build/peel
 // (BuildOnion/PeelOnion), and diversity-aware route selection (SelectRoute).
 //
@@ -20,7 +20,7 @@
 //   - Route diversity: distinct peers and (in strict mode) distinct /24 subnets;
 //     an optional pinned guard for the entry hop.
 //
-// # Residual gaps vs whitepaper §18 (not yet implemented)
+// # Residual gaps (not yet implemented)
 //
 //   - Not Sphinx: packets are nested, so they SHRINK hop-to-hop — a global observer
 //     can infer position from the decreasing size. Padding is per-layer bucketing,

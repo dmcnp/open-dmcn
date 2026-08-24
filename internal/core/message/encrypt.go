@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -24,7 +24,7 @@ var (
 var hkdfInfo = []byte("dmcn-cek-wrap-v1")
 
 // sizeClasses defines the payload size class buckets for traffic analysis
-// resistance. See whitepaper Section 15.3.3.
+// resistance. See SPEC.md §3.
 var sizeClasses = []uint32{
 	1024,        // 1 KB
 	4 * 1024,    // 4 KB
@@ -42,7 +42,7 @@ type RecipientInfo struct {
 }
 
 // RecipientRecord holds the wrapped CEK for a single recipient device.
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 type RecipientRecord struct {
 	DeviceID      [16]byte
 	RecipientXPub [32]byte // X25519 public key of recipient device
@@ -53,7 +53,7 @@ type RecipientRecord struct {
 }
 
 // EncryptedEnvelope is the outer transport structure for encrypted messages.
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 type EncryptedEnvelope struct {
 	Version          uint32
 	MessageID        [16]byte
@@ -89,7 +89,7 @@ func (e *EncryptedEnvelope) IsSplit() bool {
 }
 
 // Encrypt produces an EncryptedEnvelope from a SignedMessage using the
-// hybrid KEM pattern described in whitepaper Section 15.3.3.
+// hybrid KEM pattern described in SPEC.md §3.
 //
 // The message is encrypted once with a randomly generated CEK. The CEK
 // is then wrapped individually for each recipient device using X25519
@@ -154,7 +154,7 @@ func Encrypt(msg *SignedMessage, recipients []RecipientInfo) (*EncryptedEnvelope
 // Returns ErrRecipientNotFound if the device's key is not in the recipient list.
 // Returns ErrDecryptionFailed if the ciphertext has been tampered with.
 //
-// See whitepaper Section 15.3.3.
+// See SPEC.md §3.
 func Decrypt(env *EncryptedEnvelope, recipientPrivKey [32]byte, recipientPubKey [32]byte) (*SignedMessage, error) {
 	// Find the matching recipient record
 	var rec *RecipientRecord

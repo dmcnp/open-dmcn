@@ -35,8 +35,8 @@ func TestFederation(t *testing.T) {
 	rootA, darA := mustDomain(t, ctx, nodeA, "a.test")
 	rootB, darB := mustDomain(t, ctx, nodeB, "b.test")
 
-	// Cross-seed static _dmcn so each node can resolve the OTHER domain's fleet (the DHT-free,
-	// DNS-seeded federation anchor: fingerprint + a dialable seed).
+	// Cross-seed static _dmcn so each node can resolve the OTHER domain's fleet (the DNS-seeded
+	// federation anchor: fingerprint + a dialable seed).
 	crossDNS := map[string]domainverify.Record{
 		"a.test": {Fingerprint: darA.Fingerprint(), Seeds: []string{seedAddr(nodeA)}},
 		"b.test": {Fingerprint: darB.Fingerprint(), Seeds: []string{seedAddr(nodeB)}},

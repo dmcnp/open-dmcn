@@ -11,7 +11,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 )
 
-// DefaultHops is the fixed onion route length (see whitepaper §15.4): entry knows
+// DefaultHops is the fixed onion route length (see SPEC.md §6): entry knows
 // the sender, exit knows the destination, the middle keeps them non-adjacent.
 const DefaultHops = 3
 
@@ -97,7 +97,7 @@ func SelectRoute(candidates []identity.RelayDescriptor, exitPeerID string, opts 
 		// Diversity (skipped in Relaxed mode for small/single-operator clusters):
 		// distinct /24 subnets AND distinct domains, so no two hops share an
 		// operator — the property that keeps the middle hop from colluding with
-		// either end (whitepaper §15.4.4 operator diversity; domain = operator).
+		// either end (operator diversity; domain = operator).
 		if !opts.Relaxed {
 			if usedSubnets[subnetOf(c)] {
 				continue

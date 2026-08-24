@@ -22,9 +22,9 @@ const (
 )
 
 // VerificationTier represents the level of identity verification.
-// See whitepaper Section 15.2.2.
+// See SPEC.md §1.
 // Only DOMAIN_DNS and DANE are valid for registered addresses; provider-hosted
-// address claiming is not supported (see Section 12 for rationale).
+// address claiming is not supported.
 type VerificationTier int32
 
 const (
@@ -75,7 +75,6 @@ func (VerificationTier) EnumDescriptor() ([]byte, []int) {
 }
 
 // AttestationType represents the method of attestation.
-// See whitepaper Section 15.2.3.
 type AttestationType int32
 
 const (
@@ -132,7 +131,6 @@ func (AttestationType) EnumDescriptor() ([]byte, []int) {
 }
 
 // AttestationRecord represents a web-of-trust attestation.
-// See whitepaper Section 15.2.3.
 type AttestationRecord struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	AttesterAddress string                 `protobuf:"bytes,1,opt,name=attester_address,json=attesterAddress,proto3" json:"attester_address,omitempty"`
@@ -234,7 +232,7 @@ func (x *AttestationRecord) GetSignature() []byte {
 }
 
 // IdentityRecord is a self-certifying identity binding.
-// See whitepaper Section 15.2.2.
+// See SPEC.md §1.
 type IdentityRecord struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Version          uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -261,7 +259,7 @@ type IdentityRecord struct {
 	//
 	// Deprecated: Marked as deprecated in identity.proto.
 	BridgeCapability bool `protobuf:"varint,19,opt,name=bridge_capability,json=bridgeCapability,proto3" json:"bridge_capability,omitempty"`
-	// Domain Authority countersignature (whitepaper Section 13.2). Present when a
+	// Domain Authority countersignature (SPEC.md §2). Present when a
 	// domain authority — directly, or via a delegated sub-authority — vouches for
 	// this address↔keys binding. Excluded from the self-signature: the authority
 	// signs after the user self-signs.
@@ -270,7 +268,7 @@ type IdentityRecord struct {
 	DomainCountersignerPubkey []byte `protobuf:"bytes,22,opt,name=domain_countersigner_pubkey,json=domainCountersignerPubkey,proto3" json:"domain_countersigner_pubkey,omitempty"` // 32 bytes Ed25519 of the root or sub-authority signer
 	// require_onion: the mailbox owner requires inbound mail to arrive via onion
 	// routing (senders use onion; the recipient's relay rejects direct STOREs).
-	// Covered by the self-signature. See whitepaper Section 15.4.
+	// Covered by the self-signature. See SPEC.md §6.
 	RequireOnion bool `protobuf:"varint,23,opt,name=require_onion,json=requireOnion,proto3" json:"require_onion,omitempty"`
 	// address_credential (Credential PKI): the domain's attestation of this address↔key
 	// binding (role "address"), replacing the domain_countersignature fields. The user
@@ -467,7 +465,7 @@ func (x *IdentityRecord) GetOperatorCredentials() []*Credential {
 
 // AuthorityKey is one entry in a domain root authority's key timeline.
 // effective_from-only: a key is effective from effective_from until the next
-// key's effective_from; the latest key is open-ended (whitepaper Section 13.1).
+// key's effective_from; the latest key is open-ended (SPEC.md §2).
 type AuthorityKey struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Ed25519PublicKey []byte                 `protobuf:"bytes,1,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"` // 32 bytes
@@ -537,7 +535,7 @@ func (x *AuthorityKey) GetRotationReason() uint32 {
 }
 
 // SubAuthority is a key the domain root delegates countersigning to
-// (whitepaper Section 13.6). Covered by the DAR self-signature. Retired by
+// (SPEC.md §2). Covered by the DAR self-signature. Retired by
 // setting effective_until; the entry is kept so earlier countersigs stay valid.
 type SubAuthority struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -638,7 +636,7 @@ type DomainAuthorityRecord struct {
 	// Local-parts (case-insensitive) that may NOT be self-service registered on this domain —
 	// seeded with a default set at genesis, then fully owner-customizable. A reserved address
 	// requires the domain authority's countersignature to become usable. Covered by the DAR
-	// self-signature. See whitepaper Section 13.
+	// self-signature. See SPEC.md §2.
 	ReservedLocalParts []string `protobuf:"bytes,13,rep,name=reserved_local_parts,json=reservedLocalParts,proto3" json:"reserved_local_parts,omitempty"`
 	// fleet_domain: the fleet domain this mailbox domain defers hosting to (email's MX
 	// delegation). Empty ⇒ the domain hosts its own nodes. This is the SIGNED mirror of the
@@ -843,9 +841,9 @@ func (x *FleetNode) GetRoles() []string {
 
 // FleetRoster is the fleet OWNER's root-signed, monotonic-revision list of the nodes
 // that serve the fleet, anchored to the fleet domain's DNS fingerprint (its own DAR root
-// key). It is the availability/discovery layer that replaces the DHT's provider records:
-// a reader bootstraps from a few DNS "seed=" endpoints, fetches this roster from any of
-// them, and learns the full authoritative node set (so discovery is not single-pinned).
+// key). It is the availability/discovery layer: a reader bootstraps from a few DNS
+// "seed=" endpoints, fetches this roster from any of them, and learns the full
+// authoritative node set (so discovery is not single-pinned).
 // The roster's signature only vouches for "these nodes serve this fleet" — identity
 // records and DARs remain trust-anchored to each mailbox domain, so a lying roster is an
 // availability concern, never a forgery vector.
@@ -1291,7 +1289,7 @@ func (x *CredentialBundle) GetDar() *DomainAuthorityRecord {
 
 // JoinRequest / JoinResponse carry the /dmcn/join handshake (Credential PKI). Each side
 // presents its Credential plus the DAR that anchors it, so the peer can verify against a
-// direct DNS resolution without a DHT lookup (works at cold-start / for foreign domains). A
+// direct DNS resolution (works at cold-start / for foreign domains). A
 // peer credentialed in SEVERAL domains (hosted multi-tenant) presents one bundle per domain in
 // `bundles`; the singular credential/dar remain for single-domain peers (the primary bundle).
 type JoinRequest struct {
@@ -1431,7 +1429,7 @@ func (x *JoinResponse) GetBundles() []*CredentialBundle {
 }
 
 // RemovedBinding tombstones a specific prior (address, user key) binding so the
-// address can be re-bound to a new key. See whitepaper Section 13.3.
+// address can be re-bound to a new key. See SPEC.md §2.
 type RemovedBinding struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Ed25519PublicKey []byte                 `protobuf:"bytes,1,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"` // 32 bytes — the offboarded user identity key
@@ -1649,7 +1647,7 @@ func (x *CompromisedKey) GetRetentionUntil() int64 {
 // encrypt onion layers to it. Resolved from the node itself (GetRelayDescriptor)
 // and signed by the node's libp2p identity key — which is recoverable from the
 // peer ID itself, so the descriptor is self-anchoring (no external trust needed
-// to bind the X25519 onion key to the peer). See whitepaper Section 15.4.
+// to bind the X25519 onion key to the peer). See SPEC.md §6.
 type RelayDescriptor struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	PeerId          string                 `protobuf:"bytes,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
@@ -1785,7 +1783,7 @@ func (x *RelayDescriptor) GetCredential() *Credential {
 
 // KeyCompromiseRecord is the root-signed, append-only list of compromised
 // countersigning keys for a domain, served by the domain's fleet. Only the
-// domain root can publish one. See whitepaper Section 13 (key compromise).
+// domain root can publish one. See SPEC.md §2 (key compromise).
 type KeyCompromiseRecord struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Version         uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`

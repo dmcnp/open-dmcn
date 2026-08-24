@@ -23,7 +23,7 @@ type CredentialBlock struct {
 	CreatedAt        time.Time
 }
 
-// CredentialBlockList is a domain's root-signed blocklist (a separate DHT record so the
+// CredentialBlockList is a domain's root-signed blocklist (a separate record so the
 // DAR doesn't churn on every block).
 type CredentialBlockList struct {
 	Domain    string

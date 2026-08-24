@@ -33,7 +33,7 @@ import (
 // STORE/FETCH, and the web client syncs its mailbox over plain REST polling — no
 // push/presence/subscribe semantics are needed, so a separate /dmcn/client
 // protocol was evaluated and intentionally not added. A client just runs
-// node-side in ClientOnly mode (DHT client + no relay server handlers).
+// node-side in ClientOnly mode (no relay server handlers).
 const (
 	// ProtocolID is the libp2p protocol identifier for the relay service.
 	ProtocolID = protocol.ID("/dmcn/relay/1.0.0")
@@ -73,7 +73,7 @@ var (
 )
 
 // LookupFunc looks up an identity in the registry by address.
-// This abstraction allows testing without a full DHT.
+// This abstraction allows testing without a live fleet.
 type LookupFunc func(ctx context.Context, address string) (*identity.IdentityRecord, error)
 
 // FetchPolicyFunc reports whether an address is allowed to read its mailbox under
@@ -140,9 +140,9 @@ type Relay struct {
 
 	// records is the node's local authoritative copy of the self-authenticating records it
 	// serves for the domains it hosts (identity records, DARs, address-removal tombstones,
-	// credential blocklists, its fleet roster). It backs the fleet-resolution ops that replace
-	// the DHT: a reader bootstraps from DNS seeds, fetches these here, and verifies each against
-	// the domain's DNS fingerprint. nil ⇒ this node serves no records (a pure client / relay).
+	// credential blocklists, its fleet roster). It backs the fleet-resolution ops: a reader
+	// bootstraps from DNS seeds, fetches these here, and verifies each against the domain's DNS
+	// fingerprint. nil ⇒ this node serves no records (a pure client / relay).
 	records *RecordStore
 
 	log        logr.Logger
@@ -153,7 +153,7 @@ type Relay struct {
 	peerRole   func(peer.ID, string) bool // optional; reports whether an admitted peer holds a credential role (handoff-inject gating: the fleet 'node' role)
 	peerGrant  func(peer.ID, string) bool // optional; reports whether an admitted peer holds a FLEET grant (operator op gating: routing/admin), chaining to the config operator root
 
-	// Onion forwarding (whitepaper §15.4). When onionEnabled, the relay peels and
+	// Onion forwarding (SPEC.md §6). When onionEnabled, the relay peels and
 	// forwards/delivers OnionForward packets with onionPriv. onionSeen dedups
 	// recently-forwarded packets by hash.
 	onionEnabled bool
@@ -163,9 +163,9 @@ type Relay struct {
 
 	// onionRequired caches, per hosted mailbox (keyed by recipient X25519 hex),
 	// whether that mailbox demands onion-routed delivery. Learned at FETCH time
-	// from the recipient's own (authentic, DHT-signed) IdentityRecord. Used to
+	// from the recipient's own (authentic, self-signed) IdentityRecord. Used to
 	// reject a direct STORE to an onion-required mailbox (server-side enforcement;
-	// see whitepaper §15.4). isRelayPeer distinguishes an onion arrival that came
+	// see SPEC.md §6). isRelayPeer distinguishes an onion arrival that came
 	// through the mesh (predecessor is a relay) from a 1-hop self-delivery
 	// (predecessor is a client) — nil ⇒ trust the onion path (lenient).
 	onionRequired sync.Map // string(x25519 hex) -> bool
@@ -332,7 +332,7 @@ func WithReplicatePolicy(check func(context.Context, string) bool) Option {
 
 // WithRecordStore installs the node's local authoritative record store, enabling the
 // fleet-resolution ops (get identity/DAR/roster/removal/blocklist) that serve self-authenticating
-// records over libp2p without the DHT. nil (default) ⇒ the node answers those ops as "not found".
+// records over libp2p. nil (default) ⇒ the node answers those ops as "not found".
 func WithRecordStore(rs *RecordStore) Option {
 	return func(o *relayOptions) {
 		o.records = rs
@@ -350,7 +350,7 @@ func WithFetchPolicy(check FetchPolicyFunc) Option {
 // StoreVouchExemptFunc reports whether an envelope from an un-vouched sender may
 // be stored anyway. The one intended exemption is the countersign-request
 // bootstrap: a pending sender petitioning its OWN domain's countersign inbox
-// (whitepaper §13, PolicyAllowRequests) — without it, a sender that needs the
+// (SPEC.md §2, PolicyAllowRequests) — without it, a sender that needs the
 // domain's vouch could never ask for it.
 type StoreVouchExemptFunc func(ctx context.Context, senderRec *identity.IdentityRecord, env *message.EncryptedEnvelope) bool
 
@@ -879,7 +879,7 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 		return
 	}
 
-	// Learn this mailbox's onion-delivery policy from its authentic (DHT-signed)
+	// Learn this mailbox's onion-delivery policy from its authentic (self-signed)
 	// record — the binding of X25519 key ⇒ RequireOnion is from the record, not the
 	// (as-yet-unauthenticated) requester, so caching it here is safe. Effective
 	// policy is the mailbox flag OR the domain DAR policy. Used to reject direct

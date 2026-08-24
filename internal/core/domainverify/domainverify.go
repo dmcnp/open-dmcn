@@ -1,6 +1,6 @@
 // Package domainverify implements DOMAIN_DNS domain-control verification for
-// DMCN identities (whitepaper Section 12.2.1) and the DNS-seeded discovery layer
-// that replaces the DHT as the registry's bootstrap root. A domain proves control
+// DMCN identities (SPEC.md §1) and the DNS-seeded discovery layer
+// that is the registry's bootstrap root. A domain proves control
 // by publishing a TXT record at _dmcn.<domain> carrying the fingerprint of its
 // root authority key, optionally a fleet deferral pointer, and (for a fleet
 // domain) the bootstrap seed endpoints:

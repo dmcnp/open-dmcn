@@ -61,7 +61,7 @@ func TestInboundAllowsUnderHopLimit(t *testing.T) {
 func TestInboundSuppressesBounceForNullSender(t *testing.T) {
 	store := &capturingStore{}
 	lookup := func(context.Context, string) (*identity.IdentityRecord, error) {
-		return nil, errors.New("not in DHT")
+		return nil, errors.New("no record for that address")
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
@@ -80,7 +80,7 @@ func TestInboundSuppressesBounceForNullSender(t *testing.T) {
 func TestInboundSuppressesBounceForAutoSubmitted(t *testing.T) {
 	store := &capturingStore{}
 	lookup := func(context.Context, string) (*identity.IdentityRecord, error) {
-		return nil, errors.New("not in DHT")
+		return nil, errors.New("no record for that address")
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
@@ -99,7 +99,7 @@ func TestInboundSuppressesBounceForAutoSubmitted(t *testing.T) {
 func TestInboundStillRejectsNormalUndeliverable(t *testing.T) {
 	store := &capturingStore{}
 	lookup := func(context.Context, string) (*identity.IdentityRecord, error) {
-		return nil, errors.New("not in DHT")
+		return nil, errors.New("no record for that address")
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
