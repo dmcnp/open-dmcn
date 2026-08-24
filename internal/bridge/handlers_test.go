@@ -550,9 +550,9 @@ func TestFailureNoticeIsReadableWithoutTheAttachment(t *testing.T) {
 // From line is meaningless to a reader. MAILER-DAEMON is what mail users have recognised as "the
 // system, not a person" for decades, and it is a reserved local-part so nobody can register it.
 func TestFailureNoticeComesFromMailerDaemon(t *testing.T) {
-	got := bridge.MailerDaemonAddressForTest("merten.vg")
-	if got != "mailer-daemon@merten.vg" {
-		t.Errorf("notice sender = %q, want mailer-daemon@merten.vg", got)
+	got := bridge.MailerDaemonAddressForTest("mesh.example")
+	if got != "mailer-daemon@mesh.example" {
+		t.Errorf("notice sender = %q, want mailer-daemon@mesh.example", got)
 	}
 	if strings.HasPrefix(got, "12D3Koo") {
 		t.Error("the notice is addressed from a peer ID")

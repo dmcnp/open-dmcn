@@ -492,10 +492,10 @@ receiving MX has an AAAA record — mail really does leave over v6, and an <code
 fails for exactly those messages. Intermittently, since it depends on the receiver. Every address
 you send from also needs its own PTR.</p>
 <p>It prints the full set:</p>
-<pre><code>  merten.vg.                  IN MX   10 mail.merten.vg.
-  merten.vg.                  IN TXT  &quot;v=spf1 ip4:203.0.113.7 ip6:2001:db8::7 -all&quot;
-  dmcn._domainkey.merten.vg.  IN TXT  &quot;v=DKIM1; k=rsa; p=MIIBIjANBg…&quot;
-  _dmarc.merten.vg.           IN TXT  &quot;v=DMARC1; p=quarantine; …&quot;
+<pre><code>  mesh.example.                  IN MX   10 mail.mesh.example.
+  mesh.example.                  IN TXT  &quot;v=spf1 ip4:203.0.113.7 ip6:2001:db8::7 -all&quot;
+  dmcn._domainkey.mesh.example.  IN TXT  &quot;v=DKIM1; k=rsa; p=MIIBIjANBg…&quot;
+  _dmarc.mesh.example.           IN TXT  &quot;v=DMARC1; p=quarantine; …&quot;
   ; plus the PTR requirement, which is set at your provider, not in this zone
 </code></pre>
 <p>Then:</p>

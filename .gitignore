@@ -12,5 +12,15 @@ cmd/dmcnd/web/node_modules/
 # needs it at `go build` time, so a fresh clone builds the daemon without Node.
 # Regenerate it with `make build-web`.
 
+# Runtime state. DMCND_DATA_DIR defaults to ./data, so running the daemon from a
+# checkout writes the node's libp2p key, its relay/filter X25519 keys, and — in dev
+# mode — the domain ROOT keystore into the working tree. None of that may ever be
+# committed.
+/data/
+*.enc
+*keystore*.json
+*.pem
+*.p12
+
 # OS / editor cruft
 .DS_Store

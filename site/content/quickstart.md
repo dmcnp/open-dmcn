@@ -369,10 +369,10 @@ you send from also needs its own PTR.
 It prints the full set:
 
 ```
-  merten.vg.                  IN MX   10 mail.merten.vg.
-  merten.vg.                  IN TXT  "v=spf1 ip4:203.0.113.7 ip6:2001:db8::7 -all"
-  dmcn._domainkey.merten.vg.  IN TXT  "v=DKIM1; k=rsa; p=MIIBIjANBg…"
-  _dmarc.merten.vg.           IN TXT  "v=DMARC1; p=quarantine; …"
+  mesh.example.                  IN MX   10 mail.mesh.example.
+  mesh.example.                  IN TXT  "v=spf1 ip4:203.0.113.7 ip6:2001:db8::7 -all"
+  dmcn._domainkey.mesh.example.  IN TXT  "v=DKIM1; k=rsa; p=MIIBIjANBg…"
+  _dmarc.mesh.example.           IN TXT  "v=DMARC1; p=quarantine; …"
   ; plus the PTR requirement, which is set at your provider, not in this zone
 ```
 

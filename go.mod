@@ -107,3 +107,14 @@ require (
 	golang.org/x/tools v0.36.0 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
+
+// v0.1.0 predates this module's move to its current import path: its go.mod still
+// declares the previous one, so resolving it here fails with a module-path mismatch.
+// It is listed but cannot be used.
+retract v0.1.0
+
+// v0.2.0 was published from a tree that still carried extension-plane code
+// (operator entitlement surfaces) which is not part of the DMCN core protocol and
+// does not belong in this module. It was removed in v0.3.0. Nothing depends on
+// v0.2.0; use v0.3.0 or later.
+retract v0.2.0
