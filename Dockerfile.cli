@@ -15,7 +15,11 @@
 # nothing installed system-wide, a filesystem view limited to what you mount, and a pinnable
 # version — not protection from the program itself.
 
-FROM golang:1.25-alpine AS build
+# Pinned to the BUILD platform, not the target: the compiler runs natively on the runner and
+# cross-compiles, instead of the whole toolchain running under QEMU for every extra architecture.
+# Free here because CGO is off, and the difference is minutes per architecture. It also means the
+# module download below is shared across targets rather than repeated per platform.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -24,7 +28,10 @@ RUN go mod download
 COPY . .
 
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/dmcndcli ./cmd/dmcndcli
+# See the daemon image: cross-compile from the runner's architecture rather than emulate.
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/dmcndcli ./cmd/dmcndcli
 
 # Alpine rather than distroless, deliberately, and the opposite call from the daemon image.
 #
@@ -38,9 +45,14 @@ LABEL org.opencontainers.image.source="https://github.com/dmcnp/open-dmcn"
 LABEL org.opencontainers.image.description="dmcndcli — operator CLI for a dmcnd domain. Holds the domain root key; run it on your admin machine, never on the node."
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
-# ca-certificates is not optional: the petition commands talk to the daemon over HTTPS, and
-# without the CA roots every one of them fails with a certificate error.
-RUN apk add --no-cache ca-certificates
+# The CA bundle is copied from the build stage rather than installed with `apk add`, which
+# would be the obvious way to get it. An apk install RUNS on the target architecture, and that
+# is the one thing that would drag QEMU back in for arm64 — this stage otherwise only copies
+# files, so nothing here ever executes target code.
+#
+# Not optional, however it arrives: the petition commands talk to the daemon over HTTPS, and
+# without the roots every one of them fails with a certificate error.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 COPY --from=build /out/dmcndcli /usr/local/bin/dmcndcli
 

@@ -58,9 +58,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # arm64 is built under emulation. It is slower than a native runner but keeps the
-      # whole release in one job, and the build is a single static Go binary.
-      - uses: docker/setup-qemu-action@v3
+      # No QEMU. Both Dockerfiles pin their build stage to $BUILDPLATFORM and cross-compile with
+      # GOOS/GOARCH, and neither runs anything on a target-platform stage — so arm64 is produced
+      # by the amd64 runner's own toolchain rather than by emulating one.
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3

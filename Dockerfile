@@ -7,7 +7,11 @@
 # embedded with //go:embed, so there is no Node stage and no build-time network access beyond
 # the Go module proxy.
 
-FROM golang:1.25-alpine AS build
+# Pinned to the BUILD platform, not the target: the compiler runs natively on the runner and
+# cross-compiles, instead of the whole toolchain running under QEMU for every extra architecture.
+# Free here because CGO is off, and the difference is minutes per architecture. It also means the
+# module download below is shared across targets rather than repeated per platform.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 WORKDIR /src
 
 # Modules first: a source-only change then reuses this layer instead of re-resolving the
@@ -20,7 +24,11 @@ COPY . .
 # The build context carries no .git (see .dockerignore), so `git describe` cannot run here.
 # CI passes the tag in; a local build without it is honestly labelled "dev".
 ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/dmcnd ./cmd/dmcnd
+# TARGETOS/TARGETARCH are supplied per target platform by BuildKit; they are what turn this into
+# a cross-compile rather than a native build of whatever the runner happens to be.
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/dmcnd ./cmd/dmcnd
 
 # Stage the data directory here so it can be copied in with the right ownership. It cannot be
 # created in the final image: distroless has no shell, so there is no entrypoint script to do
