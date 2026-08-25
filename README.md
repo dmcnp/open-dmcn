@@ -40,6 +40,97 @@ What it is:
   `DMCND_BRIDGE_DELIVERY_MODE=smtp`, so a fresh install never sends live mail;
 - **onion routing** — inherited transport, inert until the mesh has ≥3 relays.
 
+### What it looks like
+
+![The dmcnd inbox](.github/screenshots/inbox.png)
+
+A verified sender is one whose identity record the client resolved and checked itself — not a
+provider's opinion about them, and not something the server can assert on their behalf.
+
+![An unknown sender, held back pending a trust decision](.github/screenshots/unknown-sender.png)
+
+The distinction ordinary email cannot draw. This message is cryptographically genuine — signed
+by the key that owns that address, untampered in transit — and that is *still* not a reason to
+trust it, because you have never confirmed who holds the key. So the contents wait for you to
+decide. Accepting the sender reveals the message and marks them trusted from then on.
+
+![A mailbox petition showing its 12-digit code](.github/screenshots/petition-code.png)
+
+On a live domain there is no sign-up form, because there is no key on the server that could
+create an address. The browser makes the keys and shows a code; you read it to the admin, who
+picks the address and signs it with a root key kept off the machine entirely.
+
+
+### Run it with Docker
+
+The fastest look, with nothing installed and nothing persisted:
+
+```bash
+docker run --rm -p 8080:8080 -e DMCND_DEV=true ghcr.io/dmcnp/open-dmcn
+# → http://localhost:8080 — register an address and send yourself mail.
+```
+
+For a real domain, `compose.yaml` in this repo is the starting point:
+
+```bash
+curl -O https://raw.githubusercontent.com/dmcnp/open-dmcn/main/compose.yaml
+# edit DMCND_DOMAIN, then
+docker compose up -d
+```
+
+The image is a distroless static build — one binary, no shell, no package manager — running
+as an unprivileged user (uid 65532), built for `linux/amd64` and `linux/arm64`. Tags track
+releases (`:latest`, `:0.13`, `:0.13.4`).
+
+Because it does not run as root, binding 443 or 25 needs
+`net.ipv4.ip_unprivileged_port_start=0` — a per-container sysctl that changes nothing on the
+host, and which `compose.yaml` sets for you. The dev command above needs none of it: it
+serves on 8080 and keeps its state inside the container.
+
+State lives in a named volume, which Docker seeds from the image with the right ownership, so
+there is nothing to chown. The only bind mounts are read-only, for the two files you supply
+if you run the bridge — the DKIM key and the bridge credential — which do need to be readable
+by uid 65532.
+
+It deliberately does **not** contain `dmcndcli`. That tool holds your domain root key, and
+the live-domain design exists precisely so the root never sits on the node; install it on
+the machine you administer from. The one operator command the node itself needs,
+`dmcnd peer-id`, is built into the daemon.
+
+On a live domain the container will start, report that it has no authority record, and wait
+— serving nothing until you publish one from your admin machine. That is intended; the
+startup log prints the exact command.
+
+### The operator CLI as a container
+
+`dmcndcli` is packaged separately, so administering a domain needs no Go toolchain and puts no
+binary on your machine:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/work" --user "$(id -u):$(id -g)" \
+  ghcr.io/dmcnp/open-dmcn-cli domain init --domain mesh.example \
+    --seed /ip4/203.0.113.7/tcp/7400/p2p/<peer-id>
+```
+
+The command is the native one with a `docker run` prefix, so nothing about the ceremony changes.
+`--user` makes `root.enc` and friends belong to you rather than to root; `/work` is the working
+directory, so everything it produces lands in the directory you ran it from.
+
+Unlike the daemon image this one has a shell, because it is short-lived and yours: `--entrypoint
+sh` when you would rather sit in the container and look at what the ceremony wrote.
+
+**Run it on your admin machine, not on the node.** It mints and holds the domain root key, and
+the whole point of the live-domain design is that the key never sits on the internet-facing
+host. A container does not change that — the same host means the same disk. If `dmcnd` is on a
+VPS, this belongs on your laptop, reaching the node over the network with `--peers` (libp2p)
+and `--url` (HTTPS).
+
+And to be clear about what it is not: since the keystore has to be mounted in for the tool to
+be useful, this is **not** a sandbox that protects the key from the program. It buys you no
+toolchain, nothing installed system-wide, a filesystem view limited to what you mount, and a
+version you can pin.
+
 ### Build & run
 
 The quickest way in — no clone, no Node, because the SPA is embedded in the binary:
@@ -65,6 +156,10 @@ make build                 # builds the embedded SPA (needs Node 20+) then bin/d
 # or, since cmd/dmcnd/web/dist is committed:
 go build -o bin/dmcnd ./cmd/dmcnd
 ```
+
+Prebuilt archives for Linux, macOS and Windows (amd64 and arm64) are attached to each
+[release](https://github.com/dmcnp/open-dmcn/releases); `make build-release` produces the
+same set locally.
 
 `web/dist` is committed on purpose: it makes `go build ./...` work from a clean clone
 without Node, and it is what lets `go install` produce a working daemon (the module zip

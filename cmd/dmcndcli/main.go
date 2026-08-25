@@ -14,6 +14,8 @@
 //	bridge issue     sign the credential that lets a node act as an SMTP bridge for the domain
 //	bridge dkim-keygen
 //	                 mint the outbound DKIM key and print the DNS records to publish
+//	bridge verify-audit
+//	                 re-check a copied audit log against the bridge's peer ID
 //	remove-address   root-sign a tombstone freeing an address, so it can be bound to a new key
 //	peer-id          print the libp2p peer ID for an identity key
 //
@@ -97,7 +99,7 @@ Usage:
         Give a petitioned key an address, signed with the offline root. The petitioner does not
         choose their address — you do. Their browser picks it up by itself.
 
-  dmcndcli bridge issue --domain <domain> --peer <peerID> [--out bridge.cred]
+  dmcndcli bridge issue --domain <domain> --peer-id <peerID> [--out bridge.cred]
         Sign the credential that lets a node act as an SMTP bridge for the domain. A bridge has
         no email address — recipients trust its SPF/DKIM/DMARC verdicts through this credential.
         Needs only the peer ID, so it runs offline: an Ed25519 peer ID contains its public key.
@@ -106,6 +108,12 @@ Usage:
         Generate the DKIM signing key for outbound mail and print the SPF/DKIM/DMARC records to
         publish. Without DKIM, mail from a new host is filtered almost everywhere — and a key
         whose record is not published is worse still, since a failing signature beats none.
+
+  dmcndcli bridge verify-audit --log <file> [--peer-id <peerID>]
+        Re-verify a bridge audit log copied off the node: sequence numbers contiguous, every
+        record linked to the previous hash, every signature made by the bridge's key. The key
+        comes from the peer ID — which is public, and in your _dmcn record — never from the log
+        itself. Without --peer-id only the chain is checked, which a wholesale rewrite would pass.
 
   dmcndcli remove-address --address <local@domain> --peers <multiaddr>[,...] [--pubkey <hex>] [--yes]
         Root-sign and publish a tombstone for an address's current key, freeing the address to be
@@ -150,15 +158,17 @@ func dispatchDomain(args []string) error {
 // dispatchBridge routes the bridge sub-commands.
 func dispatchBridge(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("bridge needs a sub-command: issue, dkim-keygen")
+		return fmt.Errorf("bridge needs a sub-command: issue, dkim-keygen, verify-audit")
 	}
 	switch args[0] {
 	case "issue":
 		return cmdBridgeIssue(args[1:])
 	case "dkim-keygen":
 		return cmdDKIMKeygen(args[1:])
+	case "verify-audit":
+		return cmdBridgeVerifyAudit(args[1:])
 	default:
-		return fmt.Errorf("unknown bridge sub-command %q (want issue or dkim-keygen)", args[0])
+		return fmt.Errorf("unknown bridge sub-command %q (want issue, dkim-keygen or verify-audit)", args[0])
 	}
 }
 

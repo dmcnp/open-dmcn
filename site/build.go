@@ -188,6 +188,9 @@ func expand(cfg SiteConfig, s string) string {
 		"{{branch}}", cfg.Branch,
 		"{{module}}", cfg.ModulePath,
 		"{{module-docs}}", "https://pkg.go.dev/"+cfg.ModulePath,
+		// Derived from the repo URL for the same reason as the rest: the container image
+		// is published to GHCR under the repository path, so a move carries it along.
+		"{{image}}", "ghcr.io/"+strings.TrimPrefix(cfg.RepoURL, "https://github.com/"),
 	).Replace(s)
 }
 

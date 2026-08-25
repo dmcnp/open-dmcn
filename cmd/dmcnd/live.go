@@ -151,7 +151,7 @@ func bridgeCredential(n *node.Node, rootKP *identity.IdentityKeyPair, cfg config
 		return nil, fmt.Errorf("no bridge credential: set DMCND_BRIDGE_CREDENTIAL.\n"+
 			"  A bridge is trusted through a credential signed by the domain root, not through a\n"+
 			"  mailbox. On the machine holding the root:\n"+
-			"      dmcndcli bridge issue --domain %s --peer %s --keystore root.enc --out bridge.cred\n"+
+			"      dmcndcli bridge issue --domain %s --peer-id %s --keystore root.enc --out bridge.cred\n"+
 			"  then copy bridge.cred here (it holds no private key) and point DMCND_BRIDGE_CREDENTIAL at it.",
 			cfg.domain, n.PeerID())
 	}

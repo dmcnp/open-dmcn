@@ -1,0 +1,130 @@
+# dmcnd — one domain, one process.
+#
+#   docker compose up -d
+#
+# Two things to know before the first start, because both surprise people:
+#
+#  1. On a live domain the daemon will NOT serve until it has been handed a signed domain
+#     authority record. That record is signed on a DIFFERENT machine, with a root key that
+#     never touches this host — which is the point. The daemon logs the exact
+#     `dmcndcli domain publish …` command to run, and starts serving within seconds of
+#     receiving it. See "Point a real domain at it" in the quickstart.
+#
+#  2. Port 7400 is the port you publish in your `_dmcn` DNS `seed=` record. It has to be
+#     reachable from other domains, and it must not change afterwards.
+#
+#  3. Everything the daemon creates lives in the `dmcnd-data` volume, which outlives the
+#     container. Removing the container does not touch it; `docker compose down -v` does,
+#     and that discards your node's identity key. Back it up like any other volume:
+#
+#       docker run --rm -v dmcnd-data:/data -v "$PWD:/out" alpine \
+#         tar czf /out/dmcnd-data.tgz -C /data .
+#
+# Just want to look at it first? No compose file needed, and nothing is persisted:
+#
+#   docker run --rm -p 8080:8080 -e DMCND_DEV=true ghcr.io/dmcnp/open-dmcn
+#
+# then open http://localhost:8080 — register an address and send yourself mail.
+
+name: dmcnd
+
+services:
+  dmcnd:
+    image: ghcr.io/dmcnp/open-dmcn:latest
+    container_name: dmcnd
+    restart: unless-stopped
+
+    environment:
+      # Addresses become user@mesh.example.
+      DMCND_DOMAIN: mesh.example
+
+      # Serve webmail on a subdomain while addresses stay on the apex — the arrangement
+      # ordinary email has always had. Point this name at the host; the apex only needs
+      # the _dmcn TXT record.
+      # DMCND_WEB_HOST: mail.mesh.example
+
+      # 443 because that is the only port Let's Encrypt performs its challenge on. To put
+      # this behind a reverse proxy instead, move it to a high port and supply your own
+      # certificate with DMCND_TLS_CERT / DMCND_TLS_KEY — the daemon always speaks TLS
+      # outside dev mode, so the proxy must talk HTTPS to it.
+      # DMCND_LISTEN: ":443"
+
+      # Also the default outside dev mode, so it is only here to be changed. If you do
+      # change it, keep the host and container sides of the port mapping IDENTICAL: libp2p
+      # advertises the port it actually bound, so publishing 9999:7400 would announce 7400 to
+      # the world while they have to reach 9999. Use DMCND_ANNOUNCE_ADDR if they must differ.
+      # DMCND_NODE_LISTEN: /ip4/0.0.0.0/tcp/7400
+
+      # A cloud VM whose public IP is NAT'd rather than on an interface binds a private
+      # address, and libp2p can only advertise what it binds — so other domains would be
+      # told to deliver your mail to 10.x. Set the reachable address here.
+      # DMCND_ANNOUNCE_ADDR: /ip4/203.0.113.7/tcp/7400
+
+      # ---- SMTP bridge: send and receive ordinary email ----------------------------
+      # DMCND_BRIDGE_ENABLED: "true"
+      # DMCND_BRIDGE_DELIVERY_MODE: smtp          # the default 'stub' sends nothing
+      # DMCND_BRIDGE_SEND_IPS: 203.0.113.7        # makes the printed DNS records pasteable
+      # DMCND_BRIDGE_AUDIT_LOG: /data/bridge-audit.log   # written by dmcnd, so it belongs in the volume
+      #
+      # There is no shell in this image, so read it from outside — both work as-is:
+      #   docker cp dmcnd:/data/bridge-audit.log ./          # copy it out, even when stopped
+      #   docker run --rm -v dmcnd-data:/data alpine tail -f /data/bridge-audit.log
+      #
+      # Do NOT point it at /dev/stdout to get it into `docker logs`. The log is hash-chained
+      # and signed, and the daemon re-reads the file at startup to recover the chain head; a
+      # write-only target silently restarts the chain at 1 on every boot, which is exactly the
+      # tamper-evidence the log exists to provide.
+      #
+      # Once copied off, prove it is the log the bridge actually wrote:
+      #   dmcndcli bridge verify-audit --log bridge-audit.log --peer-id $(docker compose run --rm dmcnd peer-id)
+      #
+      # These two you supply, so they are mounted in read-only rather than living in the
+      # volume (see below): the DKIM signing key, without which outbound mail is unsigned and
+      # widely spam-filtered, and the bridge's root-signed credential, without which its
+      # SPF/DKIM/DMARC verdicts cannot be verified by recipients.
+      # DMCND_BRIDGE_DKIM_KEY: /etc/dmcnd/dkim.pem
+      # DMCND_BRIDGE_CREDENTIAL: /etc/dmcnd/bridge.cred
+
+    sysctls:
+      # 443 and 25 are privileged ports and this container does not run as root. Rather than
+      # granting CAP_NET_BIND_SERVICE, lower the privileged threshold inside this container's
+      # own network namespace. It is namespaced — nothing on the host changes — and it beats
+      # the alternatives: file capabilities are fragile across image builds, and host port
+      # remapping would break autocert, which insists on 443.
+      net.ipv4.ip_unprivileged_port_start: "0"
+
+    ports:
+      - "443:443"
+      - "7400:7400"
+      # Uncomment with the bridge. Note that many hosting providers block OUTBOUND 25 by
+      # default and want a support ticket first — a bridge that receives fine but never
+      # delivers is usually that, not a bug here.
+      # - "25:25"
+
+    volumes:
+      # Everything dmcnd CREATES — the libp2p identity key, the record and mailbox stores,
+      # the petition queue, the autocert cache — stays in this managed volume. Docker seeds
+      # it from the image on first use, ownership included, so the unprivileged user in the
+      # container can write to it with no setup on your part.
+      - dmcnd-data:/data
+
+      # Files YOU supply are bind-mounted read-only instead, so nothing the daemon generates
+      # is entangled with your host filesystem. Both are optional and bridge-only.
+      #
+      # Each must be READABLE BY UID 65532, which a 0600 key owned by your host user is not.
+      # `sudo chown 65532 dkim.pem bridge.cred` after generating them.
+      # - ./dkim.pem:/etc/dmcnd/dkim.pem:ro
+      # - ./bridge.cred:/etc/dmcnd/bridge.cred:ro
+
+    # The daemon writes only under /data and never shells out, so the rest of the filesystem
+    # can be read-only — and with no shell, no package manager and no root, there is very
+    # little left in here to misuse. If something unexpectedly needs to write, drop this rather than
+    # widening it — and please open an issue, because that is a bug here.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  dmcnd-data:

@@ -1,0 +1,28 @@
+# Keep the build context small and reproducible.
+#
+# NOTE: cmd/dmcnd/web/dist is deliberately NOT ignored. It is tracked in git and embedded
+# with //go:embed, and excluding it here would fail the build.
+
+.git
+.github
+.gitignore
+
+# Frontend dependencies — not needed, since the SPA is already built and committed.
+cmd/dmcnd/web/node_modules
+
+# Local build output.
+/bin
+/dist
+*.test
+coverage*.txt
+
+# The documentation site and its generated output.
+/site
+/docs
+
+# Runtime state, which must never end up in an image layer.
+/data
+*.enc
+*keystore*.json
+*.pem
+*.p12

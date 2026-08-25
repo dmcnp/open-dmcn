@@ -89,12 +89,15 @@ concrete to check your own implementation against.</p>
 embedded stores, dev-friendly defaults, no operational hardening. Don't put it in front of
 real users. Do read it alongside <a href="/spec">the spec</a> when the prose is ambiguous.</p>
 <h2 id="run-it">Run it<a class="hash" href="#run-it" aria-label="Link to this section">#</a></h2>
-<p>You need <strong>Go 1.25+</strong>. That's it — the web UI ships pre-built inside the binary, so there's
-no Node step.</p>
-<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
-
-DMCND_DEV=true dmcnd
+<p>Nothing to install, if you have Docker:</p>
+<pre><code class="language-bash">docker run --rm -p 8080:8080 -e DMCND_DEV=true ghcr.io/dmcnp/open-dmcn
 </code></pre>
+<p>Or grab a binary — one static file, no runtime, no Node step, because the web UI ships
+pre-built inside it. Pick your platform from the <a href="https://github.com/dmcnp/open-dmcn/releases/latest">latest release</a>:</p>
+<pre><code class="language-bash">tar xzf dmcnd-&lt;version&gt;-linux-amd64.tar.gz
+DMCND_DEV=true ./dmcnd-linux-amd64/dmcnd
+</code></pre>
+<p>With <strong>Go 1.25+</strong> installed, <code>go install dmcn.dev/open-dmcn/cmd/dmcnd@latest</code> works too.</p>
 <p>Open <code>http://localhost:8080</code> and register an account — the daemon prints that exact URL on
 startup, so you can copy it rather than typing a scheme. Dev mode serves plain <strong>HTTP</strong> on
 <code>:8080</code>; production serves HTTPS on <code>:443</code>, and the ports differ deliberately so a browser is
@@ -221,15 +224,31 @@ mail servers try 25 and nothing else, and outbound keeps working so the gap is i
 <p><strong>1. [node]</strong> Install the daemon and get its peer ID. Set the libp2p port first — it goes into DNS
 and is awkward to change later — and confirm 7400 is reachable from wherever you will run
 <code>dmcndcli</code>, since step 7 dials it.</p>
-<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcnd@latest
-
+<pre><code class="language-bash"># Docker, a release binary, or `go install dmcn.dev/open-dmcn/cmd/dmcnd@latest` — whichever suits.
 export DMCND_DOMAIN=mesh.example
 export DMCND_NODE_LISTEN=/ip4/0.0.0.0/tcp/7400
 dmcnd peer-id
 </code></pre>
+<p>Running the node in a container? <code>compose.yaml</code> in the repository is the starting point, and
+<code>docker compose run --rm dmcnd peer-id</code> gets you the same value.</p>
 <p><strong>2. [admin]</strong> On a different machine — ideally one that stays offline — install the CLI.</p>
-<pre><code class="language-bash">go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest
+<p><code>dmcndcli</code> ships as its own download, separate from the daemon, because the two belong on
+different machines: this one holds your domain's root key and the node never does. Take the
+<code>dmcndcli-…</code> archive for <em>this</em> machine from the
+<a href="https://github.com/dmcnp/open-dmcn/releases/latest">latest release</a> — not the <code>dmcnd-…</code> one, which is the server.</p>
+<pre><code class="language-bash">tar xzf dmcndcli-&lt;version&gt;-darwin-arm64.tar.gz
+cd dmcndcli-darwin-arm64
+shasum -a 256 -c ../SHA256SUMS --ignore-missing   # worth doing for this one
 </code></pre>
+<p>It is a single static binary with no runtime dependencies. If you have Go 1.25+,
+<code>go install dmcn.dev/open-dmcn/cmd/dmcndcli@latest</code> is equivalent.</p>
+<p>Or run it as a container, if you would rather not put the binary on your machine at all:</p>
+<pre><code class="language-bash">docker run --rm -it -v &quot;$PWD:/work&quot; --user &quot;$(id -u):$(id -g)&quot; \
+  ghcr.io/dmcnp/open-dmcn-cli domain init --domain mesh.example --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/&lt;peer-id&gt;
+</code></pre>
+<p>Add <code>--entrypoint sh</code> instead if you would rather shell in and run the steps from there.</p>
+<p>Same rule either way: this is the machine that holds your root key, and it must not be the node.
+A container does not change that — running it on the node's host puts the key on the node.</p>
 <p><strong>3. [admin]</strong> Mint the root and sign the domain's authority record. This touches no network.</p>
 <pre><code class="language-bash">dmcndcli domain init --domain mesh.example \
   --seed /ip4/&lt;public-ip&gt;/tcp/7400/p2p/&lt;peer-id from step 1&gt; \
@@ -421,7 +440,7 @@ says it may vouch for legacy mail. That credential is the only thing that makes 
 believable, so issue it first — offline, alongside the rest of the ceremony:</p>
 <pre><code class="language-bash"># [admin] one signature over the node's own public key. The peer ID is enough: an Ed25519 peer
 # ID contains its key, so this needs no contact with the node.
-dmcndcli bridge issue --domain mesh.example --peer &lt;peer-id&gt; --keystore root.enc --out bridge.cred
+dmcndcli bridge issue --domain mesh.example --peer-id &lt;peer-id&gt; --keystore root.enc --out bridge.cred
 
 # [node]
 DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_CREDENTIAL=/path/to/bridge.cred dmcnd

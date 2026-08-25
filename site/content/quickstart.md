@@ -15,14 +15,21 @@ real users. Do read it alongside [the spec](/spec) when the prose is ambiguous.
 
 ## Run it
 
-You need **Go 1.25+**. That's it — the web UI ships pre-built inside the binary, so there's
-no Node step.
+Nothing to install, if you have Docker:
 
 ```bash
-go install {{module}}/cmd/dmcnd@latest
-
-DMCND_DEV=true dmcnd
+docker run --rm -p 8080:8080 -e DMCND_DEV=true {{image}}
 ```
+
+Or grab a binary — one static file, no runtime, no Node step, because the web UI ships
+pre-built inside it. Pick your platform from the [latest release]({{repo}}/releases/latest):
+
+```bash
+tar xzf dmcnd-<version>-linux-amd64.tar.gz
+DMCND_DEV=true ./dmcnd-linux-amd64/dmcnd
+```
+
+With **Go 1.25+** installed, `go install {{module}}/cmd/dmcnd@latest` works too.
 
 Open `http://localhost:8080` and register an account — the daemon prints that exact URL on
 startup, so you can copy it rather than typing a scheme. Dev mode serves plain **HTTP** on
@@ -138,18 +145,42 @@ and is awkward to change later — and confirm 7400 is reachable from wherever y
 `dmcndcli`, since step 7 dials it.
 
 ```bash
-go install {{module}}/cmd/dmcnd@latest
-
+# Docker, a release binary, or `go install {{module}}/cmd/dmcnd@latest` — whichever suits.
 export DMCND_DOMAIN=mesh.example
 export DMCND_NODE_LISTEN=/ip4/0.0.0.0/tcp/7400
 dmcnd peer-id
 ```
 
+Running the node in a container? `compose.yaml` in the repository is the starting point, and
+`docker compose run --rm dmcnd peer-id` gets you the same value.
+
 **2. [admin]** On a different machine — ideally one that stays offline — install the CLI.
 
+`dmcndcli` ships as its own download, separate from the daemon, because the two belong on
+different machines: this one holds your domain's root key and the node never does. Take the
+`dmcndcli-…` archive for *this* machine from the
+[latest release]({{repo}}/releases/latest) — not the `dmcnd-…` one, which is the server.
+
 ```bash
-go install {{module}}/cmd/dmcndcli@latest
+tar xzf dmcndcli-<version>-darwin-arm64.tar.gz
+cd dmcndcli-darwin-arm64
+shasum -a 256 -c ../SHA256SUMS --ignore-missing   # worth doing for this one
 ```
+
+It is a single static binary with no runtime dependencies. If you have Go 1.25+,
+`go install {{module}}/cmd/dmcndcli@latest` is equivalent.
+
+Or run it as a container, if you would rather not put the binary on your machine at all:
+
+```bash
+docker run --rm -it -v "$PWD:/work" --user "$(id -u):$(id -g)" \
+  {{image}}-cli domain init --domain mesh.example --seed /ip4/<public-ip>/tcp/7400/p2p/<peer-id>
+```
+
+Add `--entrypoint sh` instead if you would rather shell in and run the steps from there.
+
+Same rule either way: this is the machine that holds your root key, and it must not be the node.
+A container does not change that — running it on the node's host puts the key on the node.
 
 **3. [admin]** Mint the root and sign the domain's authority record. This touches no network.
 
@@ -298,7 +329,7 @@ believable, so issue it first — offline, alongside the rest of the ceremony:
 ```bash
 # [admin] one signature over the node's own public key. The peer ID is enough: an Ed25519 peer
 # ID contains its key, so this needs no contact with the node.
-dmcndcli bridge issue --domain mesh.example --peer <peer-id> --keystore root.enc --out bridge.cred
+dmcndcli bridge issue --domain mesh.example --peer-id <peer-id> --keystore root.enc --out bridge.cred
 
 # [node]
 DMCND_BRIDGE_ENABLED=true DMCND_BRIDGE_CREDENTIAL=/path/to/bridge.cred dmcnd

@@ -1,6 +1,8 @@
 # Go build output
 /dmcnd
+/dmcndcli
 /bin/
+/dist/
 *.test
 *.out
 coverage*.txt

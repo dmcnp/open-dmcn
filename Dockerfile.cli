@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1
+
+# dmcndcli — the operator tool, packaged so you do not have to install a Go toolchain or put a
+# binary on your machine to administer a domain.
+#
+#   docker build -f Dockerfile.cli -t dmcndcli .
+#
+# RUN THIS ON YOUR ADMIN MACHINE, NOT ON THE NODE. It mints and holds your domain's root key,
+# and the entire live-domain design exists so that key never sits on the internet-facing host.
+# A container does not change that: same host means same disk and same compromise. If dmcnd is
+# on a VPS, this belongs on your laptop, reaching it over the network.
+#
+# It is also NOT a sandbox for the key. You have to mount the keystore in for it to be useful,
+# so a binary you did not trust could still read and send it. What it buys you is no toolchain,
+# nothing installed system-wide, a filesystem view limited to what you mount, and a pinnable
+# version — not protection from the program itself.
+
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/dmcndcli ./cmd/dmcndcli
+
+# Alpine rather than distroless, deliberately, and the opposite call from the daemon image.
+#
+# This one WANTS a shell: it is short-lived, run by you, on your own machine, exposed to
+# nothing — and between ceremony steps you will want to look at what it produced, move a file,
+# or run several commands in one session (`--entrypoint sh`). The daemon is the reverse case:
+# long-running and internet-facing, so it has no shell at all.
+FROM alpine:3.21
+
+LABEL org.opencontainers.image.source="https://github.com/dmcnp/open-dmcn"
+LABEL org.opencontainers.image.description="dmcndcli — operator CLI for a dmcnd domain. Holds the domain root key; run it on your admin machine, never on the node."
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# ca-certificates is not optional: the petition commands talk to the daemon over HTTPS, and
+# without the CA roots every one of them fails with a certificate error.
+RUN apk add --no-cache ca-certificates
+
+COPY --from=build /out/dmcndcli /usr/local/bin/dmcndcli
+
+# Everything the ceremony produces — root.enc, bridge.cred, dkim.pem — is written relative to
+# the working directory, so mount a host directory here and the files land on your machine
+# rather than inside a container you are about to discard.
+WORKDIR /work
+
+# No USER: run it as yourself with `--user "$(id -u):$(id -g)"` so the files it writes belong
+# to you rather than to root. Pinning a uid here would only fight that, since the right one is
+# whoever is running it.
+
+# The binary is the entrypoint, so a container invocation is the ordinary command with a
+# docker prefix and nothing else to learn:
+#
+#   docker run --rm -it -v "$PWD:/work" IMAGE domain init --domain …
+#
+# A bare `docker run IMAGE` prints the usage. The shell is still there when you want to look at
+# what the ceremony wrote — `--entrypoint sh` — it is just not the thing you have to go through
+# to run a command.
+ENTRYPOINT ["/usr/local/bin/dmcndcli"]
