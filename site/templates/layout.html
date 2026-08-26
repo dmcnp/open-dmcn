@@ -33,6 +33,21 @@
   <meta property="og:image:alt" content="The DMCN Protocol — an address is a keypair, so the sender is a fact, not a guess.">
   <meta name="twitter:card" content="summary_large_image">
 
+  <!-- Author attribution for fediverse link cards (Mastodon 4.3+): a share of
+       this page gains a byline linking to the profile below. Deliberately here
+       and NOT in the page: the site is the protocol's, not one person's, so the
+       attribution rides the shared card rather than the site itself.
+       Mastodon shows it as verified only because of the rel="me" pair below —
+       the two are a unit; removing one silently degrades the other. -->
+  <meta name="fediverse:creator" content="@mvg@infosec.exchange">
+
+  <!-- Profile verification. Invisible on purpose (an <a> works identically, and
+       Mastodon documents both): the checkmark on the profile's dmcn.dev field is
+       the whole job, and a personal link in the footer of an open protocol's site
+       reads as ownership. Must survive without JavaScript — it does, the site is
+       pre-rendered static HTML. Changing this href breaks the checkmark. -->
+  <link rel="me" href="https://infosec.exchange/@mvg">
+
   <!-- An SVG icon is enough for every browser that supports it, and declaring
        it stops the automatic /favicon.ico request that would otherwise 404. -->
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
