@@ -37,6 +37,14 @@ var (
 	// hard enough to be dropped (DMARC failure under a p=reject policy) rather
 	// than delivered with a suspicious trust tier.
 	ErrMessageRejected = errors.New("bridge: message rejected by authentication policy")
+	// ErrSenderKeyMismatch is returned when an outbound message's inner sender key is not
+	// the Ed25519 key the registry publishes for the address it claims to be from. The
+	// message signature only proves self-consistency — it verifies against the key carried
+	// inside the message — so without this check any holder of any address on a served
+	// domain could have the bridge deliver legacy mail as any other address on that domain,
+	// DKIM-signed and DMARC-aligned. The relay's STORE gate binds a key to the CLEARTEXT
+	// sender address; this binds it to the DECRYPTED one, which is what the bridge relays under.
+	ErrSenderKeyMismatch = errors.New("bridge: sender key does not match the registry record for the claimed address")
 	// ErrSenderNotAuthorized is returned when an outbound message's DMCN sender
 	// is not on a domain this bridge relays for (an open-relay guard). It is a
 	// permanent rejection — the sender must use their own domain's bridge.

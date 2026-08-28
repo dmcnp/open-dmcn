@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -179,11 +180,23 @@ func (h *OutboundHandler) HandleEnvelope(ctx context.Context, env *message.Encry
 	h.log.Warnf("TRUST DISCLOSURE: decrypting message from %s for outbound SMTP delivery to %s",
 		pt.SenderAddress, pt.RecipientAddress)
 
-	// 4. Verify sender exists in registry (the lookup is the existence check; the record itself
-	// is no longer needed after dropping the fleet send-rate counter).
+	// 4. Resolve the sender and bind the claimed address to the signing key. The signature
+	// checked in decryptForBridge verifies against the public key carried INSIDE the message,
+	// so on its own it proves self-consistency and nothing about ownership. The relay's STORE
+	// gate does bind a key to an address, but to the request's CLEARTEXT sender; SenderAddress
+	// here comes out of the DECRYPTED header, and the two are independent fields. Without this
+	// comparison a legitimate holder of any address on a served domain can have us deliver as
+	// any other address on it — rewritten to the bridge domain and DKIM-signed, so it arrives
+	// fully DMARC-aligned.
 	senderAddr := pt.SenderAddress
-	if _, err := h.lookup(ctx, senderAddr); err != nil {
+	senderRec, err := h.lookup(ctx, senderAddr)
+	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrSenderNotFound, senderAddr, err)
+	}
+	if !bytes.Equal(senderRec.Ed25519Public, pt.SenderPublicKey) {
+		h.log.Warnf("rejecting outbound from %s: signing key is not the key registered for that address", senderAddr)
+		h.audit.Record(AuditEvent{Action: "outbound.reject", From: senderAddr, To: pt.RecipientAddress, Detail: "sender key does not match registry record"})
+		return nil, fmt.Errorf("%w: %s", ErrSenderKeyMismatch, senderAddr)
 	}
 
 	// 5. Authorize the sender for relaying. Open registration means any identity
