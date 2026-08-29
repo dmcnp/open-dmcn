@@ -1,14 +1,22 @@
 // SettingsStore holds ACCOUNT-level preferences that should follow the user across
-// devices — display name, composing signature — in a single sealed "settings/app"
+// devices — the composing signature and defaults — in a single sealed "settings/app"
 // document. (Device-local prefs like theme, density and "stay signed in" deliberately
-// stay in localStorage; they are per-device by nature.) Low-churn singleton, so it
-// uses compare-and-swap via the store's version token (the provider retries on conflict).
+// stay in localStorage; they are per-device by nature — and "device" includes an
+// installed app separately from the browser tab that installed it, so those keys are
+// namespaced per context. See lib/appContext.ts.) Anything that should genuinely look
+// the same everywhere belongs HERE, where it is account data rather than something
+// leaking between two contexts. Low-churn singleton, so it uses compare-and-swap via
+// the store's version token (the provider retries on conflict).
 
 import { PersonalStore } from './personalStore';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
 export interface AppSettings {
   v: number;
+  // Deprecated: the app labels the signed-in account by its ADDRESS (which is what
+  // the mesh routes to and what tells two open accounts apart), and labels OTHER
+  // people by the name their owner gave them in Contacts. Kept only so a document
+  // written by an older client still round-trips.
   displayName?: string;
   signature?: string;
   // Overrides the system default (rich text) for NEW messages and replies. Only ever

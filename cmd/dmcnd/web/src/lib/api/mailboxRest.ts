@@ -5,7 +5,7 @@
 // WebSocket MailboxClient; the decrypt/cache logic is unchanged.
 
 import { signWithKey } from '../crypto/sign';
-import { postJSON } from './client';
+import { postJSONAs } from './client';
 import { decodeMailboxEntry, decodeMailboxBody, type MessageHeaderFields } from '../crypto/protobuf';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type DecryptedAttachment } from '../crypto/split';
 import { fromBase64, toBase64 } from '../crypto/keys';
@@ -24,8 +24,8 @@ export interface Preview {
   // Hex of the header messageId. Shared across every copy of one compose, so the
   // Sent view groups a multi-recipient send into a single row.
   messageId: string;
-  // Hex of the header threadId — lets a reply continue the original thread.
-  // All-zero/empty for pre-feature messages.
+  // Hex of the header threadId — lets a reply continue the original thread (see
+  // ComposeDialog.handleSend). All-zero/empty for pre-feature messages.
   threadId: string;
   senderAddress: string;
   // Hex of the sender's ed25519 public key from the signature-verified header
@@ -39,6 +39,9 @@ export interface Preview {
   bcc: string[];
   subject: string;
   snippet: string;
+  // Human-readable sender name from the signed header ('' when none). Rendered only
+  // alongside senderAddress — see trust/displayName.ts for why.
+  senderDisplay: string;
   sentAt: number;
   bodySize: number;
   attachmentCount: number;
@@ -60,22 +63,6 @@ interface ChallengeResp { correlation_id: string; nonce: string }
 interface ListResp { entries: Array<{ hash: string; entry: string }>; next_cursor: string }
 interface BodyResp { hash: string; body: string }
 
-// postAuthed issues a JSON POST with an explicit bearer token, bypassing session
-// renewal — used only for the ephemeral pairing session, which is short-lived and
-// isolated from the main session's global token.
-async function postAuthed<T>(token: string, path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
 export class MailboxSync {
   private keys: WorkingKeys;
   private cache = new Map<string, CachedEntry>(); // hash → entry + verified header
@@ -85,8 +72,9 @@ export class MailboxSync {
   // unchanged keeps a no-op poll from churning `messages` identity (which would
   // re-render — and flicker — an open message every interval).
   private lastPreviewSig = '';
-  // When set, requests use this explicit token directly (pairing). When absent,
-  // they go through the global session, which transparently renews on expiry.
+  // When set, requests use this explicit token directly — the pairing session, or a
+  // background account being counted by the switcher. When absent, they go through
+  // the global session, which transparently renews on expiry.
   private explicitToken?: string;
 
   // Errors surface via the returned promises (list/fetchFull/deleteMessage reject),
@@ -101,9 +89,7 @@ export class MailboxSync {
   close() {}
 
   private post<T>(path: string, body: unknown): Promise<T> {
-    return this.explicitToken !== undefined
-      ? postAuthed<T>(this.explicitToken, path, body)
-      : postJSON<T>(path, body);
+    return postJSONAs<T>(this.explicitToken, path, body);
   }
 
   private async signNonce(nonceB64: string): Promise<string> {
@@ -128,11 +114,16 @@ export class MailboxSync {
       const ch = await this.challenge({ op: 'list', cursor });
       const res = await this.complete<ListResp>(ch.correlation_id, ch.nonce);
       for (const e of res.entries) {
+        seen.add(e.hash);
+        // The hash IS the envelope digest, so an entry is immutable under it: a
+        // header already decrypted and signature-verified this session never needs
+        // redoing. That keeps a poll cheap on a large mailbox — and is what makes
+        // counting another account's unread mail in the background affordable.
+        if (this.cache.has(e.hash)) continue;
         try {
           const entryProto = (await decodeMailboxEntry(fromBase64(e.entry))) as unknown as MailboxEntryLike;
           const header = await decryptHeader(entryProto, this.keys.x25519Derive, this.keys.x25519Public);
           this.cache.set(e.hash, { entry: entryProto, header });
-          seen.add(e.hash);
         } catch (err) {
           console.error('preview decrypt failed for', e.hash, err);
         }
@@ -196,6 +187,7 @@ export class MailboxSync {
         bcc: c.header.bcc ?? [],
         subject: c.header.subject,
         snippet: c.header.snippet,
+        senderDisplay: c.header.senderDisplay ?? '',
         sentAt: Number(c.header.sentAt),
         bodySize: Number(c.header.bodySize),
         attachmentCount: c.header.attachmentCount,

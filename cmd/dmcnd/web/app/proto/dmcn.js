@@ -8524,6 +8524,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {Array.<dmcn.message.IAttachmentRecord>|null} [attachments] PlaintextMessage attachments
              * @property {Uint8Array|null} [replyToId] PlaintextMessage replyToId
              * @property {Array.<dmcn.message.IMessageBody>|null} [alternatives] PlaintextMessage alternatives
+             * @property {string|null} [senderDisplay] PlaintextMessage senderDisplay
              */
 
             /**
@@ -8640,6 +8641,14 @@ export const dmcn = $root.dmcn = (() => {
             PlaintextMessage.prototype.alternatives = $util.emptyArray;
 
             /**
+             * PlaintextMessage senderDisplay.
+             * @member {string} senderDisplay
+             * @memberof dmcn.message.PlaintextMessage
+             * @instance
+             */
+            PlaintextMessage.prototype.senderDisplay = "";
+
+            /**
              * Creates a new PlaintextMessage instance using the specified properties.
              * @function create
              * @memberof dmcn.message.PlaintextMessage
@@ -8693,6 +8702,8 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.alternatives != null && message.alternatives.length)
                     for (let i = 0; i < message.alternatives.length; ++i)
                         $root.dmcn.message.MessageBody.encode(message.alternatives[i], writer.uint32(/* id 12, wireType 2 =*/98).fork(), q + 1).ldelim();
+                if (message.senderDisplay != null && Object.hasOwnProperty.call(message, "senderDisplay"))
+                    writer.uint32(/* id 13, wireType 2 =*/106).string(message.senderDisplay);
                 return writer;
             };
 
@@ -8785,6 +8796,10 @@ export const dmcn = $root.dmcn = (() => {
                             message.alternatives.push($root.dmcn.message.MessageBody.decode(reader, reader.uint32(), undefined, long + 1));
                             break;
                         }
+                    case 13: {
+                            message.senderDisplay = reader.string();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -8874,6 +8889,9 @@ export const dmcn = $root.dmcn = (() => {
                             return "alternatives." + error;
                     }
                 }
+                if (message.senderDisplay != null && Object.hasOwnProperty.call(message, "senderDisplay"))
+                    if (!$util.isString(message.senderDisplay))
+                        return "senderDisplay: string expected";
                 return null;
             };
 
@@ -8957,6 +8975,8 @@ export const dmcn = $root.dmcn = (() => {
                         message.alternatives[i] = $root.dmcn.message.MessageBody.fromObject(object.alternatives[i], long + 1);
                     }
                 }
+                if (object.senderDisplay != null)
+                    message.senderDisplay = String(object.senderDisplay);
                 return message;
             };
 
@@ -9020,6 +9040,7 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.replyToId = $util.newBuffer(object.replyToId);
                     }
+                    object.senderDisplay = "";
                 }
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     object.version = message.version;
@@ -9056,6 +9077,8 @@ export const dmcn = $root.dmcn = (() => {
                     for (let j = 0; j < message.alternatives.length; ++j)
                         object.alternatives[j] = $root.dmcn.message.MessageBody.toObject(message.alternatives[j], options, q + 1);
                 }
+                if (message.senderDisplay != null && Object.hasOwnProperty.call(message, "senderDisplay"))
+                    object.senderDisplay = message.senderDisplay;
                 return object;
             };
 
@@ -9376,6 +9399,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {Array.<string>|null} [to] MessageHeader to
              * @property {Array.<string>|null} [cc] MessageHeader cc
              * @property {Array.<string>|null} [bcc] MessageHeader bcc
+             * @property {string|null} [senderDisplay] MessageHeader senderDisplay
              */
 
             /**
@@ -9533,6 +9557,14 @@ export const dmcn = $root.dmcn = (() => {
             MessageHeader.prototype.bcc = $util.emptyArray;
 
             /**
+             * MessageHeader senderDisplay.
+             * @member {string} senderDisplay
+             * @memberof dmcn.message.MessageHeader
+             * @instance
+             */
+            MessageHeader.prototype.senderDisplay = "";
+
+            /**
              * Creates a new MessageHeader instance using the specified properties.
              * @function create
              * @memberof dmcn.message.MessageHeader
@@ -9597,6 +9629,8 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.bcc != null && message.bcc.length)
                     for (let i = 0; i < message.bcc.length; ++i)
                         writer.uint32(/* id 17, wireType 2 =*/138).string(message.bcc[i]);
+                if (message.senderDisplay != null && Object.hasOwnProperty.call(message, "senderDisplay"))
+                    writer.uint32(/* id 18, wireType 2 =*/146).string(message.senderDisplay);
                 return writer;
             };
 
@@ -9711,6 +9745,10 @@ export const dmcn = $root.dmcn = (() => {
                             message.bcc.push(reader.string());
                             break;
                         }
+                    case 18: {
+                            message.senderDisplay = reader.string();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -9813,6 +9851,9 @@ export const dmcn = $root.dmcn = (() => {
                         if (!$util.isString(message.bcc[i]))
                             return "bcc: string[] expected";
                 }
+                if (message.senderDisplay != null && Object.hasOwnProperty.call(message, "senderDisplay"))
+                    if (!$util.isString(message.senderDisplay))
+                        return "senderDisplay: string expected";
                 return null;
             };
 
@@ -9915,6 +9956,8 @@ export const dmcn = $root.dmcn = (() => {
                     for (let i = 0; i < object.bcc.length; ++i)
                         message.bcc[i] = String(object.bcc[i]);
                 }
+                if (object.senderDisplay != null)
+                    message.senderDisplay = String(object.senderDisplay);
                 return message;
             };
 
@@ -9999,6 +10042,7 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.bodyContentAddress = $util.newBuffer(object.bodyContentAddress);
                     }
+                    object.senderDisplay = "";
                 }
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     object.version = message.version;
@@ -10053,6 +10097,8 @@ export const dmcn = $root.dmcn = (() => {
                     for (let j = 0; j < message.bcc.length; ++j)
                         object.bcc[j] = message.bcc[j];
                 }
+                if (message.senderDisplay != null && Object.hasOwnProperty.call(message, "senderDisplay"))
+                    object.senderDisplay = message.senderDisplay;
                 return object;
             };
 
@@ -12610,6 +12656,11 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.relay.IGetBlocklistResponse|null} [getBlocklist] RelayResponse getBlocklist
              * @property {dmcn.relay.IPutRecordResponse|null} [putRecord] RelayResponse putRecord
              * @property {dmcn.relay.IGetRelayDescriptorResponse|null} [getRelayDescriptor] RelayResponse getRelayDescriptor
+             * @property {dmcn.relay.IMailboxKvPutResponse|null} [mailboxKvPut] RelayResponse mailboxKvPut
+             * @property {dmcn.relay.IMailboxKvGetResponse|null} [mailboxKvGet] RelayResponse mailboxKvGet
+             * @property {dmcn.relay.IMailboxKvListResponse|null} [mailboxKvList] RelayResponse mailboxKvList
+             * @property {dmcn.relay.IMailboxKvDeleteResponse|null} [mailboxKvDelete] RelayResponse mailboxKvDelete
+             * @property {dmcn.relay.IMailboxKvStatResponse|null} [mailboxKvStat] RelayResponse mailboxKvStat
              */
 
             /**
@@ -12763,17 +12814,57 @@ export const dmcn = $root.dmcn = (() => {
              */
             RelayResponse.prototype.getRelayDescriptor = null;
 
+            /**
+             * RelayResponse mailboxKvPut.
+             * @member {dmcn.relay.IMailboxKvPutResponse|null|undefined} mailboxKvPut
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxKvPut = null;
+
+            /**
+             * RelayResponse mailboxKvGet.
+             * @member {dmcn.relay.IMailboxKvGetResponse|null|undefined} mailboxKvGet
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxKvGet = null;
+
+            /**
+             * RelayResponse mailboxKvList.
+             * @member {dmcn.relay.IMailboxKvListResponse|null|undefined} mailboxKvList
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxKvList = null;
+
+            /**
+             * RelayResponse mailboxKvDelete.
+             * @member {dmcn.relay.IMailboxKvDeleteResponse|null|undefined} mailboxKvDelete
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxKvDelete = null;
+
+            /**
+             * RelayResponse mailboxKvStat.
+             * @member {dmcn.relay.IMailboxKvStatResponse|null|undefined} mailboxKvStat
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxKvStat = null;
+
             // OneOf field names bound to virtual getters and setters
             let $oneOfFields;
 
             /**
              * RelayResponse response.
-             * @member {"store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|undefined} response
+             * @member {"store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat"|undefined} response
              * @memberof dmcn.relay.RelayResponse
              * @instance
              */
             Object.defineProperty(RelayResponse.prototype, "response", {
-                get: $util.oneOfGetter($oneOfFields = ["store", "fetchChallenge", "fetch", "ack", "ping", "error", "mailboxList", "mailboxBodyHeader", "mailboxDelete", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor"]),
+                get: $util.oneOfGetter($oneOfFields = ["store", "fetchChallenge", "fetch", "ack", "ping", "error", "mailboxList", "mailboxBodyHeader", "mailboxDelete", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor", "mailboxKvPut", "mailboxKvGet", "mailboxKvList", "mailboxKvDelete", "mailboxKvStat"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -12825,6 +12916,16 @@ export const dmcn = $root.dmcn = (() => {
                     $root.dmcn.relay.MailboxDeleteResponse.encode(message.mailboxDelete, writer.uint32(/* id 9, wireType 2 =*/74).fork(), q + 1).ldelim();
                 if (message.onionForward != null && Object.hasOwnProperty.call(message, "onionForward"))
                     $root.dmcn.relay.OnionForwardResponse.encode(message.onionForward, writer.uint32(/* id 10, wireType 2 =*/82).fork(), q + 1).ldelim();
+                if (message.mailboxKvPut != null && Object.hasOwnProperty.call(message, "mailboxKvPut"))
+                    $root.dmcn.relay.MailboxKvPutResponse.encode(message.mailboxKvPut, writer.uint32(/* id 18, wireType 2 =*/146).fork(), q + 1).ldelim();
+                if (message.mailboxKvGet != null && Object.hasOwnProperty.call(message, "mailboxKvGet"))
+                    $root.dmcn.relay.MailboxKvGetResponse.encode(message.mailboxKvGet, writer.uint32(/* id 19, wireType 2 =*/154).fork(), q + 1).ldelim();
+                if (message.mailboxKvList != null && Object.hasOwnProperty.call(message, "mailboxKvList"))
+                    $root.dmcn.relay.MailboxKvListResponse.encode(message.mailboxKvList, writer.uint32(/* id 20, wireType 2 =*/162).fork(), q + 1).ldelim();
+                if (message.mailboxKvDelete != null && Object.hasOwnProperty.call(message, "mailboxKvDelete"))
+                    $root.dmcn.relay.MailboxKvDeleteResponse.encode(message.mailboxKvDelete, writer.uint32(/* id 21, wireType 2 =*/170).fork(), q + 1).ldelim();
+                if (message.mailboxKvStat != null && Object.hasOwnProperty.call(message, "mailboxKvStat"))
+                    $root.dmcn.relay.MailboxKvStatResponse.encode(message.mailboxKvStat, writer.uint32(/* id 22, wireType 2 =*/178).fork(), q + 1).ldelim();
                 if (message.getIdentity != null && Object.hasOwnProperty.call(message, "getIdentity"))
                     $root.dmcn.relay.GetIdentityResponse.encode(message.getIdentity, writer.uint32(/* id 28, wireType 2 =*/226).fork(), q + 1).ldelim();
                 if (message.getDar != null && Object.hasOwnProperty.call(message, "getDar"))
@@ -12945,6 +13046,26 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 34: {
                             message.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 18: {
+                            message.mailboxKvPut = $root.dmcn.relay.MailboxKvPutResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 19: {
+                            message.mailboxKvGet = $root.dmcn.relay.MailboxKvGetResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 20: {
+                            message.mailboxKvList = $root.dmcn.relay.MailboxKvListResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 21: {
+                            message.mailboxKvDelete = $root.dmcn.relay.MailboxKvDeleteResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 22: {
+                            message.mailboxKvStat = $root.dmcn.relay.MailboxKvStatResponse.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
                         }
                     default:
@@ -13155,6 +13276,56 @@ export const dmcn = $root.dmcn = (() => {
                             return "getRelayDescriptor." + error;
                     }
                 }
+                if (message.mailboxKvPut != null && Object.hasOwnProperty.call(message, "mailboxKvPut")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvPutResponse.verify(message.mailboxKvPut, long + 1);
+                        if (error)
+                            return "mailboxKvPut." + error;
+                    }
+                }
+                if (message.mailboxKvGet != null && Object.hasOwnProperty.call(message, "mailboxKvGet")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvGetResponse.verify(message.mailboxKvGet, long + 1);
+                        if (error)
+                            return "mailboxKvGet." + error;
+                    }
+                }
+                if (message.mailboxKvList != null && Object.hasOwnProperty.call(message, "mailboxKvList")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvListResponse.verify(message.mailboxKvList, long + 1);
+                        if (error)
+                            return "mailboxKvList." + error;
+                    }
+                }
+                if (message.mailboxKvDelete != null && Object.hasOwnProperty.call(message, "mailboxKvDelete")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvDeleteResponse.verify(message.mailboxKvDelete, long + 1);
+                        if (error)
+                            return "mailboxKvDelete." + error;
+                    }
+                }
+                if (message.mailboxKvStat != null && Object.hasOwnProperty.call(message, "mailboxKvStat")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvStatResponse.verify(message.mailboxKvStat, long + 1);
+                        if (error)
+                            return "mailboxKvStat." + error;
+                    }
+                }
                 return null;
             };
 
@@ -13261,6 +13432,31 @@ export const dmcn = $root.dmcn = (() => {
                         throw TypeError(".dmcn.relay.RelayResponse.getRelayDescriptor: object expected");
                     message.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorResponse.fromObject(object.getRelayDescriptor, long + 1);
                 }
+                if (object.mailboxKvPut != null) {
+                    if (!$util.isObject(object.mailboxKvPut))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxKvPut: object expected");
+                    message.mailboxKvPut = $root.dmcn.relay.MailboxKvPutResponse.fromObject(object.mailboxKvPut, long + 1);
+                }
+                if (object.mailboxKvGet != null) {
+                    if (!$util.isObject(object.mailboxKvGet))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxKvGet: object expected");
+                    message.mailboxKvGet = $root.dmcn.relay.MailboxKvGetResponse.fromObject(object.mailboxKvGet, long + 1);
+                }
+                if (object.mailboxKvList != null) {
+                    if (!$util.isObject(object.mailboxKvList))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxKvList: object expected");
+                    message.mailboxKvList = $root.dmcn.relay.MailboxKvListResponse.fromObject(object.mailboxKvList, long + 1);
+                }
+                if (object.mailboxKvDelete != null) {
+                    if (!$util.isObject(object.mailboxKvDelete))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxKvDelete: object expected");
+                    message.mailboxKvDelete = $root.dmcn.relay.MailboxKvDeleteResponse.fromObject(object.mailboxKvDelete, long + 1);
+                }
+                if (object.mailboxKvStat != null) {
+                    if (!$util.isObject(object.mailboxKvStat))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxKvStat: object expected");
+                    message.mailboxKvStat = $root.dmcn.relay.MailboxKvStatResponse.fromObject(object.mailboxKvStat, long + 1);
+                }
                 return message;
             };
 
@@ -13330,6 +13526,31 @@ export const dmcn = $root.dmcn = (() => {
                     object.onionForward = $root.dmcn.relay.OnionForwardResponse.toObject(message.onionForward, options, q + 1);
                     if (options.oneofs)
                         object.response = "onionForward";
+                }
+                if (message.mailboxKvPut != null && Object.hasOwnProperty.call(message, "mailboxKvPut")) {
+                    object.mailboxKvPut = $root.dmcn.relay.MailboxKvPutResponse.toObject(message.mailboxKvPut, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxKvPut";
+                }
+                if (message.mailboxKvGet != null && Object.hasOwnProperty.call(message, "mailboxKvGet")) {
+                    object.mailboxKvGet = $root.dmcn.relay.MailboxKvGetResponse.toObject(message.mailboxKvGet, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxKvGet";
+                }
+                if (message.mailboxKvList != null && Object.hasOwnProperty.call(message, "mailboxKvList")) {
+                    object.mailboxKvList = $root.dmcn.relay.MailboxKvListResponse.toObject(message.mailboxKvList, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxKvList";
+                }
+                if (message.mailboxKvDelete != null && Object.hasOwnProperty.call(message, "mailboxKvDelete")) {
+                    object.mailboxKvDelete = $root.dmcn.relay.MailboxKvDeleteResponse.toObject(message.mailboxKvDelete, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxKvDelete";
+                }
+                if (message.mailboxKvStat != null && Object.hasOwnProperty.call(message, "mailboxKvStat")) {
+                    object.mailboxKvStat = $root.dmcn.relay.MailboxKvStatResponse.toObject(message.mailboxKvStat, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxKvStat";
                 }
                 if (message.getIdentity != null && Object.hasOwnProperty.call(message, "getIdentity")) {
                     object.getIdentity = $root.dmcn.relay.GetIdentityResponse.toObject(message.getIdentity, options, q + 1);
@@ -22107,6 +22328,11 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.relay.IMailboxListOp|null} [list] MailboxOp list
              * @property {dmcn.relay.IMailboxBodyOp|null} [body] MailboxOp body
              * @property {dmcn.relay.IMailboxDeleteOp|null} ["delete"] MailboxOp delete
+             * @property {dmcn.relay.IMailboxKvPutOp|null} [kvPut] MailboxOp kvPut
+             * @property {dmcn.relay.IMailboxKvGetOp|null} [kvGet] MailboxOp kvGet
+             * @property {dmcn.relay.IMailboxKvListOp|null} [kvList] MailboxOp kvList
+             * @property {dmcn.relay.IMailboxKvDeleteOp|null} [kvDelete] MailboxOp kvDelete
+             * @property {dmcn.relay.IMailboxKvStatOp|null} [kvStat] MailboxOp kvStat
              */
 
             /**
@@ -22164,17 +22390,57 @@ export const dmcn = $root.dmcn = (() => {
              */
             MailboxOp.prototype["delete"] = null;
 
+            /**
+             * MailboxOp kvPut.
+             * @member {dmcn.relay.IMailboxKvPutOp|null|undefined} kvPut
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.kvPut = null;
+
+            /**
+             * MailboxOp kvGet.
+             * @member {dmcn.relay.IMailboxKvGetOp|null|undefined} kvGet
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.kvGet = null;
+
+            /**
+             * MailboxOp kvList.
+             * @member {dmcn.relay.IMailboxKvListOp|null|undefined} kvList
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.kvList = null;
+
+            /**
+             * MailboxOp kvDelete.
+             * @member {dmcn.relay.IMailboxKvDeleteOp|null|undefined} kvDelete
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.kvDelete = null;
+
+            /**
+             * MailboxOp kvStat.
+             * @member {dmcn.relay.IMailboxKvStatOp|null|undefined} kvStat
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.kvStat = null;
+
             // OneOf field names bound to virtual getters and setters
             let $oneOfFields;
 
             /**
              * MailboxOp op.
-             * @member {"list"|"body"|"delete"|undefined} op
+             * @member {"list"|"body"|"delete"|"kvPut"|"kvGet"|"kvList"|"kvDelete"|"kvStat"|undefined} op
              * @memberof dmcn.relay.MailboxOp
              * @instance
              */
             Object.defineProperty(MailboxOp.prototype, "op", {
-                get: $util.oneOfGetter($oneOfFields = ["list", "body", "delete"]),
+                get: $util.oneOfGetter($oneOfFields = ["list", "body", "delete", "kvPut", "kvGet", "kvList", "kvDelete", "kvStat"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -22216,6 +22482,16 @@ export const dmcn = $root.dmcn = (() => {
                     $root.dmcn.relay.MailboxBodyOp.encode(message.body, writer.uint32(/* id 4, wireType 2 =*/34).fork(), q + 1).ldelim();
                 if (message["delete"] != null && Object.hasOwnProperty.call(message, "delete"))
                     $root.dmcn.relay.MailboxDeleteOp.encode(message["delete"], writer.uint32(/* id 5, wireType 2 =*/42).fork(), q + 1).ldelim();
+                if (message.kvPut != null && Object.hasOwnProperty.call(message, "kvPut"))
+                    $root.dmcn.relay.MailboxKvPutOp.encode(message.kvPut, writer.uint32(/* id 8, wireType 2 =*/66).fork(), q + 1).ldelim();
+                if (message.kvGet != null && Object.hasOwnProperty.call(message, "kvGet"))
+                    $root.dmcn.relay.MailboxKvGetOp.encode(message.kvGet, writer.uint32(/* id 9, wireType 2 =*/74).fork(), q + 1).ldelim();
+                if (message.kvList != null && Object.hasOwnProperty.call(message, "kvList"))
+                    $root.dmcn.relay.MailboxKvListOp.encode(message.kvList, writer.uint32(/* id 10, wireType 2 =*/82).fork(), q + 1).ldelim();
+                if (message.kvDelete != null && Object.hasOwnProperty.call(message, "kvDelete"))
+                    $root.dmcn.relay.MailboxKvDeleteOp.encode(message.kvDelete, writer.uint32(/* id 11, wireType 2 =*/90).fork(), q + 1).ldelim();
+                if (message.kvStat != null && Object.hasOwnProperty.call(message, "kvStat"))
+                    $root.dmcn.relay.MailboxKvStatOp.encode(message.kvStat, writer.uint32(/* id 12, wireType 2 =*/98).fork(), q + 1).ldelim();
                 return writer;
             };
 
@@ -22274,6 +22550,26 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 5: {
                             message["delete"] = $root.dmcn.relay.MailboxDeleteOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 8: {
+                            message.kvPut = $root.dmcn.relay.MailboxKvPutOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 9: {
+                            message.kvGet = $root.dmcn.relay.MailboxKvGetOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 10: {
+                            message.kvList = $root.dmcn.relay.MailboxKvListOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 11: {
+                            message.kvDelete = $root.dmcn.relay.MailboxKvDeleteOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 12: {
+                            message.kvStat = $root.dmcn.relay.MailboxKvStatOp.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
                         }
                     default:
@@ -22350,6 +22646,56 @@ export const dmcn = $root.dmcn = (() => {
                             return "delete." + error;
                     }
                 }
+                if (message.kvPut != null && Object.hasOwnProperty.call(message, "kvPut")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvPutOp.verify(message.kvPut, long + 1);
+                        if (error)
+                            return "kvPut." + error;
+                    }
+                }
+                if (message.kvGet != null && Object.hasOwnProperty.call(message, "kvGet")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvGetOp.verify(message.kvGet, long + 1);
+                        if (error)
+                            return "kvGet." + error;
+                    }
+                }
+                if (message.kvList != null && Object.hasOwnProperty.call(message, "kvList")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvListOp.verify(message.kvList, long + 1);
+                        if (error)
+                            return "kvList." + error;
+                    }
+                }
+                if (message.kvDelete != null && Object.hasOwnProperty.call(message, "kvDelete")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvDeleteOp.verify(message.kvDelete, long + 1);
+                        if (error)
+                            return "kvDelete." + error;
+                    }
+                }
+                if (message.kvStat != null && Object.hasOwnProperty.call(message, "kvStat")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxKvStatOp.verify(message.kvStat, long + 1);
+                        if (error)
+                            return "kvStat." + error;
+                    }
+                }
                 return null;
             };
 
@@ -22395,6 +22741,31 @@ export const dmcn = $root.dmcn = (() => {
                     if (!$util.isObject(object["delete"]))
                         throw TypeError(".dmcn.relay.MailboxOp.delete: object expected");
                     message["delete"] = $root.dmcn.relay.MailboxDeleteOp.fromObject(object["delete"], long + 1);
+                }
+                if (object.kvPut != null) {
+                    if (!$util.isObject(object.kvPut))
+                        throw TypeError(".dmcn.relay.MailboxOp.kvPut: object expected");
+                    message.kvPut = $root.dmcn.relay.MailboxKvPutOp.fromObject(object.kvPut, long + 1);
+                }
+                if (object.kvGet != null) {
+                    if (!$util.isObject(object.kvGet))
+                        throw TypeError(".dmcn.relay.MailboxOp.kvGet: object expected");
+                    message.kvGet = $root.dmcn.relay.MailboxKvGetOp.fromObject(object.kvGet, long + 1);
+                }
+                if (object.kvList != null) {
+                    if (!$util.isObject(object.kvList))
+                        throw TypeError(".dmcn.relay.MailboxOp.kvList: object expected");
+                    message.kvList = $root.dmcn.relay.MailboxKvListOp.fromObject(object.kvList, long + 1);
+                }
+                if (object.kvDelete != null) {
+                    if (!$util.isObject(object.kvDelete))
+                        throw TypeError(".dmcn.relay.MailboxOp.kvDelete: object expected");
+                    message.kvDelete = $root.dmcn.relay.MailboxKvDeleteOp.fromObject(object.kvDelete, long + 1);
+                }
+                if (object.kvStat != null) {
+                    if (!$util.isObject(object.kvStat))
+                        throw TypeError(".dmcn.relay.MailboxOp.kvStat: object expected");
+                    message.kvStat = $root.dmcn.relay.MailboxKvStatOp.fromObject(object.kvStat, long + 1);
                 }
                 return message;
             };
@@ -22450,6 +22821,31 @@ export const dmcn = $root.dmcn = (() => {
                     object["delete"] = $root.dmcn.relay.MailboxDeleteOp.toObject(message["delete"], options, q + 1);
                     if (options.oneofs)
                         object.op = "delete";
+                }
+                if (message.kvPut != null && Object.hasOwnProperty.call(message, "kvPut")) {
+                    object.kvPut = $root.dmcn.relay.MailboxKvPutOp.toObject(message.kvPut, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "kvPut";
+                }
+                if (message.kvGet != null && Object.hasOwnProperty.call(message, "kvGet")) {
+                    object.kvGet = $root.dmcn.relay.MailboxKvGetOp.toObject(message.kvGet, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "kvGet";
+                }
+                if (message.kvList != null && Object.hasOwnProperty.call(message, "kvList")) {
+                    object.kvList = $root.dmcn.relay.MailboxKvListOp.toObject(message.kvList, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "kvList";
+                }
+                if (message.kvDelete != null && Object.hasOwnProperty.call(message, "kvDelete")) {
+                    object.kvDelete = $root.dmcn.relay.MailboxKvDeleteOp.toObject(message.kvDelete, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "kvDelete";
+                }
+                if (message.kvStat != null && Object.hasOwnProperty.call(message, "kvStat")) {
+                    object.kvStat = $root.dmcn.relay.MailboxKvStatOp.toObject(message.kvStat, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "kvStat";
                 }
                 return object;
             };
@@ -24728,6 +25124,2949 @@ export const dmcn = $root.dmcn = (() => {
             };
 
             return StoreInit;
+        })();
+
+        relay.MailboxKvPutOp = (function() {
+
+            /**
+             * Properties of a MailboxKvPutOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvPutOp
+             * @property {string|null} [key] MailboxKvPutOp key
+             * @property {Uint8Array|null} [sealed] MailboxKvPutOp sealed
+             * @property {number|Long|null} [expectedVersion] MailboxKvPutOp expectedVersion
+             */
+
+            /**
+             * Constructs a new MailboxKvPutOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvPutOp.
+             * @implements IMailboxKvPutOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvPutOp=} [properties] Properties to set
+             */
+            function MailboxKvPutOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvPutOp key.
+             * @member {string} key
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @instance
+             */
+            MailboxKvPutOp.prototype.key = "";
+
+            /**
+             * MailboxKvPutOp sealed.
+             * @member {Uint8Array} sealed
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @instance
+             */
+            MailboxKvPutOp.prototype.sealed = $util.newBuffer([]);
+
+            /**
+             * MailboxKvPutOp expectedVersion.
+             * @member {number|Long} expectedVersion
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @instance
+             */
+            MailboxKvPutOp.prototype.expectedVersion = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * Creates a new MailboxKvPutOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvPutOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvPutOp} MailboxKvPutOp instance
+             */
+            MailboxKvPutOp.create = function create(properties) {
+                return new MailboxKvPutOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvPutOp message. Does not implicitly {@link dmcn.relay.MailboxKvPutOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvPutOp} message MailboxKvPutOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvPutOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.key);
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.sealed);
+                if (message.expectedVersion != null && Object.hasOwnProperty.call(message, "expectedVersion"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.expectedVersion);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvPutOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvPutOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvPutOp} message MailboxKvPutOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvPutOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvPutOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvPutOp} MailboxKvPutOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvPutOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvPutOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.key = reader.string();
+                            break;
+                        }
+                    case 2: {
+                            message.sealed = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.expectedVersion = reader.uint64();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvPutOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvPutOp} MailboxKvPutOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvPutOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvPutOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvPutOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    if (!$util.isString(message.key))
+                        return "key: string expected";
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    if (!(message.sealed && typeof message.sealed.length === "number" || $util.isString(message.sealed)))
+                        return "sealed: buffer expected";
+                if (message.expectedVersion != null && Object.hasOwnProperty.call(message, "expectedVersion"))
+                    if (!$util.isInteger(message.expectedVersion) && !(message.expectedVersion && $util.isInteger(message.expectedVersion.low) && $util.isInteger(message.expectedVersion.high)))
+                        return "expectedVersion: integer|Long expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvPutOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvPutOp} MailboxKvPutOp
+             */
+            MailboxKvPutOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvPutOp)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvPutOp: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvPutOp();
+                if (object.key != null)
+                    message.key = String(object.key);
+                if (object.sealed != null)
+                    if (typeof object.sealed === "string")
+                        $util.base64.decode(object.sealed, message.sealed = $util.newBuffer($util.base64.length(object.sealed)), 0);
+                    else if (object.sealed.length >= 0)
+                        message.sealed = object.sealed;
+                if (object.expectedVersion != null)
+                    if ($util.Long)
+                        message.expectedVersion = $util.Long.fromValue(object.expectedVersion, true);
+                    else if (typeof object.expectedVersion === "string")
+                        message.expectedVersion = parseInt(object.expectedVersion, 10);
+                    else if (typeof object.expectedVersion === "number")
+                        message.expectedVersion = object.expectedVersion;
+                    else if (typeof object.expectedVersion === "object")
+                        message.expectedVersion = new $util.LongBits(object.expectedVersion.low >>> 0, object.expectedVersion.high >>> 0).toNumber(true);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvPutOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {dmcn.relay.MailboxKvPutOp} message MailboxKvPutOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvPutOp.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.key = "";
+                    if (options.bytes === String)
+                        object.sealed = "";
+                    else {
+                        object.sealed = [];
+                        if (options.bytes !== Array)
+                            object.sealed = $util.newBuffer(object.sealed);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.expectedVersion = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.expectedVersion = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                }
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    object.key = message.key;
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    object.sealed = options.bytes === String ? $util.base64.encode(message.sealed, 0, message.sealed.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealed) : message.sealed;
+                if (message.expectedVersion != null && Object.hasOwnProperty.call(message, "expectedVersion"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.expectedVersion = typeof message.expectedVersion === "number" ? BigInt(message.expectedVersion) : $util.Long.fromBits(message.expectedVersion.low >>> 0, message.expectedVersion.high >>> 0, true).toBigInt();
+                    else if (typeof message.expectedVersion === "number")
+                        object.expectedVersion = options.longs === String ? String(message.expectedVersion) : message.expectedVersion;
+                    else
+                        object.expectedVersion = options.longs === String ? $util.Long.prototype.toString.call(message.expectedVersion) : options.longs === Number ? new $util.LongBits(message.expectedVersion.low >>> 0, message.expectedVersion.high >>> 0).toNumber(true) : message.expectedVersion;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvPutOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvPutOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvPutOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvPutOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvPutOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvPutOp";
+            };
+
+            return MailboxKvPutOp;
+        })();
+
+        relay.MailboxKvGetOp = (function() {
+
+            /**
+             * Properties of a MailboxKvGetOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvGetOp
+             * @property {string|null} [key] MailboxKvGetOp key
+             */
+
+            /**
+             * Constructs a new MailboxKvGetOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvGetOp.
+             * @implements IMailboxKvGetOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvGetOp=} [properties] Properties to set
+             */
+            function MailboxKvGetOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvGetOp key.
+             * @member {string} key
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @instance
+             */
+            MailboxKvGetOp.prototype.key = "";
+
+            /**
+             * Creates a new MailboxKvGetOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvGetOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvGetOp} MailboxKvGetOp instance
+             */
+            MailboxKvGetOp.create = function create(properties) {
+                return new MailboxKvGetOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvGetOp message. Does not implicitly {@link dmcn.relay.MailboxKvGetOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvGetOp} message MailboxKvGetOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvGetOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.key);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvGetOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvGetOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvGetOp} message MailboxKvGetOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvGetOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvGetOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvGetOp} MailboxKvGetOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvGetOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvGetOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.key = reader.string();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvGetOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvGetOp} MailboxKvGetOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvGetOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvGetOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvGetOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    if (!$util.isString(message.key))
+                        return "key: string expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvGetOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvGetOp} MailboxKvGetOp
+             */
+            MailboxKvGetOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvGetOp)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvGetOp: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvGetOp();
+                if (object.key != null)
+                    message.key = String(object.key);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvGetOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {dmcn.relay.MailboxKvGetOp} message MailboxKvGetOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvGetOp.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults)
+                    object.key = "";
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    object.key = message.key;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvGetOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvGetOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvGetOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvGetOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvGetOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvGetOp";
+            };
+
+            return MailboxKvGetOp;
+        })();
+
+        relay.MailboxKvListOp = (function() {
+
+            /**
+             * Properties of a MailboxKvListOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvListOp
+             * @property {string|null} [prefix] MailboxKvListOp prefix
+             * @property {number|null} [limit] MailboxKvListOp limit
+             * @property {Uint8Array|null} [cursor] MailboxKvListOp cursor
+             * @property {boolean|null} [values] MailboxKvListOp values
+             */
+
+            /**
+             * Constructs a new MailboxKvListOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvListOp.
+             * @implements IMailboxKvListOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvListOp=} [properties] Properties to set
+             */
+            function MailboxKvListOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvListOp prefix.
+             * @member {string} prefix
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @instance
+             */
+            MailboxKvListOp.prototype.prefix = "";
+
+            /**
+             * MailboxKvListOp limit.
+             * @member {number} limit
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @instance
+             */
+            MailboxKvListOp.prototype.limit = 0;
+
+            /**
+             * MailboxKvListOp cursor.
+             * @member {Uint8Array} cursor
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @instance
+             */
+            MailboxKvListOp.prototype.cursor = $util.newBuffer([]);
+
+            /**
+             * MailboxKvListOp values.
+             * @member {boolean} values
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @instance
+             */
+            MailboxKvListOp.prototype.values = false;
+
+            /**
+             * Creates a new MailboxKvListOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvListOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvListOp} MailboxKvListOp instance
+             */
+            MailboxKvListOp.create = function create(properties) {
+                return new MailboxKvListOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvListOp message. Does not implicitly {@link dmcn.relay.MailboxKvListOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvListOp} message MailboxKvListOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvListOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.prefix != null && Object.hasOwnProperty.call(message, "prefix"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.prefix);
+                if (message.limit != null && Object.hasOwnProperty.call(message, "limit"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.limit);
+                if (message.cursor != null && Object.hasOwnProperty.call(message, "cursor"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.cursor);
+                if (message.values != null && Object.hasOwnProperty.call(message, "values"))
+                    writer.uint32(/* id 4, wireType 0 =*/32).bool(message.values);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvListOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvListOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvListOp} message MailboxKvListOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvListOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvListOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvListOp} MailboxKvListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvListOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvListOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.prefix = reader.string();
+                            break;
+                        }
+                    case 2: {
+                            message.limit = reader.uint32();
+                            break;
+                        }
+                    case 3: {
+                            message.cursor = reader.bytes();
+                            break;
+                        }
+                    case 4: {
+                            message.values = reader.bool();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvListOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvListOp} MailboxKvListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvListOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvListOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvListOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.prefix != null && Object.hasOwnProperty.call(message, "prefix"))
+                    if (!$util.isString(message.prefix))
+                        return "prefix: string expected";
+                if (message.limit != null && Object.hasOwnProperty.call(message, "limit"))
+                    if (!$util.isInteger(message.limit))
+                        return "limit: integer expected";
+                if (message.cursor != null && Object.hasOwnProperty.call(message, "cursor"))
+                    if (!(message.cursor && typeof message.cursor.length === "number" || $util.isString(message.cursor)))
+                        return "cursor: buffer expected";
+                if (message.values != null && Object.hasOwnProperty.call(message, "values"))
+                    if (typeof message.values !== "boolean")
+                        return "values: boolean expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvListOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvListOp} MailboxKvListOp
+             */
+            MailboxKvListOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvListOp)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvListOp: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvListOp();
+                if (object.prefix != null)
+                    message.prefix = String(object.prefix);
+                if (object.limit != null)
+                    message.limit = object.limit >>> 0;
+                if (object.cursor != null)
+                    if (typeof object.cursor === "string")
+                        $util.base64.decode(object.cursor, message.cursor = $util.newBuffer($util.base64.length(object.cursor)), 0);
+                    else if (object.cursor.length >= 0)
+                        message.cursor = object.cursor;
+                if (object.values != null)
+                    message.values = Boolean(object.values);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvListOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {dmcn.relay.MailboxKvListOp} message MailboxKvListOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvListOp.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.prefix = "";
+                    object.limit = 0;
+                    if (options.bytes === String)
+                        object.cursor = "";
+                    else {
+                        object.cursor = [];
+                        if (options.bytes !== Array)
+                            object.cursor = $util.newBuffer(object.cursor);
+                    }
+                    object.values = false;
+                }
+                if (message.prefix != null && Object.hasOwnProperty.call(message, "prefix"))
+                    object.prefix = message.prefix;
+                if (message.limit != null && Object.hasOwnProperty.call(message, "limit"))
+                    object.limit = message.limit;
+                if (message.cursor != null && Object.hasOwnProperty.call(message, "cursor"))
+                    object.cursor = options.bytes === String ? $util.base64.encode(message.cursor, 0, message.cursor.length) : options.bytes === Array ? Array.prototype.slice.call(message.cursor) : message.cursor;
+                if (message.values != null && Object.hasOwnProperty.call(message, "values"))
+                    object.values = message.values;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvListOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvListOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvListOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvListOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvListOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvListOp";
+            };
+
+            return MailboxKvListOp;
+        })();
+
+        relay.MailboxKvDeleteOp = (function() {
+
+            /**
+             * Properties of a MailboxKvDeleteOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvDeleteOp
+             * @property {string|null} [key] MailboxKvDeleteOp key
+             */
+
+            /**
+             * Constructs a new MailboxKvDeleteOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvDeleteOp.
+             * @implements IMailboxKvDeleteOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvDeleteOp=} [properties] Properties to set
+             */
+            function MailboxKvDeleteOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvDeleteOp key.
+             * @member {string} key
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @instance
+             */
+            MailboxKvDeleteOp.prototype.key = "";
+
+            /**
+             * Creates a new MailboxKvDeleteOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvDeleteOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvDeleteOp} MailboxKvDeleteOp instance
+             */
+            MailboxKvDeleteOp.create = function create(properties) {
+                return new MailboxKvDeleteOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvDeleteOp message. Does not implicitly {@link dmcn.relay.MailboxKvDeleteOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvDeleteOp} message MailboxKvDeleteOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvDeleteOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.key);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvDeleteOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvDeleteOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvDeleteOp} message MailboxKvDeleteOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvDeleteOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvDeleteOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvDeleteOp} MailboxKvDeleteOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvDeleteOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvDeleteOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.key = reader.string();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvDeleteOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvDeleteOp} MailboxKvDeleteOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvDeleteOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvDeleteOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvDeleteOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    if (!$util.isString(message.key))
+                        return "key: string expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvDeleteOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvDeleteOp} MailboxKvDeleteOp
+             */
+            MailboxKvDeleteOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvDeleteOp)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvDeleteOp: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvDeleteOp();
+                if (object.key != null)
+                    message.key = String(object.key);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvDeleteOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {dmcn.relay.MailboxKvDeleteOp} message MailboxKvDeleteOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvDeleteOp.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults)
+                    object.key = "";
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    object.key = message.key;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvDeleteOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvDeleteOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvDeleteOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvDeleteOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvDeleteOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvDeleteOp";
+            };
+
+            return MailboxKvDeleteOp;
+        })();
+
+        relay.MailboxKvStatOp = (function() {
+
+            /**
+             * Properties of a MailboxKvStatOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvStatOp
+             */
+
+            /**
+             * Constructs a new MailboxKvStatOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvStatOp.
+             * @implements IMailboxKvStatOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvStatOp=} [properties] Properties to set
+             */
+            function MailboxKvStatOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * Creates a new MailboxKvStatOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvStatOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvStatOp} MailboxKvStatOp instance
+             */
+            MailboxKvStatOp.create = function create(properties) {
+                return new MailboxKvStatOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvStatOp message. Does not implicitly {@link dmcn.relay.MailboxKvStatOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvStatOp} message MailboxKvStatOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvStatOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvStatOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvStatOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {dmcn.relay.IMailboxKvStatOp} message MailboxKvStatOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvStatOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvStatOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvStatOp} MailboxKvStatOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvStatOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvStatOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvStatOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvStatOp} MailboxKvStatOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvStatOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvStatOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvStatOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvStatOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvStatOp} MailboxKvStatOp
+             */
+            MailboxKvStatOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvStatOp)
+                    return object;
+                return new $root.dmcn.relay.MailboxKvStatOp();
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvStatOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {dmcn.relay.MailboxKvStatOp} message MailboxKvStatOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvStatOp.toObject = function toObject() {
+                return {};
+            };
+
+            /**
+             * Converts this MailboxKvStatOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvStatOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvStatOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvStatOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvStatOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvStatOp";
+            };
+
+            return MailboxKvStatOp;
+        })();
+
+        relay.MailboxKvPutResponse = (function() {
+
+            /**
+             * Properties of a MailboxKvPutResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvPutResponse
+             * @property {boolean|null} [success] MailboxKvPutResponse success
+             * @property {number|Long|null} [version] MailboxKvPutResponse version
+             */
+
+            /**
+             * Constructs a new MailboxKvPutResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvPutResponse.
+             * @implements IMailboxKvPutResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvPutResponse=} [properties] Properties to set
+             */
+            function MailboxKvPutResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvPutResponse success.
+             * @member {boolean} success
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @instance
+             */
+            MailboxKvPutResponse.prototype.success = false;
+
+            /**
+             * MailboxKvPutResponse version.
+             * @member {number|Long} version
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @instance
+             */
+            MailboxKvPutResponse.prototype.version = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * Creates a new MailboxKvPutResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvPutResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvPutResponse} MailboxKvPutResponse instance
+             */
+            MailboxKvPutResponse.create = function create(properties) {
+                return new MailboxKvPutResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvPutResponse message. Does not implicitly {@link dmcn.relay.MailboxKvPutResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvPutResponse} message MailboxKvPutResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvPutResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).bool(message.success);
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.version);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvPutResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvPutResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvPutResponse} message MailboxKvPutResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvPutResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvPutResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvPutResponse} MailboxKvPutResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvPutResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvPutResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.success = reader.bool();
+                            break;
+                        }
+                    case 2: {
+                            message.version = reader.uint64();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvPutResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvPutResponse} MailboxKvPutResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvPutResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvPutResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvPutResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                    if (typeof message.success !== "boolean")
+                        return "success: boolean expected";
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (!$util.isInteger(message.version) && !(message.version && $util.isInteger(message.version.low) && $util.isInteger(message.version.high)))
+                        return "version: integer|Long expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvPutResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvPutResponse} MailboxKvPutResponse
+             */
+            MailboxKvPutResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvPutResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvPutResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvPutResponse();
+                if (object.success != null)
+                    message.success = Boolean(object.success);
+                if (object.version != null)
+                    if ($util.Long)
+                        message.version = $util.Long.fromValue(object.version, true);
+                    else if (typeof object.version === "string")
+                        message.version = parseInt(object.version, 10);
+                    else if (typeof object.version === "number")
+                        message.version = object.version;
+                    else if (typeof object.version === "object")
+                        message.version = new $util.LongBits(object.version.low >>> 0, object.version.high >>> 0).toNumber(true);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvPutResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {dmcn.relay.MailboxKvPutResponse} message MailboxKvPutResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvPutResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.success = false;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.version = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.version = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                }
+                if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                    object.success = message.success;
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.version = typeof message.version === "number" ? BigInt(message.version) : $util.Long.fromBits(message.version.low >>> 0, message.version.high >>> 0, true).toBigInt();
+                    else if (typeof message.version === "number")
+                        object.version = options.longs === String ? String(message.version) : message.version;
+                    else
+                        object.version = options.longs === String ? $util.Long.prototype.toString.call(message.version) : options.longs === Number ? new $util.LongBits(message.version.low >>> 0, message.version.high >>> 0).toNumber(true) : message.version;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvPutResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvPutResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvPutResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvPutResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvPutResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvPutResponse";
+            };
+
+            return MailboxKvPutResponse;
+        })();
+
+        relay.MailboxKvGetResponse = (function() {
+
+            /**
+             * Properties of a MailboxKvGetResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvGetResponse
+             * @property {boolean|null} [found] MailboxKvGetResponse found
+             * @property {Uint8Array|null} [sealed] MailboxKvGetResponse sealed
+             * @property {number|Long|null} [version] MailboxKvGetResponse version
+             */
+
+            /**
+             * Constructs a new MailboxKvGetResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvGetResponse.
+             * @implements IMailboxKvGetResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvGetResponse=} [properties] Properties to set
+             */
+            function MailboxKvGetResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvGetResponse found.
+             * @member {boolean} found
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @instance
+             */
+            MailboxKvGetResponse.prototype.found = false;
+
+            /**
+             * MailboxKvGetResponse sealed.
+             * @member {Uint8Array} sealed
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @instance
+             */
+            MailboxKvGetResponse.prototype.sealed = $util.newBuffer([]);
+
+            /**
+             * MailboxKvGetResponse version.
+             * @member {number|Long} version
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @instance
+             */
+            MailboxKvGetResponse.prototype.version = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * Creates a new MailboxKvGetResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvGetResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvGetResponse} MailboxKvGetResponse instance
+             */
+            MailboxKvGetResponse.create = function create(properties) {
+                return new MailboxKvGetResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvGetResponse message. Does not implicitly {@link dmcn.relay.MailboxKvGetResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvGetResponse} message MailboxKvGetResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvGetResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.found != null && Object.hasOwnProperty.call(message, "found"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).bool(message.found);
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.sealed);
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.version);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvGetResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvGetResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvGetResponse} message MailboxKvGetResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvGetResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvGetResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvGetResponse} MailboxKvGetResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvGetResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvGetResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.found = reader.bool();
+                            break;
+                        }
+                    case 2: {
+                            message.sealed = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.version = reader.uint64();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvGetResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvGetResponse} MailboxKvGetResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvGetResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvGetResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvGetResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.found != null && Object.hasOwnProperty.call(message, "found"))
+                    if (typeof message.found !== "boolean")
+                        return "found: boolean expected";
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    if (!(message.sealed && typeof message.sealed.length === "number" || $util.isString(message.sealed)))
+                        return "sealed: buffer expected";
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (!$util.isInteger(message.version) && !(message.version && $util.isInteger(message.version.low) && $util.isInteger(message.version.high)))
+                        return "version: integer|Long expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvGetResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvGetResponse} MailboxKvGetResponse
+             */
+            MailboxKvGetResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvGetResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvGetResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvGetResponse();
+                if (object.found != null)
+                    message.found = Boolean(object.found);
+                if (object.sealed != null)
+                    if (typeof object.sealed === "string")
+                        $util.base64.decode(object.sealed, message.sealed = $util.newBuffer($util.base64.length(object.sealed)), 0);
+                    else if (object.sealed.length >= 0)
+                        message.sealed = object.sealed;
+                if (object.version != null)
+                    if ($util.Long)
+                        message.version = $util.Long.fromValue(object.version, true);
+                    else if (typeof object.version === "string")
+                        message.version = parseInt(object.version, 10);
+                    else if (typeof object.version === "number")
+                        message.version = object.version;
+                    else if (typeof object.version === "object")
+                        message.version = new $util.LongBits(object.version.low >>> 0, object.version.high >>> 0).toNumber(true);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvGetResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {dmcn.relay.MailboxKvGetResponse} message MailboxKvGetResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvGetResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.found = false;
+                    if (options.bytes === String)
+                        object.sealed = "";
+                    else {
+                        object.sealed = [];
+                        if (options.bytes !== Array)
+                            object.sealed = $util.newBuffer(object.sealed);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.version = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.version = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                }
+                if (message.found != null && Object.hasOwnProperty.call(message, "found"))
+                    object.found = message.found;
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    object.sealed = options.bytes === String ? $util.base64.encode(message.sealed, 0, message.sealed.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealed) : message.sealed;
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.version = typeof message.version === "number" ? BigInt(message.version) : $util.Long.fromBits(message.version.low >>> 0, message.version.high >>> 0, true).toBigInt();
+                    else if (typeof message.version === "number")
+                        object.version = options.longs === String ? String(message.version) : message.version;
+                    else
+                        object.version = options.longs === String ? $util.Long.prototype.toString.call(message.version) : options.longs === Number ? new $util.LongBits(message.version.low >>> 0, message.version.high >>> 0).toNumber(true) : message.version;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvGetResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvGetResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvGetResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvGetResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvGetResponse";
+            };
+
+            return MailboxKvGetResponse;
+        })();
+
+        relay.MailboxKvItem = (function() {
+
+            /**
+             * Properties of a MailboxKvItem.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvItem
+             * @property {string|null} [key] MailboxKvItem key
+             * @property {Uint8Array|null} [sealed] MailboxKvItem sealed
+             * @property {number|Long|null} [version] MailboxKvItem version
+             */
+
+            /**
+             * Constructs a new MailboxKvItem.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvItem.
+             * @implements IMailboxKvItem
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvItem=} [properties] Properties to set
+             */
+            function MailboxKvItem(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvItem key.
+             * @member {string} key
+             * @memberof dmcn.relay.MailboxKvItem
+             * @instance
+             */
+            MailboxKvItem.prototype.key = "";
+
+            /**
+             * MailboxKvItem sealed.
+             * @member {Uint8Array} sealed
+             * @memberof dmcn.relay.MailboxKvItem
+             * @instance
+             */
+            MailboxKvItem.prototype.sealed = $util.newBuffer([]);
+
+            /**
+             * MailboxKvItem version.
+             * @member {number|Long} version
+             * @memberof dmcn.relay.MailboxKvItem
+             * @instance
+             */
+            MailboxKvItem.prototype.version = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * Creates a new MailboxKvItem instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {dmcn.relay.IMailboxKvItem=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvItem} MailboxKvItem instance
+             */
+            MailboxKvItem.create = function create(properties) {
+                return new MailboxKvItem(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvItem message. Does not implicitly {@link dmcn.relay.MailboxKvItem.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {dmcn.relay.IMailboxKvItem} message MailboxKvItem message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvItem.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.key);
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.sealed);
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.version);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvItem message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvItem.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {dmcn.relay.IMailboxKvItem} message MailboxKvItem message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvItem.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvItem message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvItem} MailboxKvItem
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvItem.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvItem();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.key = reader.string();
+                            break;
+                        }
+                    case 2: {
+                            message.sealed = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.version = reader.uint64();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvItem message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvItem} MailboxKvItem
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvItem.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvItem message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvItem.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    if (!$util.isString(message.key))
+                        return "key: string expected";
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    if (!(message.sealed && typeof message.sealed.length === "number" || $util.isString(message.sealed)))
+                        return "sealed: buffer expected";
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (!$util.isInteger(message.version) && !(message.version && $util.isInteger(message.version.low) && $util.isInteger(message.version.high)))
+                        return "version: integer|Long expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvItem message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvItem} MailboxKvItem
+             */
+            MailboxKvItem.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvItem)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvItem: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvItem();
+                if (object.key != null)
+                    message.key = String(object.key);
+                if (object.sealed != null)
+                    if (typeof object.sealed === "string")
+                        $util.base64.decode(object.sealed, message.sealed = $util.newBuffer($util.base64.length(object.sealed)), 0);
+                    else if (object.sealed.length >= 0)
+                        message.sealed = object.sealed;
+                if (object.version != null)
+                    if ($util.Long)
+                        message.version = $util.Long.fromValue(object.version, true);
+                    else if (typeof object.version === "string")
+                        message.version = parseInt(object.version, 10);
+                    else if (typeof object.version === "number")
+                        message.version = object.version;
+                    else if (typeof object.version === "object")
+                        message.version = new $util.LongBits(object.version.low >>> 0, object.version.high >>> 0).toNumber(true);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvItem message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {dmcn.relay.MailboxKvItem} message MailboxKvItem
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvItem.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.key = "";
+                    if (options.bytes === String)
+                        object.sealed = "";
+                    else {
+                        object.sealed = [];
+                        if (options.bytes !== Array)
+                            object.sealed = $util.newBuffer(object.sealed);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.version = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.version = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                }
+                if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                    object.key = message.key;
+                if (message.sealed != null && Object.hasOwnProperty.call(message, "sealed"))
+                    object.sealed = options.bytes === String ? $util.base64.encode(message.sealed, 0, message.sealed.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealed) : message.sealed;
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.version = typeof message.version === "number" ? BigInt(message.version) : $util.Long.fromBits(message.version.low >>> 0, message.version.high >>> 0, true).toBigInt();
+                    else if (typeof message.version === "number")
+                        object.version = options.longs === String ? String(message.version) : message.version;
+                    else
+                        object.version = options.longs === String ? $util.Long.prototype.toString.call(message.version) : options.longs === Number ? new $util.LongBits(message.version.low >>> 0, message.version.high >>> 0).toNumber(true) : message.version;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvItem to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvItem
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvItem.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvItem
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvItem
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvItem.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvItem";
+            };
+
+            return MailboxKvItem;
+        })();
+
+        relay.MailboxKvListResponse = (function() {
+
+            /**
+             * Properties of a MailboxKvListResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvListResponse
+             * @property {Array.<dmcn.relay.IMailboxKvItem>|null} [items] MailboxKvListResponse items
+             * @property {Uint8Array|null} [nextCursor] MailboxKvListResponse nextCursor
+             */
+
+            /**
+             * Constructs a new MailboxKvListResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvListResponse.
+             * @implements IMailboxKvListResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvListResponse=} [properties] Properties to set
+             */
+            function MailboxKvListResponse(properties) {
+                this.items = [];
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvListResponse items.
+             * @member {Array.<dmcn.relay.IMailboxKvItem>} items
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @instance
+             */
+            MailboxKvListResponse.prototype.items = $util.emptyArray;
+
+            /**
+             * MailboxKvListResponse nextCursor.
+             * @member {Uint8Array} nextCursor
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @instance
+             */
+            MailboxKvListResponse.prototype.nextCursor = $util.newBuffer([]);
+
+            /**
+             * Creates a new MailboxKvListResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvListResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvListResponse} MailboxKvListResponse instance
+             */
+            MailboxKvListResponse.create = function create(properties) {
+                return new MailboxKvListResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvListResponse message. Does not implicitly {@link dmcn.relay.MailboxKvListResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvListResponse} message MailboxKvListResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvListResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.items != null && message.items.length)
+                    for (let i = 0; i < message.items.length; ++i)
+                        $root.dmcn.relay.MailboxKvItem.encode(message.items[i], writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                if (message.nextCursor != null && Object.hasOwnProperty.call(message, "nextCursor"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.nextCursor);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvListResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvListResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvListResponse} message MailboxKvListResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvListResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvListResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvListResponse} MailboxKvListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvListResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvListResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            if (!(message.items && message.items.length))
+                                message.items = [];
+                            message.items.push($root.dmcn.relay.MailboxKvItem.decode(reader, reader.uint32(), undefined, long + 1));
+                            break;
+                        }
+                    case 2: {
+                            message.nextCursor = reader.bytes();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvListResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvListResponse} MailboxKvListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvListResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvListResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvListResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.items != null && Object.hasOwnProperty.call(message, "items")) {
+                    if (!Array.isArray(message.items))
+                        return "items: array expected";
+                    for (let i = 0; i < message.items.length; ++i) {
+                        let error = $root.dmcn.relay.MailboxKvItem.verify(message.items[i], long + 1);
+                        if (error)
+                            return "items." + error;
+                    }
+                }
+                if (message.nextCursor != null && Object.hasOwnProperty.call(message, "nextCursor"))
+                    if (!(message.nextCursor && typeof message.nextCursor.length === "number" || $util.isString(message.nextCursor)))
+                        return "nextCursor: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvListResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvListResponse} MailboxKvListResponse
+             */
+            MailboxKvListResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvListResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvListResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvListResponse();
+                if (object.items) {
+                    if (!Array.isArray(object.items))
+                        throw TypeError(".dmcn.relay.MailboxKvListResponse.items: array expected");
+                    message.items = [];
+                    for (let i = 0; i < object.items.length; ++i) {
+                        if (!$util.isObject(object.items[i]))
+                            throw TypeError(".dmcn.relay.MailboxKvListResponse.items: object expected");
+                        message.items[i] = $root.dmcn.relay.MailboxKvItem.fromObject(object.items[i], long + 1);
+                    }
+                }
+                if (object.nextCursor != null)
+                    if (typeof object.nextCursor === "string")
+                        $util.base64.decode(object.nextCursor, message.nextCursor = $util.newBuffer($util.base64.length(object.nextCursor)), 0);
+                    else if (object.nextCursor.length >= 0)
+                        message.nextCursor = object.nextCursor;
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvListResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {dmcn.relay.MailboxKvListResponse} message MailboxKvListResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvListResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.arrays || options.defaults)
+                    object.items = [];
+                if (options.defaults)
+                    if (options.bytes === String)
+                        object.nextCursor = "";
+                    else {
+                        object.nextCursor = [];
+                        if (options.bytes !== Array)
+                            object.nextCursor = $util.newBuffer(object.nextCursor);
+                    }
+                if (message.items && message.items.length) {
+                    object.items = [];
+                    for (let j = 0; j < message.items.length; ++j)
+                        object.items[j] = $root.dmcn.relay.MailboxKvItem.toObject(message.items[j], options, q + 1);
+                }
+                if (message.nextCursor != null && Object.hasOwnProperty.call(message, "nextCursor"))
+                    object.nextCursor = options.bytes === String ? $util.base64.encode(message.nextCursor, 0, message.nextCursor.length) : options.bytes === Array ? Array.prototype.slice.call(message.nextCursor) : message.nextCursor;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvListResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvListResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvListResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvListResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvListResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvListResponse";
+            };
+
+            return MailboxKvListResponse;
+        })();
+
+        relay.MailboxKvDeleteResponse = (function() {
+
+            /**
+             * Properties of a MailboxKvDeleteResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvDeleteResponse
+             * @property {boolean|null} [success] MailboxKvDeleteResponse success
+             */
+
+            /**
+             * Constructs a new MailboxKvDeleteResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvDeleteResponse.
+             * @implements IMailboxKvDeleteResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvDeleteResponse=} [properties] Properties to set
+             */
+            function MailboxKvDeleteResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvDeleteResponse success.
+             * @member {boolean} success
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @instance
+             */
+            MailboxKvDeleteResponse.prototype.success = false;
+
+            /**
+             * Creates a new MailboxKvDeleteResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvDeleteResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvDeleteResponse} MailboxKvDeleteResponse instance
+             */
+            MailboxKvDeleteResponse.create = function create(properties) {
+                return new MailboxKvDeleteResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvDeleteResponse message. Does not implicitly {@link dmcn.relay.MailboxKvDeleteResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvDeleteResponse} message MailboxKvDeleteResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvDeleteResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).bool(message.success);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvDeleteResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvDeleteResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvDeleteResponse} message MailboxKvDeleteResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvDeleteResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvDeleteResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvDeleteResponse} MailboxKvDeleteResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvDeleteResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvDeleteResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.success = reader.bool();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvDeleteResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvDeleteResponse} MailboxKvDeleteResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvDeleteResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvDeleteResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvDeleteResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                    if (typeof message.success !== "boolean")
+                        return "success: boolean expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvDeleteResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvDeleteResponse} MailboxKvDeleteResponse
+             */
+            MailboxKvDeleteResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvDeleteResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvDeleteResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvDeleteResponse();
+                if (object.success != null)
+                    message.success = Boolean(object.success);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvDeleteResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {dmcn.relay.MailboxKvDeleteResponse} message MailboxKvDeleteResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvDeleteResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults)
+                    object.success = false;
+                if (message.success != null && Object.hasOwnProperty.call(message, "success"))
+                    object.success = message.success;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvDeleteResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvDeleteResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvDeleteResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvDeleteResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvDeleteResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvDeleteResponse";
+            };
+
+            return MailboxKvDeleteResponse;
+        })();
+
+        relay.MailboxKvStatResponse = (function() {
+
+            /**
+             * Properties of a MailboxKvStatResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxKvStatResponse
+             * @property {number|Long|null} [usedBytes] MailboxKvStatResponse usedBytes
+             * @property {number|Long|null} [quotaBytes] MailboxKvStatResponse quotaBytes
+             * @property {number|Long|null} [count] MailboxKvStatResponse count
+             */
+
+            /**
+             * Constructs a new MailboxKvStatResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxKvStatResponse.
+             * @implements IMailboxKvStatResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxKvStatResponse=} [properties] Properties to set
+             */
+            function MailboxKvStatResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxKvStatResponse usedBytes.
+             * @member {number|Long} usedBytes
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @instance
+             */
+            MailboxKvStatResponse.prototype.usedBytes = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * MailboxKvStatResponse quotaBytes.
+             * @member {number|Long} quotaBytes
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @instance
+             */
+            MailboxKvStatResponse.prototype.quotaBytes = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * MailboxKvStatResponse count.
+             * @member {number|Long} count
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @instance
+             */
+            MailboxKvStatResponse.prototype.count = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * Creates a new MailboxKvStatResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvStatResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxKvStatResponse} MailboxKvStatResponse instance
+             */
+            MailboxKvStatResponse.create = function create(properties) {
+                return new MailboxKvStatResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxKvStatResponse message. Does not implicitly {@link dmcn.relay.MailboxKvStatResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvStatResponse} message MailboxKvStatResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvStatResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.usedBytes != null && Object.hasOwnProperty.call(message, "usedBytes"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.usedBytes);
+                if (message.quotaBytes != null && Object.hasOwnProperty.call(message, "quotaBytes"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.quotaBytes);
+                if (message.count != null && Object.hasOwnProperty.call(message, "count"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.count);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxKvStatResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvStatResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {dmcn.relay.IMailboxKvStatResponse} message MailboxKvStatResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxKvStatResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxKvStatResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxKvStatResponse} MailboxKvStatResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvStatResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxKvStatResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.usedBytes = reader.uint64();
+                            break;
+                        }
+                    case 2: {
+                            message.quotaBytes = reader.uint64();
+                            break;
+                        }
+                    case 3: {
+                            message.count = reader.uint64();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxKvStatResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxKvStatResponse} MailboxKvStatResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxKvStatResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxKvStatResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxKvStatResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.usedBytes != null && Object.hasOwnProperty.call(message, "usedBytes"))
+                    if (!$util.isInteger(message.usedBytes) && !(message.usedBytes && $util.isInteger(message.usedBytes.low) && $util.isInteger(message.usedBytes.high)))
+                        return "usedBytes: integer|Long expected";
+                if (message.quotaBytes != null && Object.hasOwnProperty.call(message, "quotaBytes"))
+                    if (!$util.isInteger(message.quotaBytes) && !(message.quotaBytes && $util.isInteger(message.quotaBytes.low) && $util.isInteger(message.quotaBytes.high)))
+                        return "quotaBytes: integer|Long expected";
+                if (message.count != null && Object.hasOwnProperty.call(message, "count"))
+                    if (!$util.isInteger(message.count) && !(message.count && $util.isInteger(message.count.low) && $util.isInteger(message.count.high)))
+                        return "count: integer|Long expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxKvStatResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxKvStatResponse} MailboxKvStatResponse
+             */
+            MailboxKvStatResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxKvStatResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxKvStatResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxKvStatResponse();
+                if (object.usedBytes != null)
+                    if ($util.Long)
+                        message.usedBytes = $util.Long.fromValue(object.usedBytes, true);
+                    else if (typeof object.usedBytes === "string")
+                        message.usedBytes = parseInt(object.usedBytes, 10);
+                    else if (typeof object.usedBytes === "number")
+                        message.usedBytes = object.usedBytes;
+                    else if (typeof object.usedBytes === "object")
+                        message.usedBytes = new $util.LongBits(object.usedBytes.low >>> 0, object.usedBytes.high >>> 0).toNumber(true);
+                if (object.quotaBytes != null)
+                    if ($util.Long)
+                        message.quotaBytes = $util.Long.fromValue(object.quotaBytes, true);
+                    else if (typeof object.quotaBytes === "string")
+                        message.quotaBytes = parseInt(object.quotaBytes, 10);
+                    else if (typeof object.quotaBytes === "number")
+                        message.quotaBytes = object.quotaBytes;
+                    else if (typeof object.quotaBytes === "object")
+                        message.quotaBytes = new $util.LongBits(object.quotaBytes.low >>> 0, object.quotaBytes.high >>> 0).toNumber(true);
+                if (object.count != null)
+                    if ($util.Long)
+                        message.count = $util.Long.fromValue(object.count, true);
+                    else if (typeof object.count === "string")
+                        message.count = parseInt(object.count, 10);
+                    else if (typeof object.count === "number")
+                        message.count = object.count;
+                    else if (typeof object.count === "object")
+                        message.count = new $util.LongBits(object.count.low >>> 0, object.count.high >>> 0).toNumber(true);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxKvStatResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {dmcn.relay.MailboxKvStatResponse} message MailboxKvStatResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxKvStatResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.usedBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.usedBytes = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.quotaBytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.quotaBytes = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.count = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                }
+                if (message.usedBytes != null && Object.hasOwnProperty.call(message, "usedBytes"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.usedBytes = typeof message.usedBytes === "number" ? BigInt(message.usedBytes) : $util.Long.fromBits(message.usedBytes.low >>> 0, message.usedBytes.high >>> 0, true).toBigInt();
+                    else if (typeof message.usedBytes === "number")
+                        object.usedBytes = options.longs === String ? String(message.usedBytes) : message.usedBytes;
+                    else
+                        object.usedBytes = options.longs === String ? $util.Long.prototype.toString.call(message.usedBytes) : options.longs === Number ? new $util.LongBits(message.usedBytes.low >>> 0, message.usedBytes.high >>> 0).toNumber(true) : message.usedBytes;
+                if (message.quotaBytes != null && Object.hasOwnProperty.call(message, "quotaBytes"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.quotaBytes = typeof message.quotaBytes === "number" ? BigInt(message.quotaBytes) : $util.Long.fromBits(message.quotaBytes.low >>> 0, message.quotaBytes.high >>> 0, true).toBigInt();
+                    else if (typeof message.quotaBytes === "number")
+                        object.quotaBytes = options.longs === String ? String(message.quotaBytes) : message.quotaBytes;
+                    else
+                        object.quotaBytes = options.longs === String ? $util.Long.prototype.toString.call(message.quotaBytes) : options.longs === Number ? new $util.LongBits(message.quotaBytes.low >>> 0, message.quotaBytes.high >>> 0).toNumber(true) : message.quotaBytes;
+                if (message.count != null && Object.hasOwnProperty.call(message, "count"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.count = typeof message.count === "number" ? BigInt(message.count) : $util.Long.fromBits(message.count.low >>> 0, message.count.high >>> 0, true).toBigInt();
+                    else if (typeof message.count === "number")
+                        object.count = options.longs === String ? String(message.count) : message.count;
+                    else
+                        object.count = options.longs === String ? $util.Long.prototype.toString.call(message.count) : options.longs === Number ? new $util.LongBits(message.count.low >>> 0, message.count.high >>> 0).toNumber(true) : message.count;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxKvStatResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxKvStatResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxKvStatResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxKvStatResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxKvStatResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxKvStatResponse";
+            };
+
+            return MailboxKvStatResponse;
         })();
 
         return relay;

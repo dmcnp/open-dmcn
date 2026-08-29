@@ -7,7 +7,7 @@
 
 import { fromBase64, toHex } from '../crypto/keys';
 import type { ContactRecord } from '../api/contactStore';
-import type { FilterList } from '../api/filterRest';
+import type { FilterList } from '../api/filterList';
 
 export type SenderCategory = 'allowlisted' | 'pending' | 'blocked';
 

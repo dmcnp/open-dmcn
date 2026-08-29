@@ -31,7 +31,13 @@ What it is:
 - a **serving node** — durable mailbox + local record store + relay (`/dmcn/relay/1.0.0`,
   `/dmcn/peers`, `/dmcn/join`), authoritative for its own domain;
 - a **webmail client** — the React SPA is embedded (`//go:embed`); all crypto is
-  client-side (Web Crypto), the backend is an in-process proxy to the node;
+  client-side (Web Crypto), the backend is an in-process proxy to the node. It is the same
+  application the hosted product ships, differing only where a deployment genuinely must:
+  `src/lib/deployment.ts` declares those points and `src/deployment.tsx` fills them in for
+  this build. What that buys is a client whose trust code has one implementation rather than
+  two that slowly disagree — but note the direction of the trade: this build verifies a
+  bridge's attestation **in the browser**, against the domain root key published in DNS, so
+  nothing about whether a bridged message looks trustworthy passes through the server;
 - **self-service registration** — the browser generates keys and self-signs its record;
   the daemon attaches an operator routing credential and publishes it;
 - an optional **SMTP bridge** (`DMCND_BRIDGE_ENABLED`) — inbound legacy email is verified with
@@ -308,7 +314,7 @@ formats (they are end-to-end-sealed message payloads, not wire ops).
 make build        # embedded SPA + bin/dmcnd
 make test         # go test ./...
 make proto        # regenerate dmcnpb/ from proto/ (requires buf + protoc-gen-go)
-make proto-web    # regenerate the browser protobuf bundle (cmd/dmcnd/web/src/lib/proto)
+make proto-web    # regenerate the browser protobuf bundle (cmd/dmcnd/web/app/proto)
 make build-web    # rebuild the embedded SPA (needs Node 20+)
 make site         # render dmcn.dev into docs/
 make site-serve   # preview docs/ on localhost:8081 with production headers

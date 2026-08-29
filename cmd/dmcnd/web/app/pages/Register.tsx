@@ -1,20 +1,18 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../lib/hooks/useAuth';
-import { useKeys } from '../lib/hooks/useKeys';
-import { register, loginWithKeys, getRelayHints, ApiError } from '../lib/api/client';
-import { generateIdentityKeyPair, importEd25519PrivateKey, toBase64 } from '../lib/crypto/keys';
-import { encryptKeys, encryptKeysWithKey, type EncryptedBundle } from '../lib/crypto/keystore';
-import { makeLocalKeystore, saveLocalKeystore } from '../lib/crypto/localKeystore';
-import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
-import { encodeIdentitySignableBytes, encodeIdentityRecord } from '../lib/crypto/protobuf';
-import { signSelfSignature } from '../lib/crypto/identity';
-import { validateChosenAddress } from '../lib/address';
-import { DEFAULT_DOMAIN } from '../lib/config';
-import { AuthShell } from '../components/AuthShell';
-import { ChoiceRow } from '../components/ChoiceRow';
-import { Button, Input } from '../ds';
-import { Icon } from '../components/Icon';
+import { useAuth } from '../../src/lib/hooks/useAuth';
+import { useKeys } from '../../src/lib/hooks/useKeys';
+import { ApiError } from '../../src/lib/api/client';
+import { register } from '../lib/api/daemonClient';
+import { toBase64 } from '../../src/lib/crypto/keys';
+import { isPasskeySupported } from '../../src/lib/crypto/passkey';
+import { enrollIdentity, persistAndSignIn } from '../../src/lib/crypto/enrollment';
+import { validateChosenAddress } from '../../src/lib/address';
+import { DEFAULT_DOMAIN } from '../../src/lib/config';
+import { AuthShell } from '../../src/components/AuthShell';
+import { ChoiceRow } from '../../src/components/ChoiceRow';
+import { Button, Input } from '../../src/ds';
+import { Icon } from '../../src/components/Icon';
 
 const linkStyle = { color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 } as const;
 const fieldLabelStyle = { fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-body)', display: 'block', marginBottom: 'var(--space-2)' } as const;
@@ -67,48 +65,11 @@ export function Register() {
     setError('');
 
     try {
-      // For passkey, enroll first so the WebAuthn prompt fires within the form's user
-      // activation, before the (fast) key generation that follows.
-      const enr = method === 'passkey' ? await createPasskeyPRF(address) : null;
-
-      const keys = await generateIdentityKeyPair();
-      const keyData = new TextEncoder().encode(JSON.stringify({
-        ed25519_public: toBase64(keys.ed25519Public),
-        ed25519_private: toBase64(keys.ed25519Private),
-        x25519_public: toBase64(keys.x25519Public),
-        x25519_private: toBase64(keys.x25519Private),
-        device_id: toBase64(keys.deviceId),
-        created_at: keys.createdAt,
-      }));
-
-      // The encrypted keystore lives only on this device (IndexedDB) — never sent to the
-      // server. Passkey-PRF or Argon2id-passphrase wraps it.
-      let bundle: EncryptedBundle;
-      let authMethod: 'password' | 'passkey';
-      let credentialId: string | undefined;
-      let prfSalt: string | undefined;
-      if (enr) {
-        bundle = await encryptKeysWithKey(keyData, enr.aesKey);
-        authMethod = 'passkey'; credentialId = enr.credentialId; prfSalt = enr.prfSalt;
-      } else {
-        bundle = await encryptKeys(keyData, passphrase);
-        authMethod = 'password';
-      }
-
-      // The record's relay hints are advisory here — the daemon (operator) authoritatively
-      // sets them in the routing credential it attaches. Fetch what the node reports so the
-      // self-signed core already carries them.
-      const { relay_hints } = await getRelayHints(address);
-      const now = keys.createdAt;
-      const recordBase = {
-        version: 1, address,
-        ed25519PublicKey: keys.ed25519Public, x25519PublicKey: keys.x25519Public,
-        createdAt: now, expiresAt: 0, relayHints: relay_hints, verificationTier: 0, bridgeCapability: false,
-      };
-      const signableBytes = await encodeIdentitySignableBytes(recordBase);
-      const seed = keys.ed25519Private.slice(0, 32);
-      const selfSignature = await signSelfSignature(seed, signableBytes);
-      const identityRecordBytes = await encodeIdentityRecord({ ...recordBase, selfSignature });
+      const enrolled = await enrollIdentity(
+        address,
+        method === 'passkey' ? { method: 'passkey' } : { method: 'passphrase', passphrase },
+      );
+      const { keys, identityRecordBytes, selfSignature } = enrolled;
 
       await register({
         address,
@@ -118,12 +79,7 @@ export function Register() {
         self_signature: toBase64(selfSignature),
       });
 
-      // Persist the encrypted keystore locally so this device can re-unlock later.
-      await saveLocalKeystore(makeLocalKeystore({ address, kp: keys, bundle, authMethod, credentialId, prfSalt }));
-
-      // Registration mints no session — log into the client with the fresh keys.
-      const signKey = await importEd25519PrivateKey(seed);
-      const token = await loginWithKeys(address, signKey);
+      const token = await persistAndSignIn(address, enrolled);
       await setKeys(address, keys);
       setSession(address, token);
       navigate('/inbox');

@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/hex"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -96,5 +97,49 @@ func TestParityGolden(t *testing.T) {
 	}
 	if got := hex.EncodeToString(cb); got != wantContent {
 		t.Errorf("MessageContent canonical bytes drifted from the browser-parity golden:\n got %s\nwant %s", got, wantContent)
+	}
+}
+
+// TestParityGoldenSenderDisplay pins sender_display (field 18) — the legacy From display
+// name a bridge carries into the signed header. Cross-checked byte-for-byte against
+// protobufjs (encodeMessageHeader in cmd/dmcnd/web/src/lib/crypto/protobuf.ts): both
+// implementations must agree, because the browser verifies a header signature by
+// RE-ENCODING what it parsed. A client whose bundle does not know the field re-encodes
+// without it and rejects the signature — which is why the browser proto bundle has to be
+// regenerated and deployed alongside any bridge that emits a display name.
+//
+// This case goes through MessageHeader.toProto (not a raw dmcnpb literal) so it also pins
+// the always-emitted 16 zero bytes of reply_to_id that the browser mirrors.
+func TestParityGoldenSenderDisplay(t *testing.T) {
+	k32 := make([]byte, 32)
+	for i := range k32 {
+		k32[i] = byte(i + 1)
+	}
+	var bh [32]byte
+	for i := range bh {
+		bh[i] = byte(0xb0 + i%16)
+	}
+	h := MessageHeader{
+		Version:          1,
+		MessageID:        [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+		ThreadID:         [16]byte{16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		SenderAddress:    "noreply@redditmail.com",
+		SenderPublicKey:  k32,
+		RecipientAddress: "bob@dmcn.me",
+		SentAt:           time.Unix(1700000000, 0).UTC(),
+		Subject:          "Hello, \u4e16\u754c",
+		AttachmentCount:  1,
+		BodySize:         12345,
+		Snippet:          "preview text",
+		BodyHash:         bh,
+		SenderDisplay:    "Reddit",
+	}
+	const want = "080112100102030405060708090a0b0c0d0e0f101a10100f0e0d0c0b0a09080706050403020122166e6f7265706c79407265646469746d61696c2e636f6d2a200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20320b626f6240646d636e2e6d653880e2cfaa06420d48656c6c6f2c20e4b896e7958c480150b9605a0c7072657669657720746578746210000000000000000000000000000000006a20b0b1b2b3b4b5b6b7b8b9babbbcbdbebfb0b1b2b3b4b5b6b7b8b9babbbcbdbebf920106526564646974"
+	b, err := protoMarshal(h.toProto())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hex.EncodeToString(b); got != want {
+		t.Errorf("MessageHeader with sender_display drifted from the browser-parity golden:\n got %s\nwant %s", got, want)
 	}
 }

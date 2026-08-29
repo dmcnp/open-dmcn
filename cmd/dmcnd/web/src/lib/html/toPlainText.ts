@@ -1,17 +1,39 @@
-// toPlainText renders composed HTML down to the text/plain part that always accompanies
-// it on the wire (MessageContent.body stays text/plain; the HTML rides in `alternatives`).
+// toPlainText renders HTML down to a text/plain rendering — the part that always
+// accompanies it on the wire (MessageContent.body stays text/plain; the HTML rides in
+// `alternatives`).
 //
 // This is what a text-only client, the trust-gated plain-text peek, and the header
-// `snippet` all read — so it has to be a genuine rendering, not a tag strip. It runs over
-// ALREADY-SANITIZED html (sanitizeOutgoing), which is why the tag set it handles is small
-// and closed.
+// `snippet` all read — so it has to be a genuine rendering, not a tag strip.
+//
+// Two callers, deliberately: the composer runs it over ALREADY-SANITIZED html
+// (sanitizeOutgoing, a narrow closed tag set), and the reader runs it over RECEIVED
+// html when a bridged legacy message carries no text/plain part at all. The second is
+// arbitrary third-party markup, so the tag handling below covers what real mail is built
+// from — layout tables, and <style>/<script> whose text is markup, not message content.
+// Nothing here inserts HTML: the DOM it parses is detached and inert (no scripts run, no
+// resources load), and only text comes back out.
 
-// Elements that start and end a line.
-const BLOCK = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3', 'HR']);
+// Elements that start and end a line. Table rows and cells are included because HTML mail
+// is overwhelmingly laid out in tables — without them a newsletter renders as one
+// unbroken paragraph.
+const BLOCK = new Set([
+  'P', 'DIV', 'LI', 'UL', 'OL', 'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3', 'HR',
+  'H4', 'H5', 'H6', 'TABLE', 'TR', 'TD', 'TH', 'SECTION', 'ARTICLE', 'HEADER',
+  'FOOTER', 'CENTER', 'ADDRESS', 'DT', 'DD',
+]);
+
+// Elements whose text content is not message content — dropping the element alone would
+// spill CSS or script source into the rendering.
+const SKIP = new Set(['SCRIPT', 'STYLE', 'HEAD', 'TITLE', 'NOSCRIPT', 'TEMPLATE', 'IFRAME', 'OBJECT', 'EMBED']);
 
 interface Ctx {
   /** Inside <pre>: whitespace is significant and must not be collapsed. */
   pre: boolean;
+}
+
+// trimEdges strips spaces/tabs (never newlines) from both ends of a rendered block.
+function trimEdges(text: string): string {
+  return text.replace(/^[ \t]+/, '').replace(/[ \t]+$/, '');
 }
 
 // prefixLines prefixes every line of a block with `p` (used for blockquote's "> ").
@@ -38,21 +60,26 @@ function render(node: Node, ctx: Ctx): string {
   if (node.nodeType !== 1 /* element */) return '';
 
   const el = node as Element;
+  if (SKIP.has(el.tagName)) return '';
   switch (el.tagName) {
     case 'BR':
       return '\n';
     case 'HR':
       return '\n---\n';
     case 'IMG': {
+      // Only images carrying alt text say anything; HTML mail is full of spacer and
+      // tracking pixels whose placeholders would be pure noise.
       const alt = el.getAttribute('alt')?.trim();
-      return alt ? `[image: ${alt}]` : '[image]';
+      return alt ? `[image: ${alt}]` : '';
     }
     case 'A': {
       const text = renderChildren(el, ctx).trim();
       const href = el.getAttribute('href')?.trim() ?? '';
-      // Only spell out the URL when the link text isn't already the URL — otherwise every
-      // bare link would render as "https://x <https://x>".
-      if (!href || href === text) return text || href;
+      // Only spell out the URL when it adds something — a bare link already showing its
+      // own URL, an in-page anchor, or a cid: reference would otherwise render as
+      // "https://x <https://x>".
+      const bare = href && !href.startsWith('#') && !href.startsWith('cid:') ? href : '';
+      if (!href || href === text || !bare) return text || bare;
       return text ? `${text} <${href}>` : `<${href}>`;
     }
     case 'PRE':
@@ -74,7 +101,9 @@ function render(node: Node, ctx: Ctx): string {
       return '\n' + lines.join('\n') + '\n';
     }
     default:
-      if (BLOCK.has(el.tagName)) return '\n' + renderChildren(el, ctx) + '\n';
+      // Trim the block's edge spaces: the source's own indentation after a tag collapses
+      // to a leading space, which would otherwise indent every line of real mail by one.
+      if (BLOCK.has(el.tagName)) return '\n' + trimEdges(renderChildren(el, ctx)) + '\n';
       return renderChildren(el, ctx);
   }
 }

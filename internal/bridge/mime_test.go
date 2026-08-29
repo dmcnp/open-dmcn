@@ -41,8 +41,15 @@ func TestMIMERoundTrip(t *testing.T) {
 	if parsed.Subject != msg.Subject {
 		t.Errorf("subject = %q, want %q", parsed.Subject, msg.Subject)
 	}
-	if parsed.Body.ContentType != "text/html" || string(parsed.Body.Content) != "<p>See attached.</p>" {
-		t.Errorf("body = %q (%s), want the HTML body", parsed.Body.Content, parsed.Body.ContentType)
+	// HTML-only mail comes back as a text/plain RENDERING with the original HTML kept as the
+	// alternative — Body is what a text-only client (and a trust-gated plain-text peek) reads,
+	// so it must never be the markup.
+	if parsed.Body.ContentType != "text/plain" || string(parsed.Body.Content) != "See attached." {
+		t.Errorf("body = %q (%s), want the rendered text", parsed.Body.Content, parsed.Body.ContentType)
+	}
+	if len(parsed.Alternatives) != 1 || parsed.Alternatives[0].ContentType != "text/html" ||
+		string(parsed.Alternatives[0].Content) != "<p>See attached.</p>" {
+		t.Errorf("alternatives = %+v, want the original HTML", parsed.Alternatives)
 	}
 	if len(parsed.Attachments) != 1 {
 		t.Fatalf("attachments = %d, want 1", len(parsed.Attachments))

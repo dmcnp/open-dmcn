@@ -52,7 +52,7 @@ export function senderTrustView(t: SenderTrust): TrustView {
       // Deliberately WARNING, not danger: the keys still hold, so nothing is mis-sealed
       // and no impersonation is implied. What changed is a property nobody signed —
       // most importantly a domain asserting admin key custody over the account.
-      return { variant: 'warning', icon: 'alert-triangle', label: 'Sender\u2019s record changed', detail: t.reason ? `${t.reason[0].toUpperCase()}${t.reason.slice(1)}. Their keys are unchanged, so this message is genuinely from them — but the change was not something they signed, so confirm it is expected.` : 'Something this contact\u2019s identity record declares has changed since you verified them, without any change to their keys.' };
+      return { variant: 'warning', icon: 'alert-triangle', label: 'Sender’s record changed', detail: t.reason ? `${t.reason[0].toUpperCase()}${t.reason.slice(1)}. Their keys are unchanged, so this message is genuinely from them — but the change was not something they signed, so confirm it is expected.` : 'Something this contact’s identity record declares has changed since you verified them, without any change to their keys.' };
     case 'identity_unverifiable':
       return { variant: 'danger', icon: 'alert-triangle', label: 'Unverifiable identity', detail: 'The directory reports this identity claimed a domain countersignature that failed to verify (revoked or unauthorized). Do not trust it.' };
     case 'directory_missing':

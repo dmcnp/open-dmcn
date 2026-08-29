@@ -1,23 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../lib/hooks/useAuth';
-import { useKeys } from '../lib/hooks/useKeys';
-import {
-  createPetition, petitionStatus, completePetition, loginWithKeys, getRelayHints, ApiError,
-} from '../lib/api/client';
-import { generateIdentityKeyPair, importEd25519PrivateKey, keyPairFromPayloadJSON, toBase64 } from '../lib/crypto/keys';
-import { encryptKeys, encryptKeysWithKey, decryptKeys, decryptKeysWithKey, type EncryptedBundle } from '../lib/crypto/keystore';
-import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, clearLocalKeystore } from '../lib/crypto/localKeystore';
-import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
-import { encodeIdentitySignableBytes, encodeIdentityRecord } from '../lib/crypto/protobuf';
-import { signSelfSignature } from '../lib/crypto/identity';
-import { sign } from '../lib/crypto/sign';
-import { unlockPasskeyPRF } from '../lib/crypto/passkey';
-import { DEFAULT_DOMAIN } from '../lib/config';
-import { AuthShell } from '../components/AuthShell';
-import { ChoiceRow } from '../components/ChoiceRow';
-import { Button, Input } from '../ds';
-import { Icon } from '../components/Icon';
+import { useAuth } from '../../src/lib/hooks/useAuth';
+import { useKeys } from '../../src/lib/hooks/useKeys';
+import { loginWithKeys, ApiError } from '../../src/lib/api/client';
+import { createPetition, petitionStatus, completePetition } from '../lib/api/daemonClient';
+import { buildSelfSignedRecord } from '../../src/lib/crypto/enrollment';
+import { generateIdentityKeyPair, importEd25519PrivateKey, keyPairFromPayloadJSON, toBase64 } from '../../src/lib/crypto/keys';
+import { encryptKeys, encryptKeysWithKey, decryptKeys, decryptKeysWithKey, type EncryptedBundle } from '../../src/lib/crypto/keystore';
+import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, clearLocalKeystore } from '../../src/lib/crypto/localKeystore';
+import { isPasskeySupported, createPasskeyPRF } from '../../src/lib/crypto/passkey';
+import { sign } from '../../src/lib/crypto/sign';
+import { unlockPasskeyPRF } from '../../src/lib/crypto/passkey';
+import { DEFAULT_DOMAIN } from '../../src/lib/config';
+import { AuthShell } from '../../src/components/AuthShell';
+import { ChoiceRow } from '../../src/components/ChoiceRow';
+import { Button, Input } from '../../src/ds';
+import { Icon } from '../../src/components/Icon';
 
 // Petition is the sign-up page for a domain whose root key is kept offline. Nobody — including
 // this daemon — can mint an address there, so there is nothing to "create". What the page does
@@ -173,16 +171,7 @@ export function Petition() {
       const keys = keyPairFromPayloadJSON(keyBytes);
       const seed = keys.ed25519Private.slice(0, 32);
 
-      const { relay_hints } = await getRelayHints(address);
-      const recordBase = {
-        version: 1, address,
-        ed25519PublicKey: keys.ed25519Public, x25519PublicKey: keys.x25519Public,
-        createdAt: keys.createdAt, expiresAt: 0, relayHints: relay_hints,
-        verificationTier: 0, bridgeCapability: false,
-      };
-      const signableBytes = await encodeIdentitySignableBytes(recordBase);
-      const selfSignature = await signSelfSignature(seed, signableBytes);
-      const identityRecordBytes = await encodeIdentityRecord({ ...recordBase, selfSignature });
+      const { identityRecordBytes } = await buildSelfSignedRecord(address, keys);
 
       await completePetition({ code: p.code, identity_record: toBase64(identityRecordBytes) });
 

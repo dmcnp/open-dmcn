@@ -7,7 +7,10 @@
 // "{{ .X }}" placeholders — envVal() detects those (and a missing `env`) and falls
 // back to the defaults below, so the app works the same in dev.
 
-function envVal(key: keyof Env, fallback: string): string {
+// envVal reads one rendered value. Exported because src/deployment.tsx reads the keys
+// that belong to ITS front door rather than to the mail client, and those keys differ
+// per deployment — an absent one simply falls back.
+export function envVal(key: string, fallback: string): string {
   const v = typeof env !== 'undefined' ? env[key] : undefined;
   if (typeof v !== 'string' || v === '' || v.startsWith('{')) return fallback;
   return v;
@@ -42,14 +45,6 @@ export const DOMAINS: string[] = (() => {
 })();
 /** True when the backend reports dev mode. */
 export const IS_DEV = envVal('DEV_MODE', '') === 'true';
-// PETITION_MODE: a live self-hosted domain whose root key is offline. Nobody can self-register,
-// so the register page asks for a mailbox instead of creating one — see the petition flow.
-export const PETITION_MODE = envVal('PETITION_MODE', '') === 'true';
-// DOMAIN_ROOT_PUB is this domain's root Ed25519 public key (base64). Public by construction — it
-// is what the domain's _dmcn DNS fingerprint commits to. The client uses it to verify a bridge's
-// credential without asking the server anything, which is the point: the server must not be able
-// to influence whether a bridged message looks trustworthy.
-export const DOMAIN_ROOT_PUB = envVal('DOMAIN_ROOT_PUB', '');
 /** Mailbox (inbox) poll cadence (ms). Defaults to 10s when unset/unrendered. New
  *  mail arrives externally, so the inbox is the one thing that needs frequent polling. */
 export const POLL_INTERVAL_MS = Number(envVal('POLL_INTERVAL_MS', '10000')) || 10000;
@@ -60,3 +55,9 @@ export const POLL_INTERVAL_MS = Number(envVal('POLL_INTERVAL_MS', '10000')) || 1
  *  tab focus. Derived as 6× the inbox cadence (min 60s), so it stays well clear of the
  *  inbox poll even if an operator retunes POLL_INTERVAL_MS. */
 export const STORAGE_POLL_INTERVAL_MS = Math.max(60_000, POLL_INTERVAL_MS * 6);
+/** Cadence (ms) for counting unread mail in the OTHER accounts unlocked in this tab
+ *  (the account switcher's dot). Each tick is a full mailbox + flags read per such
+ *  account, so it deliberately trails the inbox by a wide margin: this is an ambient
+ *  "something arrived elsewhere" signal, and the account becomes live the moment you
+ *  switch to it. Same 6×/min-60s shape as the personal store. */
+export const BACKGROUND_UNREAD_INTERVAL_MS = Math.max(60_000, POLL_INTERVAL_MS * 6);

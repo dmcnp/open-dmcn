@@ -6,7 +6,10 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"dmcn.dev/open-dmcn/dmcnpb"
 	"dmcn.dev/open-dmcn/internal/core/crypto"
@@ -65,6 +68,9 @@ type PlaintextMessage struct {
 	// Body stays the primary text/plain fallback that every reader can display; a
 	// text/html part rides here. A reader picks the richest form it can render safely.
 	Alternatives []MessageBody
+	// SenderDisplay is an optional human-readable name for the sender, copied into
+	// the signed header by Split. Display only — see MessageHeader.SenderDisplay.
+	SenderDisplay string
 }
 
 // NewPlaintextMessage creates a new PlaintextMessage with generated IDs.
@@ -164,8 +170,9 @@ func (m *PlaintextMessage) toProto() *dmcnpb.PlaintextMessage {
 			ContentType: m.Body.ContentType,
 			Content:     m.Body.Content,
 		},
-		ReplyToId:    m.ReplyToID[:],
-		Alternatives: bodiesToProto(m.Alternatives),
+		ReplyToId:     m.ReplyToID[:],
+		Alternatives:  bodiesToProto(m.Alternatives),
+		SenderDisplay: m.SenderDisplay,
 	}
 
 	for _, a := range m.Attachments {
@@ -188,7 +195,8 @@ func plaintextMessageFromProto(pb *dmcnpb.PlaintextMessage) *PlaintextMessage {
 			ContentType: pb.Body.GetContentType(),
 			Content:     pb.Body.GetContent(),
 		},
-		Alternatives: bodiesFromProto(pb.Alternatives),
+		Alternatives:  bodiesFromProto(pb.Alternatives),
+		SenderDisplay: pb.SenderDisplay,
 	}
 
 	copy(m.MessageID[:], pb.MessageId)
@@ -270,4 +278,65 @@ func signedMessageFromProto(pb *dmcnpb.SignedMessage) *SignedMessage {
 	}
 	copy(sm.SenderSignature[:], pb.SenderSignature)
 	return sm
+}
+
+// maxDisplayNameLen caps a sender display name. Long enough for any real name or
+// brand, short enough that it can't push the address out of a reader's view — which
+// is the whole point of showing them together.
+const maxDisplayNameLen = 96
+
+// SanitizeDisplayName normalizes a sender display name for the wire. It runs at the
+// PRODUCER (Split), never on the parse path: the header signature is verified by
+// re-marshaling what was parsed, so cleaning a value on the way in would break the
+// signature of every header that carried something we would now rewrite.
+//
+// Display names are the classic mail spoofing surface, and this one arrives from a
+// legacy From header. So: drop control characters, drop the bidirectional-override
+// codepoints that let "moc.live@rekcatta" render as a friendly name, collapse
+// whitespace to single spaces, and cap the length. What survives is a single line of
+// printable text that a reader can safely show NEXT TO the address.
+func SanitizeDisplayName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	space := false
+	for _, r := range s {
+		switch {
+		case unicode.IsSpace(r): // incl. tab/newline/NBSP: a name is one line
+			space = b.Len() > 0
+		case r == utf8.RuneError:
+			// Invalid UTF-8: skip rather than emit a replacement glyph.
+		case unicode.IsControl(r), isBidiControl(r):
+			// Dropped, not replaced by a space: these are invisible, so replacing
+			// them would let a name smuggle spacing a reader can't account for.
+		default:
+			if space {
+				b.WriteByte(' ')
+				space = false
+			}
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	if len(out) > maxDisplayNameLen {
+		out = out[:maxDisplayNameLen]
+		for len(out) > 0 && !utf8.ValidString(out) { // never split a rune
+			out = out[:len(out)-1]
+		}
+		out = strings.TrimRight(out, " ")
+	}
+	return out
+}
+
+// isBidiControl reports whether r is one of the Unicode bidirectional formatting
+// codepoints. They reorder rendered text without being visible, which is exactly
+// how a display name is made to read as something other than what it is.
+func isBidiControl(r rune) bool {
+	switch r {
+	case 0x061C, // ARABIC LETTER MARK
+		0x200E, 0x200F, // LEFT-TO-RIGHT / RIGHT-TO-LEFT MARK
+		0x202A, 0x202B, 0x202C, 0x202D, 0x202E, // EMBEDDING / OVERRIDE / POP
+		0x2066, 0x2067, 0x2068, 0x2069: // ISOLATES
+		return true
+	}
+	return false
 }

@@ -71,6 +71,9 @@ build-web:
 # proto-web regenerates the browser protobuf bundle (dmcn.js). It MUST list every proto in the
 # bundle; a partial run silently drops whole namespaces.
 #
+# It lands in web/app/, not web/src/: src/ holds the client shared with the hosted product,
+# and a generated bundle is per-build. The shared code reaches it through the @proto alias.
+#
 # bridge.proto is in here deliberately. It used to be a separate hand-regenerated bridge.js, which
 # meant it was generated from bridge.proto ALONE — so the dmcn.identity.Credential it imports never
 # resolved, and the browser could not see the bridge credential at all. One bundle, one command, no
@@ -80,8 +83,8 @@ PBTS = cd $(WEB) && npx -y -p protobufjs-cli@1.1.3 pbts
 CORE_PROTOS = ../../../proto/identity.proto ../../../proto/message.proto ../../../proto/relay.proto ../../../proto/bridge.proto
 
 proto-web:
-	$(PBJS) -o src/lib/proto/dmcn.js $(CORE_PROTOS)
-	$(PBTS) -o src/lib/proto/dmcn.d.ts src/lib/proto/dmcn.js
+	$(PBJS) -o app/proto/dmcn.js $(CORE_PROTOS)
+	$(PBTS) -o app/proto/dmcn.d.ts app/proto/dmcn.js
 
 # proto regenerates the Go bindings (dmcnpb) from the core schema. Requires the buf CLI.
 proto:

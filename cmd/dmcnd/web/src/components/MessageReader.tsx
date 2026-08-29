@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Preview, FullBody } from '../lib/api/mailboxRest';
+import type { ComposeReplyTo } from '../lib/compose';
 import { useMessages } from '../lib/hooks/useMessages';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
@@ -11,25 +12,59 @@ import { Icon } from './Icon';
 import { lookupIdentity } from '../lib/api/client';
 import { verifyBridgeAttestation, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
 import { verifyDeliveryReceipt, RECEIPT_CONTENT_TYPE, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
+import type { DecryptedAttachment } from '../lib/crypto/split';
+import { HtmlMessageBody } from './HtmlMessageBody';
+import { sanitizeOutgoing } from '../lib/html/sanitize';
+import { fromPlainText, escapeHtml } from '../lib/html/fromPlainText';
 import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust';
 import { senderTrustView } from '../lib/trust/trustView';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
-import type { DecryptedAttachment } from '../lib/crypto/split';
-import { HtmlMessageBody } from './HtmlMessageBody';
-import type { ComposeReplyTo } from './ComposeDialog';
-import { sanitizeOutgoing } from '../lib/html/sanitize';
-import { fromPlainText, escapeHtml } from '../lib/html/fromPlainText';
 import { directoryFacts } from '../lib/trust/pinnedKey';
+import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
+import { deployment } from '@deployment';
 
-// attestationView maps a bridged-message verdict to its display treatment. Only a
-// verified verdict shows the bridge-asserted trust tier; an unverified verdict is
-// always a warning, regardless of the (untrusted) tier it claims.
-function attestationView(a: BridgeAttestation): {
-  variant: 'success' | 'warning' | 'danger';
-  icon: 'shield-check' | 'alert-triangle';
+// attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
+// NEVER shown with a trust shield: even the best case (SPF/DKIM/DMARC pass + an operator-
+// trusted bridge) is only domain-authentication relayed by a bridge you trust — not the
+// end-to-end cryptographic identity a native dmcn sender carries. So the strongest tier is a
+// NEUTRAL "Legacy email"; weaker outcomes are warning/danger. An unverified verdict is always
+// danger, regardless of the (untrusted) tier it claims.
+// authBreakdown renders the three checks behind the tier as one short line. Shown
+// alongside the verdict because the tier alone cannot answer "which check did not
+// pass" — and the answer changes what the reader should conclude. A message with
+// spf=pass dmarc=pass dkim=none authenticated correctly under DMARC and simply missed
+// this classifier's stricter DKIM-and-DMARC conjunction; one with dkim=fail did not.
+//
+// It also names the SMTP envelope sender when it differs from the displayed From address
+// (bulk senders relay through a provider: From reddit.com, envelope …@amazonses.com). The
+// displayed address is the identity DMARC checked; the envelope is who handed it over, and
+// hiding that difference would be the kind of omission this client exists to avoid.
+function authBreakdown(a: BridgeAttestation, senderAddress: string): string | null {
+  const parts = [
+    a.spf ? `SPF ${a.spf}` : null,
+    a.dkim ? `DKIM ${a.dkim}` : null,
+    a.dmarc ? `DMARC ${a.dmarc}` : null,
+  ].filter(Boolean);
+  const envelope = domainPart(a.smtpFrom);
+  if (envelope && envelope !== domainPart(senderAddress)) parts.push(`via ${envelope}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+// domainPart returns the lower-cased domain of an address ('' when there isn't one).
+function domainPart(addr: string): string {
+  const at = (addr || '').lastIndexOf('@');
+  return at >= 0 ? addr.slice(at + 1).toLowerCase() : '';
+}
+
+// senderAddress is the address the reader DISPLAYS (the message's From, which the bridge
+// authenticated), not the classification's envelope sender — naming a bulk sender's
+// per-message bounce address here told the reader a domain they never saw had been checked.
+function attestationView(a: BridgeAttestation, senderAddress: string): {
+  variant: 'neutral' | 'warning' | 'danger';
+  icon: 'mail' | 'alert-triangle';
   label: string;
   detail: string;
 } {
@@ -38,39 +73,39 @@ function attestationView(a: BridgeAttestation): {
       variant: 'danger',
       icon: 'alert-triangle',
       label: 'Unverified bridge',
-      detail: `This message arrived via an SMTP bridge that could not be verified${a.reason ? ` (${a.reason})` : ''}. Treat its sender with caution.`,
+      detail: `This message claims to arrive via an SMTP bridge that could not be verified${a.reason ? ` (${a.reason})` : ''}. Its sender cannot be confirmed — treat it with caution.`,
     };
   }
-  const who = a.smtpFrom || 'the sender';
-  // No separate "is the bridge itself anchored?" note any more. Reaching this point already means
-  // the bridge holds a credential signed by its domain's root — there is no half-trusted state
-  // left to caveat, and the old note invited readers to weigh something already decided.
+  const who = senderAddress || a.smtpFrom || 'the sender';
+  const domain = domainPart(who);
   switch (a.trustTier) {
     case BridgeTrustTier.VerifiedLegacy:
-      return { variant: 'success', icon: 'shield-check', label: 'Verified legacy sender', detail: `A verified bridge confirmed SPF/DKIM/DMARC for ${who}.` };
+      return {
+        variant: 'neutral',
+        icon: 'mail',
+        label: 'Legacy email',
+        detail: `Authenticated by ${domain ? `${domain}'s domain` : 'the sending domain'} (SPF/DKIM/DMARC) and relayed by a trusted bridge. Not end-to-end verified like a dmcn sender.`,
+      };
     case BridgeTrustTier.Suspicious:
-      return { variant: 'danger', icon: 'alert-triangle', label: 'Suspicious legacy sender', detail: `Legacy authentication failed for ${who} — this sender may be forged.` };
+      return { variant: 'danger', icon: 'alert-triangle', label: 'Legacy email — failed checks', detail: `Legacy authentication (SPF/DKIM/DMARC) failed for ${who} — this sender may be forged. Treat it with caution.` };
     default:
-      return { variant: 'warning', icon: 'alert-triangle', label: 'Unverified legacy sender', detail: `${who}'s domain did not fully authenticate this message.` };
+      return { variant: 'warning', icon: 'alert-triangle', label: 'Legacy email — unauthenticated', detail: `${who}'s domain did not fully authenticate this message, so the sender can't be confirmed.` };
   }
 }
 
-// Minimal themed style for the native label/folder assignment selects.
-const assignSelectStyle: CSSProperties = {
-  font: 'inherit', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
-  background: 'var(--surface-card)', border: '1px solid var(--border-default)',
-  borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer',
-};
-
-function formatDate(sec: number): string {
-  return new Date(sec * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-}
-function formatTime(sec: number): string {
-  return new Date(sec * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+// calloutColors resolves the inline background/foreground for a trust callout. The neutral
+// variant has no `--neutral-subtle` token, so map it explicitly to the sunken surface.
+function calloutColors(variant: 'neutral' | 'success' | 'warning' | 'danger'): { bg: string; fg: string } {
+  switch (variant) {
+    case 'neutral': return { bg: 'var(--surface-sunken)', fg: 'var(--text-muted)' };
+    case 'success': return { bg: 'var(--success-subtle)', fg: 'var(--success)' };
+    case 'warning': return { bg: 'var(--warning-subtle)', fg: 'var(--warning)' };
+    case 'danger': return { bg: 'var(--danger-subtle)', fg: 'var(--danger)' };
+  }
 }
 
-// receiptView maps a delivery-receipt verdict to its display treatment: a verified receipt shows
-// the bridge's delivered/failed outcome; an unverified one is a warning.
+// receiptView maps a delivery-receipt verdict to its display treatment: a verified receipt shows the
+// bridge's delivered/failed outcome; an unverified one is a warning.
 function receiptView(r: DeliveryReceiptView): {
   variant: 'success' | 'warning' | 'danger';
   icon: 'shield-check' | 'alert-triangle';
@@ -92,21 +127,42 @@ function receiptView(r: DeliveryReceiptView): {
   return { variant: 'danger', icon: 'alert-triangle', label: 'Delivery failed', detail: `The bridge could not deliver your message to ${who}${r.errorDetail ? `: ${r.errorDetail}` : ''}.` };
 }
 
+// Minimal themed style for the native label/folder assignment selects.
+const assignSelectStyle: CSSProperties = {
+  font: 'inherit', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
+  background: 'var(--surface-card)', border: '1px solid var(--border-default)',
+  borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer',
+};
+
+function formatDate(sec: number): string {
+  return new Date(sec * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+function formatTime(sec: number): string {
+  return new Date(sec * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// System attachments carried for protocol purposes (the bridge attestation and the raw
-// legacy source) are consumed elsewhere and hidden from the user-facing list.
-const INTERNAL_ATTACHMENT_TYPES = new Set<string>([
-  CLASSIFICATION_CONTENT_TYPE,
-  RECEIPT_CONTENT_TYPE,
-  'message/rfc822', // original.eml — raw legacy email preserved by the bridge
-]);
+// System attachments carried for protocol purposes are consumed elsewhere and hidden
+// from the user-facing attachment list: the bridge attestation and delivery receipt, the
+// raw legacy source, and whatever control payloads this deployment carries.
+// Built on demand, not at module load: `deployment` imports the screens it contributes, so
+// reading it while THIS module is being evaluated would depend on which side of that cycle
+// loaded first. A function has no such ordering to get wrong.
+function internalAttachmentTypes(): Set<string> {
+  return new Set<string>([
+    CLASSIFICATION_CONTENT_TYPE,
+    RECEIPT_CONTENT_TYPE,
+    'message/rfc822', // original.eml — raw legacy email preserved by the bridge
+    ...deployment.internalAttachmentTypes,
+  ]);
+}
 function userAttachments(all: DecryptedAttachment[]): DecryptedAttachment[] {
-  return all.filter(a => !INTERNAL_ATTACHMENT_TYPES.has(a.contentType));
+  const internal = internalAttachmentTypes();
+  return all.filter(a => !internal.has(a.contentType));
 }
 
 // sanitizeFilename strips path separators, control chars, and leading dots before the
@@ -123,9 +179,9 @@ function sanitizeFilename(name: string): string {
   return clean || 'attachment';
 }
 
-// downloadAttachment saves an attachment via a transient blob: URL. The blob is revoked
-// on a delay so the bytes aren't retained; nothing is opened inline, so a hostile
-// content type can't execute in-page.
+// downloadAttachment saves an attachment via a transient blob: URL. The blob is
+// revoked on a delay so the (up to 25 MB) bytes aren't retained; nothing is opened
+// inline, so a hostile content type can't execute in-page.
 function downloadAttachment(a: DecryptedAttachment): void {
   const blob = new Blob([a.content as BufferSource], { type: a.contentType || 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
@@ -183,36 +239,49 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const sentByMe = address != null && msg.senderAddress.toLowerCase() === address.toLowerCase();
   const ownMessage = sentView || sentByMe;
 
-  // Sent messages read their self-sealed envelope from the personal store; everything
-  // else fetches from the mailbox. Both return the same FullBody, so one code path.
-  const fetchFull = openFull ?? openMessageFull;
   const [body, setBody] = useState<string | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
-  // The text/html rendering, when the message carries one. It renders only for a
-  // trusted sender (see htmlAllowed) — a pending sender's plain-text peek never
-  // renders HTML. `showHtml` toggles between the two views.
-  const [htmlBody, setHtmlBody] = useState<string | null>(null);
-  const [showHtml, setShowHtml] = useState(true);
-  const [attachments, setAttachments] = useState<DecryptedAttachment[]>([]);
-  // Per-file "download anyway" acknowledgments for a sender who isn't trusted yet.
-  const [ackedDownloads, setAckedDownloads] = useState<Set<number>>(new Set());
   const [attestation, setAttestation] = useState<BridgeAttestation | null>(null);
-  // A bridge delivery receipt for a message I sent out to the legacy world. By default the
-  // bridge only returns one when delivery FAILED, so this is usually a bounce.
+  // Delivery receipt: a bridge's signed confirmation that an outbound-to-legacy message we sent was
+  // delivered (or failed). Verified server-side against the operator key, like a classification.
   const [receipt, setReceipt] = useState<DeliveryReceiptView | null>(null);
+  // Whether the bridge attestation/receipt has settled (a verdict OR confirmed-none). The
+  // sender_address of a bridged message is a legacy email, indistinguishable from a native one
+  // until the classification verifies — so gate the trust UI on this to avoid flashing the wrong
+  // verdict (or acting on the shared bridge key) before we know it's bridged.
+  const [bridgeResolved, setBridgeResolved] = useState(false);
   // Native-sender trust (§14): anchors the signature-verified header key to the
   // directory + the owner's allowlist. Independent of the body fetch.
   const [nativeTrust, setNativeTrust] = useState<SenderTrust | null>(null);
+  // Whether the directory verdict has SETTLED for this message. Distinct from
+  // `nativeTrust !== null`, which can't tell "still resolving" from "resolved to nothing" —
+  // and the gate must fail closed on the former. Reset per message by the msg.hash effect.
+  const [nativeTrustReady, setNativeTrustReady] = useState(false);
   // Pending-queue gate: a non-allowlisted sender's body stays hidden until the owner
   // either trusts them or explicitly reveals it as plain text (§14.2, accept-once).
   const [revealed, setRevealed] = useState(false);
   const [actioning, setActioning] = useState(false);
+  // User-facing attachments (internal/protocol ones filtered out) + per-file download
+  // acknowledgments. Downloads are gated on sender TRUST, NOT on `revealed`: the
+  // plain-text peek is safe because text is escaped; a binary download is not.
+  const [attachments, setAttachments] = useState<DecryptedAttachment[]>([]);
+  const [ackedDownloads, setAckedDownloads] = useState<Set<number>>(new Set());
+  // The text/html rendering (when the message carries one). Rendered sanitized in a
+  // sandboxed iframe — but ONLY for a trusted sender; a pending sender's plain-text
+  // peek never renders HTML. `showHtml` toggles the HTML vs plain-text view.
+  const [htmlBody, setHtmlBody] = useState<string | null>(null);
+  const [showHtml, setShowHtml] = useState(true);
 
   const senderContact = contactByAddress(msg.senderAddress);
   // Content signature of the sender's allowlist entry — used as an effect dep so
   // trust re-evaluates only when the contact's provenance/pinned key actually
   // changes, not when a poll hands back a fresh (but equal) contacts array.
-  const contactSig = senderContact ? `${senderContact.provenance ?? ''}:${senderContact.ed25519Pub ?? ''}` : '';
+  const contactSig = senderContact
+    ? [
+        senderContact.provenance ?? '', senderContact.ed25519Pub ?? '', senderContact.x25519Pub ?? '',
+        senderContact.bridgeCapability ? '1' : '', senderContact.adminKeyCustody ? '1' : '', senderContact.pinSeq ?? 0,
+      ].join(':')
+    : '';
 
   // buildReply assembles the payload the composer needs: recipients (Reply vs Reply All),
   // the Gmail-style quoted original, and the threading metadata (continue the thread +
@@ -255,41 +324,47 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     }
     return { to, cc, subject: msg.subject, quote, quoteHtml, replyToId: msg.messageId, threadId: msg.threadId };
   };
-  // Show Reply All only when it would add recipients beyond the plain reply (a la Gmail).
+  // Show Reply All only when it would add recipients beyond the plain reply (à la Gmail).
   const replyAll = buildReply(true);
   const showReplyAll = (replyAll.cc?.length ?? 0) > 0;
 
-  // Sent records from the personal store carry their own body (no mailbox fetch, no
-  // bridge attestation). Otherwise fetch + verify the body on open (the inbox only
-  // holds previews); for bridged legacy mail, verify the bridge's signed
+  // Fetch + verify the body on open (the inbox list only holds previews). Sent messages
+  // use openFull to read their self-sealed envelope from the personal store; either way
+  // it's the same FullBody. For bridged legacy mail, verify the bridge's signed
   // classification attestation client-side before trusting the tier it claims.
   useEffect(() => {
     let cancelled = false;
     setBody(null);
     setBodyError(null);
-    setHtmlBody(null);
-    setAttachments([]);
     setAttestation(null);
     setReceipt(null);
-    fetchFull(msg.hash)
-      .then(full => {
+    setAttachments([]);
+    setHtmlBody(null);
+    setBridgeResolved(false);
+    (openFull ?? openMessageFull)(msg.hash)
+      .then(async full => {
         if (cancelled) return;
         setBody(full.bodyText);
         setHtmlBody(full.htmlBody ?? null);
         setAttachments(userAttachments(full.attachments));
-        verifyBridgeAttestation(full.attachments)
-          .then(a => { if (!cancelled) setAttestation(a); })
-          .catch(() => { /* unexpected: treat as non-bridged, show no badge */ });
-        // The receipt is signed by the BRIDGE, which is the sender of this message, so the
-        // already-verified header key is what it must be bound to.
         const senderPub = msg.senderPublicKey ? fromHex(msg.senderPublicKey) : null;
-        verifyDeliveryReceipt(full.attachments, senderPub)
-          .then(r => { if (!cancelled) setReceipt(r); })
-          .catch(() => { /* not a receipt, or unreadable: show no badge */ });
+        // Resolve both attestations before revealing the trust UI (each fails closed to null).
+        const [a, r] = await Promise.all([
+          verifyBridgeAttestation(full.attachments, senderPub).catch(() => null),
+          verifyDeliveryReceipt(full.attachments, senderPub).catch(() => null),
+        ]);
+        if (cancelled) return;
+        setAttestation(a);
+        setReceipt(r);
+        setBridgeResolved(true);
       })
-      .catch(err => { if (!cancelled) setBodyError(err instanceof Error ? err.message : 'Failed to load message body'); });
+      .catch(err => {
+        if (cancelled) return;
+        setBodyError(err instanceof Error ? err.message : 'Failed to load message body');
+        setBridgeResolved(true); // body failed — unblock the UI so the error can render.
+      });
     return () => { cancelled = true; };
-  }, [msg.hash, fetchFull]);
+  }, [msg.hash, openMessageFull, openFull]);
 
   // Evaluate native-sender trust (skip your own Sent copies). The header key is
   // already signature-verified upstream; this anchors it to the directory + the
@@ -297,36 +372,87 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // verdict while re-resolving — keeping the last one visible avoids a badge flash on
   // a re-run; the msg.hash reset effect below clears it when a different message opens.
   useEffect(() => {
-    if (ownMessage || !msg.senderPublicKey) { setNativeTrust(null); return; }
+    // No native anchor is obtainable here (own mail, or no header key at all), so mark it
+    // settled — otherwise the gate would fail closed forever on a message it can't anchor.
+    if (ownMessage || !msg.senderPublicKey) { setNativeTrust(null); setNativeTrustReady(true); return; }
     let cancelled = false;
     evaluateSenderTrust(
       { senderAddress: msg.senderAddress, senderPublicKey: fromHex(msg.senderPublicKey), contact: senderContact },
       lookupIdentity,
-    ).then(t => { if (!cancelled) setNativeTrust(t); }).catch(() => { if (!cancelled) setNativeTrust(null); });
+    )
+      .then(t => { if (!cancelled) setNativeTrust(t); })
+      .catch(() => { if (!cancelled) setNativeTrust(null); })
+      .finally(() => { if (!cancelled) setNativeTrustReady(true); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- senderContact tracked via contactSig
   }, [msg.hash, msg.senderAddress, msg.senderPublicKey, ownMessage, contactSig]);
 
-  const av = attestation ? attestationView(attestation) : null;
+  const av = attestation ? attestationView(attestation, msg.senderAddress) : null;
   const rv = receipt ? receiptView(receipt) : null;
-  // Native trust badge/callout — suppressed when a bridge attestation is shown
-  // (bridged legacy mail: the DMCN "sender" is the bridge, not the real author), and
-  // held back until the allowlist + filter are loaded so it resolves straight to the
-  // correct verdict instead of flashing "unknown" first.
-  const tv = contactsReady && filterReady && !av && !rv && nativeTrust ? senderTrustView(nativeTrust) : null;
+  // Native trust badge/callout — suppressed when a bridge attestation is shown (bridged legacy
+  // mail: sender_address is a legacy email vouched for by the bridge, not a native identity), and
+  // held back until contacts + filter + the bridge attestation have all settled so it resolves
+  // straight to the correct verdict instead of flashing "unknown" (or a native verdict on a
+  // legacy address) first.
+  const tv = contactsReady && filterReady && bridgeResolved && !av && !rv && nativeTrust ? senderTrustView(nativeTrust) : null;
+  // A verified bridge classification means the DMCN "sender" is a legacy email relayed by a
+  // trusted bridge. Allowlist/block it by ADDRESS only — there is no directory key to pin, and the
+  // shared bridge key (in sender_public_key) must never be pinned or blocked.
+  const bridgedLegacy = attestation?.verified === true;
+
+  // `attestation.verified` only proves the BRIDGE credential chains to an operator-trusted key —
+  // it says NOTHING about whether the legacy sender passed SPF/DKIM/DMARC (that verdict is the
+  // signed trust tier). Only a VerifiedLegacy tier is an actual anti-spoof proof: the bridge
+  // rejects at SMTP solely on DMARC-fail-under-p=reject, so a spoof of a domain publishing no
+  // SPF/DKIM arrives as UnverifiedLegacy and would otherwise sail through on the address alone.
+  const bridgeAuthenticated = bridgedLegacy && attestation?.trustTier === BridgeTrustTier.VerifiedLegacy;
+  // The directory's active-distrust verdicts. evaluateSenderTrust already computes these; before
+  // this they only drove the badge, so a message whose displayed sender the directory disowns
+  // could still open if that address happened to sit in the address book.
+  const nativeDanger = !bridgedLegacy && nativeTrust !== null
+    && (nativeTrust.kind === 'key_mismatch' || nativeTrust.kind === 'key_changed' || nativeTrust.kind === 'identity_unverifiable');
 
   // Pending-queue category (§14.2). Your own Sent copies are never gated. Blocked/
-  // pending senders' bodies stay behind the gate until trusted or revealed. trustReady
-  // guards a cold load: don't gate (or show the body) until contacts + filter are
-  // loaded, so we never flash the wrong state.
-  const trustReady = ownMessage || (contactsReady && filterReady);
-  const category = ownMessage ? 'allowlisted' : categorizeSender(msg.senderAddress, msg.senderPublicKey, senderContact, mailFilter);
+  // pending senders' bodies stay behind the gate until trusted or revealed.
+  //
+  // A VERIFIED delivery receipt is the bridge's signed confirmation of your own outbound mail
+  // (not an unknown sender) — bypass the pending gate. Only when verified: a spoofer can't forge
+  // an operator-trusted bridge's receipt, so this can't be used to smuggle content past the gate.
+  const trustBypass = ownMessage || receipt?.verified === true;
+  const base: 'allowlisted' | 'pending' | 'blocked' = trustBypass
+    ? 'allowlisted'
+    : categorizeSender(msg.senderAddress, msg.senderPublicKey, senderContact, mailFilter);
+  // A keyless (address-only) allowlist entry is a legacy sender: it has no pinned key because the
+  // legacy sender has no DMCN keypair. The address alone is spoofable (any DMCN peer can put it in
+  // a header), so it is NOT self-authenticating — the real anti-spoof proof is the bridge's signed
+  // SPF/DKIM/DMARC classification. So honor a legacy allowlist entry ONLY for a bridge-AUTHENTICATED
+  // message; a claimed-but-unauthenticated legacy address stays gated (possible spoof).
+  const senderIsLegacyContact = !!senderContact && !senderContact.ed25519Pub && !!senderContact.provenance;
+
+  // trustReady guards a cold load: don't gate (or show the body) until contacts + filter are
+  // loaded, so we never flash the wrong state. A native sender the contact list would admit also
+  // needs its directory anchor to have SETTLED — an address-book entry is not itself proof of
+  // identity, so opening before the verdict lands would render content we might then retract.
+  const needsNativeAnchor = !trustBypass && !bridgedLegacy && base === 'allowlisted';
+  const trustReady = ownMessage
+    || (contactsReady && filterReady && bridgeResolved && (!needsNativeAnchor || nativeTrustReady));
+
+  let category: 'allowlisted' | 'pending' | 'blocked';
+  if (trustBypass || base !== 'allowlisted') {
+    category = base;
+  } else if (senderIsLegacyContact && !bridgeAuthenticated) {
+    category = 'pending'; // legacy address vouched for by nothing the bridge actually verified
+  } else if (nativeDanger) {
+    category = 'pending'; // the directory disowns the key that signed this header
+  } else {
+    category = base;
+  }
   const gated = trustReady && category !== 'allowlisted';
   // Attachment downloads unlock on sender TRUST only (own message or allowlisted), or a
   // per-file "download anyway" acknowledgment. Deliberately independent of `revealed`.
   const downloadsUnlocked = ownMessage || category === 'allowlisted';
   // HTML renders ONLY for a trusted sender (mirrors downloadsUnlocked) — a pending
-  // sender's plain-text peek shows escaped text, never rendered HTML.
+  // sender's "See as plain text" peek shows escaped text, never rendered HTML.
   const htmlAllowed = !!htmlBody && downloadsUnlocked;
   // Inline images (disposition=inline) render inside the HTML body, so they're kept out
   // of the downloadable-attachment list.
@@ -334,18 +460,18 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
 
   // Reset per-message UI (accept-once reveal + prior trust verdict) when the open
   // message changes, so nothing from the previous message lingers.
-  useEffect(() => { setRevealed(false); setNativeTrust(null); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
+  useEffect(() => { setRevealed(false); setNativeTrust(null); setNativeTrustReady(false); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
 
-  // Lazy key-pin (§14.1.2): once a message from an unpinned contact verifies with the
-  // header key matching the directory key, record the facts so a later unsigned change
-  // is detectable. Runs at most once per unpinned contact.
+  // Lazy key-pin (§14.1.2): once a message from an unpinned CONTACT verifies with the header key
+  // matching the directory key, record the keys so a later unsigned change is detectable. Runs at
+  // most once per unpinned contact.
   //
-  // `domain_verified` counts as well as `allowlisted`. Requiring allowlisting meant a
-  // contact added by hand on the Contacts page — no provenance, no pinned key — never
-  // gained key-change protection no matter how much mail passed between you. Both kinds
-  // already establish that header key == directory key, which is the only precondition a
-  // pin needs; allowlisting is a statement about trusting the person, not about whether
-  // the key we just saw is the one the directory served.
+  // Deliberately covers 'domain_verified' as well as 'allowlisted'. Pinning used to require the
+  // contact to be allowlisted, which meant a contact added by hand on the Contacts page — no
+  // provenance, no pinned key — never gained key-change protection no matter how much mail passed
+  // between you. Both kinds already establish that header key == directory key, which is the only
+  // precondition a pin needs; allowlisting is a statement about trusting the person, not about
+  // whether the key we just saw is the one the directory served.
   useEffect(() => {
     const pinnable = nativeTrust?.kind === 'allowlisted' || nativeTrust?.kind === 'domain_verified';
     if (ownMessage || !pinnable || !senderContact || senderContact.ed25519Pub) return;
@@ -361,26 +487,45 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const handleTrust = async () => {
     setActioning(true);
     try {
-      const dir = await lookupIdentity(msg.senderAddress);
-      await allowlist({
-        address: msg.senderAddress,
-        name: senderContact?.name || msg.senderAddress,
-        fingerprint: dir.fingerprint,
-        provenance: 'user_approved',
-        // Pin the DIRECTORY facts: if the key disagrees with the header key
-        // (impersonation), the sender stays pending rather than being trusted into the
-        // inbox. Trusting is a deliberate decision, so this REPLACES any pin this
-        // device holds and advances the repin sequence (useContacts.allowlist) — it is
-        // the "re-verify after a rotation" path.
-        ...directoryFacts(dir),
-      });
+      if (bridgedLegacy) {
+        // Legacy sender relayed by a trusted bridge: no DMCN directory entry / key to pin —
+        // keyless allowlist by address (a user-discretion "I trust this email", not a key anchor).
+        //
+        // The name defaults to the one the message carried, because the owner clicked trust on a
+        // screen showing that name AND the address together — so adopting it is what they meant.
+        // From here it is an OWNER-given contact name like any other, which is why it is taken at
+        // this deliberate moment and never silently.
+        await allowlist({
+          address: msg.senderAddress,
+          name: senderContact?.name || sanitizeDisplayName(msg.senderDisplay) || msg.senderAddress,
+          fingerprint: '',
+          provenance: 'user_approved',
+        });
+      } else {
+        const dir = await lookupIdentity(msg.senderAddress);
+        await allowlist({
+          address: msg.senderAddress,
+          name: senderContact?.name || msg.senderAddress,
+          fingerprint: dir.fingerprint,
+          provenance: 'user_approved',
+          // Pin the DIRECTORY facts: if the key disagrees with the header key
+          // (impersonation), the sender stays pending rather than being trusted into the
+          // inbox. Trusting is a deliberate decision, so this REPLACES any pin this
+          // device holds and advances the repin sequence (useContacts.allowlist) — it is
+          // the "re-verify after a rotation" path.
+          ...directoryFacts(dir),
+        });
+      }
     } catch { /* leave pending; the badge already flags any problem */ }
     finally { setActioning(false); }
   };
   const handleBlock = async () => {
     setActioning(true);
     try {
-      await blockSender(msg.senderAddress, msg.senderPublicKey);
+      // For bridged legacy mail, block by ADDRESS only: msg.senderPublicKey is the shared bridge
+      // key, so key-blocking it would block ALL bridged mail. (Relay-side key blocking can't apply
+      // to a legacy sender anyway — the relay only ever sees the bridge; this hides it locally.)
+      await blockSender(msg.senderAddress, bridgedLegacy ? undefined : msg.senderPublicKey);
       if (onDeleteOverride) await onDeleteOverride();
       else { await deleteMessage(msg.hash); await removeFlags(msg.hash); } // GC flag record
     } catch { /* ignore; close regardless */ }
@@ -400,11 +545,14 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // Sent copy — recipient copies never carry it.
   const toList = msg.to.length ? msg.to : msg.recipientAddress ? [msg.recipientAddress] : [];
   const counterparty = sentView ? toList[0] ?? '' : msg.senderAddress;
-  // The name the owner gave this person, when they gave one. The ADDRESS stays the
-  // identity everywhere it matters (routing, pinning, the title tip) — this is only
-  // the label, and it must match what the mail list shows for the same person.
-  const counterpartyName = nameFor(counterparty);
-  const namedCounterparty = counterpartyName !== counterparty;
+  // The header labels people by the name the owner gave them in Contacts first, then by
+  // the display name the message itself carried (legacy mail's From name), then by the
+  // address. The address stays visible alongside either name, so the actual identity is
+  // never hidden behind a nickname — or behind a name a sender chose for itself.
+  const contactName = nameFor(counterparty);
+  const { primary: counterpartyName, secondary: counterpartyAddress } =
+    senderLabel(counterparty, contactName, sentView ? '' : msg.senderDisplay);
+  const namedCounterparty = counterpartyAddress !== '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-page)' }}>
@@ -429,7 +577,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             <h1 style={{ margin: 0, fontSize: mobile ? 'var(--text-xl)' : 'var(--text-2xl)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>
               {msg.subject || '(no subject)'}
             </h1>
-            <Badge variant="brand" icon={<Icon name="lock" size={12} />}>Encrypted</Badge>
+            {/* Legacy mail is encrypted only on the bridge→you hop (it crossed plaintext SMTP
+                first), so tone the badge down from the brand "Encrypted" (which signals full E2E)
+                to a neutral "Encrypted to you". The callout below spells out the caveat. */}
+            <Badge variant={av ? 'neutral' : 'brand'} icon={<Icon name="lock" size={12} />}>{av ? 'Encrypted to you' : 'Encrypted'}</Badge>
             {av && <Badge variant={av.variant} icon={<Icon name={av.icon} size={12} />}>{av.label}</Badge>}
             {rv && <Badge variant={rv.variant} icon={<Icon name={rv.icon} size={12} />}>{rv.label}</Badge>}
             {tv && <Badge variant={tv.variant} icon={<Icon name={tv.icon} size={12} />}>{tv.label}</Badge>}
@@ -440,7 +591,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
               <div title={sentView ? toList.join(', ') : counterparty} style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sentView
                   ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span></>
-                  : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterparty}</span>}</>}
+                  : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterpartyAddress}</span>}</>}
               </div>
               {!sentView && toList.length > 0 && (
                 <div title={toList.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -453,8 +604,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 </div>
               )}
               {msg.bcc.length > 0 && (
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Bcc {msg.bcc.join(', ')}
+                <div title={msg.bcc.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Bcc {msg.bcc.map(nameFor).join(', ')}
                 </div>
               )}
               <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
@@ -514,7 +665,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>You don’t know this sender yet</div>
                   <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>
-                    This message is genuine and end-to-end encrypted, but {counterparty} isn’t on your allowlist. Decide how to handle it before reading the contents.
+                    {av
+                      ? <>This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. {counterparty} isn’t on your allowlist — decide how to handle it before reading the contents.</>
+                      : <>This message is genuine and end-to-end encrypted, but {counterparty} isn’t on your allowlist. Decide how to handle it before reading the contents.</>}
                   </div>
                 </div>
               </div>
@@ -530,7 +683,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
               {gated && revealed && (
                 <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
                   <Icon name="eye" size={16} style={{ color: 'var(--warning)', flex: 'none' }} />
-                  <span style={{ flex: 1, minWidth: 160 }}>Shown as plain text — you haven’t added this sender to your allowlist.</span>
+                  <span style={{ flex: 1, minWidth: 160 }}>Shown as plain text — you haven’t added this sender to your allowlist.{htmlBody ? ' The HTML version stays hidden until you trust the sender.' : ''}</span>
                   <Button size="sm" leftIcon={<Icon name="shield-check" size={14} />} onClick={handleTrust} disabled={actioning}>Trust</Button>
                   <Button size="sm" variant="danger" leftIcon={<Icon name="alert-octagon" size={14} />} onClick={handleBlock} disabled={actioning}>Block</Button>
                 </div>
@@ -559,9 +712,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             </>
           )}
 
-          {/* Attachments: metadata is always shown; the download itself is disabled for a
-              not-yet-trusted sender until they're trusted or the file is individually
-              acknowledged. Files never open inline — always save-to-disk. */}
+          {/* Attachments (§ trust gate): metadata is always shown; the actual download
+              is disabled for a not-yet-trusted sender until they're trusted or the file
+              is individually acknowledged. Files never open inline — always save-to-disk. */}
           {downloadAttachments.length > 0 && (
             <div style={{ marginTop: 'var(--space-6)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)' }}>
@@ -571,7 +724,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
               {!downloadsUnlocked && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
                   <Icon name="alert-triangle" size={15} style={{ color: 'var(--warning)', flex: 'none' }} />
-                  <span>Downloads are locked because you haven't trusted this sender. Files from unknown senders can be unsafe.</span>
+                  <span>Downloads are locked because you haven’t trusted this sender. Files from unknown senders can be unsafe.</span>
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -582,7 +735,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                       <Icon name="file" size={18} style={{ color: 'var(--text-muted)', flex: 'none' }} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-strong)', fontSize: 'var(--text-sm)' }}>{a.filename || 'attachment'}</div>
-                        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{formatBytes(a.content.length)}{a.contentType ? ` \u00b7 ${a.contentType}` : ''}</div>
+                        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{formatBytes(a.content.length)}{a.contentType ? ` · ${a.contentType}` : ''}</div>
                       </div>
                       {enabled ? (
                         <Button size="sm" variant="secondary" leftIcon={<Icon name="download" size={14} />} onClick={() => downloadAttachment(a)}>Download</Button>
@@ -596,20 +749,34 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             </div>
           )}
 
-          <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-            <Icon name="shield-check" size={16} />
-            End-to-end encrypted over dmcn — only you and {counterpartyName} can read this.
-          </div>
+          {av ? (
+            <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+              <Icon name="mail" size={16} />
+              Encrypted from the bridge to you. The original email crossed standard email (SMTP) before reaching the bridge, which isn’t end-to-end encrypted.
+            </div>
+          ) : rv ? null : (
+            <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+              <Icon name="shield-check" size={16} />
+              End-to-end encrypted over dmcn — only you and {contactName} can read this.
+            </div>
+          )}
 
           {av && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${av.variant}-subtle)`, color: `var(--${av.variant === 'success' ? 'success' : av.variant === 'warning' ? 'warning' : 'danger'})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: calloutColors(av.variant).bg, color: calloutColors(av.variant).fg, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
               <Icon name={av.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
-              <span>{av.detail}</span>
+              <span>
+                {av.detail}
+                {attestation && authBreakdown(attestation, msg.senderAddress) && (
+                  <span style={{ display: 'block', marginTop: 'var(--space-1)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', opacity: 0.85 }}>
+                    {authBreakdown(attestation, msg.senderAddress)}
+                  </span>
+                )}
+              </span>
             </div>
           )}
 
           {rv && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${rv.variant}-subtle)`, color: `var(--${rv.variant})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${rv.variant}-subtle)`, color: `var(--${rv.variant === 'success' ? 'success' : rv.variant === 'warning' ? 'warning' : 'danger'})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
               <Icon name={rv.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
               <span>{rv.detail}</span>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { MailFilterClient, emptyFilterList, type FilterList } from '../lib/api/filterRest';
+import { emptyFilterList, type FilterList } from '../lib/api/filterList';
+import { deployment } from '@deployment';
 import type { WorkingKeys } from '../lib/crypto/workingKeys';
 import { Badge, Button, Input, Switch } from '../ds';
 import { Icon } from './Icon';
@@ -10,7 +11,7 @@ import { Icon } from './Icon';
 // ciphertext. Granularity: whole domains or specific sender addresses. Allow-list
 // mode default-denies; "allow verified" then admits any DNS-anchored sender.
 export function BlockedSenders({ keys }: { keys: WorkingKeys }) {
-  const [client] = useState(() => new MailFilterClient(keys));
+  const [client] = useState(() => deployment.mailFilter(keys));
   const [list, setList] = useState<FilterList | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

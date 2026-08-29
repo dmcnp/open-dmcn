@@ -14,7 +14,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@deployment": ["./app/deployment.tsx"],
+      "@proto": ["./app/proto/dmcn"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "app"]
 }

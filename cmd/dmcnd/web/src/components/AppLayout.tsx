@@ -8,25 +8,21 @@ import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
 import { readThemePref, resolveTheme, readDensity, writeThemePref, writeDensity, type ThemePref } from '../lib/theme';
 import { logout as apiLogout } from '../lib/api/client';
+import { countUnread } from '../lib/unread';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
-import { useSettings } from '../lib/hooks/useSettings';
-import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
-import { categorizeSender } from '../lib/trust/category';
-import { isReceivedForMe } from '../lib/mailView';
+import { loadLocalKeystore } from '../lib/crypto/localKeystore';
 import { LabelManager } from './LabelManager';
-
-// The open protocol carries no control messages (device pairing + countersign requests
-// are product surfaces), so nothing is excluded from the inbox. Kept as an (empty) set so
-// the shared list-filtering logic is unchanged. In sync with InboxMain's CONTROL_SUBJECTS.
-const CONTROL_SUBJECTS = new Set<string>([]);
-import { Button, IconButton, Input } from '../ds';
-import { AccountMonogram } from './AccountMonogram';
-import { Icon } from './Icon';
-import { ComposeDialog, type ComposeReplyTo } from './ComposeDialog';
-import { DEFAULT_DOMAIN } from '../lib/config';
+import { AccountMenu } from './AccountMenu';
+import { NavRow } from './NavRow';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
+import { deployment } from '@deployment';
+
+import { Button, IconButton, Input } from '../ds';
+import { Icon } from './Icon';
+import { ComposeDialog } from './ComposeDialog';
+import type { ComposeReplyTo } from '../lib/compose';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
@@ -51,44 +47,6 @@ function sectionFromPath(p: string): Section {
 
 // --- sidebar primitives (app-level; the DS ships components, not a nav rail) ---
 
-function NavRow({ icon, swatch, label, active, count, badge, collapsed, onClick }: {
-  icon?: string; swatch?: string; label: string; active?: boolean; count?: number; badge?: boolean; collapsed: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={collapsed ? label : undefined}
-      style={{
-        position: 'relative', display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%',
-        padding: collapsed ? 0 : '0 var(--space-3)', justifyContent: collapsed ? 'center' : 'flex-start',
-        height: 36, border: 'none', cursor: 'pointer',
-        background: active ? 'var(--brand-subtle)' : 'transparent',
-        color: active ? 'var(--brand-text)' : 'var(--text-body)',
-        borderLeft: active ? '2px solid var(--brand)' : '2px solid transparent',
-        font: 'inherit', fontSize: 'var(--text-md)',
-        fontWeight: active ? 'var(--weight-semibold)' : 'var(--weight-medium)',
-        textAlign: 'left', transition: 'background var(--dur-fast) var(--ease-standard)',
-      }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--surface-hover)'; }}
-      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-    >
-      {swatch
-        ? <span style={{ width: 12, height: 12, borderRadius: '50%', background: swatch, flex: 'none' }} />
-        : <Icon name={icon ?? 'inbox'} size={17} style={{ color: active ? 'var(--brand)' : 'var(--text-muted)' }} />}
-      {!collapsed && <span style={{ flex: 1 }}>{label}</span>}
-      {!collapsed && count != null && count > 0 && (
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: active ? 'var(--brand-text)' : 'var(--text-muted)' }}>{count}</span>
-      )}
-      {badge && (
-        <span style={{
-          position: collapsed ? 'absolute' : 'static', top: collapsed ? 6 : undefined, right: collapsed ? 14 : undefined,
-          minWidth: 7, height: 7, borderRadius: 999, background: 'var(--warning)', flex: 'none',
-        }} />
-      )}
-    </button>
-  );
-}
-
 function GroupLabel({ children, collapsed }: { children: ReactNode; collapsed: boolean }) {
   if (collapsed) return <div style={{ height: 1, background: 'var(--border-subtle)', margin: 'var(--space-3)' }} />;
   return (
@@ -103,20 +61,17 @@ function GroupLabel({ children, collapsed }: { children: ReactNode; collapsed: b
  * every authenticated screen via a react-router layout route. Child sections
  * render in the main column through <Outlet/>, so the chrome (and an in-progress
  * compose) survives section switches. On mobile, account sections (Contacts /
- * Settings) render standalone (full screen) instead.
+ * Devices / Settings / Admin) render standalone (full screen) instead.
  */
 export function AppLayout() {
   const { messages, refresh } = useMessages();
   const { refreshSent } = useSent();
-  const { isRead, isArchived } = useFlags();
+  const { flags } = useFlags();
   const { labels, folders } = useLabels();
-  const { settings } = useSettings();
-  const { contactByAddress } = useContacts();
   const { filter: mailFilter } = useMailFilter();
   const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const { address, clearSession } = useAuth();
-  const displayName = settings.displayName || address;
-  const { clearKeys } = useKeys();
+  const { clearKeys, clearAllKeys } = useKeys();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -130,13 +85,24 @@ export function AppLayout() {
   const [compact, setCompact] = useState(() => readDensity() === 'compact');
   const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
   const [compose, setCompose] = useState<{ replyTo: ComposeReplyTo | null } | null>(null);
-  // Temporary (single-session) sign-in on a shared computer: nothing is stored here.
-  const [ephemeral] = useState(() => { try { return sessionStorage.getItem('dmcn_ephemeral') === '1'; } catch { return false; } });
-  // Whether this relay hosts personal storage. False-by-default and flips once the first
-  // storage call comes back UNSUPPORTED, so the banner appears as soon as we actually know.
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  // Whether this relay hosts personal storage at all. False until the first storage call
+  // comes back UNSUPPORTED, so the banner appears as soon as we actually know.
   const { localOnly: storageLocalOnly } = useStorageMode();
+  const AppNav = deployment.appNav;
+  // Temporary (single-session) sign-in on a shared computer: nothing is stored here.
+  // Derived from the absence of an encrypted keystore rather than a flag, so it stays
+  // correct when the account switcher moves the tab to (or off) such a session.
+  const [ephemeral, setEphemeral] = useState(false);
 
   const theme = resolveTheme(themePref);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!address) { setEphemeral(false); return; }
+    void loadLocalKeystore(address).then(ks => { if (!cancelled) setEphemeral(ks === null); });
+    return () => { cancelled = true; };
+  }, [address]);
 
   useEffect(() => { writeThemePref(themePref); }, [themePref]);
   useEffect(() => { writeDensity(compact ? 'compact' : 'comfortable'); }, [compact]);
@@ -148,25 +114,35 @@ export function AppLayout() {
     if (new URLSearchParams(window.location.search).get('compose')) setCompose({ replyTo: null });
   }, []);
 
-  // Received, non-control, non-archived mail, split by trust category (§14.2) so the
-  // Inbox is one combined list — unread count covers every non-blocked sender, since
-  // trust is decided at read time rather than by splitting the list.
-  const liveReceived = messages.filter(m =>
-    isReceivedForMe(m, address) && !CONTROL_SUBJECTS.has(m.subject) && !isArchived(m.hash)
-  );
-  // My own address is inherently trusted, so mail I sent myself counts as allowlisted
-  // (Inbox), mirroring InboxMain's view filter so the badges match the lists.
-  const catOf = (m: typeof messages[number]) =>
-    address != null && m.senderAddress.toLowerCase() === address.toLowerCase()
-      ? 'allowlisted' as const
-      : categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
-  const unreadCount = liveReceived.filter(m => !isRead(m.hash) && catOf(m) === 'allowlisted').length;
+  // One combined inbox: every unread received message except blocked senders (trust is
+  // decided at read time by the reader's gate, not by list placement). The rule lives in
+  // lib/unread so the account switcher's per-account counts mean the same thing.
+  const unreadCount = countUnread(messages, address, flags, mailFilter);
 
   const handleSignOut = async () => {
     try { await apiLogout(); } catch { /* ignore */ }
     await clearKeys(); // drop the working handle (locks the account; removes a temp handle)
     clearSession();
     navigate('/login');
+  };
+
+  // Leaving a shared machine: lock every account this tab holds, not just the one
+  // in front of us. The others stay listed on the picker, they just need unlocking.
+  const handleSignOutAll = async () => {
+    try { await apiLogout(); } catch { /* ignore */ }
+    await clearAllKeys();
+    clearSession();
+    navigate('/login');
+  };
+
+  // A switch re-homes every provider on its own (they key off the session and keys);
+  // what's left is shell state that belonged to the account we just left.
+  const handleSwitched = () => {
+    setCompose(null);
+    setLabelManagerOpen(false);
+    setFolder('inbox');
+    setFilter('');
+    setSearchOpen(false);
   };
 
   const selectFolder = (f: Folder) => {
@@ -259,7 +235,13 @@ export function AppLayout() {
           <NavRow icon="settings" label="Manage labels" collapsed={railCollapsed} onClick={() => setLabelManagerOpen(true)} />
 
           <GroupLabel collapsed={railCollapsed}>Account</GroupLabel>
+          {/* On mobile the header trigger is a bare monogram; this is the labelled
+              way in, and it opens the same sheet. */}
+          {isMobile && (
+            <NavRow icon="user" label="Switch account" collapsed={railCollapsed} onClick={() => { setDrawerOpen(false); setSearchOpen(false); setAccountMenuOpen(true); }} />
+          )}
           <NavRow icon="users" label="Contacts" active={section === 'contacts'} collapsed={railCollapsed} onClick={() => goto('/contacts')} />
+          {AppNav && <AppNav collapsed={railCollapsed} pathname={location.pathname} goto={goto} />}
           <NavRow icon="settings" label="Settings" active={section === 'settings'} collapsed={railCollapsed} onClick={() => goto('/settings')} />
         </div>
 
@@ -308,14 +290,7 @@ export function AppLayout() {
             <IconButton aria-label={isMobile ? 'Open menu' : 'Toggle navigation'} active={!isMobile && collapsed} onClick={onMenu}>
               <Icon name={isMobile ? 'menu' : 'panel-left'} />
             </IconButton>
-            {/* The deployment's own domain, not a product mark. This client is unbranded;
-                the useful thing to show here is WHICH server you are signed in to. */}
-            {DEFAULT_DOMAIN && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--text-strong)', marginRight: 'var(--space-2)', whiteSpace: 'nowrap' }}>
-                <Icon name="mail" size={17} style={{ color: 'var(--text-muted)' }} />
-                {DEFAULT_DOMAIN}
-              </span>
-            )}
+            {deployment.branding.appMark}
             {!isMobile && section === 'mail' && (
               <div style={{ flex: 1, maxWidth: 620 }}>
                 <Input
@@ -344,17 +319,26 @@ export function AppLayout() {
                 <Icon name="settings" />
               </IconButton>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginLeft: 'var(--space-1)' }}>
-              <AccountMonogram address={address || '?'} size={32} />
-              {!isMobile && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={address ?? undefined}>{displayName}</span>}
-            </div>
+            {/* The signed-in account is identified by its ADDRESS: that's what the
+                mesh routes to, what recipients see, and the only way to tell two
+                accounts apart. It doubles as the switcher between the identities
+                unlocked in this tab. */}
+            <AccountMenu
+              open={accountMenuOpen}
+              onOpenChange={setAccountMenuOpen}
+              mobile={isMobile}
+              onSignOut={handleSignOut}
+              onSignOutAll={handleSignOutAll}
+              onSwitched={handleSwitched}
+              draftOpen={compose !== null}
+            />
           </header>
         )}
 
-        {/* This relay hosts no personal storage, so Sent, contacts, flags and settings are
-            being kept in THIS browser only. Said out loud because the alternative is that
-            someone opens a second device, finds an empty Sent folder, and reasonably
-            concludes their mail was lost. */}
+        {/* A relay that hosts no personal storage is a valid deployment, but it means Sent,
+            contacts, flags and settings are being kept in THIS browser only. Said out loud
+            because the alternative is that someone opens a second device, finds an empty Sent
+            folder, and reasonably concludes their mail was lost. */}
         {storageLocalOnly && (
           <div style={{
             flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
@@ -368,7 +352,6 @@ export function AppLayout() {
             </span>
           </div>
         )}
-
         {ephemeral && (
           <div style={{
             flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',

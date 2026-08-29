@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode, createElement } from 'react';
-import { MailFilterClient, emptyFilterList, type FilterList } from '../api/filterRest';
+import { emptyFilterList, type FilterList, type MailFilter } from '../api/filterList';
+import { deployment } from '@deployment';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 
@@ -22,24 +23,26 @@ export function MailFilterProvider({ children }: { children: ReactNode }) {
   const { sessionToken, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<FilterList | null>(null);
   const [ready, setReady] = useState(false);
-  const clientRef = useRef<MailFilterClient | null>(null);
-  const sigRef = useRef('');
+  const clientRef = useRef<MailFilter | null>(null);
 
   // Gate on the account session, not just keys — same pairing race as
   // ContactsProvider: the blocklist must load against the real account token, not
   // the ephemeral pairing token that's live for a beat after keys are installed.
   useEffect(() => {
     if (!keys || !sessionToken || !isAuthenticated) return;
-    const client = new MailFilterClient(keys);
+    const client = deployment.mailFilter(keys);
     clientRef.current = client;
     let cancelled = false;
     const load = () => client.get()
       .then(f => {
         if (cancelled) return;
         // Only replace on an actual change, so a wake-reload of an unchanged list
-        // doesn't churn `filter` identity and re-render consumers.
-        const sig = JSON.stringify(f);
-        if (sig !== sigRef.current) { sigRef.current = sig; setFilter(f); }
+        // doesn't churn `filter` identity and re-render consumers. Compared against
+        // the CURRENT filter rather than a remembered signature: this effect re-runs
+        // on silent session renewal and its cleanup nulls `filter`, which a
+        // remembered signature would outlive — swallowing the reload and leaving the
+        // blocklist unloaded (blocked senders reading as merely pending).
+        setFilter(prev => (JSON.stringify(prev) === JSON.stringify(f) ? prev : f));
       })
       .catch(() => { /* transient */ })
       .finally(() => { if (!cancelled) setReady(true); });
@@ -86,7 +89,6 @@ export function MailFilterProvider({ children }: { children: ReactNode }) {
       if (!next.senders.some(x => x.trim().toLowerCase() === a)) next.senders.push(a);
     }
     await client.save(next);
-    sigRef.current = JSON.stringify(next);
     setFilter(next);
   }, []);
 

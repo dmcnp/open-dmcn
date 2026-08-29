@@ -7,7 +7,7 @@
 import { type IdentityKeyPair, keyPairFromPayloadJSON } from './keys';
 import { decryptKeys, decryptKeysWithKey } from './keystore';
 import { unlockPasskeyPRF } from './passkey';
-import { loadLocalKeystore, type AuthMethod } from './localKeystore';
+import { loadLocalKeystore, type AuthMethod, type LocalKeystore } from './localKeystore';
 
 // Thrown when the local keystore is password-gated and the caller did not supply a
 // password — the caller should prompt and retry with { password }.
@@ -37,7 +37,15 @@ export interface UnlockResult {
 export async function unlockBackupBytes(address: string, opts?: { password?: string }): Promise<UnlockResult> {
   const ks = await loadLocalKeystore(address);
   if (!ks) throw new Error('no local keystore on this device');
+  return unlockKeystore(ks, opts);
+}
 
+// unlockKeystore is the same unlock against an ALREADY-LOADED keystore record. The
+// account picker/switcher holds the record and must call this rather than
+// unlockBackupBytes: an IndexedDB round trip between the click and
+// navigator.credentials.get() can cost the transient user activation the passkey
+// prompt needs (Safari), turning a valid unlock into a silent failure.
+export async function unlockKeystore(ks: LocalKeystore, opts?: { password?: string }): Promise<UnlockResult> {
   if (ks.authMethod === 'passkey') {
     if (!ks.credentialId || !ks.prfSalt) throw new Error('local keystore is missing passkey metadata');
     const aesKey = await unlockPasskeyPRF(ks.credentialId, ks.prfSalt);

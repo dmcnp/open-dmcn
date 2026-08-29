@@ -1,9 +1,10 @@
 // Protobuf encode/decode backed by a statically generated module (pbjs
-// static-module: src/lib/proto/dmcn.js) instead of runtime reflection/codegen,
+// static-module: web/app/proto/dmcn.js, reached via the @proto alias) instead of runtime
+// reflection/codegen,
 // so it works under a strict CSP with no 'unsafe-eval'. The static codecs are
 // byte-identical to Go's deterministic marshaling (verified). The getRoot()/
 // lookupType() shim keeps the existing helper call sites below unchanged.
-import { dmcn } from '../proto/dmcn.js';
+import { dmcn } from '@proto';
 
 interface StaticType {
   create(props: unknown): unknown;
@@ -36,6 +37,12 @@ export async function encodeIdentityRecord(record: {
   verificationTier: number;
   bridgeCapability: boolean;
   requireOnion?: boolean;
+  // Owner-signed monotonic version. Go's NewIdentityRecord starts at 1; the browser omitted it
+  // entirely (encoding 0), which made "monotonic" false across the two producers — a Go-built
+  // record beat any browser-built one on acceptIdentity's anti-rollback comparison, and a
+  // browser record could never displace it. Not a security control either way: the owner signs
+  // it, so a hostile rebind just picks its own value.
+  revision?: number;
   selfSignature?: Uint8Array;
   // Domain countersignature (optional). Excluded from signableBytes, so adding it
   // does not invalidate the self-signature.
@@ -88,6 +95,7 @@ export async function encodeIdentitySignableBytes(record: {
   verificationTier: number;
   bridgeCapability: boolean;
   requireOnion?: boolean;
+  revision?: number;
 }): Promise<Uint8Array> {
   const root = await getRoot();
   const IdentityRecord = root.lookupType('dmcn.identity.IdentityRecord');
@@ -127,8 +135,10 @@ export interface BodyWire {
 // --- Split header/body ---
 //
 // The only shape this client produces. The older whole-message form (PlaintextMessage /
-// SignedMessage sealed into one blob) had no callers left in either direction, so its
-// codecs are gone; Go still reads and writes v1 for records predating the split.
+// SignedMessage sealed into one blob) had one caller left — outbound-to-legacy mail sealed
+// for the bridge — and that moved onto the split form too, because the shared To/Cc audience
+// a bridge needs for Reply All exists only on a split header. Its codecs are gone with it;
+// Go still reads and writes v1 for records predating the split.
 
 export interface MessageHeaderFields {
   version: number;
@@ -154,6 +164,11 @@ export interface MessageHeaderFields {
   to?: string[];
   cc?: string[];
   bcc?: string[];
+  // Optional human-readable sender name (legacy mail's From display name), signed with
+  // the rest of the header. Display only — never an identity; see trust/displayName.ts.
+  // Empty/absent is stripped by canonical(), matching Go's omission of an empty string,
+  // so a header that predates the field re-encodes byte-identically on the verify path.
+  senderDisplay?: string;
 }
 
 // encodeMessageHeader is the canonical serialization signed by the sender.
@@ -314,122 +329,4 @@ export async function decodeMailboxBody(data: Uint8Array): Promise<{
   const root = await getRoot();
   const MailboxBody = root.lookupType('dmcn.relay.MailboxBody');
   return MailboxBody.decode(data) as any;
-}
-
-// NOTE (open-dmcn reference client): device-pairing (dmcn.pairing.Clone*) and
-// countersign-request (dmcn.countersign.CountersignRequest) payloads are product
-// surfaces not carried by the open protocol, so their encoders are omitted (those
-// proto messages are not in the core bundle). The core domain-countersignature
-// binding (encodeCountersignBinding above) stays — it is part of the IdentityRecord.
-
-// --- Bridge classification record (signed legacy-auth attestation) ---
-
-export interface BridgeClassificationFields {
-  bridgeAddress: string;
-  bridgePublicKey: Uint8Array;
-  smtpFrom: string;
-  smtpSenderIp: string;
-  spfResult: number;
-  dkimResult: number;
-  dmarcResult: number;
-  reputationScore: number;
-  trustTier: number;
-  classifiedAt: number;
-  bridgeSignature: Uint8Array;
-}
-
-// decodeBridgeClassification decodes a BridgeClassificationRecord attachment and
-// returns both the parsed fields and the exact bytes the bridge signed over
-// (the record minus bridge_signature). signableBytes are produced by re-encoding
-// the decoded message with the signature field removed: pbjs writes fields in
-// ascending field-number order and only those present on the wire, which is
-// byte-identical to Go's deterministic signableBytes() (internal/bridge/types.go).
-export async function decodeBridgeClassification(
-  data: Uint8Array
-): Promise<{ record: BridgeClassificationFields; signableBytes: Uint8Array }> {
-  const T = dmcn.bridge.BridgeClassificationRecord;
-  const msg = T.decode(data);
-  // longs:Number keeps classified_at a plain number; bytes stay Uint8Array.
-  const record = T.toObject(msg, { longs: Number }) as BridgeClassificationFields;
-  // Remove the signature AND the credential, then re-encode → the signed-over bytes.
-  //
-  // The credential (field 12) must come out as well: Go signs fields 1-10 only, deliberately, so
-  // that a bridge credential can be re-issued without invalidating every attestation it ever
-  // made. Leaving it in here would make the browser compute different signed bytes than the
-  // bridge did, and every bridged message would render as forged.
-  const own = msg as unknown as Record<string, unknown>;
-  delete own.bridgeSignature;
-  delete own.bridgeCredential;
-  const signableBytes = T.encode(msg).finish() as Uint8Array;
-  return { record, signableBytes };
-}
-
-// CredentialFields is the subset of a dmcn.identity.Credential this client reads.
-export interface CredentialFields {
-  subject: Uint8Array;
-  domain: string;
-  roles: string[];
-  issuerPub: Uint8Array;
-  signature: Uint8Array;
-  notAfter?: number;
-  effectiveFrom?: number;
-}
-
-// decodeCredentialFromClassification pulls the bridge credential out of a classification record
-// and returns its fields alongside the exact bytes its issuer signed (the credential minus its
-// signature), so the browser can verify it against a domain root key.
-export async function decodeCredentialFromClassification(
-  data: Uint8Array
-): Promise<{ credential: CredentialFields; signableBytes: Uint8Array } | null> {
-  const T = dmcn.bridge.BridgeClassificationRecord;
-  const msg = T.decode(data) as unknown as Record<string, unknown>;
-  return extractCredential(msg.bridgeCredential);
-}
-
-// decodeCredentialFromReceipt is the same extraction for a delivery receipt. Both records
-// carry the bridge's credential in the identical shape, and both are verified the same way.
-export async function decodeCredentialFromReceipt(
-  data: Uint8Array
-): Promise<{ credential: CredentialFields; signableBytes: Uint8Array } | null> {
-  const T = dmcn.bridge.BridgeDeliveryReceipt;
-  const msg = T.decode(data) as unknown as Record<string, unknown>;
-  return extractCredential(msg.bridgeCredential);
-}
-
-function extractCredential(cred: unknown): { credential: CredentialFields; signableBytes: Uint8Array } | null {
-  if (!cred) return null;
-  const C = dmcn.identity.Credential;
-  const credential = C.toObject(cred as never, { longs: Number }) as unknown as CredentialFields;
-  // Same trick as above: drop the signature own-property and re-encode.
-  delete (cred as Record<string, unknown>).signature;
-  const signableBytes = C.encode(cred as never).finish() as Uint8Array;
-  return { credential, signableBytes };
-}
-
-// DeliveryReceiptFields mirrors dmcn.bridge.BridgeDeliveryReceipt.
-export interface DeliveryReceiptFields {
-  originalMessageId: Uint8Array;
-  recipientEmail: string;
-  bridgeAddress: string;
-  deliveredAt: number;
-  success: boolean;
-  errorDetail: string;
-  bridgeSignature: Uint8Array;
-}
-
-// decodeDeliveryReceipt returns the receipt's fields plus the exact bytes the bridge signed
-// (fields 1-6). Both the signature (7) and the credential (8) come out, matching Go's
-// signableBytes — the credential is excluded there so a re-issued credential does not
-// invalidate every receipt the bridge ever wrote.
-export async function decodeDeliveryReceipt(
-  data: Uint8Array
-): Promise<{ record: DeliveryReceiptFields; signableBytes: Uint8Array }> {
-  const T = dmcn.bridge.BridgeDeliveryReceipt;
-  const msg = T.decode(data);
-  const record = T.toObject(msg, { longs: Number }) as unknown as DeliveryReceiptFields;
-  const own = msg as unknown as Record<string, unknown>;
-  delete own.bridgeSignature;
-  delete own.bridgeCredential;
-  const signableBytes = T.encode(msg).finish() as Uint8Array;
-  return { record, signableBytes };
 }

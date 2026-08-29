@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, ReactNode, createElement } from 'react';
 import { ContactStore, type ContactRecord, type TrustProvenance } from '../api/contactStore';
-import { contactFacts, type PinnedFacts } from '../trust/pinnedKey';
+import { contactFacts, type PinnedFacts, absentIdentityFacts } from '../trust/pinnedKey';
 import { loadPin, loadPins, savePin, deletePin, makePin, reconcilePin, type PinAnomaly } from '../trust/pinStore';
 import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
@@ -111,6 +111,9 @@ export interface AllowlistInput {
   x25519Pub?: string;  // base64 std
   bridgeCapability?: boolean;
   adminKeyCustody?: boolean;
+  // Set when the owner is confirming that this address has NO DMCN identity (see
+  // trust/pinnedKey.ts). Mutually exclusive with the key fields in practice.
+  noIdentity?: boolean;
 }
 
 // PinAlert reports a disagreement between this device's pin and the KV copy, found
@@ -270,13 +273,18 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
     const owner = ownerRef.current;
     if (!store || !owner) return;
     let pinSeq: number | undefined;
-    if (input.ed25519Pub) {
-      const facts: PinnedFacts = {
-        ed25519Pub: input.ed25519Pub,
-        x25519Pub: input.x25519Pub ?? '',
-        bridgeCapability: input.bridgeCapability === true,
-        adminKeyCustody: input.adminKeyCustody === true,
-      };
+    // A confirmed ABSENCE of an identity is pinned exactly like a present one: it is the
+    // owner deciding what this address currently is, and it must survive so a key appearing
+    // later reads as a change rather than a first sighting.
+    if (input.ed25519Pub || input.noIdentity) {
+      const facts: PinnedFacts = input.noIdentity
+        ? absentIdentityFacts()
+        : {
+            ed25519Pub: input.ed25519Pub!,
+            x25519Pub: input.x25519Pub ?? '',
+            bridgeCapability: input.bridgeCapability === true,
+            adminKeyCustody: input.adminKeyCustody === true,
+          };
       // Allowlisting is the owner deliberately deciding to trust these keys, and it is
       // the ONLY action allowed to replace a pin this device already holds — it is the
       // remedy the composer points at ("remove them and add them again"). Advancing the

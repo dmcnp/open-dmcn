@@ -9,20 +9,24 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
-import { isReceivedForMe } from '../lib/mailView';
+import { isReceivedForMe, previewText } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
 import { IconButton } from '../ds';
 import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
+import { senderLabel } from '../lib/trust/displayName';
 import { MessageReader } from '../components/MessageReader';
-import type { ComposeReplyTo } from '../components/ComposeDialog';
+import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
+import { deployment } from '@deployment';
 
-// The open protocol carries no control messages (device pairing + countersign requests are
-// product surfaces), so nothing is excluded from the normal mail folders. Kept as an (empty)
-// set so the shared list-filtering logic is unchanged.
-const CONTROL_SUBJECTS = new Set<string>([]);
+// Control messages this deployment carries (device pairing, countersign requests) are
+// surfaced in their own panels, not the normal mail folders. Empty on a deployment whose
+// protocol has none, which leaves every message ordinary mail.
+// A function, not a module-level Set: `deployment` imports screens that import this module,
+// and a value read during module evaluation would depend on which side of that cycle ran first.
+const controlSubjects = () => new Set<string>(deployment.controlSubjects);
 
 function formatWhen(sec: number): string {
   const d = new Date(sec * 1000);
@@ -78,8 +82,8 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
   // Unread applies to received mail only (you don't "read" your own Sent copy).
   const unread = !sent && !read;
   // Informational hint: this sender isn't in your contacts/allowlist yet. Purely a glanceable cue
-  // — it grants NO access (the reader gates at read time), so it's fine that it's cheap and
-  // address-based.
+  // now that Inbox and Pending are one list — it grants NO access (the reader gates at read time),
+  // so it's fine that it's cheap and address-based.
   const newSenderTag = unknownSender ? (
     <span title="Sender isn't in your contacts yet" style={{
       flex: 'none', alignSelf: 'center', fontSize: 'var(--text-2xs)', fontWeight: 600, letterSpacing: '0.02em',
@@ -88,18 +92,28 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
     }}>New</span>
   ) : null;
   const nameWeight = unread ? 700 : 500;
-  // For a sent message the "who" is the full recipient audience (To + Cc); the label
-  // shows the whole list. Falls back to the singular recipientAddress for pre-feature
-  // messages with no lists.
-  // Every address goes through nameFor, so a contact shows under the name its owner
-  // gave it — but the underlying ADDRESS is what routing, pinning and the title tip use.
+  // The cleaned preview decides everything about the snippet: whether it renders, and how the
+  // subject is sized — so the two can never disagree about how many columns the middle of the
+  // row holds. Cleaning first matters: bulk mail routinely opens with "[image: Logo][1]", which
+  // previewText reduces to nothing, and an empty preview must not claim a column or leave a
+  // dangling em-dash behind.
+  const preview = msg.snippet && !unknownSender ? previewText(msg.snippet) : '';
+  const showSnippet = preview !== '';
+  // For a sent message the "who" is the full recipient audience (To + Cc). Falls back
+  // to the singular recipientAddress for pre-feature messages with no lists. Every
+  // recipient address goes through nameFor, so a contact shows under the name its owner gave it.
   const recipientList = msg.to.length || msg.cc.length ? [...msg.to, ...msg.cc] : [msg.recipientAddress];
   const whoAddress = sent ? recipientList[0] : msg.senderAddress;
-  const who = nameFor(whoAddress);
+  // Owner-given contact name first, then the display name the message carried (legacy
+  // mail's From name), then the address. The row is a scanning surface with one narrow
+  // column, so a sender-supplied name appears here without the address next to it — the
+  // address is one hover (title) away, the "New" tag flags a sender you don't know, and
+  // the reader, where trusting actually happens, always shows name AND address.
+  const who = senderLabel(whoAddress, nameFor(whoAddress), sent ? '' : msg.senderDisplay).primary;
   const sentLabel = `To: ${recipientList.map(nameFor).join(', ')}`;
-  // Which network the counterparty is on — the one bit worth a glance per row. For
-  // received mail the header's signing key is compared against the directory, so a
-  // bridged message claiming a DMCN address cannot wear the shield.
+  // Who this row is about — the sender, or the first recipient in Sent. For received
+  // mail the header's signing key is compared against the directory, so a bridged
+  // message claiming a DMCN address can't wear the shield.
   const kind = useCounterpartyKind(whoAddress, sent ? '' : msg.senderPublicKey);
   const [dx, setDx] = useState(0);
   const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false });
@@ -149,7 +163,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
               {unread && <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: 'var(--brand)', alignSelf: 'center' }} />}
               <span style={{ alignSelf: 'center', display: 'inline-flex', marginRight: 2 }}><KindIcon kind={kind} size={14} /></span>
-              <span title={sent ? recipientList.join(', ') : whoAddress} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sent ? sentLabel : who}
               </span>
               {newSenderTag}
@@ -157,7 +171,14 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flex: 'none' }}>{formatWhen(msg.sentAt)}</span>
             </div>
             <div style={{ marginTop: 2, fontSize: 'var(--text-md)', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.subject || '(no subject)'}</div>
-            {msg.snippet && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{msg.snippet}</div>}
+          {/* The snippet is body text — the leading 140 bytes of it (SPEC.md) — so it is
+              withheld on exactly the terms the body is. An unknown sender's body is already
+              hidden behind the reveal gate at read time; showing their snippet here would put
+              a line of their own words in front of the owner while they are still deciding
+              whether to trust them, which is the thing that gate exists to prevent. The check
+              is address-based and therefore spoofable: it stops an unknown sender, not a
+              targeted spoof of a known one, which the reader catches on open. */}
+            {showSnippet && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{preview}</div>}
           </div>
         </div>
       </div>
@@ -188,26 +209,29 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
           put it) rather than floating in the middle of the subject text. */}
       <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
         <KindIcon kind={kind} size={14} />
-        <span title={sent ? recipientList.join(', ') : whoAddress} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sent ? `To: ${who}` : who}
         </span>
         {newSenderTag}
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 'none', maxWidth: '45%' }}>
+        {/* The 45% cap exists to leave room for the snippet beside it. With no snippet there
+            is no second column to leave room for, so the subject takes the whole middle and
+            truncates only when it genuinely overruns — `0 1 auto` + minWidth:0 so it still
+            shrinks against the date column rather than pushing through it. */}
+        <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(showSnippet ? { flex: 'none', maxWidth: '45%' } : { flex: '0 1 auto', minWidth: 0 }) }}>
           {msg.subject || '(no subject)'}
         </span>
-        {msg.snippet && (
+        {showSnippet && (
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-            &mdash; {msg.snippet}
+            &mdash; {preview}
           </span>
         )}
       </div>
       <div style={{ flex: 'none', width: 140, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)' }}>
         {/* The date never moves or disappears, and the hover actions keep their slot
             when hidden (visibility, not unmounting) — so hovering changes colours,
-            never geometry. Swapping the date OUT for buttons was what made every row
-            resize as the pointer crossed it. */}
+            never geometry. */}
         <span style={{ flex: 1, textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatWhen(msg.sentAt)}</span>
         <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, visibility: hovered ? 'visible' : 'hidden' }}>
           {!sent && (
@@ -239,16 +263,18 @@ export function InboxMain() {
   useEffect(() => { setOpenHash(null); }, [folder]);
 
   const isSent = (sender: string) => address != null && sender === address;
-  const mail = messages.filter(m => !CONTROL_SUBJECTS.has(m.subject));
+  const control = controlSubjects();
+  const mail = messages.filter(m => !control.has(m.subject));
+  // Address-based sender category (cheap, no body fetch). Used ONLY for the optional "Unknown
+  // senders" filter and the informational per-row hint — it does NOT decide Inbox membership.
+  // Trust is enforced at read time by the reader's gate (which can run the real native-key /
+  // bridge-SPF-DKIM-DMARC checks), so a spoofable address match here carries no trust weight.
+  const catOf = (m: Preview): 'allowlisted' | 'pending' | 'blocked' =>
+    isSent(m.senderAddress) ? 'allowlisted' : categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
 
   const q = filter.trim().toLowerCase();
   const matchesQ = (m: Preview) =>
     !q || `${m.senderAddress} ${m.recipientAddress} ${[...m.to, ...m.cc].join(' ')} ${m.subject} ${m.snippet}`.toLowerCase().includes(q);
-
-  // Trust category (§14.2): allowlisted senders land in the Inbox; unknown senders
-  // in Pending; blocked senders appear in neither (dropped at the relay). Declared out
-  // here because the row renderer also uses it for the informational "New" tag.
-  const catOf = (m: Preview) => categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
 
   let rows: Row[];
   if (folder === 'sent') {
@@ -277,12 +303,9 @@ export function InboxMain() {
       if (folder === 'archive') return isArchived(m.hash);
       if (folder === 'starred') return isStarred(m.hash);
       // One combined inbox: every received message except blocked senders (still hidden) and
-      // archived/filed ones. There is no trust-based list split — trust is decided at READ TIME
-      // by the reader's gate, so a spoofed sender cannot ride an address match into a "trusted"
-      // bucket, and an unknown sender is visible (identity, subject, snippet) with only the body
-      // sealed until the reader decides.
-      const cat = isSent(m.senderAddress) ? 'allowlisted' : catOf(m);
-      return cat !== 'blocked' && !isArchived(m.hash) && !isFiled(m.hash);
+      // archived/filed ones. There is no trust-based list split — trust is decided at READ TIME by
+      // the reader's gate, so a spoofed sender can't ride an address match into a "trusted" bucket.
+      return catOf(m) !== 'blocked' && !isArchived(m.hash) && !isFiled(m.hash);
     };
     rows = mail.filter(inFolder).filter(matchesQ).map(m => ({ msg: m, hashes: [m.hash] }));
   }
@@ -312,8 +335,6 @@ export function InboxMain() {
   const toggleArchive = (m: Preview) => setFlag(m.hash, { archived: !isArchived(m.hash) });
   const toggleStar = (m: Preview) => setFlag(m.hash, { starred: !isStarred(m.hash) });
 
-  // The reader builds the reply payload (it holds the decrypted body needed to quote
-  // the original); the list just closes the reader and opens the composer with it.
   const handleReply = (replyTo: ComposeReplyTo) => {
     setOpenHash(null);
     openCompose(replyTo);

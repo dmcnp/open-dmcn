@@ -39,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionToken(null);
     sessionStorage.removeItem('dmcn_session');
     sessionStorage.removeItem('dmcn_encrypted_payload');
-    sessionStorage.removeItem('dmcn_ephemeral');
     setState({ isAuthenticated: false, address: null, sessionToken: null });
   }, []);
 

@@ -1,18 +1,18 @@
 import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../lib/hooks/useAuth';
-import { useKeys } from '../lib/hooks/useKeys';
-import { importChallenge, importIdentity } from '../lib/api/client';
-import { encryptKeys, encryptKeysWithKey, type EncryptedBundle } from '../lib/crypto/keystore';
-import { makeLocalKeystore, saveLocalKeystore } from '../lib/crypto/localKeystore';
-import { readExport, EXPORT_FORMAT, type KeystoreExport } from '../lib/crypto/exportFile';
-import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
-import { sign } from '../lib/crypto/sign';
-import { toBase64, fromBase64, keyPairToPayloadJSON, type IdentityKeyPair } from '../lib/crypto/keys';
-import { AuthShell } from '../components/AuthShell';
-import { ChoiceRow } from '../components/ChoiceRow';
-import { Button, IconButton, Input } from '../ds';
-import { Icon } from '../components/Icon';
+import { useAuth } from '../../src/lib/hooks/useAuth';
+import { useKeys } from '../../src/lib/hooks/useKeys';
+import { importChallenge, importIdentity } from '../../src/lib/api/client';
+import { encryptKeys, encryptKeysWithKey, type EncryptedBundle } from '../../src/lib/crypto/keystore';
+import { makeLocalKeystore, saveLocalKeystore } from '../../src/lib/crypto/localKeystore';
+import { readExport, EXPORT_FORMAT, type KeystoreExport } from '../../src/lib/crypto/exportFile';
+import { isPasskeySupported, createPasskeyPRF } from '../../src/lib/crypto/passkey';
+import { sign } from '../../src/lib/crypto/sign';
+import { toBase64, fromBase64, keyPairToPayloadJSON, type IdentityKeyPair } from '../../src/lib/crypto/keys';
+import { AuthShell } from '../../src/components/AuthShell';
+import { ChoiceRow } from '../../src/components/ChoiceRow';
+import { Button, IconButton, Input } from '../../src/ds';
+import { Icon } from '../../src/components/Icon';
 
 const linkStyle = { color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 } as const;
 

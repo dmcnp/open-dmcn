@@ -2670,6 +2670,9 @@ export namespace dmcn {
 
             /** PlaintextMessage alternatives */
             alternatives?: (dmcn.message.IMessageBody[]|null);
+
+            /** PlaintextMessage senderDisplay */
+            senderDisplay?: (string|null);
         }
 
         /** Represents a PlaintextMessage. */
@@ -2716,6 +2719,9 @@ export namespace dmcn {
 
             /** PlaintextMessage alternatives. */
             public alternatives: dmcn.message.IMessageBody[];
+
+            /** PlaintextMessage senderDisplay. */
+            public senderDisplay: string;
 
             /**
              * Creates a new PlaintextMessage instance using the specified properties.
@@ -2951,6 +2957,9 @@ export namespace dmcn {
 
             /** MessageHeader bcc */
             bcc?: (string[]|null);
+
+            /** MessageHeader senderDisplay */
+            senderDisplay?: (string|null);
         }
 
         /** Represents a MessageHeader. */
@@ -3012,6 +3021,9 @@ export namespace dmcn {
 
             /** MessageHeader bcc. */
             public bcc: string[];
+
+            /** MessageHeader senderDisplay. */
+            public senderDisplay: string;
 
             /**
              * Creates a new MessageHeader instance using the specified properties.
@@ -3870,6 +3882,21 @@ export namespace dmcn {
 
             /** RelayResponse getRelayDescriptor */
             getRelayDescriptor?: (dmcn.relay.IGetRelayDescriptorResponse|null);
+
+            /** RelayResponse mailboxKvPut */
+            mailboxKvPut?: (dmcn.relay.IMailboxKvPutResponse|null);
+
+            /** RelayResponse mailboxKvGet */
+            mailboxKvGet?: (dmcn.relay.IMailboxKvGetResponse|null);
+
+            /** RelayResponse mailboxKvList */
+            mailboxKvList?: (dmcn.relay.IMailboxKvListResponse|null);
+
+            /** RelayResponse mailboxKvDelete */
+            mailboxKvDelete?: (dmcn.relay.IMailboxKvDeleteResponse|null);
+
+            /** RelayResponse mailboxKvStat */
+            mailboxKvStat?: (dmcn.relay.IMailboxKvStatResponse|null);
         }
 
         /** Represents a RelayResponse. */
@@ -3932,8 +3959,23 @@ export namespace dmcn {
             /** RelayResponse getRelayDescriptor. */
             public getRelayDescriptor?: (dmcn.relay.IGetRelayDescriptorResponse|null);
 
+            /** RelayResponse mailboxKvPut. */
+            public mailboxKvPut?: (dmcn.relay.IMailboxKvPutResponse|null);
+
+            /** RelayResponse mailboxKvGet. */
+            public mailboxKvGet?: (dmcn.relay.IMailboxKvGetResponse|null);
+
+            /** RelayResponse mailboxKvList. */
+            public mailboxKvList?: (dmcn.relay.IMailboxKvListResponse|null);
+
+            /** RelayResponse mailboxKvDelete. */
+            public mailboxKvDelete?: (dmcn.relay.IMailboxKvDeleteResponse|null);
+
+            /** RelayResponse mailboxKvStat. */
+            public mailboxKvStat?: (dmcn.relay.IMailboxKvStatResponse|null);
+
             /** RelayResponse response. */
-            public response?: ("store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor");
+            public response?: ("store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat");
 
             /**
              * Creates a new RelayResponse instance using the specified properties.
@@ -7439,6 +7481,21 @@ export namespace dmcn {
 
             /** MailboxOp delete */
             "delete"?: (dmcn.relay.IMailboxDeleteOp|null);
+
+            /** MailboxOp kvPut */
+            kvPut?: (dmcn.relay.IMailboxKvPutOp|null);
+
+            /** MailboxOp kvGet */
+            kvGet?: (dmcn.relay.IMailboxKvGetOp|null);
+
+            /** MailboxOp kvList */
+            kvList?: (dmcn.relay.IMailboxKvListOp|null);
+
+            /** MailboxOp kvDelete */
+            kvDelete?: (dmcn.relay.IMailboxKvDeleteOp|null);
+
+            /** MailboxOp kvStat */
+            kvStat?: (dmcn.relay.IMailboxKvStatOp|null);
         }
 
         /** Represents a MailboxOp. */
@@ -7465,8 +7522,23 @@ export namespace dmcn {
             /** MailboxOp delete. */
             public delete?: (dmcn.relay.IMailboxDeleteOp|null);
 
+            /** MailboxOp kvPut. */
+            public kvPut?: (dmcn.relay.IMailboxKvPutOp|null);
+
+            /** MailboxOp kvGet. */
+            public kvGet?: (dmcn.relay.IMailboxKvGetOp|null);
+
+            /** MailboxOp kvList. */
+            public kvList?: (dmcn.relay.IMailboxKvListOp|null);
+
+            /** MailboxOp kvDelete. */
+            public kvDelete?: (dmcn.relay.IMailboxKvDeleteOp|null);
+
+            /** MailboxOp kvStat. */
+            public kvStat?: (dmcn.relay.IMailboxKvStatOp|null);
+
             /** MailboxOp op. */
-            public op?: ("list"|"body"|"delete");
+            public op?: ("list"|"body"|"delete"|"kvPut"|"kvGet"|"kvList"|"kvDelete"|"kvStat");
 
             /**
              * Creates a new MailboxOp instance using the specified properties.
@@ -8333,6 +8405,1145 @@ export namespace dmcn {
 
             /**
              * Gets the default type url for StoreInit
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvPutOp. */
+        interface IMailboxKvPutOp {
+
+            /** MailboxKvPutOp key */
+            key?: (string|null);
+
+            /** MailboxKvPutOp sealed */
+            sealed?: (Uint8Array|null);
+
+            /** MailboxKvPutOp expectedVersion */
+            expectedVersion?: (number|Long|null);
+        }
+
+        /** Represents a MailboxKvPutOp. */
+        class MailboxKvPutOp implements IMailboxKvPutOp {
+
+            /**
+             * Constructs a new MailboxKvPutOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvPutOp);
+
+            /** MailboxKvPutOp key. */
+            public key: string;
+
+            /** MailboxKvPutOp sealed. */
+            public sealed: Uint8Array;
+
+            /** MailboxKvPutOp expectedVersion. */
+            public expectedVersion: (number|Long);
+
+            /**
+             * Creates a new MailboxKvPutOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvPutOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvPutOp): dmcn.relay.MailboxKvPutOp;
+
+            /**
+             * Encodes the specified MailboxKvPutOp message. Does not implicitly {@link dmcn.relay.MailboxKvPutOp.verify|verify} messages.
+             * @param message MailboxKvPutOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvPutOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvPutOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvPutOp.verify|verify} messages.
+             * @param message MailboxKvPutOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvPutOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvPutOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvPutOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvPutOp;
+
+            /**
+             * Decodes a MailboxKvPutOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvPutOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvPutOp;
+
+            /**
+             * Verifies a MailboxKvPutOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvPutOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvPutOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvPutOp;
+
+            /**
+             * Creates a plain object from a MailboxKvPutOp message. Also converts values to other types if specified.
+             * @param message MailboxKvPutOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvPutOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvPutOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvPutOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvGetOp. */
+        interface IMailboxKvGetOp {
+
+            /** MailboxKvGetOp key */
+            key?: (string|null);
+        }
+
+        /** Represents a MailboxKvGetOp. */
+        class MailboxKvGetOp implements IMailboxKvGetOp {
+
+            /**
+             * Constructs a new MailboxKvGetOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvGetOp);
+
+            /** MailboxKvGetOp key. */
+            public key: string;
+
+            /**
+             * Creates a new MailboxKvGetOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvGetOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvGetOp): dmcn.relay.MailboxKvGetOp;
+
+            /**
+             * Encodes the specified MailboxKvGetOp message. Does not implicitly {@link dmcn.relay.MailboxKvGetOp.verify|verify} messages.
+             * @param message MailboxKvGetOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvGetOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvGetOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvGetOp.verify|verify} messages.
+             * @param message MailboxKvGetOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvGetOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvGetOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvGetOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvGetOp;
+
+            /**
+             * Decodes a MailboxKvGetOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvGetOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvGetOp;
+
+            /**
+             * Verifies a MailboxKvGetOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvGetOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvGetOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvGetOp;
+
+            /**
+             * Creates a plain object from a MailboxKvGetOp message. Also converts values to other types if specified.
+             * @param message MailboxKvGetOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvGetOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvGetOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvGetOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvListOp. */
+        interface IMailboxKvListOp {
+
+            /** MailboxKvListOp prefix */
+            prefix?: (string|null);
+
+            /** MailboxKvListOp limit */
+            limit?: (number|null);
+
+            /** MailboxKvListOp cursor */
+            cursor?: (Uint8Array|null);
+
+            /** MailboxKvListOp values */
+            values?: (boolean|null);
+        }
+
+        /** Represents a MailboxKvListOp. */
+        class MailboxKvListOp implements IMailboxKvListOp {
+
+            /**
+             * Constructs a new MailboxKvListOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvListOp);
+
+            /** MailboxKvListOp prefix. */
+            public prefix: string;
+
+            /** MailboxKvListOp limit. */
+            public limit: number;
+
+            /** MailboxKvListOp cursor. */
+            public cursor: Uint8Array;
+
+            /** MailboxKvListOp values. */
+            public values: boolean;
+
+            /**
+             * Creates a new MailboxKvListOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvListOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvListOp): dmcn.relay.MailboxKvListOp;
+
+            /**
+             * Encodes the specified MailboxKvListOp message. Does not implicitly {@link dmcn.relay.MailboxKvListOp.verify|verify} messages.
+             * @param message MailboxKvListOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvListOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvListOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvListOp.verify|verify} messages.
+             * @param message MailboxKvListOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvListOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvListOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvListOp;
+
+            /**
+             * Decodes a MailboxKvListOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvListOp;
+
+            /**
+             * Verifies a MailboxKvListOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvListOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvListOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvListOp;
+
+            /**
+             * Creates a plain object from a MailboxKvListOp message. Also converts values to other types if specified.
+             * @param message MailboxKvListOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvListOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvListOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvListOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvDeleteOp. */
+        interface IMailboxKvDeleteOp {
+
+            /** MailboxKvDeleteOp key */
+            key?: (string|null);
+        }
+
+        /** Represents a MailboxKvDeleteOp. */
+        class MailboxKvDeleteOp implements IMailboxKvDeleteOp {
+
+            /**
+             * Constructs a new MailboxKvDeleteOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvDeleteOp);
+
+            /** MailboxKvDeleteOp key. */
+            public key: string;
+
+            /**
+             * Creates a new MailboxKvDeleteOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvDeleteOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvDeleteOp): dmcn.relay.MailboxKvDeleteOp;
+
+            /**
+             * Encodes the specified MailboxKvDeleteOp message. Does not implicitly {@link dmcn.relay.MailboxKvDeleteOp.verify|verify} messages.
+             * @param message MailboxKvDeleteOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvDeleteOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvDeleteOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvDeleteOp.verify|verify} messages.
+             * @param message MailboxKvDeleteOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvDeleteOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvDeleteOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvDeleteOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvDeleteOp;
+
+            /**
+             * Decodes a MailboxKvDeleteOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvDeleteOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvDeleteOp;
+
+            /**
+             * Verifies a MailboxKvDeleteOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvDeleteOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvDeleteOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvDeleteOp;
+
+            /**
+             * Creates a plain object from a MailboxKvDeleteOp message. Also converts values to other types if specified.
+             * @param message MailboxKvDeleteOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvDeleteOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvDeleteOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvDeleteOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvStatOp. */
+        interface IMailboxKvStatOp {
+        }
+
+        /** Represents a MailboxKvStatOp. */
+        class MailboxKvStatOp implements IMailboxKvStatOp {
+
+            /**
+             * Constructs a new MailboxKvStatOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvStatOp);
+
+            /**
+             * Creates a new MailboxKvStatOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvStatOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvStatOp): dmcn.relay.MailboxKvStatOp;
+
+            /**
+             * Encodes the specified MailboxKvStatOp message. Does not implicitly {@link dmcn.relay.MailboxKvStatOp.verify|verify} messages.
+             * @param message MailboxKvStatOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvStatOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvStatOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvStatOp.verify|verify} messages.
+             * @param message MailboxKvStatOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvStatOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvStatOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvStatOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvStatOp;
+
+            /**
+             * Decodes a MailboxKvStatOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvStatOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvStatOp;
+
+            /**
+             * Verifies a MailboxKvStatOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvStatOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvStatOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvStatOp;
+
+            /**
+             * Creates a plain object from a MailboxKvStatOp message. Also converts values to other types if specified.
+             * @param message MailboxKvStatOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvStatOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvStatOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvStatOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvPutResponse. */
+        interface IMailboxKvPutResponse {
+
+            /** MailboxKvPutResponse success */
+            success?: (boolean|null);
+
+            /** MailboxKvPutResponse version */
+            version?: (number|Long|null);
+        }
+
+        /** Represents a MailboxKvPutResponse. */
+        class MailboxKvPutResponse implements IMailboxKvPutResponse {
+
+            /**
+             * Constructs a new MailboxKvPutResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvPutResponse);
+
+            /** MailboxKvPutResponse success. */
+            public success: boolean;
+
+            /** MailboxKvPutResponse version. */
+            public version: (number|Long);
+
+            /**
+             * Creates a new MailboxKvPutResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvPutResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvPutResponse): dmcn.relay.MailboxKvPutResponse;
+
+            /**
+             * Encodes the specified MailboxKvPutResponse message. Does not implicitly {@link dmcn.relay.MailboxKvPutResponse.verify|verify} messages.
+             * @param message MailboxKvPutResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvPutResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvPutResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvPutResponse.verify|verify} messages.
+             * @param message MailboxKvPutResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvPutResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvPutResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvPutResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvPutResponse;
+
+            /**
+             * Decodes a MailboxKvPutResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvPutResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvPutResponse;
+
+            /**
+             * Verifies a MailboxKvPutResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvPutResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvPutResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvPutResponse;
+
+            /**
+             * Creates a plain object from a MailboxKvPutResponse message. Also converts values to other types if specified.
+             * @param message MailboxKvPutResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvPutResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvPutResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvPutResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvGetResponse. */
+        interface IMailboxKvGetResponse {
+
+            /** MailboxKvGetResponse found */
+            found?: (boolean|null);
+
+            /** MailboxKvGetResponse sealed */
+            sealed?: (Uint8Array|null);
+
+            /** MailboxKvGetResponse version */
+            version?: (number|Long|null);
+        }
+
+        /** Represents a MailboxKvGetResponse. */
+        class MailboxKvGetResponse implements IMailboxKvGetResponse {
+
+            /**
+             * Constructs a new MailboxKvGetResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvGetResponse);
+
+            /** MailboxKvGetResponse found. */
+            public found: boolean;
+
+            /** MailboxKvGetResponse sealed. */
+            public sealed: Uint8Array;
+
+            /** MailboxKvGetResponse version. */
+            public version: (number|Long);
+
+            /**
+             * Creates a new MailboxKvGetResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvGetResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvGetResponse): dmcn.relay.MailboxKvGetResponse;
+
+            /**
+             * Encodes the specified MailboxKvGetResponse message. Does not implicitly {@link dmcn.relay.MailboxKvGetResponse.verify|verify} messages.
+             * @param message MailboxKvGetResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvGetResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvGetResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvGetResponse.verify|verify} messages.
+             * @param message MailboxKvGetResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvGetResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvGetResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvGetResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvGetResponse;
+
+            /**
+             * Decodes a MailboxKvGetResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvGetResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvGetResponse;
+
+            /**
+             * Verifies a MailboxKvGetResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvGetResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvGetResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvGetResponse;
+
+            /**
+             * Creates a plain object from a MailboxKvGetResponse message. Also converts values to other types if specified.
+             * @param message MailboxKvGetResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvGetResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvGetResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvGetResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvItem. */
+        interface IMailboxKvItem {
+
+            /** MailboxKvItem key */
+            key?: (string|null);
+
+            /** MailboxKvItem sealed */
+            sealed?: (Uint8Array|null);
+
+            /** MailboxKvItem version */
+            version?: (number|Long|null);
+        }
+
+        /** Represents a MailboxKvItem. */
+        class MailboxKvItem implements IMailboxKvItem {
+
+            /**
+             * Constructs a new MailboxKvItem.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvItem);
+
+            /** MailboxKvItem key. */
+            public key: string;
+
+            /** MailboxKvItem sealed. */
+            public sealed: Uint8Array;
+
+            /** MailboxKvItem version. */
+            public version: (number|Long);
+
+            /**
+             * Creates a new MailboxKvItem instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvItem instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvItem): dmcn.relay.MailboxKvItem;
+
+            /**
+             * Encodes the specified MailboxKvItem message. Does not implicitly {@link dmcn.relay.MailboxKvItem.verify|verify} messages.
+             * @param message MailboxKvItem message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvItem, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvItem message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvItem.verify|verify} messages.
+             * @param message MailboxKvItem message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvItem, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvItem message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvItem
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvItem;
+
+            /**
+             * Decodes a MailboxKvItem message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvItem
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvItem;
+
+            /**
+             * Verifies a MailboxKvItem message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvItem message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvItem
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvItem;
+
+            /**
+             * Creates a plain object from a MailboxKvItem message. Also converts values to other types if specified.
+             * @param message MailboxKvItem
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvItem, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvItem to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvItem
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvListResponse. */
+        interface IMailboxKvListResponse {
+
+            /** MailboxKvListResponse items */
+            items?: (dmcn.relay.IMailboxKvItem[]|null);
+
+            /** MailboxKvListResponse nextCursor */
+            nextCursor?: (Uint8Array|null);
+        }
+
+        /** Represents a MailboxKvListResponse. */
+        class MailboxKvListResponse implements IMailboxKvListResponse {
+
+            /**
+             * Constructs a new MailboxKvListResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvListResponse);
+
+            /** MailboxKvListResponse items. */
+            public items: dmcn.relay.IMailboxKvItem[];
+
+            /** MailboxKvListResponse nextCursor. */
+            public nextCursor: Uint8Array;
+
+            /**
+             * Creates a new MailboxKvListResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvListResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvListResponse): dmcn.relay.MailboxKvListResponse;
+
+            /**
+             * Encodes the specified MailboxKvListResponse message. Does not implicitly {@link dmcn.relay.MailboxKvListResponse.verify|verify} messages.
+             * @param message MailboxKvListResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvListResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvListResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvListResponse.verify|verify} messages.
+             * @param message MailboxKvListResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvListResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvListResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvListResponse;
+
+            /**
+             * Decodes a MailboxKvListResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvListResponse;
+
+            /**
+             * Verifies a MailboxKvListResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvListResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvListResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvListResponse;
+
+            /**
+             * Creates a plain object from a MailboxKvListResponse message. Also converts values to other types if specified.
+             * @param message MailboxKvListResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvListResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvListResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvListResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvDeleteResponse. */
+        interface IMailboxKvDeleteResponse {
+
+            /** MailboxKvDeleteResponse success */
+            success?: (boolean|null);
+        }
+
+        /** Represents a MailboxKvDeleteResponse. */
+        class MailboxKvDeleteResponse implements IMailboxKvDeleteResponse {
+
+            /**
+             * Constructs a new MailboxKvDeleteResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvDeleteResponse);
+
+            /** MailboxKvDeleteResponse success. */
+            public success: boolean;
+
+            /**
+             * Creates a new MailboxKvDeleteResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvDeleteResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvDeleteResponse): dmcn.relay.MailboxKvDeleteResponse;
+
+            /**
+             * Encodes the specified MailboxKvDeleteResponse message. Does not implicitly {@link dmcn.relay.MailboxKvDeleteResponse.verify|verify} messages.
+             * @param message MailboxKvDeleteResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvDeleteResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvDeleteResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvDeleteResponse.verify|verify} messages.
+             * @param message MailboxKvDeleteResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvDeleteResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvDeleteResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvDeleteResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvDeleteResponse;
+
+            /**
+             * Decodes a MailboxKvDeleteResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvDeleteResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvDeleteResponse;
+
+            /**
+             * Verifies a MailboxKvDeleteResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvDeleteResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvDeleteResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvDeleteResponse;
+
+            /**
+             * Creates a plain object from a MailboxKvDeleteResponse message. Also converts values to other types if specified.
+             * @param message MailboxKvDeleteResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvDeleteResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvDeleteResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvDeleteResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxKvStatResponse. */
+        interface IMailboxKvStatResponse {
+
+            /** MailboxKvStatResponse usedBytes */
+            usedBytes?: (number|Long|null);
+
+            /** MailboxKvStatResponse quotaBytes */
+            quotaBytes?: (number|Long|null);
+
+            /** MailboxKvStatResponse count */
+            count?: (number|Long|null);
+        }
+
+        /** Represents a MailboxKvStatResponse. */
+        class MailboxKvStatResponse implements IMailboxKvStatResponse {
+
+            /**
+             * Constructs a new MailboxKvStatResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxKvStatResponse);
+
+            /** MailboxKvStatResponse usedBytes. */
+            public usedBytes: (number|Long);
+
+            /** MailboxKvStatResponse quotaBytes. */
+            public quotaBytes: (number|Long);
+
+            /** MailboxKvStatResponse count. */
+            public count: (number|Long);
+
+            /**
+             * Creates a new MailboxKvStatResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxKvStatResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxKvStatResponse): dmcn.relay.MailboxKvStatResponse;
+
+            /**
+             * Encodes the specified MailboxKvStatResponse message. Does not implicitly {@link dmcn.relay.MailboxKvStatResponse.verify|verify} messages.
+             * @param message MailboxKvStatResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxKvStatResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxKvStatResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxKvStatResponse.verify|verify} messages.
+             * @param message MailboxKvStatResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxKvStatResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxKvStatResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxKvStatResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxKvStatResponse;
+
+            /**
+             * Decodes a MailboxKvStatResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxKvStatResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxKvStatResponse;
+
+            /**
+             * Verifies a MailboxKvStatResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxKvStatResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxKvStatResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxKvStatResponse;
+
+            /**
+             * Creates a plain object from a MailboxKvStatResponse message. Also converts values to other types if specified.
+             * @param message MailboxKvStatResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxKvStatResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxKvStatResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxKvStatResponse
              * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns The default type url
              */

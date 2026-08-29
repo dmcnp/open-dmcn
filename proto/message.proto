@@ -42,6 +42,9 @@ message PlaintextMessage {
   // stays the primary text/plain fallback; `alternatives` carries e.g. a text/html
   // part. Readers pick the richest they can render; text-only clients read `body`.
   repeated MessageBody alternatives = 12;
+  // Optional human-readable name for the sender, copied into the header on split.
+  // Display only — see MessageHeader.sender_display for the reader's obligations.
+  string sender_display = 13;
 }
 
 // SignedMessage wraps a PlaintextMessage with the sender's Ed25519 signature.
@@ -71,7 +74,11 @@ message MessageHeader {
   string subject = 8;
   uint32 attachment_count = 9;
   uint64 body_size = 10;           // plaintext body size, for UI
-  string snippet = 11;             // optional short preview of the body
+  // Leading text of the body (longest valid-UTF-8 prefix of its first 140 bytes; empty for a
+  // non-text body). Signed, but NOT bound to the body the way body_hash is — a signer can
+  // emit a snippet that disagrees with its own body, so readers should re-derive it once the
+  // body is decrypted and surface a mismatch. See SPEC.md.
+  string snippet = 11;
   bytes reply_to_id = 12;          // 16 bytes UUID; empty = not a reply
   bytes body_hash = 13;            // 32 bytes SHA-256 over canonical MessageContent
   // Content address of the body ciphertext blob (body_nonce||encrypted_body||body_tag):
@@ -87,6 +94,20 @@ message MessageHeader {
   repeated string to = 15;
   repeated string cc = 16;
   repeated string bcc = 17;
+  // Optional human-readable name for the sender — legacy mail's From display name
+  // ("Reddit" <noreply@redditmail.com>), which a bridge would otherwise have to
+  // discard. Covered by the header signature, so no relay can rewrite it.
+  //
+  // It is NOT an identity. It is asserted by whoever signed the header (for bridged
+  // mail, by the legacy From header, which is only as trustworthy as the bridge's
+  // authentication verdict says). Readers MUST render it only ALONGSIDE
+  // sender_address, never in place of it, and MUST NOT key trust, allowlist, or
+  // blocklist decisions on it. Producers should emit a display name only where one
+  // was genuinely supplied — a self-asserted name on a cryptographically identified
+  // sender adds nothing but a spoofing surface.
+  //
+  // Empty = none; an empty value is byte-identical to a header predating the field.
+  string sender_display = 18;
 }
 
 // SignedHeader wraps a MessageHeader with the sender's signature (covers body_hash,

@@ -216,6 +216,29 @@ snippet, recipient lists, body commitments) and a large body, so listing an inbo
 reads bodies; the bcc list appears only on the sender's own copy;</p>
 </li>
 <li>
+<p>the header's <strong><code>snippet</code></strong> is the <strong>leading text of the body</strong>, not a free-form summary:
+the longest valid-UTF-8 prefix of the body's first 140 bytes, empty for a non-text body.
+Producers MUST derive it from the body they are sealing. It is covered by the header
+signature, but nothing in the envelope <em>binds</em> it to the body the way <code>body_hash</code> and the
+body content address do — so a signer can emit a header whose snippet disagrees with its
+own body, and a reader that never fetches the body cannot tell. Readers SHOULD therefore
+re-derive it once the body is decrypted and surface a mismatch: both halves are signed by
+the same key, so a disagreement is a deliberate act by the signer, not corruption. Because
+it IS body text, a reader that withholds an untrusted sender's body should withhold the
+snippet on the same terms — it is a fragment of the thing being withheld;</p>
+</li>
+<li>
+<p>the header may carry a <strong><code>sender_display</code></strong> name — the human-readable name legacy mail
+puts in its From header, which a bridge would otherwise have to discard. It is covered by
+the header signature, so no relay can rewrite it, but it is <strong>asserted, not verified</strong>:
+whoever signed the header chose it. Readers MUST render it only alongside
+<code>sender_address</code>, never in place of it, and MUST NOT key trust, allowlist, or blocklist
+decisions on it. Producers should sanitize it (single line, no control or bidirectional
+formatting codepoints) before signing, and should emit one only where a name was
+genuinely supplied — a self-asserted name on a cryptographically identified sender is a
+spoofing surface that buys nothing;</p>
+</li>
+<li>
 <p>the body ciphertext blob (<code>body_nonce‖encrypted_body‖body_tag</code>) is <strong>content-addressed</strong>
 (<code>CIDv1(raw, sha2-256)</code> = <code>0x01 0x55 0x12 0x20 ‖ SHA-256(blob)</code>): carried in the clear
 on the envelope for keyless relay verification and committed inside the <strong>signed</strong>
@@ -320,6 +343,11 @@ SMTP: the store, and the state that belongs with it.</p>
 correspondent</strong>: it has no DMCN address and no directory entry. It is a peer whose key
 carries a <code>bridge</code> credential (§5) issued by the domain authority, and that credential is
 the whole basis on which anyone believes it.</p>
+<p>A bridge maps the legacy sender onto <code>sender_address</code> + <code>sender_display</code>. The identity it
+should carry is the one it authenticated — the <strong>From header</strong>, which is what DMARC
+evaluates and what a reader recognizes — not the SMTP envelope sender, which for bulk mail
+is a per-message bounce address that makes every message look like a new correspondent. The
+envelope sender is preserved in the classification record below.</p>
 <p>Inbound legacy mail is authenticated (SPF/DKIM/DMARC) at the bridge, and the verdict
 travels as a signed <strong><code>BridgeClassificationRecord</code></strong> attachment
 (<code>application/x-dmcn-bridge-classification</code>) inside the sealed envelope. Outbound delivery

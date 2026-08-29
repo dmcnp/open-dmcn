@@ -50,6 +50,13 @@ type MessageHeader struct {
 	To  []string
 	Cc  []string
 	Bcc []string
+	// SenderDisplay is an optional human-readable name for the sender — legacy
+	// mail's From display name, which a bridge would otherwise discard. Covered by
+	// the header signature, so no relay can rewrite it, but it is NOT an identity:
+	// whoever signed the header asserted it. Readers must render it only alongside
+	// SenderAddress and must never key trust decisions on it. Empty = none, and an
+	// empty value marshals identically to a header predating the field.
+	SenderDisplay string
 }
 
 // SignedHeader wraps a MessageHeader with the sender's signature (which covers
@@ -88,6 +95,7 @@ func (h *MessageHeader) toProto() *dmcnpb.MessageHeader {
 		To:                 h.To,
 		Cc:                 h.Cc,
 		Bcc:                h.Bcc,
+		SenderDisplay:      h.SenderDisplay,
 	}
 }
 
@@ -111,6 +119,12 @@ func messageHeaderFromProto(pb *dmcnpb.MessageHeader) MessageHeader {
 	h.To = pb.To
 	h.Cc = pb.Cc
 	h.Bcc = pb.Bcc
+	// Deliberately NOT sanitized here: this is the parse path, and the signature is
+	// verified by re-marshaling what we parsed. Normalizing on the way in would change
+	// those bytes and reject every header whose producer wrote something this version
+	// would clean up. Sanitizing belongs at the producer (SanitizeDisplayName, applied
+	// by Split) and at the reader's render step.
+	h.SenderDisplay = pb.SenderDisplay
 	return h
 }
 
@@ -210,6 +224,7 @@ func Split(msg *PlaintextMessage, senderPriv ed25519.PrivateKey) (*SignedHeader,
 		Snippet:          snippetOf(msg.Body),
 		ReplyToID:        msg.ReplyToID,
 		BodyHash:         bodyHash,
+		SenderDisplay:    SanitizeDisplayName(msg.SenderDisplay),
 	}}
 	if err := sh.Sign(senderPriv); err != nil {
 		return nil, nil, err
@@ -217,11 +232,33 @@ func Split(msg *PlaintextMessage, senderPriv ed25519.PrivateKey) (*SignedHeader,
 	return sh, content, nil
 }
 
-// snippetOf returns a short preview of a text body (empty for non-text). The
-// result is always the longest valid-UTF-8 prefix of the first snippetMax bytes,
-// so the signed header round-trips identically across implementations (a Go
-// byte-slice could otherwise split a multibyte rune and a protobufjs verifier
-// would re-encode it differently, breaking the signature).
+// VerifySnippet reports whether a header's snippet is what its body actually begins with.
+//
+// Both are signed by the same key, but only the BODY is bound to the header (body_hash, and
+// the body's content address). The snippet is not, so a signer can seal a header whose
+// snippet disagrees with its own body — and a reader listing an inbox, which never fetches
+// bodies, has nothing to compare against. That is the point of checking here: this is the one
+// moment the truth is available.
+//
+// A false result is not corruption and not a relay's doing; a relay cannot alter either half
+// without breaking the header signature. It means the signer wrote one thing in the preview
+// and another in the message, deliberately. Callers should surface that rather than refuse
+// the message: the body is authentic, and hiding real mail over a misleading preview is the
+// worse failure.
+func VerifySnippet(h *MessageHeader, content *MessageContent) bool {
+	if h == nil || content == nil {
+		return false
+	}
+	return h.Snippet == snippetOf(content.Body)
+}
+
+// snippetOf produces the header's snippet: the leading bytes of a text body, as the longest
+// valid-UTF-8 prefix of the first snippetMax bytes (never splitting a multibyte rune, so the
+// signed header round-trips identically across implementations).
+//
+// The prefix IS the contract (SPEC.md): a producer must derive this from the body it is
+// sealing. Nothing binds the two the way body_hash binds the body, so a reader that has the
+// body should re-derive and compare — see VerifySnippet.
 func snippetOf(body MessageBody) string {
 	if body.ContentType != "text/plain" {
 		return ""

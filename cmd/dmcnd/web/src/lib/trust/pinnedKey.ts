@@ -50,6 +50,16 @@ export interface PinnedFacts {
   x25519Pub: string;  // base64 std
   bridgeCapability: boolean;
   adminKeyCustody: boolean;
+  // noIdentity records the CONFIRMED ABSENCE of a DMCN identity: the owner was shown that a
+  // counterparty they had verified now resolves to no record at all, and said that was
+  // expected. It is a pinned state in its own right, not the lack of one.
+  //
+  // It has to be recorded rather than clearing the pin, or the absence becomes a laundering
+  // step: withhold a record until the owner confirms "they left DMCN" and the pin is erased,
+  // then serve an attacker's key, which a device with no pin takes as an ordinary first
+  // sighting. Two moves, no warning at either. Keeping the absence pinned means the key that
+  // appears afterwards is a CHANGE against something, and says so.
+  noIdentity?: boolean;
 }
 
 // DirectoryFacts is the subset of IdentityLookupResponse a pin is taken from. Declared
@@ -59,16 +69,30 @@ export interface DirectoryFacts {
   x25519_pub: string;
   bridge_capability?: boolean;
   admin_key_custody?: boolean;
+  // Set by a directory that answers a lookup for a non-DMCN address by pointing at its
+  // outbound bridge. A successful response carrying no identity is still an ANSWER about
+  // this address, and a held pin has to be compared against it.
+  legacy?: boolean;
 }
 
 export type PinVerdict =
   | 'unpinned'        // nothing recorded for this counterparty — nothing to compare
   | 'match'           // everything we pinned still holds
-  | 'changed'         // an identity KEY differs — danger; blocks a send
+  | 'changed'         // the identity itself differs — danger; blocks a send
   | 'record_changed'; // keys hold, but a pinned property changed — warn, don't block
+
+// absentIdentityFacts is what the directory offering NO identity for an address looks like as
+// a fact set — the shape a legacy (bridge-only) address resolves to. Used both to compare
+// against a held pin and, once the owner confirms it, to pin.
+export function absentIdentityFacts(): PinnedFacts {
+  return { ed25519Pub: '', x25519Pub: '', bridgeCapability: false, adminKeyCustody: false, noIdentity: true };
+}
 
 // directoryFacts projects a directory response onto the pinned fact set.
 export function directoryFacts(dir: DirectoryFacts): PinnedFacts {
+  // A legacy answer resolves to no identity at all; anything it does carry describes the
+  // bridge, not the correspondent, and must not be pinned as if it were them.
+  if (dir.legacy || !dir.ed25519_pub) return absentIdentityFacts();
   return {
     ed25519Pub: dir.ed25519_pub ?? '',
     x25519Pub: dir.x25519_pub ?? '',
@@ -78,8 +102,10 @@ export function directoryFacts(dir: DirectoryFacts): PinnedFacts {
 }
 
 // contactFacts reads the facts pinned on a contact record, or undefined when the contact
-// carries no pin (legacy v1/v2 rows, keyless legacy-bridge allowlist entries).
+// carries no pin (legacy v1/v2 rows, and keyless legacy-bridge entries that were never
+// confirmed — which is different from one confirmed to have no identity, see noIdentity).
 export function contactFacts(contact: ContactRecord | undefined): PinnedFacts | undefined {
+  if (contact?.noIdentity) return absentIdentityFacts();
   if (!contact?.ed25519Pub) return undefined;
   return {
     ed25519Pub: contact.ed25519Pub,
@@ -95,6 +121,11 @@ export function contactFacts(contact: ContactRecord | undefined): PinnedFacts | 
 // would fire on every pre-existing pin the first time this code runs.
 export function changedFacts(pinned: PinnedFacts, observed: PinnedFacts): string[] {
   const out: string[] = [];
+  // Gaining or losing a DMCN identity outranks everything else: it changes who can read mail
+  // to this address, not merely which key seals it. Reported ALONE, because every key
+  // difference that comes with it is a consequence of the identity going away, not a separate
+  // finding — listing three changes for one event reads as three times the evidence.
+  if (!!pinned.noIdentity !== !!observed.noIdentity) return ['DMCN identity'];
   if (pinned.ed25519Pub && pinned.ed25519Pub !== observed.ed25519Pub) out.push('signing key');
   if (pinned.x25519Pub && pinned.x25519Pub !== observed.x25519Pub) out.push('encryption key');
   if (pinned.adminKeyCustody !== observed.adminKeyCustody) out.push('admin key custody');
@@ -104,11 +135,21 @@ export function changedFacts(pinned: PinnedFacts, observed: PinnedFacts): string
 
 // checkPin compares a freshly resolved directory record against what we pinned.
 // `observed` is undefined while the recipient is still being resolved.
+// checkPin compares a freshly resolved directory record against what we pinned. `observed` is
+// undefined while the recipient is still being RESOLVING — distinct from resolving to nothing,
+// which is absentIdentityFacts() and is a comparable state.
 export function checkPin(contact: ContactRecord | undefined, observed: PinnedFacts | undefined): PinVerdict {
   const pinned = contactFacts(contact);
-  if (!pinned || !observed?.ed25519Pub) return 'unpinned';
+  if (!pinned || !observed) return 'unpinned';
+  // Nothing usable came back and it is not a confirmed absence either — treat it as unresolved
+  // rather than inventing a verdict from a malformed record.
+  if (!observed.ed25519Pub && !observed.noIdentity) return 'unpinned';
   const changed = changedFacts(pinned, observed);
   if (changed.length === 0) return 'match';
+  // Appearing or disappearing from the directory is the same class of danger as a key swap:
+  // mail that was sealed to this person would now be sealed to a bridge, or to a key nobody
+  // has vouched for. Both are unrecoverable once sent.
+  if (!!pinned.noIdentity !== !!observed.noIdentity) return 'changed';
   // A key change outranks a property change: it is the unrecoverable one.
   if (pinned.ed25519Pub !== observed.ed25519Pub) return 'changed';
   if (pinned.x25519Pub && pinned.x25519Pub !== observed.x25519Pub) return 'changed';
@@ -128,6 +169,20 @@ export function hasPinnedKey(contact: ContactRecord | undefined): boolean {
  */
 export function pinnedKeyWarning(address: string): string {
   return `${address}'s key has changed since you verified them. That can be a normal rotation — a lost device, or an admin re-provisioning the account — or someone else now holding the address. Confirm with them out of band before sending anything sensitive.`;
+}
+
+/**
+ * pinnedIdentityGoneWarning covers the other direction: an address you verified as a DMCN
+ * correspondent now resolves to no identity at all, so mail to it would leave over a bridge as
+ * ordinary email — readable by that bridge and every hop after it.
+ *
+ * Worded as a downgrade rather than an error because it can legitimately be one (they closed
+ * the account), and because the thing the reader needs to weigh is what sending now would
+ * actually do, not whose fault it is. A fleet that simply withholds one record produces this
+ * exact signal, which is why it stops a send instead of warning beside it.
+ */
+export function pinnedIdentityGoneWarning(address: string): string {
+  return `${address} no longer has a DMCN identity, but you have verified one for them before. Sending now would deliver over a bridge as ordinary email — the bridge and every mail server after it could read it. That is expected if they closed the account, and is also what a withheld record looks like.`;
 }
 
 /**

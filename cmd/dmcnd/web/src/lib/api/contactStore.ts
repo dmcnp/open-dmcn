@@ -53,6 +53,11 @@ export interface ContactRecord {
   // the change a key comparison cannot see. See trust/pinnedKey.ts PinnedFacts.
   bridgeCapability?: boolean;
   adminKeyCustody?: boolean;
+  // noIdentity marks a contact the owner confirmed has NO DMCN identity, after having
+  // verified one for them previously. Distinct from a plain keyless row, which only means
+  // nothing was ever pinned. See trust/pinnedKey.ts PinnedFacts.noIdentity for why the
+  // absence is recorded rather than the pin being cleared.
+  noIdentity?: boolean;
   // pinSeq counts DELIBERATE re-pins by the owner (re-verifying after a rotation). It
   // is the only thing that lets a KV pin replace one a device already holds, so it
   // must only ever increase. Absent on v1/v2 records ⇒ treated as 1.
