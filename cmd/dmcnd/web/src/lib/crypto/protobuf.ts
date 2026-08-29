@@ -36,6 +36,12 @@ export async function encodeIdentityRecord(record: {
   verificationTier: number;
   bridgeCapability: boolean;
   requireOnion?: boolean;
+  // Owner-signed monotonic version. Go's NewIdentityRecord starts at 1; the browser omitted it
+  // entirely (encoding 0), which made "monotonic" false across the two producers — a Go-built
+  // record beat any browser-built one on acceptIdentity's anti-rollback comparison, and a
+  // browser record could never displace it. Not a security control either way: the owner signs
+  // it, so a hostile rebind just picks its own value.
+  revision?: number;
   selfSignature?: Uint8Array;
   // Domain countersignature (optional). Excluded from signableBytes, so adding it
   // does not invalidate the self-signature.
@@ -88,6 +94,7 @@ export async function encodeIdentitySignableBytes(record: {
   verificationTier: number;
   bridgeCapability: boolean;
   requireOnion?: boolean;
+  revision?: number;
 }): Promise<Uint8Array> {
   const root = await getRoot();
   const IdentityRecord = root.lookupType('dmcn.identity.IdentityRecord');
@@ -154,6 +161,11 @@ export interface MessageHeaderFields {
   to?: string[];
   cc?: string[];
   bcc?: string[];
+  // Optional human-readable sender name (legacy mail's From display name), signed with
+  // the rest of the header. Display only — never an identity; see trust/displayName.ts.
+  // Empty/absent is stripped by canonical(), matching Go's omission of an empty string,
+  // so a header that predates the field re-encodes byte-identically on the verify path.
+  senderDisplay?: string;
 }
 
 // encodeMessageHeader is the canonical serialization signed by the sender.

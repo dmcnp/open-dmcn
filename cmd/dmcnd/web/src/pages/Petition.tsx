@@ -179,6 +179,8 @@ export function Petition() {
         ed25519PublicKey: keys.ed25519Public, x25519PublicKey: keys.x25519Public,
         createdAt: keys.createdAt, expiresAt: 0, relayHints: relay_hints,
         verificationTier: 0, bridgeCapability: false,
+        // Match Go's NewIdentityRecord, which starts at 1 — see Register.tsx.
+        revision: 1,
       };
       const signableBytes = await encodeIdentitySignableBytes(recordBase);
       const selfSignature = await signSelfSignature(seed, signableBytes);

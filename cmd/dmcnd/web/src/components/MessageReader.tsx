@@ -14,6 +14,7 @@ import { verifyDeliveryReceipt, RECEIPT_CONTENT_TYPE, type DeliveryReceiptView }
 import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust';
 import { senderTrustView } from '../lib/trust/trustView';
 import { useContacts } from '../lib/hooks/useContacts';
+import { senderLabel } from '../lib/trust/displayName';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
 import type { DecryptedAttachment } from '../lib/crypto/split';
@@ -24,12 +25,19 @@ import { fromPlainText, escapeHtml } from '../lib/html/fromPlainText';
 import { directoryFacts } from '../lib/trust/pinnedKey';
 import { fromHex } from '../lib/crypto/keys';
 
-// attestationView maps a bridged-message verdict to its display treatment. Only a
-// verified verdict shows the bridge-asserted trust tier; an unverified verdict is
-// always a warning, regardless of the (untrusted) tier it claims.
-function attestationView(a: BridgeAttestation): {
-  variant: 'success' | 'warning' | 'danger';
-  icon: 'shield-check' | 'alert-triangle';
+// attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
+// NEVER shown with a trust shield: even the best case (SPF/DKIM/DMARC pass + a domain-trusted
+// bridge) is only domain-authentication relayed by a bridge you trust — not the end-to-end
+// cryptographic identity a native dmcn sender carries. So the strongest tier is a NEUTRAL
+// "Legacy email"; weaker outcomes are warning/danger. An unverified verdict is always danger,
+// regardless of the (untrusted) tier it claims.
+//
+// senderAddress is the address the reader DISPLAYS (the message's From, which the bridge
+// authenticated), not the classification's envelope sender — naming a bulk sender's
+// per-message bounce address here told the reader a domain they never saw had been checked.
+function attestationView(a: BridgeAttestation, senderAddress: string): {
+  variant: 'neutral' | 'warning' | 'danger';
+  icon: 'mail' | 'alert-triangle';
   label: string;
   detail: string;
 } {
@@ -38,20 +46,64 @@ function attestationView(a: BridgeAttestation): {
       variant: 'danger',
       icon: 'alert-triangle',
       label: 'Unverified bridge',
-      detail: `This message arrived via an SMTP bridge that could not be verified${a.reason ? ` (${a.reason})` : ''}. Treat its sender with caution.`,
+      detail: `This message claims to arrive via an SMTP bridge that could not be verified${a.reason ? ` (${a.reason})` : ''}. Its sender cannot be confirmed — treat it with caution.`,
     };
   }
-  const who = a.smtpFrom || 'the sender';
+  const who = senderAddress || a.smtpFrom || 'the sender';
+  const domain = domainPart(who);
   // No separate "is the bridge itself anchored?" note any more. Reaching this point already means
   // the bridge holds a credential signed by its domain's root — there is no half-trusted state
   // left to caveat, and the old note invited readers to weigh something already decided.
   switch (a.trustTier) {
     case BridgeTrustTier.VerifiedLegacy:
-      return { variant: 'success', icon: 'shield-check', label: 'Verified legacy sender', detail: `A verified bridge confirmed SPF/DKIM/DMARC for ${who}.` };
+      return {
+        variant: 'neutral',
+        icon: 'mail',
+        label: 'Legacy email',
+        detail: `Authenticated by ${domain ? `${domain}'s domain` : 'the sending domain'} (SPF/DKIM/DMARC) and relayed by a trusted bridge. Not end-to-end verified like a dmcn sender.`,
+      };
     case BridgeTrustTier.Suspicious:
-      return { variant: 'danger', icon: 'alert-triangle', label: 'Suspicious legacy sender', detail: `Legacy authentication failed for ${who} — this sender may be forged.` };
+      return { variant: 'danger', icon: 'alert-triangle', label: 'Legacy email — failed checks', detail: `Legacy authentication (SPF/DKIM/DMARC) failed for ${who} — this sender may be forged. Treat it with caution.` };
     default:
-      return { variant: 'warning', icon: 'alert-triangle', label: 'Unverified legacy sender', detail: `${who}'s domain did not fully authenticate this message.` };
+      return { variant: 'warning', icon: 'alert-triangle', label: 'Legacy email — unauthenticated', detail: `${who}'s domain did not fully authenticate this message, so the sender can't be confirmed.` };
+  }
+}
+
+// authBreakdown renders the three checks behind the tier as one short line. Shown
+// alongside the verdict because the tier alone cannot answer "which check did not
+// pass" — and the answer changes what the reader should conclude. A message with
+// spf=pass dmarc=pass dkim=none authenticated correctly under DMARC and simply missed
+// this classifier's stricter DKIM-and-DMARC conjunction; one with dkim=fail did not.
+//
+// It also names the SMTP envelope sender when it differs from the displayed From address
+// (bulk senders relay through a provider: From reddit.com, envelope …@amazonses.com). The
+// displayed address is the identity DMARC checked; the envelope is who handed it over, and
+// hiding that difference would be the kind of omission this client exists to avoid.
+function authBreakdown(a: BridgeAttestation, senderAddress: string): string | null {
+  const parts = [
+    a.spf ? `SPF ${a.spf}` : null,
+    a.dkim ? `DKIM ${a.dkim}` : null,
+    a.dmarc ? `DMARC ${a.dmarc}` : null,
+  ].filter(Boolean);
+  const envelope = domainPart(a.smtpFrom);
+  if (envelope && envelope !== domainPart(senderAddress)) parts.push(`via ${envelope}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+// domainPart returns the lower-cased domain of an address ('' when there isn't one).
+function domainPart(addr: string): string {
+  const at = (addr || '').lastIndexOf('@');
+  return at >= 0 ? addr.slice(at + 1).toLowerCase() : '';
+}
+
+// calloutColors resolves the inline background/foreground for a trust callout. The neutral
+// variant has no `--neutral-subtle` token, so map it explicitly to the sunken surface.
+function calloutColors(variant: 'neutral' | 'success' | 'warning' | 'danger'): { bg: string; fg: string } {
+  switch (variant) {
+    case 'neutral': return { bg: 'var(--surface-sunken)', fg: 'var(--text-muted)' };
+    case 'success': return { bg: 'var(--success-subtle)', fg: 'var(--success)' };
+    case 'warning': return { bg: 'var(--warning-subtle)', fg: 'var(--warning)' };
+    case 'danger': return { bg: 'var(--danger-subtle)', fg: 'var(--danger)' };
   }
 }
 
@@ -307,7 +359,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- senderContact tracked via contactSig
   }, [msg.hash, msg.senderAddress, msg.senderPublicKey, ownMessage, contactSig]);
 
-  const av = attestation ? attestationView(attestation) : null;
+  const av = attestation ? attestationView(attestation, msg.senderAddress) : null;
   const rv = receipt ? receiptView(receipt) : null;
   // Native trust badge/callout — suppressed when a bridge attestation is shown
   // (bridged legacy mail: the DMCN "sender" is the bridge, not the real author), and
@@ -400,11 +452,14 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // Sent copy — recipient copies never carry it.
   const toList = msg.to.length ? msg.to : msg.recipientAddress ? [msg.recipientAddress] : [];
   const counterparty = sentView ? toList[0] ?? '' : msg.senderAddress;
-  // The name the owner gave this person, when they gave one. The ADDRESS stays the
-  // identity everywhere it matters (routing, pinning, the title tip) — this is only
-  // the label, and it must match what the mail list shows for the same person.
-  const counterpartyName = nameFor(counterparty);
-  const namedCounterparty = counterpartyName !== counterparty;
+  // The name the owner gave this person, when they gave one; otherwise the display name
+  // the message itself carried (legacy mail's From name); otherwise the address. The
+  // ADDRESS stays the identity everywhere it matters (routing, pinning, the title tip) and
+  // is rendered beside either name, so nobody is ever shown a label alone.
+  const contactName = nameFor(counterparty);
+  const { primary: counterpartyName, secondary: counterpartyAddress } =
+    senderLabel(counterparty, contactName, sentView ? '' : msg.senderDisplay);
+  const namedCounterparty = counterpartyAddress !== '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-page)' }}>
@@ -440,7 +495,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
               <div title={sentView ? toList.join(', ') : counterparty} style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sentView
                   ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span></>
-                  : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterparty}</span>}</>}
+                  : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterpartyAddress}</span>}</>}
               </div>
               {!sentView && toList.length > 0 && (
                 <div title={toList.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -514,7 +569,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>You don’t know this sender yet</div>
                   <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>
-                    This message is genuine and end-to-end encrypted, but {counterparty} isn’t on your allowlist. Decide how to handle it before reading the contents.
+                    {av
+                      ? <>This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. {counterparty} isn’t on your allowlist — decide how to handle it before reading the contents.</>
+                      : <>This message is genuine and end-to-end encrypted, but {counterparty} isn’t on your allowlist. Decide how to handle it before reading the contents.</>}
                   </div>
                 </div>
               </div>
@@ -596,15 +653,33 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             </div>
           )}
 
-          <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-            <Icon name="shield-check" size={16} />
-            End-to-end encrypted over dmcn — only you and {counterpartyName} can read this.
-          </div>
+          {/* The encryption line, told truthfully for each path. Bridged legacy mail is sealed
+              only from the BRIDGE to you — it crossed SMTP in the clear before that — so it must
+              never carry the brand "end-to-end encrypted" claim. A delivery receipt is our own
+              outbound mail coming back, which has no counterparty to make the claim about. */}
+          {av ? (
+            <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+              <Icon name="mail" size={16} />
+              Encrypted from the bridge to you. The original email crossed standard email (SMTP) before reaching the bridge, which isn’t end-to-end encrypted.
+            </div>
+          ) : rv ? null : (
+            <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+              <Icon name="shield-check" size={16} />
+              End-to-end encrypted over dmcn — only you and {contactName} can read this.
+            </div>
+          )}
 
           {av && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${av.variant}-subtle)`, color: `var(--${av.variant === 'success' ? 'success' : av.variant === 'warning' ? 'warning' : 'danger'})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: calloutColors(av.variant).bg, color: calloutColors(av.variant).fg, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
               <Icon name={av.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
-              <span>{av.detail}</span>
+              <span>
+                {av.detail}
+                {attestation && authBreakdown(attestation, msg.senderAddress) && (
+                  <span style={{ display: 'block', marginTop: 'var(--space-1)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', opacity: 0.85 }}>
+                    {authBreakdown(attestation, msg.senderAddress)}
+                  </span>
+                )}
+              </span>
             </div>
           )}
 

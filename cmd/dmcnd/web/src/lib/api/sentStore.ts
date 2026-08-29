@@ -143,6 +143,8 @@ function previewFromLegacy(hash: string, e: LegacySentEntry, selfAddress: string
     bcc: e.bcc ?? [],
     subject: e.subject ?? '',
     snippet: (e.body ?? '').slice(0, SNIPPET_MAX),
+    senderDisplay: '', // legacy local rows: the owner's own mail, shown under their address
+
     sentAt: Number(e.sentAt ?? 0),
     bodySize: (e.body ?? '').length,
     attachmentCount: 0,
@@ -170,6 +172,7 @@ function previewFromHeader(hash: string, h: MessageHeaderFields): Preview {
     bcc: h.bcc ?? [],
     subject: h.subject,
     snippet: h.snippet,
+    senderDisplay: h.senderDisplay ?? '',
     sentAt: Number(h.sentAt),
     bodySize: Number(h.bodySize),
     attachmentCount: h.attachmentCount,

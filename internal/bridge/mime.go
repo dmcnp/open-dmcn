@@ -330,9 +330,16 @@ func parseInboundMIME(raw []byte) (*parsedMail, error) {
 		}
 	}
 
-	// Body = text/plain when present (universal fallback), else text/html. When BOTH
-	// exist, keep the HTML as an alternative so an HTML-capable client can render it
-	// (text clients still read Body). The raw original is also preserved by the caller.
+	// Body = text/plain when present (universal fallback), with the HTML kept as an
+	// alternative so an HTML-capable client can render it (text clients still read Body).
+	// The raw original is also preserved by the caller.
+	//
+	// HTML-only mail — most bulk and transactional mail — gets a text/plain rendering
+	// SYNTHESIZED from the HTML rather than the markup dumped into Body. Body is the
+	// rendering every client can read, including a reader's trust-gated plain-text peek,
+	// which by design never renders an unknown sender's HTML; handing it the source showed
+	// the reader a screenful of markup instead of the message. Nothing is lost: the original
+	// HTML rides in Alternatives (and the raw source as an attachment).
 	switch {
 	case plain != nil:
 		out.Body = message.MessageBody{ContentType: "text/plain", Content: plain}
@@ -340,7 +347,8 @@ func parseInboundMIME(raw []byte) (*parsedMail, error) {
 			out.Alternatives = []message.MessageBody{{ContentType: "text/html", Content: html}}
 		}
 	case html != nil:
-		out.Body = message.MessageBody{ContentType: "text/html", Content: html}
+		out.Body = message.MessageBody{ContentType: "text/plain", Content: []byte(htmlToText(string(html)))}
+		out.Alternatives = []message.MessageBody{{ContentType: "text/html", Content: html}}
 	default:
 		out.Body = message.MessageBody{ContentType: "text/plain"}
 	}

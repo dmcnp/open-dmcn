@@ -8,6 +8,7 @@
 import { aesGcmEncrypt, wrapCEK, selectSizeClass, padPayload, type RecipientInfo } from './encrypt';
 import { aesGcmDecrypt, unwrapCEK, unpadPayload } from './decrypt';
 import { signWithKey, verify } from './sign';
+import { toPlainText } from '../html/toPlainText';
 import {
   encodeMessageHeader,
   encodeSignedHeader,
@@ -324,8 +325,16 @@ export async function decryptBody(
   const parts = [content.body, ...(content.alternatives ?? [])];
   const textPart = parts.find(p => p.contentType === 'text/plain');
   const htmlPart = parts.find(p => p.contentType === 'text/html');
-  const bodyText = new TextDecoder().decode(textPart ? new Uint8Array(textPart.content) : raw);
   const htmlBody = htmlPart ? new TextDecoder().decode(new Uint8Array(htmlPart.content)) : undefined;
+  // No text/plain part at all — legacy mail that shipped HTML only, wrapped by a bridge
+  // predating the bridge-side rendering. Render the HTML down to text rather than handing
+  // the reader the markup as its "plain text": the plain-text peek exists precisely for a
+  // sender whose HTML we refuse to render, and showing the source there is unreadable.
+  const bodyText = textPart
+    ? new TextDecoder().decode(new Uint8Array(textPart.content))
+    : htmlBody !== undefined
+      ? toPlainText(htmlBody)
+      : new TextDecoder().decode(raw);
 
   const attachments: DecryptedAttachment[] = (content.attachments ?? []).map(a => ({
     filename: a.filename,

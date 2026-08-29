@@ -50,6 +50,13 @@ type MessageHeader struct {
 	To  []string
 	Cc  []string
 	Bcc []string
+	// SenderDisplay is an optional human-readable name for the sender — legacy
+	// mail's From display name, which a bridge would otherwise discard. Covered by
+	// the header signature, so no relay can rewrite it, but it is NOT an identity:
+	// whoever signed the header asserted it. Readers must render it only alongside
+	// SenderAddress and must never key trust decisions on it. Empty = none, and an
+	// empty value marshals identically to a header predating the field.
+	SenderDisplay string
 }
 
 // SignedHeader wraps a MessageHeader with the sender's signature (which covers
@@ -88,6 +95,7 @@ func (h *MessageHeader) toProto() *dmcnpb.MessageHeader {
 		To:                 h.To,
 		Cc:                 h.Cc,
 		Bcc:                h.Bcc,
+		SenderDisplay:      h.SenderDisplay,
 	}
 }
 
@@ -111,6 +119,12 @@ func messageHeaderFromProto(pb *dmcnpb.MessageHeader) MessageHeader {
 	h.To = pb.To
 	h.Cc = pb.Cc
 	h.Bcc = pb.Bcc
+	// Deliberately NOT sanitized here: this is the parse path, and the signature is
+	// verified by re-marshaling what we parsed. Normalizing on the way in would change
+	// those bytes and reject every header whose producer wrote something this version
+	// would clean up. Sanitizing belongs at the producer (SanitizeDisplayName, applied
+	// by Split) and at the reader's render step.
+	h.SenderDisplay = pb.SenderDisplay
 	return h
 }
 
@@ -210,6 +224,7 @@ func Split(msg *PlaintextMessage, senderPriv ed25519.PrivateKey) (*SignedHeader,
 		Snippet:          snippetOf(msg.Body),
 		ReplyToID:        msg.ReplyToID,
 		BodyHash:         bodyHash,
+		SenderDisplay:    SanitizeDisplayName(msg.SenderDisplay),
 	}}
 	if err := sh.Sign(senderPriv); err != nil {
 		return nil, nil, err

@@ -3,6 +3,8 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"net/mail"
+	"strings"
 
 	"github.com/mertenvg/logr/v2"
 
@@ -152,16 +154,20 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 	// its SPF/DKIM/DMARC verdict for exactly this address before treating the name as meaningful.
 	// That is the whole point of the attestation — attributing the mail to the bridge instead
 	// would throw away the identity the bridge just went to the trouble of checking.
+	senderAddr, senderDisplay := inboundSender(hdr, from)
 	msg, err := message.NewPlaintextMessage(
-		from,
+		senderAddr,
 		dmcnAddr,
-		fmt.Sprintf("Bridged message from %s", from),
+		fmt.Sprintf("Bridged message from %s", senderAddr),
 		"",
 		h.bridgeKP.Ed25519Public,
 	)
 	if err != nil {
 		return fmt.Errorf("bridge: compose message: %w", err)
 	}
+	// The From header's display name ("Reddit" <noreply@redditmail.com>), which a reader shows
+	// NEXT TO the address. message.Split sanitizes it before signing.
+	msg.SenderDisplay = senderDisplay
 	parsed, perr := parseInboundMIME(rawMsg)
 	if perr != nil {
 		h.log.Warnf("inbound MIME parse failed for %s, delivering raw source as body: %v", dmcnAddr, perr)
@@ -170,7 +176,7 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 		if parsed.Subject != "" {
 			msg.Subject = parsed.Subject
 		}
-		if len(parsed.Body.Content) == 0 && len(parsed.Attachments) == 0 {
+		if len(parsed.Body.Content) == 0 && len(parsed.Alternatives) == 0 && len(parsed.Attachments) == 0 {
 			// Parsed but empty (e.g. a non-MIME/headerless payload): keep the raw source as the
 			// body rather than delivering an empty message.
 			msg.Body = message.MessageBody{ContentType: "text/plain", Content: rawMsg}
@@ -244,6 +250,54 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 	h.log.Infof("inbound message from %s to %s delivered, hash: %x", from, dmcnAddr, computeEnvelopeHash(env))
 	h.audit.Record(AuditEvent{Action: "inbound.deliver", From: from, To: dmcnAddr, SenderIP: senderIP, TrustTier: tier, Success: true})
 	return nil
+}
+
+// inboundSender picks the address the recipient sees as the sender of a bridged legacy
+// message, plus the display name that came with it: the RFC5322 From header when the message
+// carries a parseable one, else the SMTP envelope sender (hdr is nil when the header block did
+// not parse; the envelope carries no display name).
+//
+// The From header is the identity legacy mail presents to a human AND the identity the bridge
+// authenticates: DMARC is evaluated against the From domain, and a p=reject failure on it is
+// what ShouldReject drops. The envelope sender is frequently a per-message VERP/bounce address
+// — Amazon SES's 010001a0…-000000@amazonses.com — so keying on it made every message from a
+// bulk sender look like a brand-new correspondent (nothing could ever be allowlisted) while
+// never showing who the mail claimed to be from.
+//
+// Neither address is self-authenticating; both are claims until the signed classification says
+// otherwise, and a reader should honor a legacy allowlist entry only for a VerifiedLegacy tier
+// (aligned DKIM+DMARC on this very From domain). So preferring the recognizable identity
+// weakens nothing — it aligns what is displayed with what was checked. The envelope sender is
+// preserved, signed, in the classification record's SMTPFrom.
+func inboundSender(hdr mail.Header, from string) (address, display string) {
+	if hdr != nil {
+		// ParseAddressList also accepts a single address, and handles both the display
+		// form and RFC 2047 encoded words. A From listing several authors (rare, legal)
+		// resolves to the first, as mail clients do.
+		if list, err := mail.ParseAddressList(hdr.Get("From")); err == nil && len(list) > 0 && list[0].Address != "" {
+			name := strings.TrimSpace(list[0].Name)
+			// A "display name" that just repeats the address is noise, and one that
+			// contains a DIFFERENT address is the oldest trick in phishing — it reads as
+			// the sender in any client that shows the name first. Neither is carried;
+			// the address is shown either way.
+			if strings.EqualFold(name, list[0].Address) || strings.Contains(name, "@") {
+				name = ""
+			}
+			return list[0].Address, name
+		}
+	}
+	return senderAddressForSMTP(from), ""
+}
+
+// senderAddressForSMTP returns the bare local@domain from an SMTP reverse-path. The envelope
+// MAIL FROM is already address-only, but strip any display form ("Name" <addr>) defensively so
+// the wrapped message's sender_address is always a clean address — what a recipient's client
+// keys on for allowlist/block/reply. Empty/null reverse-paths (bounces) pass through unchanged.
+func senderAddressForSMTP(from string) string {
+	if addr, err := mail.ParseAddress(from); err == nil && addr.Address != "" {
+		return addr.Address
+	}
+	return from
 }
 
 // computeEnvelopeHash computes the SHA-256 hash of an envelope's proto bytes.

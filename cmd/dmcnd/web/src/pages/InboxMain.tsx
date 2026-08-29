@@ -15,6 +15,7 @@ import { IconButton } from '../ds';
 import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
+import { senderLabel } from '../lib/trust/displayName';
 import { MessageReader } from '../components/MessageReader';
 import type { ComposeReplyTo } from '../components/ComposeDialog';
 import type { MailOutletContext } from '../components/AppLayout';
@@ -95,7 +96,12 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
   // gave it — but the underlying ADDRESS is what routing, pinning and the title tip use.
   const recipientList = msg.to.length || msg.cc.length ? [...msg.to, ...msg.cc] : [msg.recipientAddress];
   const whoAddress = sent ? recipientList[0] : msg.senderAddress;
-  const who = nameFor(whoAddress);
+  // Owner-given contact name first, then the display name the message carried (legacy
+  // mail's From name), then the address. The row is a scanning surface with one narrow
+  // column, so a sender-supplied name appears here without the address next to it — the
+  // address is one hover (title) away, and the reader, where trusting actually happens,
+  // always shows name AND address.
+  const who = senderLabel(whoAddress, nameFor(whoAddress), sent ? '' : msg.senderDisplay).primary;
   const sentLabel = `To: ${recipientList.map(nameFor).join(', ')}`;
   // Which network the counterparty is on — the one bit worth a glance per row. For
   // received mail the header's signing key is compared against the directory, so a
@@ -149,7 +155,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
               {unread && <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: 'var(--brand)', alignSelf: 'center' }} />}
               <span style={{ alignSelf: 'center', display: 'inline-flex', marginRight: 2 }}><KindIcon kind={kind} size={14} /></span>
-              <span title={sent ? recipientList.join(', ') : whoAddress} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sent ? sentLabel : who}
               </span>
               {newSenderTag}
@@ -188,7 +194,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
           put it) rather than floating in the middle of the subject text. */}
       <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
         <KindIcon kind={kind} size={14} />
-        <span title={sent ? recipientList.join(', ') : whoAddress} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sent ? `To: ${who}` : who}
         </span>
         {newSenderTag}

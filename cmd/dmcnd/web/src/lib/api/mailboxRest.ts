@@ -39,6 +39,9 @@ export interface Preview {
   bcc: string[];
   subject: string;
   snippet: string;
+  // Human-readable sender name from the signed header ('' when none). Rendered only
+  // alongside senderAddress — see trust/displayName.ts for why.
+  senderDisplay: string;
   sentAt: number;
   bodySize: number;
   attachmentCount: number;
@@ -196,6 +199,7 @@ export class MailboxSync {
         bcc: c.header.bcc ?? [],
         subject: c.header.subject,
         snippet: c.header.snippet,
+        senderDisplay: c.header.senderDisplay ?? '',
         sentAt: Number(c.header.sentAt),
         bodySize: Number(c.header.bodySize),
         attachmentCount: c.header.attachmentCount,

@@ -195,7 +195,10 @@ type PlaintextMessage struct {
 	// Richer alternative renderings of `body` (multipart/alternative analog). `body`
 	// stays the primary text/plain fallback; `alternatives` carries e.g. a text/html
 	// part. Readers pick the richest they can render; text-only clients read `body`.
-	Alternatives  []*MessageBody `protobuf:"bytes,12,rep,name=alternatives,proto3" json:"alternatives,omitempty"`
+	Alternatives []*MessageBody `protobuf:"bytes,12,rep,name=alternatives,proto3" json:"alternatives,omitempty"`
+	// Optional human-readable name for the sender, copied into the header on split.
+	// Display only — see MessageHeader.sender_display for the reader's obligations.
+	SenderDisplay string `protobuf:"bytes,13,opt,name=sender_display,json=senderDisplay,proto3" json:"sender_display,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -314,6 +317,13 @@ func (x *PlaintextMessage) GetAlternatives() []*MessageBody {
 	return nil
 }
 
+func (x *PlaintextMessage) GetSenderDisplay() string {
+	if x != nil {
+		return x.SenderDisplay
+	}
+	return ""
+}
+
 // SignedMessage wraps a PlaintextMessage with the sender's Ed25519 signature.
 // See SPEC.md §3.
 type SignedMessage struct {
@@ -402,9 +412,23 @@ type MessageHeader struct {
 	// Cc, and Bcc recipients alike) carries an EMPTY bcc, so a Bcc recipient is never
 	// revealed. Empty repeated fields are omitted by deterministic marshaling, so a
 	// recipient copy with no bcc is byte-identical to one that never set it.
-	To            []string `protobuf:"bytes,15,rep,name=to,proto3" json:"to,omitempty"`
-	Cc            []string `protobuf:"bytes,16,rep,name=cc,proto3" json:"cc,omitempty"`
-	Bcc           []string `protobuf:"bytes,17,rep,name=bcc,proto3" json:"bcc,omitempty"`
+	To  []string `protobuf:"bytes,15,rep,name=to,proto3" json:"to,omitempty"`
+	Cc  []string `protobuf:"bytes,16,rep,name=cc,proto3" json:"cc,omitempty"`
+	Bcc []string `protobuf:"bytes,17,rep,name=bcc,proto3" json:"bcc,omitempty"`
+	// Optional human-readable name for the sender — legacy mail's From display name
+	// ("Reddit" <noreply@redditmail.com>), which a bridge would otherwise have to
+	// discard. Covered by the header signature, so no relay can rewrite it.
+	//
+	// It is NOT an identity. It is asserted by whoever signed the header (for bridged
+	// mail, by the legacy From header, which is only as trustworthy as the bridge's
+	// authentication verdict says). Readers MUST render it only ALONGSIDE
+	// sender_address, never in place of it, and MUST NOT key trust, allowlist, or
+	// blocklist decisions on it. Producers should emit a display name only where one
+	// was genuinely supplied — a self-asserted name on a cryptographically identified
+	// sender adds nothing but a spoofing surface.
+	//
+	// Empty = none; an empty value is byte-identical to a header predating the field.
+	SenderDisplay string `protobuf:"bytes,18,opt,name=sender_display,json=senderDisplay,proto3" json:"sender_display,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -556,6 +580,13 @@ func (x *MessageHeader) GetBcc() []string {
 		return x.Bcc
 	}
 	return nil
+}
+
+func (x *MessageHeader) GetSenderDisplay() string {
+	if x != nil {
+		return x.SenderDisplay
+	}
+	return ""
 }
 
 // SignedHeader wraps a MessageHeader with the sender's signature (covers body_hash,
@@ -969,7 +1000,7 @@ const file_message_proto_rawDesc = "" +
 	"\acontent\x18\x06 \x01(\fR\acontent\x12\x1d\n" +
 	"\n" +
 	"content_id\x18\a \x01(\tR\tcontentId\x12 \n" +
-	"\vdisposition\x18\b \x01(\tR\vdisposition\"\xeb\x03\n" +
+	"\vdisposition\x18\b \x01(\tR\vdisposition\"\x92\x04\n" +
 	"\x10PlaintextMessage\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
@@ -984,10 +1015,11 @@ const file_message_proto_rawDesc = "" +
 	"\vattachments\x18\n" +
 	" \x03(\v2\x1e.dmcn.message.AttachmentRecordR\vattachments\x12\x1e\n" +
 	"\vreply_to_id\x18\v \x01(\fR\treplyToId\x12=\n" +
-	"\falternatives\x18\f \x03(\v2\x19.dmcn.message.MessageBodyR\falternatives\"x\n" +
+	"\falternatives\x18\f \x03(\v2\x19.dmcn.message.MessageBodyR\falternatives\x12%\n" +
+	"\x0esender_display\x18\r \x01(\tR\rsenderDisplay\"x\n" +
 	"\rSignedMessage\x12<\n" +
 	"\tplaintext\x18\x01 \x01(\v2\x1e.dmcn.message.PlaintextMessageR\tplaintext\x12)\n" +
-	"\x10sender_signature\x18\x02 \x01(\fR\x0fsenderSignature\"\x9b\x04\n" +
+	"\x10sender_signature\x18\x02 \x01(\fR\x0fsenderSignature\"\xc2\x04\n" +
 	"\rMessageHeader\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +
@@ -1007,7 +1039,8 @@ const file_message_proto_rawDesc = "" +
 	"\x14body_content_address\x18\x0e \x01(\fR\x12bodyContentAddress\x12\x0e\n" +
 	"\x02to\x18\x0f \x03(\tR\x02to\x12\x0e\n" +
 	"\x02cc\x18\x10 \x03(\tR\x02cc\x12\x10\n" +
-	"\x03bcc\x18\x11 \x03(\tR\x03bcc\"n\n" +
+	"\x03bcc\x18\x11 \x03(\tR\x03bcc\x12%\n" +
+	"\x0esender_display\x18\x12 \x01(\tR\rsenderDisplay\"n\n" +
 	"\fSignedHeader\x123\n" +
 	"\x06header\x18\x01 \x01(\v2\x1b.dmcn.message.MessageHeaderR\x06header\x12)\n" +
 	"\x10sender_signature\x18\x02 \x01(\fR\x0fsenderSignature\"\xc0\x01\n" +

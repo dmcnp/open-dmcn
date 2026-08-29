@@ -39,7 +39,43 @@ export interface BridgeAttestation {
   verified: boolean; // signature valid AND the signer holds a root-signed bridge credential
   trustTier: BridgeTrustTier; // bridge-asserted tier; meaningful only when verified
   smtpFrom: string; // original legacy sender, for display
+  // The individual SPF/DKIM/DMARC verdicts behind trustTier. Carried so the reader can
+  // say WHICH check did not pass rather than only that the tier fell short — the tier
+  // requires DKIM AND DMARC to pass, so a message that authenticates perfectly well via
+  // aligned SPF still lands in "unauthenticated", and that is worth being able to tell
+  // apart from a genuine spoof. Meaningful only when verified.
+  spf?: string;
+  dkim?: string;
+  dmarc?: string;
   reason?: string; // why verification failed
+}
+
+// The three verdict vocabularies match Go's SPFResult/DKIMResult/DMARCResult String()
+// (internal/bridge/types.go), which in turn follow RFC 7208 — so a reader can compare
+// what this shows against a Received-SPF header or another MTA's verdict with no
+// translation table. An absent field means the enum was 0, which is "none" in all three.
+function spfString(v: number | undefined): string {
+  switch (v) {
+    case 1: return 'pass';
+    case 2: return 'fail';
+    case 3: return 'softfail';
+    case 4: return 'neutral';
+    default: return 'none';
+  }
+}
+function dkimString(v: number | undefined): string {
+  switch (v) {
+    case 1: return 'pass';
+    case 2: return 'fail';
+    default: return 'none';
+  }
+}
+function dmarcString(v: number | undefined): string {
+  switch (v) {
+    case 1: return 'pass';
+    case 2: return 'fail';
+    default: return 'none';
+  }
 }
 
 interface AttachmentLike {
@@ -70,7 +106,13 @@ export async function verifyBridgeAttestation(
     return { verified: false, trustTier: BridgeTrustTier.Unspecified, smtpFrom: '', reason: 'malformed classification record' };
   }
 
-  const base = { trustTier: record.trustTier as BridgeTrustTier, smtpFrom: record.smtpFrom };
+  const base = {
+    trustTier: record.trustTier as BridgeTrustTier,
+    smtpFrom: record.smtpFrom,
+    spf: spfString(record.spfResult),
+    dkim: dkimString(record.dkimResult),
+    dmarc: dmarcString(record.dmarcResult),
+  };
 
   // 1. The record must be signed by the key it carries.
   let sigOk = false;
