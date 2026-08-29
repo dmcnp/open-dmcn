@@ -1,22 +1,38 @@
 // Minimal IndexedDB wrapper (no dependency). One database with four object stores:
 //   - 'working'  — the unlocked, non-extractable CryptoKey handles (session-scoped)
 //   - 'keystore' — the client-side encrypted blob + unlock metadata (persistent)
-//   - 'personal' — the account's per-account mail state (Sent, read/unread + labels,
-//                  contacts, settings, block/allow list), cached locally and synced to
-//                  the relay's owner-only personal KV.
+//   - 'personal' — the account's mail state (Sent, flags/labels, contacts, settings) when the
+//                  home relay hosts no personal storage; see api/personalStore.ts
 //   - 'pins'     — the device-local counterparty key pins (persistent, see trust/pinStore.ts)
-//
-// 'pins' must be local BECAUSE the personal KV is relay-served. A pin whose only copy
-// sits in the KV can be withheld or rolled back by the very operator it exists to
-// detect, which makes it no defence at all against a hostile fleet. The KV copy is kept
-// for cross-device sync; this one decides.
 //
 // We store structured-cloneable values directly (CryptoKey objects survive the
 // clone with their bytes never serialized into JS reach). Keys are simple strings.
+//
+// The earlier note here said the first two stores were the ENTIRE local footprint —
+// mail, contacts and flags all live in the personal KV and are only ever decrypted in
+// memory — so naming the database per context was all it took to make an installed app
+// its own device, and it asked that a third store re-open that reasoning. 'pins' is
+// that third store, and it does:
+//
+//   - It must be local BECAUSE the personal KV is served by the relay. A pin whose only
+//     copy sits in the KV can be withheld or rolled back by the very operator it exists
+//     to detect, which makes it no defence at all against a hostile fleet. The KV copy
+//     is kept for cross-device sync; this one is the source of truth.
+//   - Per-context separation is still the right default, and it comes for free from
+//     DB_NAME. A pin is an observation this device made; an installed app that never
+//     saw a contact has no honest basis for claiming a pin on them. The cost is that a
+//     fresh context adopts the KV's pins once, on first sight — the same exposure any
+//     new device has, and documented as such in trust/pinStore.ts.
 
-const DB_NAME = 'dmcn';
-// v3 added 'pins'. onupgradeneeded creates only the stores that are missing, so an
-// existing v2 database keeps its working handles, keystore and personal cache.
+import { usesOwnStore } from '../appContext';
+
+// Resolved once at module load: a window can't move between contexts mid-session, and
+// pinning stops a display-mode change from re-pointing the database under an open
+// transaction.
+const DB_NAME = usesOwnStore() ? 'dmcn-app' : 'dmcn';
+// v2 added PINS_STORE; v3 added PERSONAL_STORE. onupgradeneeded creates only the stores
+// that are missing, so an existing database keeps its working handles, keystore and pins
+// across either bump.
 const DB_VERSION = 3;
 export const WORKING_STORE = 'working';
 export const KEYSTORE_STORE = 'keystore';

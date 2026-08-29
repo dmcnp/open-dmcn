@@ -3,11 +3,12 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
-import { logout as apiLogout } from '../lib/api/client';
-import { toHex, keyPairToPayloadJSON } from '../lib/crypto/keys';
+import { logout as apiLogout, lookupIdentity } from '../lib/api/client';
+import { toHex } from '../lib/crypto/keys';
 import { unlockBackupBytes } from '../lib/crypto/reauth';
 import { buildPasswordExport, buildPasskeyExport, triggerDownload, type ExportAuth } from '../lib/crypto/exportFile';
 import { encryptKeys } from '../lib/crypto/keystore';
+import { keyPairToPayloadJSON } from '../lib/crypto/keys';
 import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
 import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, type LocalKeystore } from '../lib/crypto/localKeystore';
 import { isStoragePersisted, requestPersistentStorage } from '../lib/crypto/storage';
@@ -19,8 +20,9 @@ import { BlockedSenders } from '../components/BlockedSenders';
 import type { MailOutletContext } from '../components/AppLayout';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useStorageUsage } from '../lib/hooks/useStorageUsage';
+import { Badge, Button, Input, Textarea, Switch, Tabs, UsageMeter } from '../ds';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
-import { Badge, Button, Input, Textarea, Switch, Tabs } from '../ds';
+import { deployment } from '../deployment';
 import { Icon } from '../components/Icon';
 
 type Section = 'profile' | 'privacy' | 'appearance' | 'account';
@@ -39,18 +41,15 @@ function formatBytes(n: number): string {
   return `${v >= 100 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
 }
 
-// StorageCard surfaces the owner's per-account state usage (Sent, contacts, settings,
-// flags) AND, more importantly, where that state actually lives.
-//
-// It used to state flatly that everything was "kept in this browser only, never uploaded".
-// That stopped being true when relays gained personal storage: the normal case now is that
-// this state is sealed here and synced to the home relay, so it follows the account between
-// devices. Saying otherwise was not a cosmetic slip — someone reading it would conclude their
-// sent mail was device-local when it was not, and vice versa on a relay with no storage.
-// Both modes are legitimate, so the card reports whichever one is in force.
+// StorageCard surfaces the owner's personal-storage usage (Sent, contacts,
+// settings, flags) against their effective quota. An unbounded quota (0) shows the
+// used amount without a bar. When the deploy has Stripe billing enabled it also offers
+// an upgrade path (plans → Stripe Checkout → operator-signed quota grant).
 function StorageCard() {
-  const { usage, loading } = useStorageUsage();
+  const { usage, loading, refresh } = useStorageUsage();
   const { localOnly } = useStorageMode();
+  const unbounded = usage != null && usage.quotaBytes === 0;
+  const Upgrade = deployment.storageUpgrade;
 
   return (
     <div style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
@@ -58,30 +57,40 @@ function StorageCard() {
         <Icon name="database" size={16} style={{ color: 'var(--brand)' }} />
         <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Storage</span>
       </div>
-      {usage == null ? (
+      {localOnly ? (
+        /* Where the state lives matters more than how much of it there is. A relay that
+           hosts no personal storage is a valid deployment, but it means none of this
+           follows the account to another device — and finding that out by opening a
+           second device to an empty Sent folder reads as data loss. */
+        <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 'var(--leading-normal)' }}>
+          This server doesn't store your mailbox state, so your sent mail, contacts, settings and
+          message flags are kept in <strong>this browser only</strong>. They won't appear on your
+          other devices, and clearing this browser's data loses them.
+        </p>
+      ) : usage == null ? (
         <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
           {loading ? 'Loading usage…' : 'Usage unavailable right now.'}
         </p>
-      ) : (
+      ) : unbounded ? (
         <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
-          Using <strong>{formatBytes(usage.usedBytes)}</strong> across {usage.count} item{usage.count === 1 ? '' : 's'}.
+          Using <strong>{formatBytes(usage.usedBytes)}</strong> — no storage limit on this account.
+        </p>
+      ) : (
+        <UsageMeter
+          label="Personal storage"
+          value={usage.usedBytes}
+          max={usage.quotaBytes}
+          valueText={`${formatBytes(usage.usedBytes)} of ${formatBytes(usage.quotaBytes)}`}
+        />
+      )}
+      {!localOnly && (
+        <p style={{ margin: 'var(--space-3) 0 0', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
+          Covers your sent mail, contacts, settings and message flags — all end-to-end encrypted and
+          stored only as ciphertext on your relay.
         </p>
       )}
-      <p style={{ margin: 'var(--space-3) 0 0', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-        Covers your sent mail, contacts, settings and message flags.{' '}
-        {localOnly
-          ? 'This server doesn\u2019t store mailbox state, so it is kept in this browser only and won\u2019t appear on your other devices.'
-          : 'It is encrypted on this device before it is stored on your server, so it follows your account to your other devices \u2014 the server only ever holds ciphertext.'}
-      </p>
-      {localOnly && (
-        <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-          <Icon name="alert-triangle" size={16} style={{ color: 'var(--warning)', flex: 'none', marginTop: 1 }} />
-          <span>
-            Nothing here is backed up. Clearing this browser\u2019s data removes your sent mail,
-            contacts and settings, and importing your identity elsewhere won\u2019t bring them along.
-          </span>
-        </div>
-      )}
+      {/* Whether more storage can be bought, and how, belongs to whoever runs the service. */}
+      {!localOnly && Upgrade && <Upgrade usage={usage} onChanged={refresh} />}
     </div>
   );
 }
@@ -122,7 +131,6 @@ export function Settings() {
   const { settings, updateSettings } = useSettings();
   const [section, setSection] = useState<Section>('profile');
   // Profile form (synced account settings). Seeded from the loaded settings doc.
-  const [displayName, setDisplayName] = useState('');
   const [signature, setSignature] = useState('');
   const [composePlainText, setComposePlainText] = useState(false);
   const [profileBusy, setProfileBusy] = useState(false);
@@ -149,6 +157,19 @@ export function Settings() {
   // keystore is the only at-rest copy, a non-persisted origin risks losing it.
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [staySignedIn, setStay] = useState(isStaySignedIn());
+  // Managed-account disclosure (whitepaper §13.8): true when the domain's DAR
+  // declares admin key custody — the org admin holds this account's keys.
+  const [managedDomain, setManagedDomain] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    lookupIdentity(address)
+      .then(r => { if (!cancelled) setManagedDomain(!!r.admin_key_custody); })
+      .catch(() => { /* display-only badge; stay hidden on lookup failure */ });
+    return () => { cancelled = true; };
+  }, [address]);
+
   // Backup download button label. Exporting needs the raw key bytes, which the
   // non-extractable session handles can't yield, so it re-unlocks the at-rest
   // keystore first — a passkey account taps their passkey, and a password account
@@ -222,10 +243,10 @@ export function Settings() {
       setErr(e instanceof Error ? e.message : 'password change failed');
     } finally { setBusy(false); }
   };
-  // Appearance prefs live in the same localStorage keys the shell reads (lib/theme.ts
-  // owns the key strings, so these can't drift apart).
+  // Appearance prefs go through lib/theme, which owns the storage keys (and their
+  // per-context namespacing) — the shell reads exactly the same accessors.
   const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
-  const [density, setDensity] = useState<Density>(readDensity);
+  const [density, setDensity] = useState<Density>(() => readDensity());
 
   // Effective light/dark for the standalone live page preview.
   const effectiveTheme = themePref === 'system' ? readTheme() : themePref;
@@ -245,16 +266,15 @@ export function Settings() {
 
   // Seed the profile form from the synced settings doc when it (re)loads.
   useEffect(() => {
-    setDisplayName(settings.displayName ?? '');
     setSignature(settings.signature ?? '');
     setComposePlainText(settings.composePlainText === true);
-  }, [settings.displayName, settings.signature, settings.composePlainText]);
+  }, [settings.signature, settings.composePlainText]);
 
   const saveProfile = async () => {
     setProfileBusy(true);
     setProfileMsg('');
     try {
-      await updateSettings({ displayName: displayName.trim(), signature, composePlainText });
+      await updateSettings({ signature, composePlainText });
       setProfileMsg('Saved. Your profile syncs to your other devices.');
     } catch (e) {
       setProfileMsg(e instanceof Error ? e.message : 'Failed to save');
@@ -302,11 +322,6 @@ export function Settings() {
 
         {section === 'profile' && (
           <div style={{ marginTop: 'var(--space-4)' }}>
-            <Row title="Display name" desc="Shown in this app in place of your address. Synced to your other devices; not sent to recipients.">
-              <div style={{ width: 260 }}>
-                <Input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder={address || 'Your name'} aria-label="Display name" />
-              </div>
-            </Row>
             <div style={{ padding: 'var(--space-4) 0', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Signature</div>
               <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2, marginBottom: 'var(--space-3)' }}>
@@ -467,6 +482,11 @@ export function Settings() {
             <Row title="Signed in as">
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>{address}</span>
             </Row>
+            {managedDomain && (
+              <Row title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing).">
+                <Badge variant="neutral"><Icon name="shield-check" size={13} /> Managed</Badge>
+              </Row>
+            )}
             <Row title="Switch or add account" desc="Use another identity (work, personal) in this tab, or add a new one.">
               <Button variant="secondary" size="sm" leftIcon={<Icon name="users" size={15} />} onClick={() => navigate('/login')}>Switch account</Button>
             </Row>
@@ -476,10 +496,8 @@ export function Settings() {
           </div>
         )}
 
-        {/* The daemon's version, not a product name — this client has no branding of its
-            own, and the version is the one thing worth surfacing for a bug report. */}
         <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-          dmcnd <span style={{ fontFamily: 'var(--font-mono)' }}>{APP_VERSION}</span>
+          DMCN Mail <span style={{ fontFamily: 'var(--font-mono)' }}>{APP_VERSION}</span>
         </div>
       </div>
     </PageShell>

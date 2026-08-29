@@ -31,8 +31,8 @@ export class FlagStore {
   private store: PersonalStore;
   private deviceHex: string;
 
-  constructor(keys: WorkingKeys) {
-    this.store = new PersonalStore(keys);
+  constructor(keys: WorkingKeys, explicitToken?: string) {
+    this.store = new PersonalStore(keys, explicitToken);
     this.deviceHex = toHex(keys.deviceId);
   }
 

@@ -228,6 +228,15 @@ export function logout(): Promise<void> {
   return request('POST', '/api/v1/logout');
 }
 
+// logoutToken revokes ONE session token explicitly, rather than whichever the module holds.
+// The account switcher installs the incoming session first and then ends the outgoing one
+// with this: revoking via the module token would either race the switch or (on a 401)
+// re-enter session renewal for the account being left. Server-side logout is per-token, so
+// this cannot disturb another tab.
+export function logoutToken(token: string): Promise<void> {
+  return request('POST', '/api/v1/logout', undefined, { skipReauth: true, token });
+}
+
 // Identity API
 export interface IdentityLookupResponse {
   address: string;
@@ -247,6 +256,11 @@ export interface IdentityLookupResponse {
   // Effective onion-delivery policy (mailbox flag OR domain DAR). When true, the
   // compose UI auto-enables + locks the onion toggle; the server enforces it too.
   require_onion?: boolean;
+  // True when the address's domain declares admin key custody (DAR policy): the domain admin
+  // holds the account keys. A single-domain daemon has no such policy to report, so this is
+  // never set here — it is declared because the pinned-fact set is shared, and a contact whose
+  // domain turns custody ON is a change no key comparison can see (trust/pinnedKey.ts).
+  admin_key_custody?: boolean;
   // legacy marks a recipient that is NOT a DMCN identity — an ordinary email address, reachable
   // through this domain's SMTP bridge. When true, x25519_pub and relay_hints describe the BRIDGE,
   // not the recipient: the message is end-to-end encrypted as far as the bridge and travels as

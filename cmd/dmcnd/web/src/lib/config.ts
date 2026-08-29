@@ -55,3 +55,9 @@ export const POLL_INTERVAL_MS = Number(envVal('POLL_INTERVAL_MS', '10000')) || 1
  *  tab focus. Derived as 6× the inbox cadence (min 60s), so it stays well clear of the
  *  inbox poll even if an operator retunes POLL_INTERVAL_MS. */
 export const STORAGE_POLL_INTERVAL_MS = Math.max(60_000, POLL_INTERVAL_MS * 6);
+/** Cadence (ms) for counting unread mail in the OTHER accounts unlocked in this tab
+ *  (the account switcher's dot). Each tick is a full mailbox + flags read per such
+ *  account, so it deliberately trails the inbox by a wide margin: this is an ambient
+ *  "something arrived elsewhere" signal, and the account becomes live the moment you
+ *  switch to it. Same 6×/min-60s shape as the personal store. */
+export const BACKGROUND_UNREAD_INTERVAL_MS = Math.max(60_000, POLL_INTERVAL_MS * 6);

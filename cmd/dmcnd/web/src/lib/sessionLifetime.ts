@@ -7,10 +7,23 @@
 // When the tab closes, the id is gone, the handle is orphaned (and later GC'd), and
 // re-unlock is required — no heartbeat or timing window needed.
 //
-// "Stay signed in" (opt-in) instead keys the handle by account address, so it
+// Handles are keyed by tab AND account, so one tab can hold SEVERAL accounts
+// unlocked at once (the header's account switcher moves between them without a
+// re-prompt) while closing that tab still locks every one of them together.
+// Holding N unlocked handles does widen what an XSS on the origin could *use* —
+// it still can't steal them (they stay non-extractable, and the raw-bytes paths in
+// crypto/reauth.ts re-derive from the encrypted keystore instead of reading these).
+//
+// "Stay signed in" (opt-in) instead keys the handle by account address alone, so it
 // persists across browser restarts for one-click access.
 
-const STAY_KEY = 'dmcn_stay_signed_in';
+import { storageKey } from './appContext';
+
+// Namespaced per context (see appContext.storageKey): an installed app and a browser
+// tab are separate devices to their user, so turning on "stay signed in" in one must
+// not extend key lifetime in the other. TAB_KEY needs no namespacing — sessionStorage
+// is per-window already, so the two never shared it.
+const STAY_KEY = storageKey('dmcn_stay_signed_in');
 const TAB_KEY = 'dmcn_tab_id';
 
 export function isStaySignedIn(): boolean {
@@ -39,10 +52,28 @@ export function getTabId(): string {
 }
 
 // workingKeyRef is the IndexedDB key under which this tab's working handle for
-// `address` is stored. Default (lock-on-close): per-tab, so closing the tab orphans
-// the handle. "Stay signed in": per-account, persisting across browser restarts.
+// `address` is stored. Default (lock-on-close): per-tab AND per-account, so a tab
+// can hold several unlocked accounts and closing it orphans all of them at once.
+// "Stay signed in": per-account only, persisting across browser restarts.
+// Addresses are local@domain and carry no colon, so `tab:<id>:<address>` splits
+// unambiguously back into its two parts (see parseTabWorkingRef).
 export function workingKeyRef(address: string): string {
-  return isStaySignedIn() ? `acct:${address}` : `tab:${getTabId()}`;
+  return isStaySignedIn() ? `acct:${address}` : `tab:${getTabId()}:${address}`;
+}
+
+// tabWorkingPrefix is the key prefix owned by this tab in the lock-on-close posture.
+export function tabWorkingPrefix(): string {
+  return `tab:${getTabId()}:`;
+}
+
+// parseTabWorkingRef splits a per-tab handle key into its tab id and account. A
+// legacy single-slot key ('tab:<id>', pre-multi-account) yields a null address.
+export function parseTabWorkingRef(key: string): { tabId: string; address: string | null } | null {
+  if (!key.startsWith('tab:')) return null;
+  const rest = key.slice('tab:'.length);
+  const sep = rest.indexOf(':');
+  if (sep < 0) return { tabId: rest, address: null };
+  return { tabId: rest.slice(0, sep), address: rest.slice(sep + 1) };
 }
 
 // Presence: each open tab writes a heartbeat under its own localStorage key so GC can
@@ -50,7 +81,7 @@ export function workingKeyRef(address: string): string {
 // decision (that's exact via the per-tab sessionStorage id) — it only lets a freshly
 // opened tab promptly sweep handles whose tab is gone, instead of leaving them to age
 // out. Each tab owns its key (no shared-map write races); stale keys are pruned on read.
-const PRESENCE_PREFIX = 'dmcn_tab_';
+const PRESENCE_PREFIX = storageKey('dmcn_tab_');
 const PRESENCE_INTERVAL_MS = 20_000;
 const PRESENCE_STALE_MS = 120_000; // > background setInterval throttling (~60s)
 

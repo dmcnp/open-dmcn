@@ -1,16 +1,14 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode, createElement } from 'react';
 import type { IdentityKeyPair } from '../crypto/keys';
-import { toBase64 } from '../crypto/keys';
 import {
   type WorkingKeys,
   importWorkingKeys,
-  saveWorkingKeys,
-  loadWorkingKeys,
   clearWorkingKeys,
+  clearUnlockedHandles,
   gcWorkingHandles,
 } from '../crypto/workingKeys';
-import { loadLocalKeystore, migrateLegacyKeystore } from '../crypto/localKeystore';
-import { requestPersistentStorage } from '../crypto/storage';
+import { migrateLegacyKeystore } from '../crypto/localKeystore';
+import { loadUnlockedKeys, persistWorkingKeys } from '../accounts';
 import { isStaySignedIn, workingKeyRef, getTabId, startPresence, liveTabIds } from '../sessionLifetime';
 import { useAuth } from './useAuth';
 
@@ -23,22 +21,33 @@ interface KeysContextValue {
   // can sign the login challenge immediately. Temporary access reuses this — it just
   // skips writing the encrypted keystore, so no re-login material lands on disk.
   setKeys: (address: string, kp: IdentityKeyPair) => Promise<WorkingKeys>;
-  // clearKeys locks the current tab's account (drops its working handles); the
-  // encrypted keystore stays so the account can be unlocked again.
+  // adoptKeys installs already-imported, already-persisted handles as this tab's
+  // current account SYNCHRONOUSLY, so a caller can apply it and setSession() in one
+  // continuation. The account switcher needs that: a render in which the new
+  // account's key is paired with the outgoing account's session token would sign the
+  // wrong mailbox's challenge.
+  adoptKeys: (wk: WorkingKeys) => void;
+  // clearKeys locks the current account (drops its working handles); the encrypted
+  // keystore stays so the account can be unlocked again. Other accounts unlocked in
+  // this tab are untouched — clearAllKeys locks every one of them.
   clearKeys: () => Promise<void>;
+  clearAllKeys: () => Promise<void>;
 }
 
 const KeysContext = createContext<KeysContextValue | null>(null);
 
 // Working handles are scoped to the tab's session via sessionLifetime.workingKeyRef:
-// by default a per-tab id (sessionStorage) keys the handle, so closing the tab/browser
-// orphans it and re-unlock is required — a refresh keeps the same id and re-loads the
-// handle with no prompt. "Stay signed in" instead keys by account for persistence.
+// by default a per-tab id (sessionStorage) plus the address keys the handle, so
+// closing the tab/browser orphans every account it held and re-unlock is required —
+// a refresh keeps the same id and re-loads the handle with no prompt. "Stay signed
+// in" instead keys by account alone, for persistence across restarts.
 // Handles are non-extractable CryptoKeys — never raw bytes in web storage.
 //
-// Safety: a tab only ever loads the handle at its own ref and rejects one whose
-// account doesn't match its session, so it can't sign relay challenges with the wrong
-// account's key; a missing/mismatched handle forces a clean re-unlock.
+// This context tracks the ONE account the tab is currently acting as. Several may be
+// unlocked at once (that's what makes the header's account switcher instant), but
+// only the one adopted here can sign: a handle is loaded from its own account's ref
+// and rejected unless it names that account, so relay challenges can't be signed with
+// the wrong key; a missing/mismatched handle forces a clean re-unlock.
 export function KeysProvider({ children }: { children: ReactNode }) {
   const [keys, setKeysState] = useState<WorkingKeys | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +60,10 @@ export function KeysProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // An account switch adopts the handles before it changes the session, so this run
+    // has nothing to load. Flipping to `loading` anyway would unmount the whole shell
+    // (the protected route renders nothing while loading) for an IndexedDB round trip.
+    if (!address || keysRef.current?.address !== address) setLoading(true);
     (async () => {
       await migrateLegacyKeystore();
       // One sweep per app load: drop closed-tab orphan handles (their tab id isn't in
@@ -73,18 +85,9 @@ export function KeysProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setLoading(false);
         return;
       }
-      const ref = workingKeyRef(address);
-      let wk = await loadWorkingKeys(ref);
-      // Reject a handle that isn't this account's (e.g. a per-tab ref reused after an
-      // account switch), or that doesn't match the keystore (stale).
-      if (wk && wk.address !== address) wk = null;
-      if (wk) {
-        const ks = await loadLocalKeystore(address);
-        if (ks && toBase64(wk.ed25519Public) !== ks.ed25519Public) {
-          await clearWorkingKeys(ref);
-          wk = null;
-        }
-      }
+      // loadUnlockedKeys rejects a handle that isn't this account's, or that no
+      // longer matches the keystore (stale after a re-import).
+      const wk = await loadUnlockedKeys(address);
       if (!cancelled) { setBoth(wk); setLoading(false); }
     })();
     return () => { cancelled = true; };
@@ -94,23 +97,33 @@ export function KeysProvider({ children }: { children: ReactNode }) {
   // its handle and reaps only genuine closed-tab orphans.
   useEffect(() => startPresence(), []);
 
-  const setKeys = useCallback(async (addr: string, kp: IdentityKeyPair) => {
-    const wk = await importWorkingKeys(addr, kp);
-    await saveWorkingKeys(workingKeyRef(addr), wk);
-    // The local keystore is the only at-rest copy, so ask the browser to exempt this
-    // origin from storage eviction (best-effort; the export backup is the real net).
-    void requestPersistentStorage();
+  const adoptKeys = useCallback((wk: WorkingKeys) => {
     setBoth(wk);
     setLoading(false);
-    return wk;
   }, [setBoth]);
+
+  const setKeys = useCallback(async (addr: string, kp: IdentityKeyPair) => {
+    const wk = await importWorkingKeys(addr, kp);
+    await persistWorkingKeys(wk);
+    adoptKeys(wk);
+    return wk;
+  }, [adoptKeys]);
 
   const clearKeys = useCallback(async () => {
     if (address) await clearWorkingKeys(workingKeyRef(address));
     setBoth(null);
   }, [address, setBoth]);
 
-  return createElement(KeysContext.Provider, { value: { keys, loading, setKeys, clearKeys } }, children);
+  const clearAllKeys = useCallback(async () => {
+    await clearUnlockedHandles();
+    setBoth(null);
+  }, [setBoth]);
+
+  return createElement(
+    KeysContext.Provider,
+    { value: { keys, loading, setKeys, adoptKeys, clearKeys, clearAllKeys } },
+    children
+  );
 }
 
 export function useKeys(): KeysContextValue {

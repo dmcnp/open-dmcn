@@ -10,10 +10,11 @@
 // browser against the domain root are both right for their own trust anchor. A difference
 // that is merely older on one side is drift, and belongs in neither: fix it in both.
 
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { BridgeAttestation } from './crypto/bridgeAttest';
 import type { DeliveryReceiptView } from './crypto/receiptAttest';
 import type { MailFilterFactory } from './api/filterList';
+import type { StorageUsage } from './api/personalStore';
 
 export interface Deployment {
   // Who this client says it is, on the pre-auth screens.
@@ -32,6 +33,10 @@ export interface Deployment {
     note: ReactNode;
     // An optional panel beside the form. Absent ⇒ the form is the whole screen.
     authPanel?: ReactNode;
+    // Shown in the signed-in app's header. The reference names the SERVER you are signed
+    // in to, which is the useful fact when the client itself is unbranded; a product names
+    // itself. Absent ⇒ nothing sits there.
+    appMark?: ReactNode;
     // The browser tab title. The reference names the DEPLOYMENT (a self-hoster on
     // example.org gets "example.org mail"); a product names itself.
     documentTitle?: string;
@@ -40,6 +45,14 @@ export interface Deployment {
   // What /register renders. A hosted front door shows a signup form; a self-hosted domain
   // whose root key is offline cannot mint an address at all and shows a petition instead.
   registerScreen: ReactNode;
+  // Some deployments front the mail client with a SECOND service (registration, billing,
+  // countersigning) that keeps its own challenge-response session — deliberately sharing no
+  // secret with the mail client, each verifying identities independently.
+  //
+  // Called whenever the signed-in account changes, with the account to mint for or null to
+  // tear down. A deployment with no such service leaves this out and nothing is minted.
+  installAccountSession?: (account: { address: string; signKey: CryptoKey } | null) => void;
+
   // What the sign-in page offers someone without an account here. Both the wording and the
   // destination belong to the deployment: a domain that cannot mint an address on demand must
   // not invite anyone to "create" one, and a front door with no public signup should either
@@ -54,6 +67,15 @@ export interface Deployment {
   authRoutes: { path: string; element: ReactNode }[];
   // Extra sections inside the signed-in shell, e.g. an admin console.
   appRoutes: { path: string; element: ReactNode }[];
+  // Whether more personal storage can be bought here, and how. Rendered inside the shared
+  // Storage card in Settings; absent ⇒ the card just reports usage, which is the honest
+  // answer on a deployment that sells nothing.
+  storageUpgrade?: ComponentType<{ usage: StorageUsage | null; onChanged: () => void }>;
+
+  // The left-rail rows for those sections. A component rather than a data list because the
+  // rows carry live counts (pending device pairings, address requests) that only the
+  // deployment knows how to derive — it reads them from the same hooks the shell does.
+  appNav?: ComponentType<{ collapsed: boolean; pathname: string; goto: (path: string) => void }>;
 
   // How a bridge's signed SPF/DKIM/DMARC classification is verified. Both implementations
   // answer the same question — "is this attestation from a bridge I trust, about THIS

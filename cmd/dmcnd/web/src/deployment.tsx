@@ -38,6 +38,14 @@ export const deployment: Deployment = {
     note: 'Your keys are generated and kept on this device. Mail is decrypted here, never on the server.',
     // Named after the deployment, not after a product — see the note on branding above.
     documentTitle: DEFAULT_DOMAIN ? `${DEFAULT_DOMAIN} mail` : undefined,
+    // In the app header, name the SERVER you are signed in to. With no product identity to
+    // show, that is the useful fact — and on a self-hosted daemon it is the only one.
+    appMark: DEFAULT_DOMAIN ? (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--text-strong)', marginRight: 'var(--space-2)', whiteSpace: 'nowrap' }}>
+        <Icon name="mail" size={17} style={{ color: 'var(--text-muted)' }} />
+        {DEFAULT_DOMAIN}
+      </span>
+    ) : null,
     // No marketing panel. A reference implementation should not sell anything.
   },
   // One route, two screens, chosen by where the domain root key is. A live domain whose root
