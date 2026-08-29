@@ -23,7 +23,7 @@ import type { WorkingKeys } from '../crypto/workingKeys';
 import { sealToRecipients, openSealed, type SealedBlobJSON } from '../crypto/sealedBlob';
 import { signWithKey } from '../crypto/sign';
 import { toBase64, fromBase64 } from '../crypto/keys';
-import { postJSON, ApiError } from './client';
+import { postJSONAs, ApiError } from './client';
 
 // StorageUsage is the owner's personal-storage occupancy for the Settings meter.
 // quotaBytes === 0 means no cap.
@@ -110,10 +110,14 @@ export class PersonalStore {
   // Set once a relay tells us it has no storage. Seeded from the session-wide verdict so a
   // store created after the discovery never pays a failed round trip at all.
   private localOnly = isStorageLocalOnly();
+  // An explicit bearer for a session that isn't the tab's current account (the
+  // switcher reading another unlocked account's flags). Absent ⇒ global session.
+  private explicitToken?: string;
 
-  constructor(keys: WorkingKeys) {
+  constructor(keys: WorkingKeys, explicitToken?: string) {
     this.keys = keys;
     this.owner = keys.address;
+    this.explicitToken = explicitToken;
   }
 
   // localOnlyMode reports whether this store fell back to device-local storage, so the UI can
@@ -129,9 +133,9 @@ export class PersonalStore {
   // --- transport ---------------------------------------------------------------------------
 
   private async op<T>(req: Record<string, unknown>): Promise<T> {
-    const ch = await postJSON<ChallengeResp>('/api/v1/mailbox/challenge', req);
+    const ch = await postJSONAs<ChallengeResp>(this.explicitToken, '/api/v1/mailbox/challenge', req);
     const signature = toBase64(await signWithKey(this.keys.ed25519Sign, fromBase64(ch.nonce)));
-    return postJSON<T>('/api/v1/mailbox/complete', {
+    return postJSONAs<T>(this.explicitToken, '/api/v1/mailbox/complete', {
       correlation_id: ch.correlation_id,
       signature,
     });

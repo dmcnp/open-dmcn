@@ -93,8 +93,14 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 // verifyBridgeAttestation inspects a decrypted message's attachments. It returns null when the
 // message is not a bridged legacy email (no classification record), or a verdict describing
 // whether the bridge's account of it can be trusted.
+// messageSenderPub is the wrapped message's already-verified sender Ed25519 key. A bridged
+// message is authored BY the bridge, so the classification's bridge key must be that same key
+// — otherwise a genuine attestation could be lifted off one message and stapled onto another,
+// lending a bridge's SPF/DKIM/DMARC verdict to mail the bridge never saw. Mirrors the binding
+// verifyDeliveryReceipt already makes, and Go's check in bridge/attest.go's caller.
 export async function verifyBridgeAttestation(
-  attachments: AttachmentLike[]
+  attachments: AttachmentLike[],
+  messageSenderPub?: Uint8Array | null,
 ): Promise<BridgeAttestation | null> {
   const att = attachments.find((a) => a.contentType === CLASSIFICATION_CONTENT_TYPE);
   if (!att) return null; // not a bridged message
@@ -122,6 +128,11 @@ export async function verifyBridgeAttestation(
     sigOk = false; // malformed key/signature → unverified, never throw
   }
   if (!sigOk) return { ...base, verified: false, reason: 'invalid bridge signature' };
+
+  // 1b. The signer must be the author of the message carrying it (see the note above).
+  if (messageSenderPub && !bytesEqual(record.bridgePublicKey, messageSenderPub)) {
+    return { ...base, verified: false, reason: 'classification signer is not the message author' };
+  }
 
   // 2. That key must hold a bridge credential from this domain's root. Without a configured root
   //    there is nothing to check against, and saying "verified" would be a lie.

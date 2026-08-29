@@ -125,7 +125,16 @@ export function keyPairToPayloadJSON(kp: IdentityKeyPair): string {
 
 // Helper to convert Uint8Array to base64
 export function toBase64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
+  // Build the binary string in chunks. `String.fromCharCode(...bytes)` spreads every
+  // byte as a separate argument, which overflows the call stack ("Maximum call stack
+  // size exceeded") once a message is large — e.g. an envelope carrying an attachment.
+  // 0x8000 keeps each call well under the engine's argument limit.
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 
 // Helper to convert base64 to Uint8Array

@@ -35,6 +35,7 @@ function runReauth(): Promise<string | null> {
 interface RequestOpts {
   retried?: boolean; // internal: set on the single post-renewal retry
   skipReauth?: boolean; // public/auth endpoints opt out (no session to renew)
+  token?: string; // explicit bearer, bypassing the module token (see logoutToken)
 }
 
 // ApiError carries the HTTP status and the server's optional machine-readable
@@ -55,8 +56,9 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (sessionToken) {
-    headers['Authorization'] = `Bearer ${sessionToken}`;
+  const bearer = opts.token ?? sessionToken;
+  if (bearer) {
+    headers['Authorization'] = `Bearer ${bearer}`;
   }
 
   const res = await fetch(path, {
@@ -88,6 +90,14 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
 // renewal — for callers outside the typed wrappers (e.g. the mailbox sync).
 export function postJSON<T>(path: string, body: unknown): Promise<T> {
   return request('POST', path, body);
+}
+
+// postJSONAs is the same POST under an EXPLICIT bearer when one is given, falling
+// back to the global session when it isn't. Used by the sessions that aren't the
+// tab's current account. Explicit tokens skip session renewal: the renewal handler
+// only ever knows the active account, so a 401 here is the caller's to re-mint.
+export function postJSONAs<T>(token: string | undefined, path: string, body: unknown): Promise<T> {
+  return token === undefined ? postJSON<T>(path, body) : request<T>('POST', path, body, { token, skipReauth: true });
 }
 
 // Auth API. The server holds no key material — it is a public-key directory (the
