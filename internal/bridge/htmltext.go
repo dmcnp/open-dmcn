@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"fmt"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -27,9 +28,9 @@ func htmlToText(src string) string {
 		// fall back to emitting the source: that is the behavior this function replaces.
 		return ""
 	}
-	var w textWriter
+	w := textWriter{links: &linkTable{}}
 	w.render(doc, false)
-	return w.String()
+	return w.String() + w.links.render()
 }
 
 // skipContent are elements whose text content is not message content — dropping the
@@ -58,10 +59,64 @@ var paraElem = map[atom.Atom]bool{
 	atom.H4: true, atom.H5: true, atom.H6: true, atom.Pre: true,
 }
 
+// linkTable collects the targets of the links in a message so they can be listed once, in
+// full, at the end — the numbered-reference form text browsers have used for decades.
+//
+// Inline targets were the obvious rendering and the wrong one. Bulk mail wraps every phrase
+// in a tracking redirect hundreds of characters long, so a digest arrived as far more URL
+// than message and the actual words were unreadable between them. Shortening each to its host
+// fixed the reading and broke the using: a link is often the POINT of the mail — a sign-in, a
+// confirmation, a password reset — and this rendering is what a reader sees when they have
+// chosen NOT to trust the sender enough to render its HTML. That is exactly when the link
+// still has to work.
+//
+// So: nothing is dropped and nothing is abbreviated. The text reads as text, and every target
+// is recoverable in full, on its own line, ready to copy. Repeats share a number, because one
+// destination referenced five times is one destination.
+type linkTable struct {
+	order []string
+	index map[string]int
+}
+
+// ref returns the reference number for a target, assigning one on first sight.
+func (t *linkTable) ref(href string) int {
+	if t.index == nil {
+		t.index = map[string]int{}
+	}
+	if n, ok := t.index[href]; ok {
+		return n
+	}
+	n := len(t.order) + 1
+	t.index[href] = n
+	t.order = append(t.order, href)
+	return n
+}
+
+// render writes the reference list, or nothing at all when the message had no links.
+//
+// The form is markdown's reference-link definition rather than a plain numbered list, because
+// it costs nothing and degrades in both directions: read as text it is a legible list of
+// targets, and read as markdown it resolves the [text][n] markers above into real links and
+// drops these lines entirely. The alternative shape, [text](#n), looks similar but points at
+// an in-page anchor that does not exist — a dead link wherever anything actually renders it.
+func (t *linkTable) render() string {
+	if len(t.order) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n\n--\n")
+	for i, href := range t.order {
+		fmt.Fprintf(&b, "[%d]: %s\n", i+1, href)
+	}
+	return b.String()
+}
+
 // textWriter accumulates the rendering. Line breaks are REQUESTED rather than written, so
 // nested block boundaries (a <td> inside a <tr> inside a <table>, all closing at once)
 // collapse into one break instead of a run of blank lines.
 type textWriter struct {
+	// links is the document-wide reference table, shared with every nested writer.
+	links   *linkTable
 	b       strings.Builder
 	pending int  // line breaks owed before the next text: 1 = new line, 2 = blank line
 	space   bool // a collapsed whitespace run is owed before the next text
@@ -100,6 +155,31 @@ func (w *textWriter) text(s string) {
 	w.b.WriteString(s)
 }
 
+// stripInvisible removes characters that occupy no visual space. They are not content, and in
+// mail they are almost always working against the reader: senders pad a preheader with runs of
+// them so the inbox preview shows only the line they chose, and split words with them
+// ("5<ZWNJ>4<ZWNJ>8 Market St.") to defeat scrapers — which also defeats search, copy-paste and
+// a screen reader. A rendering meant to be READ should carry what is visible and nothing else.
+//
+// Soft hyphen is included: it renders as nothing except at a line break this rendering does not
+// perform. Ordinary whitespace is left alone — that is handled by the writer's spacing rules.
+func stripInvisible(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\u00ad', // soft hyphen
+			r == '\u034f',                  // combining grapheme joiner
+			r == '\u061c',                  // arabic letter mark
+			r == '\ufeff',                  // zero-width no-break space (BOM)
+			r >= '\u200b' && r <= '\u200f', // zero-width space/joiners, LRM/RLM
+			r >= '\u2060' && r <= '\u2064', // word joiner, invisible operators
+			r >= '\u202a' && r <= '\u202e', // bidi embedding/override
+			r >= '\u2066' && r <= '\u2069': // bidi isolates
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // raw appends text verbatim (inside <pre>, where whitespace is significant).
 func (w *textWriter) raw(s string) {
 	if s == "" {
@@ -118,6 +198,10 @@ func (w *textWriter) String() string { return w.b.String() }
 // whitespace collapse to a single space, and a space at a boundary is only emitted when real
 // text follows it — so the source's own indentation never reaches the rendering.
 func (w *textWriter) writeCollapsed(s string) {
+	// Before collapsing, not after: a preheader padded with invisible characters is otherwise
+	// a run of real runes separated by spaces, so it survives as a blank line at the top of
+	// every newsletter. Stripped first, it is just whitespace and the rules below drop it.
+	s = stripInvisible(s)
 	var b strings.Builder
 	space, lead := false, false
 	for _, r := range s {
@@ -226,11 +310,16 @@ func (w *textWriter) renderChildren(n *html.Node, pre bool) {
 	}
 }
 
-// renderLink writes an anchor as "text <href>", spelling out the target only when it adds
-// something — a bare URL as its own link text, an in-page anchor, or a cid: reference stays
-// as it is. Without the target, "click here" links lose the only information they carry.
+// renderLink writes an anchor as "[text][n]", with n indexing the reference list at the end of
+// the message (see linkTable). A bare URL used as its own link text, an in-page anchor, or a
+// cid: reference is already self-describing and stays as it is.
+//
+// The brackets around the text are not decoration: they mark where the link began and ended,
+// which is the job the old inline "<href>" form did by delimiting the target instead. Link
+// text that already carries its own brackets — an image rendered as "[image: alt]" — is not
+// bracketed twice; it reads as the link label it already is.
 func (w *textWriter) renderLink(n *html.Node, pre bool) {
-	var inner textWriter
+	inner := textWriter{links: w.links}
 	inner.renderChildren(n, pre)
 	text := strings.TrimSpace(inner.String())
 	href := strings.TrimSpace(attrOf(n, "href"))
@@ -238,11 +327,17 @@ func (w *textWriter) renderLink(n *html.Node, pre bool) {
 		w.text(text)
 		return
 	}
+	ref := w.links.ref(href)
 	if text == "" {
-		w.text("<" + href + ">")
+		// An empty anchor still went somewhere; the reference is all there is to show.
+		w.text(fmt.Sprintf("[%d]", ref))
 		return
 	}
-	w.text(text + " <" + href + ">")
+	if strings.HasPrefix(text, "[") && strings.HasSuffix(text, "]") {
+		w.text(fmt.Sprintf("%s[%d]", text, ref))
+		return
+	}
+	w.text(fmt.Sprintf("[%s][%d]", text, ref))
 }
 
 func attrOf(n *html.Node, key string) string {

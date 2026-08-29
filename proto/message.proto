@@ -74,7 +74,11 @@ message MessageHeader {
   string subject = 8;
   uint32 attachment_count = 9;
   uint64 body_size = 10;           // plaintext body size, for UI
-  string snippet = 11;             // optional short preview of the body
+  // Leading text of the body (longest valid-UTF-8 prefix of its first 140 bytes; empty for a
+  // non-text body). Signed, but NOT bound to the body the way body_hash is — a signer can
+  // emit a snippet that disagrees with its own body, so readers should re-derive it once the
+  // body is decrypted and surface a mismatch. See SPEC.md.
+  string snippet = 11;
   bytes reply_to_id = 12;          // 16 bytes UUID; empty = not a reply
   bytes body_hash = 13;            // 32 bytes SHA-256 over canonical MessageContent
   // Content address of the body ciphertext blob (body_nonce||encrypted_body||body_tag):

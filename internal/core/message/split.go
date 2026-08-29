@@ -232,11 +232,33 @@ func Split(msg *PlaintextMessage, senderPriv ed25519.PrivateKey) (*SignedHeader,
 	return sh, content, nil
 }
 
-// snippetOf returns a short preview of a text body (empty for non-text). The
-// result is always the longest valid-UTF-8 prefix of the first snippetMax bytes,
-// so the signed header round-trips identically across implementations (a Go
-// byte-slice could otherwise split a multibyte rune and a protobufjs verifier
-// would re-encode it differently, breaking the signature).
+// VerifySnippet reports whether a header's snippet is what its body actually begins with.
+//
+// Both are signed by the same key, but only the BODY is bound to the header (body_hash, and
+// the body's content address). The snippet is not, so a signer can seal a header whose
+// snippet disagrees with its own body — and a reader listing an inbox, which never fetches
+// bodies, has nothing to compare against. That is the point of checking here: this is the one
+// moment the truth is available.
+//
+// A false result is not corruption and not a relay's doing; a relay cannot alter either half
+// without breaking the header signature. It means the signer wrote one thing in the preview
+// and another in the message, deliberately. Callers should surface that rather than refuse
+// the message: the body is authentic, and hiding real mail over a misleading preview is the
+// worse failure.
+func VerifySnippet(h *MessageHeader, content *MessageContent) bool {
+	if h == nil || content == nil {
+		return false
+	}
+	return h.Snippet == snippetOf(content.Body)
+}
+
+// snippetOf produces the header's snippet: the leading bytes of a text body, as the longest
+// valid-UTF-8 prefix of the first snippetMax bytes (never splitting a multibyte rune, so the
+// signed header round-trips identically across implementations).
+//
+// The prefix IS the contract (SPEC.md): a producer must derive this from the body it is
+// sealing. Nothing binds the two the way body_hash binds the body, so a reader that has the
+// body should re-derive and compare — see VerifySnippet.
 func snippetOf(body MessageBody) string {
 	if body.ContentType != "text/plain" {
 		return ""

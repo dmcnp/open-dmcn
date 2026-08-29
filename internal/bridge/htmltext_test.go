@@ -31,9 +31,9 @@ func TestHTMLToText(t *testing.T) {
 			want: "First cell\nSecond cell",
 		},
 		{
-			name: "links keep their target",
+			name: "links are numbered and listed in full at the end",
 			html: `<p>Read <a href="https://example.com/x">the post</a></p>`,
-			want: "Read the post <https://example.com/x>",
+			want: "Read [the post][1]\n\n--\n[1]: https://example.com/x\n",
 		},
 		{
 			name: "a link that is its own url is not doubled",
@@ -109,17 +109,81 @@ func TestParseInboundMIME_HTMLOnly(t *testing.T) {
 		t.Fatalf("body content type = %q, want text/plain", parsed.Body.ContentType)
 	}
 	body := string(parsed.Body.Content)
-	// No tags, no CSS. (Angle brackets alone are not the test: a rendered link keeps its
-	// target as "text <https://…>".)
+	// No tags, no CSS.
 	if strings.Contains(body, "<table") || strings.Contains(body, "<p>") || strings.Contains(body, "color:#fff") {
 		t.Fatalf("body still carries markup/CSS: %q", body)
 	}
+	// The prose reads as prose, and the target is recoverable in full from the reference list.
 	if !strings.Contains(body, "Your account will be deleted.") ||
-		!strings.Contains(body, "Keep it <https://reddit.com/keep>") {
+		!strings.Contains(body, "[Keep it][1]") ||
+		!strings.Contains(body, "[1]: https://reddit.com/keep") {
 		t.Fatalf("body lost content: %q", body)
 	}
 	if len(parsed.Alternatives) != 1 || parsed.Alternatives[0].ContentType != "text/html" ||
 		!strings.Contains(string(parsed.Alternatives[0].Content), "<table>") {
 		t.Fatalf("alternatives = %+v, want the original HTML", parsed.Alternatives)
+	}
+}
+
+// A digest in the shape real bulk mail arrives in: every phrase wrapped in a long tracking
+// redirect, decorative images, and a preheader padded with invisible characters. The message
+// must read as a message, and every link must still be recoverable in full.
+func TestHTMLToText_BulkMailStaysReadable(t *testing.T) {
+	const track = "https://click.redditmail.com/CL0/https:%2F%2Fwww.reddit.com%2Fr%2FGMail%2F%3F%2524deep_link=true%26correlation_id=90e8aa94-d9f3-479a-97ae-0385c1f1ddf8%26ref=email_digest/1/010001a04b75238b-e5b9fa16-9939-4363-a3a4-9249c54b8364-000000/Rxja1LWyVH2iYguRK3EeglQu_kuxpHhrLcEDHbbm2uM=452"
+	const other = track + "&second"
+	html := `<div>` +
+		`<span>&#847;&zwnj; &#847;&zwnj; &#847;&zwnj; &#847;&zwnj;</span>` +
+		`<p><a href="` + track + `">r/GMail</a></p>` +
+		`<p>Google suddenly disabled my account</p>` +
+		`<p><a href="` + track + `">Read More</a></p>` +
+		`<p><a href="` + other + `">Hide r/GMail</a></p>` +
+		`<p>5&zwnj;4&zwnj;8 M&zwnj;a&zwnj;rket S&zwnj;t.</p>` +
+		`</div>`
+
+	got := htmlToText(html)
+	t.Logf("rendering:\n%s", got)
+
+	// The prose is readable: no URL interrupts it.
+	body, refs, ok := strings.Cut(got, "\n\n--\n")
+	if !ok {
+		t.Fatal("no reference list emitted")
+	}
+	if strings.Contains(body, "http") {
+		t.Errorf("a URL leaked into the message text:\n%s", body)
+	}
+	for _, want := range []string{"[r/GMail][1]", "[Read More][1]", "[Hide r/GMail][2]",
+		"Google suddenly disabled my account"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("message text lost %q:\n%s", want, body)
+		}
+	}
+
+	// Invisible padding and the zero-width-split address are gone — the address is searchable.
+	for _, unwanted := range []string{"\u200c", "\u034f"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("rendering still carries an invisible character %q", unwanted)
+		}
+	}
+	if !strings.Contains(body, "548 Market St.") {
+		t.Errorf("zero-width-split address was not reassembled:\n%s", body)
+	}
+
+	// Nothing is hidden: every distinct target survives in full, once.
+	if !strings.Contains(refs, "[1]: "+track+"\n") {
+		t.Errorf("target 1 not listed in full:\n%s", refs)
+	}
+	if !strings.Contains(refs, "[2]: "+other+"\n") {
+		t.Errorf("target 2 not listed in full:\n%s", refs)
+	}
+	if strings.Count(refs, "[1]:") != 1 {
+		t.Errorf("a repeated destination was listed more than once:\n%s", refs)
+	}
+}
+
+// A message with no links must not grow an empty reference section.
+func TestHTMLToText_NoLinksNoReferenceList(t *testing.T) {
+	got := htmlToText(`<p>Just a note.</p>`)
+	if strings.Contains(got, "--") {
+		t.Errorf("emitted a reference list for a message with no links: %q", got)
 	}
 }

@@ -122,6 +122,16 @@ signature is computed over the canonical plaintext with no context tag.
 - envelope v2 is **split** into a small listable encrypted header (sender, subject,
   snippet, recipient lists, body commitments) and a large body, so listing an inbox never
   reads bodies; the bcc list appears only on the sender's own copy;
+- the header's **`snippet`** is the **leading text of the body**, not a free-form summary:
+  the longest valid-UTF-8 prefix of the body's first 140 bytes, empty for a non-text body.
+  Producers MUST derive it from the body they are sealing. It is covered by the header
+  signature, but nothing in the envelope *binds* it to the body the way `body_hash` and the
+  body content address do — so a signer can emit a header whose snippet disagrees with its
+  own body, and a reader that never fetches the body cannot tell. Readers SHOULD therefore
+  re-derive it once the body is decrypted and surface a mismatch: both halves are signed by
+  the same key, so a disagreement is a deliberate act by the signer, not corruption. Because
+  it IS body text, a reader that withholds an untrusted sender's body should withhold the
+  snippet on the same terms — it is a fragment of the thing being withheld;
 - the header may carry a **`sender_display`** name — the human-readable name legacy mail
   puts in its From header, which a bridge would otherwise have to discard. It is covered by
   the header signature, so no relay can rewrite it, but it is **asserted, not verified**:

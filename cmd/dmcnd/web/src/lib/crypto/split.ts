@@ -122,6 +122,10 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 // snippetOf returns the longest valid-UTF-8 prefix of the first SNIPPET_MAX bytes
 // of a text body (parity with Go snippetOf — never splits a multibyte rune).
+//
+// The prefix IS the contract (SPEC.md), not a choice this composer makes: a producer derives
+// the snippet from the body it is sealing. Nothing binds the two the way body_hash binds the
+// body, so a reader holding the body can re-derive and compare — Go's message.VerifySnippet.
 function snippetOf(contentType: string, content: Uint8Array): string {
   if (contentType !== 'text/plain') return '';
   let s = content.length > SNIPPET_MAX ? content.slice(0, SNIPPET_MAX) : content;

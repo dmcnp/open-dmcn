@@ -9,7 +9,7 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
-import { isReceivedForMe } from '../lib/mailView';
+import { isReceivedForMe, previewText } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
 import { IconButton } from '../ds';
 import { Icon } from '../components/Icon';
@@ -164,7 +164,14 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flex: 'none' }}>{formatWhen(msg.sentAt)}</span>
             </div>
             <div style={{ marginTop: 2, fontSize: 'var(--text-md)', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.subject || '(no subject)'}</div>
-            {msg.snippet && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{msg.snippet}</div>}
+          {/* The snippet is body text — the leading 140 bytes of it (SPEC.md) — so it is
+              withheld on exactly the terms the body is. An unknown sender's body is already
+              hidden behind the reveal gate at read time; showing their snippet here would put
+              a line of their own words in front of the owner while they are still deciding
+              whether to trust them, which is the thing that gate exists to prevent. The check
+              is address-based and therefore spoofable: it stops an unknown sender, not a
+              targeted spoof of a known one, which the reader catches on open. */}
+            {msg.snippet && !unknownSender && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{previewText(msg.snippet)}</div>}
           </div>
         </div>
       </div>
@@ -204,9 +211,9 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
         <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 'none', maxWidth: '45%' }}>
           {msg.subject || '(no subject)'}
         </span>
-        {msg.snippet && (
+        {msg.snippet && !unknownSender && (
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-            &mdash; {msg.snippet}
+            &mdash; {previewText(msg.snippet)}
           </span>
         )}
       </div>
