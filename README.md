@@ -314,7 +314,7 @@ formats (they are end-to-end-sealed message payloads, not wire ops).
 make build        # embedded SPA + bin/dmcnd
 make test         # go test ./...
 make proto        # regenerate dmcnpb/ from proto/ (requires buf + protoc-gen-go)
-make proto-web    # regenerate the browser protobuf bundle (cmd/dmcnd/web/src/lib/proto)
+make proto-web    # regenerate the browser protobuf bundle (cmd/dmcnd/web/app/proto)
 make build-web    # rebuild the embedded SPA (needs Node 20+)
 make site         # render dmcn.dev into docs/
 make site-serve   # preview docs/ on localhost:8081 with production headers

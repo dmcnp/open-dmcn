@@ -1,5 +1,6 @@
 // Protobuf encode/decode backed by a statically generated module (pbjs
-// static-module: src/lib/proto/dmcn.js) instead of runtime reflection/codegen,
+// static-module: web/app/proto/dmcn.js, reached via the @proto alias) instead of runtime
+// reflection/codegen,
 // so it works under a strict CSP with no 'unsafe-eval'. The static codecs are
 // byte-identical to Go's deterministic marshaling (verified). The getRoot()/
 // lookupType() shim keeps the existing helper call sites below unchanged.
