@@ -21,6 +21,8 @@ export function Login() {
   const { accounts, busy, error, needsPassword, beginUnlock, cancelUnlock, switchTo, forget } = useAccountSwitch();
   const location = useLocation();
   const expired = (location.state as { reason?: string } | null)?.reason === 'expired';
+  // Absent ⇒ this deployment has no pairing flow; offer no route into one.
+  const pairing = deployment.pairing;
 
   if (accounts === null) return null; // loading IndexedDB
 
@@ -36,8 +38,8 @@ export function Login() {
             Your keys never leave your devices, so there's nothing on the server to sign
             in with. Bring an existing identity onto {isInstalledApp() ? 'this app' : 'this browser'}:
           </p>
-          <Link to="/pair"><Button size="lg" fullWidth>Add this device (pairing)</Button></Link>
-          <Link to="/import"><Button size="lg" variant="secondary" fullWidth>Import a backup or keystore</Button></Link>
+          {pairing && <Link to={pairing.path}><Button size="lg" fullWidth>Add this device (pairing)</Button></Link>}
+          <Link to="/import"><Button size="lg" variant={pairing ? 'secondary' : 'primary'} fullWidth>Import a backup or keystore</Button></Link>
         </div>
       </AuthShell>
     );
@@ -51,7 +53,7 @@ export function Login() {
         <span>
           Add another: {deployment.signUp.inline}
           {' · '}<Link to="/import" style={linkStyle}>import</Link>
-          {' · '}<Link to="/pair" style={linkStyle}>pair a device</Link>
+          {pairing && <>{' · '}<Link to={pairing.path} style={linkStyle}>pair a device</Link></>}
         </span>
       }
     >

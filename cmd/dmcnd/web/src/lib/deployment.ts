@@ -63,6 +63,20 @@ export interface Deployment {
     // The short inline variant, offered beside an existing account list.
     inline: ReactNode;
   };
+  // Whether an existing identity can be brought onto this device by pairing with a device
+  // that already holds it — and if so, where that flow lives. Absent ⇒ this deployment has
+  // no pairing, and the sign-in screen offers none.
+  //
+  // Absent is the default because pairing is not a setting a deployment can simply switch
+  // on: it needs the flow itself (a pre-auth screen here, a responder on the other device,
+  // and control messages the mail UI must recognise but never show), all of which a
+  // deployment supplies or does not. A build without it must not advertise it — on the
+  // empty-device screen the pairing button is the PRIMARY action, and a primary action
+  // that routes nowhere lands the reader back on sign-in with no explanation.
+  //
+  // The path is carried here rather than assumed so this and authRoutes cannot disagree:
+  // whatever registers the screen is what the sign-in page links to.
+  pairing?: { path: string };
   // Extra pre-auth screens (outside the signed-in shell), e.g. device pairing.
   authRoutes: { path: string; element: ReactNode }[];
   // Extra sections inside the signed-in shell, e.g. an admin console.
