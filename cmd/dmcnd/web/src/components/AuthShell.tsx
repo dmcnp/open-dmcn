@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 import { readTheme } from '../lib/theme';
-import { DEFAULT_DOMAIN } from '../lib/config';
+import { deployment } from '../deployment';
 
 export interface AuthShellProps {
   /** Heading above the form (e.g. "Welcome back"). */
@@ -16,24 +16,12 @@ export interface AuthShellProps {
   footer?: ReactNode;
 }
 
-// No "we" here: the reference client has no provider behind it, and on a self-hosted
-// daemon the operator may well be the reader themselves. State the property that is
-// actually true of the software — keys stay on the device — and claim nothing about who
-// is running the server.
-const DEFAULT_NOTE = 'Your keys are generated and kept on this device. Mail is decrypted here, never on the server.';
-
 /**
- * Single-panel authentication layout, shared by sign-in, register, import and device
- * pairing so every pre-auth screen matches.
- *
- * Deliberately unbranded. This client ships with no product identity: it is the webmail
- * the daemon serves, and the only name worth showing is the DEPLOYMENT's own domain —
- * whoever runs it. It carried a wordmark and a marketing panel ("Email that only you can
- * read", three feature columns) inherited from the hosted product; both are gone. A
- * reference implementation should not sell anything, and a self-hoster should not have to
- * strip someone else's brand out of their own mail client.
+ * Authentication layout, shared by sign-in, register, import and device pairing so every
+ * pre-auth screen matches. The form is always the left column; whether anything sits beside
+ * it, and what name appears above it, are the deployment's to say (see lib/deployment.ts).
  */
-export function AuthShell({ title, subtitle, children, note = DEFAULT_NOTE, footer }: AuthShellProps) {
+export function AuthShell({ title, subtitle, children, note = deployment.branding.note, footer }: AuthShellProps) {
   return (
     <div
       data-theme={readTheme()}
@@ -50,12 +38,7 @@ export function AuthShell({ title, subtitle, children, note = DEFAULT_NOTE, foot
         padding: 'calc(var(--space-8) + env(safe-area-inset-top)) calc(var(--space-8) + env(safe-area-inset-right)) calc(var(--space-8) + env(safe-area-inset-bottom)) calc(var(--space-8) + env(safe-area-inset-left))',
       }}>
         <div style={{ width: '100%', maxWidth: 430 }}>
-          {DEFAULT_DOMAIN && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
-              <Icon name="mail" size={20} />
-              <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-strong)' }}>{DEFAULT_DOMAIN}</span>
-            </div>
-          )}
+          {deployment.branding.mark}
           <h1 style={{ margin: 'var(--space-6) 0 var(--space-1)', fontSize: 'var(--text-2xl)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>{title}</h1>
           <p style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--text-muted)' }}>{subtitle}</p>
 
@@ -70,6 +53,17 @@ export function AuthShell({ title, subtitle, children, note = DEFAULT_NOTE, foot
           {footer && <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{footer}</div>}
         </div>
       </div>
+
+      {/* Beside the form: the deployment's own panel, when it has one. Hidden on narrow
+          viewports by .dmcn-auth-brand in tokens.css, where the form takes the screen. */}
+      {deployment.branding.authPanel && (
+        <div className="dmcn-auth-brand" style={{
+          flex: '1 1 0', display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          padding: 'var(--space-20)',
+        }}>
+          {deployment.branding.authPanel}
+        </div>
+      )}
 
     </div>
   );

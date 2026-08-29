@@ -9,15 +9,13 @@ import { SettingsProvider } from './lib/hooks/useSettings';
 import { ContactsProvider } from './lib/hooks/useContacts';
 import { MailFilterProvider } from './lib/hooks/useMailFilter';
 import { Login } from './pages/Login';
-import { Register } from './pages/Register';
-import { Petition } from './pages/Petition';
 import { Import } from './pages/Import';
 import { InboxMain } from './pages/InboxMain';
 import { Contacts } from './pages/Contacts';
 import { Settings } from './pages/Settings';
 import { AppLayout } from './components/AppLayout';
 import { SessionRenewer } from './components/SessionRenewer';
-import { PETITION_MODE } from './lib/config';
+import { deployment } from './deployment';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -47,17 +45,19 @@ export function App() {
           <SessionRenewer />
           <Routes>
             <Route path="/login" element={<Login />} />
-            {/* One route, two pages, chosen by where the domain root key is. A live domain
-                cannot mint an address, so /register is the petition flow there — the daemon does
-                not even route POST /api/v1/register in that mode. */}
-            <Route path="/register" element={PETITION_MODE ? <Petition /> : <Register />} />
+            {/* Registration and any extra pre-auth screens are the deployment's (see
+                lib/deployment.ts): what it takes to get an address here is a property of
+                who runs the domain, not of the mail client. */}
+            <Route path="/register" element={deployment.registerScreen} />
             <Route path="/import" element={<Import />} />
+            {deployment.authRoutes.map(r => <Route key={r.path} path={r.path} element={r.element} />)}
             {/* Authenticated app: one persistent shell (sidebar + top bar + compose);
                 the active section renders in the main column via <Outlet/>. */}
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/inbox" element={<InboxMain />} />
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/settings" element={<Settings />} />
+              {deployment.appRoutes.map(r => <Route key={r.path} path={r.path} element={r.element} />)}
             </Route>
             <Route path="*" element={<Navigate to="/inbox" replace />} />
           </Routes>

@@ -24,6 +24,7 @@ import { categorizeSender } from '../lib/trust/category';
 import { directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
+import { deployment } from '../deployment';
 
 // attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
 // NEVER shown with a trust shield: even the best case (SPF/DKIM/DMARC pass + an operator-
@@ -145,16 +146,23 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// System attachments carried for protocol purposes (the bridge attestation, the
-// delivery receipt, and the raw legacy source) are consumed elsewhere and hidden from
-// the user-facing attachment list.
-const INTERNAL_ATTACHMENT_TYPES = new Set<string>([
-  CLASSIFICATION_CONTENT_TYPE,
-  RECEIPT_CONTENT_TYPE,
-  'message/rfc822', // original.eml — raw legacy email preserved by the bridge
-]);
+// System attachments carried for protocol purposes are consumed elsewhere and hidden
+// from the user-facing attachment list: the bridge attestation and delivery receipt, the
+// raw legacy source, and whatever control payloads this deployment carries.
+// Built on demand, not at module load: `deployment` imports the screens it contributes, so
+// reading it while THIS module is being evaluated would depend on which side of that cycle
+// loaded first. A function has no such ordering to get wrong.
+function internalAttachmentTypes(): Set<string> {
+  return new Set<string>([
+    CLASSIFICATION_CONTENT_TYPE,
+    RECEIPT_CONTENT_TYPE,
+    'message/rfc822', // original.eml — raw legacy email preserved by the bridge
+    ...deployment.internalAttachmentTypes,
+  ]);
+}
 function userAttachments(all: DecryptedAttachment[]): DecryptedAttachment[] {
-  return all.filter(a => !INTERNAL_ATTACHMENT_TYPES.has(a.contentType));
+  const internal = internalAttachmentTypes();
+  return all.filter(a => !internal.has(a.contentType));
 }
 
 // sanitizeFilename strips path separators, control chars, and leading dots before the

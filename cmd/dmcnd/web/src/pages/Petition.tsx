@@ -3,14 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import {
-  createPetition, petitionStatus, completePetition, loginWithKeys, getRelayHints, ApiError,
+  createPetition, petitionStatus, completePetition, loginWithKeys, ApiError,
 } from '../lib/api/client';
+import { buildSelfSignedRecord } from '../lib/crypto/enrollment';
 import { generateIdentityKeyPair, importEd25519PrivateKey, keyPairFromPayloadJSON, toBase64 } from '../lib/crypto/keys';
 import { encryptKeys, encryptKeysWithKey, decryptKeys, decryptKeysWithKey, type EncryptedBundle } from '../lib/crypto/keystore';
 import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, clearLocalKeystore } from '../lib/crypto/localKeystore';
 import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
-import { encodeIdentitySignableBytes, encodeIdentityRecord } from '../lib/crypto/protobuf';
-import { signSelfSignature } from '../lib/crypto/identity';
 import { sign } from '../lib/crypto/sign';
 import { unlockPasskeyPRF } from '../lib/crypto/passkey';
 import { DEFAULT_DOMAIN } from '../lib/config';
@@ -173,18 +172,7 @@ export function Petition() {
       const keys = keyPairFromPayloadJSON(keyBytes);
       const seed = keys.ed25519Private.slice(0, 32);
 
-      const { relay_hints } = await getRelayHints(address);
-      const recordBase = {
-        version: 1, address,
-        ed25519PublicKey: keys.ed25519Public, x25519PublicKey: keys.x25519Public,
-        createdAt: keys.createdAt, expiresAt: 0, relayHints: relay_hints,
-        verificationTier: 0, bridgeCapability: false,
-        // Match Go's NewIdentityRecord, which starts at 1 — see Register.tsx.
-        revision: 1,
-      };
-      const signableBytes = await encodeIdentitySignableBytes(recordBase);
-      const selfSignature = await signSelfSignature(seed, signableBytes);
-      const identityRecordBytes = await encodeIdentityRecord({ ...recordBase, selfSignature });
+      const { identityRecordBytes } = await buildSelfSignedRecord(address, keys);
 
       await completePetition({ code: p.code, identity_record: toBase64(identityRecordBytes) });
 

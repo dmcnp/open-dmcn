@@ -10,16 +10,10 @@ import { listLocalKeystores, clearLocalKeystore, type LocalKeystore } from '../l
 import { loadWorkingKeys, clearWorkingKeys } from '../lib/crypto/workingKeys';
 import { workingKeyRef } from '../lib/sessionLifetime';
 import { AuthShell } from '../components/AuthShell';
+import { deployment } from '../deployment';
 import { Button, IconButton, Input } from '../ds';
 import { Icon } from '../components/Icon';
-import { PETITION_MODE } from '../lib/config';
 
-// The "create an account" affordance. It always links the in-app register page, but on a
-// live domain nothing is created on demand — you ask an admin — so the wording has to
-// change with it, or the link promises something the page cannot do.
-function CreateAccountLink({ label, petitionLabel }: { label: string; petitionLabel: string }) {
-  return <Link to="/register" style={linkStyle}>{PETITION_MODE ? petitionLabel : label}</Link>;
-}
 
 const linkStyle = { color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 } as const;
 
@@ -119,7 +113,7 @@ export function Login() {
       <AuthShell
         title="Set up this device"
         subtitle="There's no identity stored in this browser yet."
-        footer={<>Don't have a mailbox here yet? <CreateAccountLink label="Create an account" petitionLabel="Ask for a mailbox" /></>}
+        footer={deployment.signUp.prompt}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
@@ -141,7 +135,7 @@ export function Login() {
       subtitle="Unlock an identity stored on this device."
       footer={
         <span>
-          Add another: <CreateAccountLink label="create" petitionLabel="ask for a mailbox" />
+          Add another: {deployment.signUp.inline}
           {' · '}<Link to="/import" style={linkStyle}>import</Link>
         </span>
       }

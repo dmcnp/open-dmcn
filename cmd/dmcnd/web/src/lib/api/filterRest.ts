@@ -1,39 +1,26 @@
-// MailFilterClient holds the account's block/allow list. In the DMCN PRODUCT the list
-// lived server-side at the mailbox relay (sealed to the owner + the relay) so the relay
-// could silently DROP blocked senders at delivery. The OPEN protocol does not carry that
-// operator surface, so here the list is browser-local and advisory: it drives the
-// client-side trust view (blocked/unknown senders are hidden in the UI), but mail is not
-// dropped at the relay. The public interface (get/save/clear + FilterList) is unchanged,
-// so useMailFilter and its consumers are untouched.
+// This deployment's block/allow list: device-local, in IndexedDB.
+//
+// The relay-held form the product uses is an operator surface the open protocol does not
+// carry, so the list here is advisory — it drives the client-side trust view, and blocked
+// mail still arrives, it just isn't shown. Everything else about it is the same; see
+// lib/api/filterList.ts for the shared shape and lib/deployment.ts for the seam.
 
 import { idbGet, idbPut, idbDelete, PERSONAL_STORE } from '../crypto/idb';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
-// FilterList mirrors Go's mailfilter.List JSON.
-export interface FilterList {
-  mode: 'deny' | 'allow';
-  domains: string[];
-  senders: string[];
-  allow_verified?: boolean;
-  // Hex ed25519 public keys of blocked identities (§14.3.1). Unlike senders/domains,
-  // a sender_keys match ALWAYS hides regardless of mode — a personal blocklist bound
-  // to the cryptographic identity, so a blocked sender can't evade by changing their
-  // address string.
-  sender_keys?: string[];
-}
-
-export function emptyFilterList(): FilterList {
-  return { mode: 'deny', domains: [], senders: [], allow_verified: false, sender_keys: [] };
-}
+export type { FilterList } from './filterList';
+import type { FilterList, MailFilter } from './filterList';
 
 // The single logical key the filter list is stored under, per account.
 const FILTER_KEY = 'filter/list';
 
-export class MailFilterClient {
+export class MailFilterClient implements MailFilter {
   // The owner address namespaces the list within the shared per-origin store.
   private owner: string;
 
-  constructor(keys: WorkingKeys) {
+  // explicitToken is accepted to satisfy MailFilterFactory and deliberately ignored: this
+  // list never leaves the device, so there is no session for it to be read under.
+  constructor(keys: WorkingKeys, _explicitToken?: string) {
     this.owner = keys.address;
   }
 
