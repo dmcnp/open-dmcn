@@ -92,6 +92,13 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
     }}>New</span>
   ) : null;
   const nameWeight = unread ? 700 : 500;
+  // The cleaned preview decides everything about the snippet: whether it renders, and how the
+  // subject is sized — so the two can never disagree about how many columns the middle of the
+  // row holds. Cleaning first matters: bulk mail routinely opens with "[image: Logo][1]", which
+  // previewText reduces to nothing, and an empty preview must not claim a column or leave a
+  // dangling em-dash behind.
+  const preview = msg.snippet && !unknownSender ? previewText(msg.snippet) : '';
+  const showSnippet = preview !== '';
   // For a sent message the "who" is the full recipient audience (To + Cc). Falls back
   // to the singular recipientAddress for pre-feature messages with no lists. Every
   // recipient address goes through nameFor, so a contact shows under the name its owner gave it.
@@ -171,7 +178,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
               whether to trust them, which is the thing that gate exists to prevent. The check
               is address-based and therefore spoofable: it stops an unknown sender, not a
               targeted spoof of a known one, which the reader catches on open. */}
-            {msg.snippet && !unknownSender && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{previewText(msg.snippet)}</div>}
+            {showSnippet && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{preview}</div>}
           </div>
         </div>
       </div>
@@ -208,12 +215,16 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
         {newSenderTag}
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 'none', maxWidth: '45%' }}>
+        {/* The 45% cap exists to leave room for the snippet beside it. With no snippet there
+            is no second column to leave room for, so the subject takes the whole middle and
+            truncates only when it genuinely overruns — `0 1 auto` + minWidth:0 so it still
+            shrinks against the date column rather than pushing through it. */}
+        <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(showSnippet ? { flex: 'none', maxWidth: '45%' } : { flex: '0 1 auto', minWidth: 0 }) }}>
           {msg.subject || '(no subject)'}
         </span>
-        {msg.snippet && !unknownSender && (
+        {showSnippet && (
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-            &mdash; {previewText(msg.snippet)}
+            &mdash; {preview}
           </span>
         )}
       </div>
