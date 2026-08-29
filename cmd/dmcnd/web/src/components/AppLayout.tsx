@@ -17,11 +17,12 @@ import { LabelManager } from './LabelManager';
 import { AccountMenu } from './AccountMenu';
 import { NavRow } from './NavRow';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 
 import { Button, IconButton, Input } from '../ds';
 import { Icon } from './Icon';
-import { ComposeDialog, type ComposeReplyTo } from './ComposeDialog';
+import { ComposeDialog } from './ComposeDialog';
+import type { ComposeReplyTo } from '../lib/compose';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode, createElement } from 'react';
 import { emptyFilterList, type FilterList, type MailFilter } from '../api/filterList';
-import { deployment } from '../../deployment';
+import { deployment } from '@deployment';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 

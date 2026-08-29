@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 import { readTheme } from '../lib/theme';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 
 export interface AuthShellProps {
   /** Heading above the form (e.g. "Welcome back"). */

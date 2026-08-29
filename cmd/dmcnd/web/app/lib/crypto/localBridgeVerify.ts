@@ -10,17 +10,17 @@
 //
 // The daemon never sees plaintext, so this runs entirely over the decrypted attachment.
 
-import { decodeBridgeClassification, decodeCredentialFromClassification, decodeDeliveryReceipt, decodeCredentialFromReceipt } from './protobuf';
-import { verify } from './sign';
-import { fromBase64 } from './keys';
-import { envVal } from '../config';
+import { decodeBridgeClassification, decodeCredentialFromClassification, decodeDeliveryReceipt, decodeCredentialFromReceipt } from './bridgeProtobuf';
+import { verify } from '../../../src/lib/crypto/sign';
+import { fromBase64 } from '../../../src/lib/crypto/keys';
+import { envVal } from '../../../src/lib/config';
 
 // This domain's root Ed25519 public key (base64). Public by construction — it is what the
 // domain's _dmcn DNS fingerprint commits to. Read here rather than from shared config
 // because it is this deployment's trust anchor, and no other deployment has one.
 const DOMAIN_ROOT_PUB = envVal('DOMAIN_ROOT_PUB', '');
-import { BridgeTrustTier, type BridgeAttestation } from './bridgeAttest';
-import type { DeliveryReceiptView } from './receiptAttest';
+import { BridgeTrustTier, type BridgeAttestation } from '../../../src/lib/crypto/bridgeAttest';
+import type { DeliveryReceiptView } from '../../../src/lib/crypto/receiptAttest';
 
 // ROLE_BRIDGE mirrors identity.RoleBridge (Go).
 const ROLE_BRIDGE = 'bridge';

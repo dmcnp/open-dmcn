@@ -6,7 +6,7 @@
 // default (a success receipt per message is noise), so in practice this renders bounces. It
 // still verifies success the same way, because a self-hoster can turn success receipts on.
 
-import { deployment } from '../../deployment';
+import { deployment } from '@deployment';
 import type { AttachmentLike } from './bridgeAttest';
 
 export const RECEIPT_CONTENT_TYPE = 'application/x-dmcn-bridge-delivery-receipt';

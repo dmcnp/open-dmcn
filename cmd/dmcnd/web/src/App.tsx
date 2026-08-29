@@ -9,13 +9,12 @@ import { SettingsProvider } from './lib/hooks/useSettings';
 import { ContactsProvider } from './lib/hooks/useContacts';
 import { MailFilterProvider } from './lib/hooks/useMailFilter';
 import { Login } from './pages/Login';
-import { Import } from './pages/Import';
 import { InboxMain } from './pages/InboxMain';
 import { Contacts } from './pages/Contacts';
 import { Settings } from './pages/Settings';
 import { AppLayout } from './components/AppLayout';
 import { SessionRenewer } from './components/SessionRenewer';
-import { deployment } from './deployment';
+import { deployment } from '@deployment';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -49,7 +48,6 @@ export function App() {
                 lib/deployment.ts): what it takes to get an address here is a property of
                 who runs the domain, not of the mail client. */}
             <Route path="/register" element={deployment.registerScreen} />
-            <Route path="/import" element={<Import />} />
             {deployment.authRoutes.map(r => <Route key={r.path} path={r.path} element={r.element} />)}
             {/* Authenticated app: one persistent shell (sidebar + top bar + compose);
                 the active section renders in the main column via <Outlet/>. */}

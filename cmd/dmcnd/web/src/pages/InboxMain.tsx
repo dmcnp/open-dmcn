@@ -17,9 +17,9 @@ import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
 import { senderLabel } from '../lib/trust/displayName';
 import { MessageReader } from '../components/MessageReader';
-import type { ComposeReplyTo } from '../components/ComposeDialog';
+import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 
 // Control messages this deployment carries (device pairing, countersign requests) are
 // surfaced in their own panels, not the normal mail folders. Empty on a deployment whose

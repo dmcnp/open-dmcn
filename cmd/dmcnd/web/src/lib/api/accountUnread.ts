@@ -13,7 +13,7 @@
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { MailboxSync } from './mailboxRest';
 import { FlagStore } from './flagStore';
-import { MailFilterClient } from './filterRest';
+import { deployment } from '@deployment';
 import { loginWithKeys, ApiError } from './client';
 import { countUnread } from '../unread';
 
@@ -37,7 +37,7 @@ async function countWithToken(address: string, wk: WorkingKeys, token: string): 
     new FlagStore(wk, token).list(),
     // A missing/unreadable blocklist only means blocked senders aren't excluded —
     // not a reason to report no count at all.
-    new MailFilterClient(wk, token).get().catch(() => null),
+    deployment.mailFilter(wk, token).get().catch(() => null),
   ]);
   return countUnread(previews, address, flags, filter);
 }

@@ -6,10 +6,10 @@
 
 import type { Preview } from './api/mailboxRest';
 import type { FlagRecord } from './api/flagStore';
-import type { FilterList } from './api/filterRest';
+import type { FilterList } from './api/filterList';
 import { isReceivedForMe } from './mailView';
 import { filterBlocks } from './trust/category';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 
 // Control messages this deployment carries surface in their own panels, not the inbox, so
 // they never count as unread mail. A function rather than a module-level Set: `deployment`

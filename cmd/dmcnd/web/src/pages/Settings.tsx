@@ -22,7 +22,7 @@ import { useSettings } from '../lib/hooks/useSettings';
 import { useStorageUsage } from '../lib/hooks/useStorageUsage';
 import { Badge, Button, Input, Textarea, Switch, Tabs, UsageMeter } from '../ds';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 import { Icon } from '../components/Icon';
 
 type Section = 'profile' | 'privacy' | 'appearance' | 'account';

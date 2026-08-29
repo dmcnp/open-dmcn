@@ -5,11 +5,11 @@
 // mail still arrives, it just isn't shown. Everything else about it is the same; see
 // lib/api/filterList.ts for the shared shape and lib/deployment.ts for the seam.
 
-import { idbGet, idbPut, idbDelete, PERSONAL_STORE } from '../crypto/idb';
-import type { WorkingKeys } from '../crypto/workingKeys';
+import { idbGet, idbPut, idbDelete, PERSONAL_STORE } from '../../../src/lib/crypto/idb';
+import type { WorkingKeys } from '../../../src/lib/crypto/workingKeys';
 
-export type { FilterList } from './filterList';
-import type { FilterList, MailFilter } from './filterList';
+export type { FilterList } from '../../../src/lib/api/filterList';
+import type { FilterList, MailFilter } from '../../../src/lib/api/filterList';
 
 // The single logical key the filter list is stored under, per account.
 const FILTER_KEY = 'filter/list';

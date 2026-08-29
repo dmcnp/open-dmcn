@@ -7,12 +7,13 @@
 //
 // See lib/deployment.ts for what belongs in this file and what does not.
 
-import type { Deployment } from './lib/deployment';
+import type { Deployment } from '../src/lib/deployment';
 import { MailFilterClient } from './lib/api/filterRest';
-import { Icon } from './components/Icon';
-import { DEFAULT_DOMAIN, envVal } from './lib/config';
+import { Icon } from '../src/components/Icon';
+import { DEFAULT_DOMAIN, envVal } from '../src/lib/config';
 import { Link } from 'react-router-dom';
 import { Register } from './pages/Register';
+import { Import } from './pages/Import';
 import { Petition } from './pages/Petition';
 import { verifyClassificationLocal, verifyReceiptLocal } from './lib/crypto/localBridgeVerify';
 
@@ -61,7 +62,7 @@ export const deployment: Deployment = {
     inline: <Link to="/register" style={linkStyle}>{PETITION_MODE ? 'ask for a mailbox' : 'create'}</Link>,
   },
   // No device pairing and no admin console here: both are product surfaces.
-  authRoutes: [],
+  authRoutes: [{ path: '/import', element: <Import /> }],
   appRoutes: [],
   // The open protocol carries no control messages — device pairing and countersign
   // requests are product surfaces — so nothing is hidden from the mail folders here.

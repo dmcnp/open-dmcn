@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Preview, FullBody } from '../lib/api/mailboxRest';
-import type { ComposeReplyTo } from './ComposeDialog';
+import type { ComposeReplyTo } from '../lib/compose';
 import { useMessages } from '../lib/hooks/useMessages';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
@@ -24,7 +24,7 @@ import { categorizeSender } from '../lib/trust/category';
 import { directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 
 // attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
 // NEVER shown with a trust shield: even the best case (SPF/DKIM/DMARC pass + an operator-

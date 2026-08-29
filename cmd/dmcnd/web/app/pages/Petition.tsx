@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../lib/hooks/useAuth';
-import { useKeys } from '../lib/hooks/useKeys';
-import {
-  createPetition, petitionStatus, completePetition, loginWithKeys, ApiError,
-} from '../lib/api/client';
-import { buildSelfSignedRecord } from '../lib/crypto/enrollment';
-import { generateIdentityKeyPair, importEd25519PrivateKey, keyPairFromPayloadJSON, toBase64 } from '../lib/crypto/keys';
-import { encryptKeys, encryptKeysWithKey, decryptKeys, decryptKeysWithKey, type EncryptedBundle } from '../lib/crypto/keystore';
-import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, clearLocalKeystore } from '../lib/crypto/localKeystore';
-import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
-import { sign } from '../lib/crypto/sign';
-import { unlockPasskeyPRF } from '../lib/crypto/passkey';
-import { DEFAULT_DOMAIN } from '../lib/config';
-import { AuthShell } from '../components/AuthShell';
-import { ChoiceRow } from '../components/ChoiceRow';
-import { Button, Input } from '../ds';
-import { Icon } from '../components/Icon';
+import { useAuth } from '../../src/lib/hooks/useAuth';
+import { useKeys } from '../../src/lib/hooks/useKeys';
+import { loginWithKeys, ApiError } from '../../src/lib/api/client';
+import { createPetition, petitionStatus, completePetition } from '../lib/api/daemonClient';
+import { buildSelfSignedRecord } from '../../src/lib/crypto/enrollment';
+import { generateIdentityKeyPair, importEd25519PrivateKey, keyPairFromPayloadJSON, toBase64 } from '../../src/lib/crypto/keys';
+import { encryptKeys, encryptKeysWithKey, decryptKeys, decryptKeysWithKey, type EncryptedBundle } from '../../src/lib/crypto/keystore';
+import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, clearLocalKeystore } from '../../src/lib/crypto/localKeystore';
+import { isPasskeySupported, createPasskeyPRF } from '../../src/lib/crypto/passkey';
+import { sign } from '../../src/lib/crypto/sign';
+import { unlockPasskeyPRF } from '../../src/lib/crypto/passkey';
+import { DEFAULT_DOMAIN } from '../../src/lib/config';
+import { AuthShell } from '../../src/components/AuthShell';
+import { ChoiceRow } from '../../src/components/ChoiceRow';
+import { Button, Input } from '../../src/ds';
+import { Icon } from '../../src/components/Icon';
 
 // Petition is the sign-up page for a domain whose root key is kept offline. Nobody — including
 // this daemon — can mint an address there, so there is nothing to "create". What the page does

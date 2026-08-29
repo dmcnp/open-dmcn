@@ -4,7 +4,7 @@ import { useAccountSwitch } from '../lib/hooks/useAccountSwitch';
 import { isInstalledApp } from '../lib/appContext';
 import { AccountMonogram } from '../components/AccountMonogram';
 import { AuthShell } from '../components/AuthShell';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 import { Button, IconButton, Input } from '../ds';
 import { Icon } from '../components/Icon';
 

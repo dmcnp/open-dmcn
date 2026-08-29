@@ -1,8 +1,11 @@
+import type { ComposeReplyTo } from '../lib/compose';
+import { deployment } from '@deployment';
 import { useState, useRef, useEffect } from 'react';
 import type { CSSProperties, ReactNode, KeyboardEvent } from 'react';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
-import { lookupIdentity, sendMessage } from '../lib/api/client';
+import { lookupIdentity, sendMessage, ApiError } from '../lib/api/client';
+import { absentIdentityFacts, checkPin, changedFacts, contactFacts, directoryFacts, pinnedIdentityGoneWarning, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
 import { encryptSplit, type SplitEnvelope, type AttachmentInput } from '../lib/crypto/split';
 import { encodeSplitEnvelope } from '../lib/crypto/protobuf';
 import { signWithKey } from '../lib/crypto/sign';
@@ -10,7 +13,6 @@ import { toBase64, fromBase64, toHex, fromHex } from '../lib/crypto/keys';
 import { SentStore } from '../lib/api/sentStore';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useContacts, type Contact } from '../lib/hooks/useContacts';
-import { absentIdentityFacts, checkPin, changedFacts, contactFacts, directoryFacts, pinnedIdentityGoneWarning, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
 import { DEFAULT_DOMAIN } from '../lib/config';
 import { Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
@@ -19,22 +21,34 @@ import { sanitizeOutgoing } from '../lib/html/sanitize';
 import { toPlainText } from '../lib/html/toPlainText';
 import { fromPlainText } from '../lib/html/fromPlainText';
 
-export interface ComposeReplyTo {
-  // One or more recipients: a plain Reply carries just the sender; Reply All carries
-  // the sender plus every other original recipient (see MessageReader.buildReply).
-  to: string[];
-  cc?: string[];
-  // Raw subject; the "Re:" prefix is applied below.
-  subject: string;
-  // Prebuilt Gmail-style quoted original, placed below the signature. `quote` is the
-  // plain-text form; `quoteHtml` the HTML one (sanitized, cid: images dropped). The
-  // composer picks whichever matches its current mode.
-  quote?: string;
-  quoteHtml?: string;
-  // Threading metadata (hex): the original's messageId -> header replyToId, and the
-  // original's threadId -> continue that thread. Empty/all-zero => start a fresh thread.
-  replyToId?: string;
-  threadId?: string;
+
+// Total attachment cap per message (body + all attachments ride inline in one sealed
+// blob). ~25 MB: works with the existing size-class padding (rounds to whole MB above
+// 1 MB) and stays reasonable for browser memory + the relay's in-memory store.
+const MAX_TOTAL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// truncateFilename shortens a long name in the MIDDLE so the chip fits the compose
+// box while keeping the start and the extension (the full name is in the title tip).
+function truncateFilename(name: string, max = 28): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
+  const keep = Math.max(6, max - ext.length - 1);
+  return name.slice(0, keep) + '…' + ext;
+}
+
+// newUuid returns 16 random bytes with RFC-4122 v4 bits set (attachment_id / message id).
+function newUuid(): Uint8Array {
+  const id = crypto.getRandomValues(new Uint8Array(16));
+  id[6] = (id[6] & 0x0f) | 0x40;
+  id[8] = (id[8] & 0x3f) | 0x80;
+  return id;
 }
 
 // How a recipient can receive this message, driving the chip's shield:
@@ -56,34 +70,6 @@ function recipientChip(kind: RecipientKind | undefined): {
   }
 }
 
-// Attachments ride inline in the sealed body blob, so the cap is a real memory and
-// message-size limit, not a policy knob.
-const MAX_TOTAL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// truncateFilename shortens a long name in the MIDDLE so the chip fits the compose
-// box while keeping the start and the extension (the full name is in the title tip).
-function truncateFilename(name: string, max = 28): string {
-  if (name.length <= max) return name;
-  const dot = name.lastIndexOf('.');
-  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
-  const keep = Math.max(6, max - ext.length - 1);
-  return name.slice(0, keep) + '\u2026' + ext;
-}
-
-// newUuid returns 16 random bytes with RFC-4122 v4 bits set (attachment_id).
-function newUuid(): Uint8Array {
-  const id = crypto.getRandomValues(new Uint8Array(16));
-  id[6] = (id[6] & 0x0f) | 0x40;
-  id[8] = (id[8] & 0x3f) | 0x80;
-  return id;
-}
-
 export interface ComposeDialogProps {
   onClose: () => void;
   /** When set, pre-fills the recipient and a "Re:" subject. */
@@ -103,7 +89,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const { address } = useAuth();
   const { keys } = useKeys();
   const { settings } = useSettings();
-  const { contacts, contactByAddress, nameFor, pinKey, allowlist } = useContacts();
+  const { contacts, nameFor, contactByAddress, pinKey, allowlist } = useContacts();
 
   // Three recipient classes with standard email semantics. To/Cc are visible to
   // everyone; Bcc is only recorded on the sender's own Sent copy (see handleSend).
@@ -134,23 +120,21 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     return out.join('');
   };
 
-  const [body, setBody] = useState(() => plainScaffold(settings.signature ?? ''));
-  // Rich (HTML) is the default for every compose; the account setting flips the STARTING
-  // mode and the footer toggle overrides it for this message only.
+  // Rich (HTML) is the system default for every compose; the account setting may flip the
+  // STARTING mode, and the footer toggle overrides it for this message only.
   const [richMode, setRichMode] = useState(() => settings.composePlainText !== true);
+  const [body, setBody] = useState(() => plainScaffold(settings.signature ?? ''));
   const editorRef = useRef<RichTextEditorHandle>(null);
   // The editor is uncontrolled and reads this only when it mounts, so it doubles as the
-  // seed for a plain -> rich switch (which is exactly when it mounts).
+  // seed for a plain → rich switch (which is exactly when it mounts).
   const richInitial = useRef(htmlScaffold(settings.signature ?? ''));
   // Set once the user edits either body, so a late-loading settings doc never clobbers it.
   const dirtyRef = useRef(false);
-  // Holds the HTML from before a rich -> plain switch, so switching back is lossless as
-  // long as the plain text was not edited in between.
-  const stashedHtml = useRef<string | null>(null);
 
-  // Attachments ride inline in the sealed body blob (one CEK), read fully into memory
-  // here. The ref is authoritative because inline images are inserted from async
-  // handlers that would otherwise read a stale `attachments` closure mid-batch.
+  // Attachments ride inline in the sealed body blob (one CEK). Read fully into memory
+  // here; the crypto layer already round-trips AttachmentInput end-to-end. The ref is
+  // authoritative because images are inserted from async handlers that would otherwise
+  // read a stale `attachments` closure mid-batch.
   const [attachments, setAttachments] = useState<AttachmentInput[]>([]);
   const attachmentsRef = useRef<AttachmentInput[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -161,10 +145,15 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const recipientInput = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   // Per-recipient classification (keyed by lowercased address) for the chip shields.
   const [recipientInfo, setRecipientInfo] = useState<Record<string, RecipientKind>>({});
-  // What the directory currently publishes for each recipient, recorded as they are typed
-  // so a pin mismatch surfaces BEFORE the message is written, not after.
+  // The pinnable facts the directory served for each resolved recipient — both keys plus the
+  // properties a pin covers, not just the signing key. Stored raw rather than as a precomputed
+  // verdict: the comparison depends on the contact list, which loads asynchronously, so deriving
+  // the verdict at render keeps it correct no matter which arrives first. Caching a verdict
+  // computed during the lookup would silently miss a changed key whenever the lookup won the race
+  // against contacts loading.
   const [recipientKeys, setRecipientKeys] = useState<Record<string, PinnedFacts>>({});
 
   // inspectRecipient resolves a recipient once: records whether it's a DMCN identity
@@ -176,35 +165,53 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     try {
       const rec = await lookupIdentity(addr);
       if (rec.require_onion) setOnion(true);
-      // A legacy lookup succeeds, but what it resolves is the BRIDGE, not a correspondent: the
-      // message is sealed to the bridge and leaves the network as ordinary email. Say so, rather
-      // than showing it as a DMCN identity because a lookup happened to return 200.
+      // Two ways a directory says "no identity here", both handled: some answer a legacy
+      // address by pointing at their own bridge (a 200 carrying legacy:true, where x25519_pub
+      // describes the BRIDGE and not a correspondent), others simply 404 — see the catch below.
+      // Either way the absence is recorded as an observation, because for a contact we have
+      // already pinned, "the directory now offers no identity" is a change to compare, and a
+      // blank leaves checkPin with nothing to say precisely when it matters most.
       setRecipientInfo(m => ({ ...m, [key]: rec.legacy ? 'legacy' : 'dmcn' }));
       if (rec.legacy) {
-        // A bridge, not a correspondent — nothing to pin, but the absence itself is an
-        // observation a held pin must be compared against (see the catch branch below).
         setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
-        return;
+        return; // a bridge, not a correspondent — nothing to pin
       }
 
+      // Record the facts while the recipient is being typed, so the warning can appear before the
+      // message is written rather than after it is composed and the user is committed to sending.
       const facts = directoryFacts(rec);
       setRecipientKeys(m => ({ ...m, [key]: facts }));
       const contact = contactByAddress(addr);
       if (contact && !contact.ed25519Pub) {
-        // First confirmed sighting of an existing contact's key — pin it, so a LATER swap
-        // is detectable. pinKey is a no-op if this device already holds a pin for them.
+        // First confirmed sighting of an existing contact's key — pin it, so a LATER swap is
+        // detectable. pinKey is a no-op if this device already holds a pin for them.
         void pinKey(addr, facts);
       }
     } catch {
-      // Unresolvable in either direction — not a DMCN identity, and no bridge to carry it.
-      // handleSend surfaces the send error.
+      // Not resolvable in the DMCN directory → a legacy address reachable only via a
+      // bridge, which cannot be end-to-end encrypted. handleSend surfaces send errors.
+      //
+      // Record the ABSENCE as an observation rather than leaving it blank: for a contact we
+      // have already pinned, "the directory now offers no identity" is a change to compare,
+      // and a blank leaves checkPin with nothing to say precisely when it matters most.
       setRecipientInfo(m => ({ ...m, [key]: 'legacy' }));
+      setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
     }
   };
 
-  // Pre-filled (reply) recipients may already require onion.
+  // Pre-filled (reply / reply-all) recipients may already require onion.
   useEffect(() => {
     to.forEach(r => void inspectRecipient(r));
+    cc.forEach(r => void inspectRecipient(r));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // On a reply, drop the caret at the very top so the user types ABOVE the signature/quote.
+  useEffect(() => {
+    if (!replyTo) return;
+    if (richMode) { editorRef.current?.focus(true); return; }
+    const el = bodyRef.current;
+    if (el) { el.focus(); el.setSelectionRange(0, 0); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -232,6 +239,24 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     editorRef.current?.setHTML(richInitial.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.signature]);
+
+  // toggleMode converts the body rather than discarding it. The HTML is stashed so a
+  // rich → plain → rich round-trip is lossless as long as the plain text wasn't edited;
+  // once it has been, the edited text wins and the formatting is genuinely gone.
+  const stashedHtml = useRef<string | null>(null);
+  const toggleMode = () => {
+    dirtyRef.current = true;
+    if (richMode) {
+      const html = editorRef.current?.getHTML() ?? '';
+      stashedHtml.current = html;
+      setBody(toPlainText(html));
+      setRichMode(false);
+      return;
+    }
+    const stash = stashedHtml.current;
+    richInitial.current = stash !== null && toPlainText(stash) === body ? stash : fromPlainText(body);
+    setRichMode(true);
+  };
 
   // commitPending trims + de-dupes the field's pending text into its chip list and
   // returns the resulting list (so a send triggered before blur still sees it).
@@ -276,22 +301,22 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     }
   };
 
-  // Inline images are attachments too — same sealed blob, same cap — but they are
-  // referenced from the HTML body by cid: rather than listed, so the chip strip shows
-  // only the real attachments.
+  // Inline images are attachments too — same sealed blob, same cap — but they're
+  // referenced from the HTML body by cid: rather than listed for download, so the chip
+  // strip shows only the real attachments.
   const fileAttachments = attachments.filter(a => a.disposition !== 'inline');
   const attachedBytes = attachments.reduce((n, a) => n + a.sizeBytes, 0);
   const usedBytes = () => attachmentsRef.current.reduce((n, a) => n + a.sizeBytes, 0);
-  const capMessage = `Attachments can't exceed ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB in total.`;
+  const capMessage = `Attachments can’t exceed ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB in total.`;
 
   const pushAttachments = (adds: AttachmentInput[]) => {
     attachmentsRef.current = [...attachmentsRef.current, ...adds];
     setAttachments(attachmentsRef.current);
   };
 
-  // addFiles reads each selected file fully into memory, hashes it, and appends it. The
-  // whole batch is rejected (nothing added) if it would push the running total past the
-  // cap, so the composer never holds an over-limit set.
+  // addFiles reads each selected file fully into memory, hashes it, and appends it as
+  // an AttachmentInput. The whole batch is rejected (nothing added) if it would push
+  // the running total past the cap, so the composer never holds an over-limit set.
   const addFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const additions: AttachmentInput[] = [];
@@ -303,7 +328,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         setError(capMessage);
         return;
       }
-      const contentHash = new Uint8Array(await crypto.subtle.digest('SHA-256', content as BufferSource));
+      const contentHash = new Uint8Array(await crypto.subtle.digest('SHA-256', content));
       additions.push({
         attachmentId: newUuid(),
         filename: file.name,
@@ -326,7 +351,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       setError(capMessage);
       return null;
     }
-    const contentHash = new Uint8Array(await crypto.subtle.digest('SHA-256', content as BufferSource));
+    const contentHash = new Uint8Array(await crypto.subtle.digest('SHA-256', content));
     const contentType = file.type || 'application/octet-stream';
     const contentId = `${toHex(newUuid())}@dmcn`;
     const filename = file.name || 'image';
@@ -347,23 +372,6 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const removeAttachment = (att: AttachmentInput) => {
     attachmentsRef.current = attachmentsRef.current.filter(a => a !== att);
     setAttachments(attachmentsRef.current);
-  };
-
-  // Switching modes is lossy in one direction only: rich -> plain flattens formatting.
-  // The HTML is stashed so switching straight back restores it; once the plain text has
-  // actually been edited, the edit wins and the formatting is genuinely gone.
-  const toggleMode = () => {
-    dirtyRef.current = true;
-    if (richMode) {
-      const html = editorRef.current?.getHTML() ?? '';
-      stashedHtml.current = html;
-      setBody(toPlainText(html));
-      setRichMode(false);
-      return;
-    }
-    const stash = stashedHtml.current;
-    richInitial.current = stash !== null && toPlainText(stash) === body ? stash : fromPlainText(body);
-    setRichMode(true);
   };
 
   const handleSend = async () => {
@@ -414,19 +422,19 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     messageId[8] = (messageId[8] & 0x3f) | 0x80;
     // A reply continues the original thread and references it; a new compose starts a
     // fresh thread. Both ride the signed header (portable to the bridge as
-    // In-Reply-To/References). A pre-feature original has an all-zero threadId hex —
-    // treat that as absent and start fresh.
+    // In-Reply-To/References later). A pre-feature original has an all-zero threadId hex
+    // → treat as absent and start fresh.
     const threadId = replyTo?.threadId && !/^0*$/.test(replyTo.threadId)
       ? fromHex(replyTo.threadId)
       : newUuid();
     const replyToId = replyTo?.replyToId ? fromHex(replyTo.replyToId) : undefined;
     const sentAt = Math.floor(Date.now() / 1000);
 
-    // Derive both renderings ONCE, before the recipient loop, so every copy (recipients
-    // and the Sent self-copy) carries byte-identical content.
+    // Derive both renderings ONCE, before the recipient loop, so every copy (recipients,
+    // the bridge copy, and the Sent self-copy) carries byte-identical content.
     //
     // Sanitizing here is the point of the exercise: this is the boundary where composed
-    // markup becomes wire bytes, and the last chance to ensure a hostile paste isn't
+    // markup becomes wire bytes, and it's the last chance to ensure a hostile paste isn't
     // shipped under the sender's own signature. The plain-text part is always produced —
     // it stays the primary body, so text-only readers and the trust-gated plain-text peek
     // never see an empty message.
@@ -473,10 +481,50 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     setLoading(true);
     setError('');
     try {
-      // Deliver a copy to each recipient, recording the relay-accept hash per address.
-      const acceptHashes: Record<string, string> = {};
+      // Route an outbound message to a LEGACY email recipient through the sender domain's bridge:
+      // seal the SAME split envelope every other recipient gets, but wrap the CEK for the BRIDGE's
+      // X25519 key and label it with the legacy address, then STORE it on the bridge. The bridge
+      // decrypts, reads the real destination out of the signed header, and delivers over SMTP.
+      // Not end-to-end encrypted to the recipient: the bridge sees the plaintext, by design.
+      //
+      // This used to seal the older whole-message (v1) form, and that shape has nowhere to put the
+      // shared To/Cc — the audience lives on the split HEADER. So the bridge received no audience
+      // for browser-composed mail and addressed each copy to its one recipient: a message to three
+      // people arrived as three apparently-private messages, with nobody for Reply All to reach.
+      // Sealing the same split envelope as everyone else fixes it at the source, and leaves one
+      // sealing path for every recipient, legacy or not.
+
+      // Deliver a copy to each recipient (DMCN natively, or via the legacy bridge on 404).
       for (const rcpt of allRecipients) {
-        const recipient = await lookupIdentity(rcpt);
+        let recipient;
+        try {
+          recipient = await lookupIdentity(rcpt);
+        } catch (e) {
+          // No DMCN record for a well-formed email ⇒ a LEGACY recipient, reachable only if this
+          // deployment has a way (see lib/deployment.ts sendToLegacy).
+          if (e instanceof ApiError && e.status === 404 && rcpt.includes('@') && deployment.sendToLegacy) {
+            // Unless we had verified a DMCN identity for them. Falling back to a bridge would
+            // silently downgrade that correspondence to ordinary email, readable by the bridge
+            // and every hop after it — and a fleet withholding one record produces exactly this.
+            // Same refusal as a changed key, for the same reason: it is unrecoverable once sent.
+            if (checkPin(contactByAddress(rcpt), absentIdentityFacts()) === 'changed') {
+              throw new Error(pinnedIdentityGoneWarning(rcpt) + ' Confirm it in the warning above if that is expected.');
+            }
+            await deployment.sendToLegacy({
+              recipient: rcpt,
+              senderAddress: selfAddress,
+              seal: async x25519Pub => encodeSplitEnvelope(await encryptSplit({
+                ...common,
+                recipientAddress: rcpt,
+                bcc: [],
+                recipients: [{ deviceId: new Uint8Array(16), x25519Pub }],
+              })),
+              sign: bytes => signWithKey(k.ed25519Sign, bytes),
+            });
+            continue;
+          }
+          throw e;
+        }
         // Refuse rather than warn: the harm here is sealing a message to a key the recipient does
         // not hold, which is unrecoverable once sent. A pinned mismatch means either they rotated
         // (harmless, and re-verifying clears it) or someone else now holds the address — and we
@@ -494,7 +542,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         // (onion-routed when requested or required by their record). Bcc is EMPTY on
         // every recipient copy — a Bcc recipient is never revealed, and a reply-all
         // can't leak the Bcc list.
-        acceptHashes[rcpt] = await storeEnvelope(
+        await storeEnvelope(
           await encryptSplit({
             ...common,
             recipientAddress: rcpt,
@@ -508,12 +556,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
       // Sent self-copy: seal the SAME composed message to our OWN X25519 key and store
       // the envelope (a small listed header + a lazy body) in the owner-only personal
-      // store. Sent then renders through the normal header/body path — body, attachments
-      // and HTML alternatives all live in the body, decrypted on open, exactly like inbox
-      // mail — so the Sent list only ever handles headers. Sealed to us alone, so it never
-      // touches the relay STORE path, onion routing, or the free-ride guard (the full bcc
-      // audience rides on this self-copy only). Best-effort: the message is already
-      // delivered, so a Sent-copy failure must not fail the send.
+      // store. Sent then renders through the normal header/body path — body, attachments,
+      // HTML alternatives all live in the body, decrypted on open, exactly like inbox mail
+      // — so the Sent list needs only the headers. Sealed to us alone, so it never touches
+      // the relay STORE path, onion, or the free-ride guard (the full bcc audience rides on
+      // this self-copy only). Best-effort: the message is already delivered, so a Sent-copy
+      // failure must not fail the send.
       try {
         const selfEnvelope = await encryptSplit({
           ...common,
@@ -537,6 +585,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
   const inputReset = { border: 'none', outline: 'none', background: 'transparent', font: 'inherit' } as const;
 
+  // Any legacy (non-DMCN) recipient means the message can't be end-to-end encrypted
+  // for everyone — surfaced as a warning above the footer.
+  const hasLegacy = [...to, ...cc, ...bcc].some(a => recipientInfo[a.trim().toLowerCase()] === 'legacy');
+  // Whether any recipient resolved as a DMCN identity — the encryption banner only
+  // makes sense (and is only accurate) when there's someone it can be encrypted to.
+  const hasDmcn = [...to, ...cc, ...bcc].some(a => recipientInfo[a.trim().toLowerCase()] === 'dmcn');
   // Recipients whose key no longer matches the one we pinned. Sending to them is BLOCKED in
   // handleSend, so this banner is the explanation for a send that is about to be refused, not a
   // soft advisory — hence naming the addresses rather than a generic "some recipients".
@@ -589,13 +643,6 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     return pinned && seen ? changedFacts(pinned, seen).join(' and ') : '';
   })();
 
-  // Any legacy (non-DMCN) recipient means the message can't be end-to-end encrypted
-  // for everyone — surfaced as a warning above the footer.
-  const hasLegacy = [...to, ...cc, ...bcc].some(a => recipientInfo[a.trim().toLowerCase()] === 'legacy');
-  // Whether any recipient resolved as a DMCN identity — the encryption banner only
-  // makes sense (and is only accurate) when there's someone it can be encrypted to.
-  const hasDmcn = [...to, ...cc, ...bcc].some(a => recipientInfo[a.trim().toLowerCase()] === 'dmcn');
-
   // Full-screen sheet on mobile; floating window anchored bottom-right on desktop.
   const shell: CSSProperties = mobile
     ? {
@@ -633,9 +680,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         mobile={mobile}
         inputRef={recipientInput}
         contacts={contacts}
-        nameFor={nameFor}
         onPick={pickRecipient(to, setTo, setPendingTo)}
         recipientInfo={recipientInfo}
+        nameFor={nameFor}
         rightSlot={!showCcBcc ? (
           <button
             type="button"
@@ -659,9 +706,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             placeholder="Carbon copy"
             mobile={mobile}
             contacts={contacts}
-            nameFor={nameFor}
             onPick={pickRecipient(cc, setCc, setPendingCc)}
             recipientInfo={recipientInfo}
+            nameFor={nameFor}
           />
           <RecipientField
             label="Bcc"
@@ -674,9 +721,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             placeholder="Blind carbon copy — hidden from other recipients"
             mobile={mobile}
             contacts={contacts}
-            nameFor={nameFor}
             onPick={pickRecipient(bcc, setBcc, setPendingBcc)}
             recipientInfo={recipientInfo}
+            nameFor={nameFor}
           />
         </>
       )}
@@ -691,7 +738,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         />
       </div>
 
-      {/* Body */}
+      {/* Body — rich by default; plain text is the per-message escape hatch. */}
       {richMode ? (
         <RichTextEditor
           ref={editorRef}
@@ -703,6 +750,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         />
       ) : (
         <textarea
+          ref={bodyRef}
           value={body}
           onChange={e => { dirtyRef.current = true; setBody(e.target.value); }}
           placeholder="Write something — it's encrypted before it leaves your device."
@@ -728,19 +776,20 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         </div>
       )}
 
+      {/* Hidden picker; reset value so re-selecting the same file still fires onChange. */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
-        onChange={e => { void addFiles(e.target.files); e.target.value = ''; }}
         style={{ display: 'none' }}
+        onChange={e => { void addFiles(e.target.files); e.target.value = ''; }}
       />
 
       {error && (
         <div style={{ padding: 'var(--space-2) var(--space-4)', color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{error}</div>
       )}
 
-      {/* A pinned key that no longer matches. Rendered above every other banner: it is the
+      {/* Changed-key warning. Ranked ABOVE the legacy and encryption banners because it is the
           only one that blocks sending, and because "end-to-end encrypted" sitting alone under a
           swapped key would be technically true and dangerously misleading. */}
       {changedKeyRecipients.length > 0 && (
@@ -778,7 +827,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           <span>
             The {changedRecordDetail || 'identity record'} for {changedRecordRecipients.join(', ')} changed
             since you verified them. Their keys are unchanged, so this message is still sealed to the same
-            person — confirm the change is expected.
+            person — but the change was not something they signed.
           </span>
         </div>
       )}
@@ -843,7 +892,7 @@ interface RecipientFieldProps {
   onPick: (value: string) => void;
   /** Per-recipient classification (lowercased address → kind) for the chip shields. */
   recipientInfo: Record<string, RecipientKind>;
-  /** Shared display-name resolver, so a suggestion reads the same as the mail list. */
+  /** Shared display-name resolver (contact name, else the address). */
   nameFor: (address: string) => string;
 }
 
@@ -897,7 +946,7 @@ function RecipientField({ label, values, onRemove, pending, setPending, onKey, o
         return (
           <Tag key={r} onRemove={() => onRemove(r)}>
             <Icon name={chip.icon} size={13} style={{ color: chip.color }} title={chip.title} />
-            {r}
+            <span title={r}>{nameFor(r)}</span>
           </Tag>
         );
       })}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { emptyFilterList, type FilterList } from '../lib/api/filterList';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 import type { WorkingKeys } from '../lib/crypto/workingKeys';
 import { Badge, Button, Input, Switch } from '../ds';
 import { Icon } from './Icon';

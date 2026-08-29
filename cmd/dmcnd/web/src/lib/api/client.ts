@@ -39,7 +39,7 @@ interface RequestOpts {
 }
 
 // ApiError carries the HTTP status and the server's optional machine-readable
-// error code so callers can branch on the cause;
+// error code (e.g. "admin_key_custody") so callers can branch on the cause;
 // err.message still holds the human-readable error for existing consumers.
 export class ApiError extends Error {
   status: number;
@@ -88,14 +88,24 @@ async function request<T>(method: string, path: string, body?: unknown, opts: Re
 
 // Generic authenticated POST on the global session that participates in session
 // renewal — for callers outside the typed wrappers (e.g. the mailbox sync).
+// apiRequest is the low-level authenticated call, exported so a deployment's own endpoints
+// (its account service, its bridge plane, its petition flow) share this module's session
+// handling and error shape instead of re-implementing them. The shared client itself uses the
+// typed wrappers below; nothing here knows which endpoints a particular deployment has.
+export function apiRequest<T>(method: string, path: string, body?: unknown, opts: { skipReauth?: boolean; token?: string } = {}): Promise<T> {
+  return request<T>(method, path, body, opts);
+}
+
 export function postJSON<T>(path: string, body: unknown): Promise<T> {
   return request('POST', path, body);
 }
 
 // postJSONAs is the same POST under an EXPLICIT bearer when one is given, falling
 // back to the global session when it isn't. Used by the sessions that aren't the
-// tab's current account. Explicit tokens skip session renewal: the renewal handler
-// only ever knows the active account, so a 401 here is the caller's to re-mint.
+// tab's current account — the short-lived pairing session, and the background reads
+// that count another unlocked account's unread mail. Explicit tokens skip session
+// renewal: the renewal handler only ever knows the active account, so a 401 here is
+// the caller's to re-mint.
 export function postJSONAs<T>(token: string | undefined, path: string, body: unknown): Promise<T> {
   return token === undefined ? postJSON<T>(path, body) : request<T>('POST', path, body, { token, skipReauth: true });
 }
@@ -132,69 +142,6 @@ export function importChallenge(address: string): Promise<ImportChallengeRespons
 
 export function importIdentity(req: ImportRequest): Promise<SessionResponse> {
   return request('POST', '/api/v1/import', req, { skipReauth: true });
-}
-
-// Self-service registration against the local daemon (it is the operator for its own
-// domain). The browser generates the keys and self-signs the record; the server attaches a
-// routing credential and publishes it. Mints NO session — after "active" the caller logs in
-// with the fresh keys (loginWithKeys).
-export interface RegisterRequest {
-  address: string;
-  ed25519_pub: string;
-  x25519_pub: string;
-  identity_record: string;
-  self_signature: string;
-}
-
-export interface RegisterResponse {
-  status?: string; // "active"
-}
-
-export function register(req: RegisterRequest): Promise<RegisterResponse> {
-  return request('POST', '/api/v1/register', req, { skipReauth: true });
-}
-
-// --- Mailbox petitions (live self-hosted domains) ----------------------------------------
-//
-// On a domain whose root key is kept offline the node cannot mint an address, so there is no
-// self-service registration. Instead the browser proves it holds a fresh keypair, gets a
-// 12-digit code, and the person reads that code to their admin out of band. The admin assigns an
-// address with the offline root; the browser learns it by polling and then self-signs a record
-// for it. The petitioner never chooses their own address — that is what makes an unclaimed
-// petition worthless and lets it simply expire.
-
-export interface PetitionRequest {
-  ed25519_pub: string;
-  x25519_pub: string;
-  proof: string; // Ed25519 over "dmcn-petition-v1\0" ‖ ed25519_pub ‖ x25519_pub
-}
-
-export interface PetitionResponse {
-  code: string;       // "0428-9173-5560"
-  expires_at: string; // RFC3339
-}
-
-export function createPetition(req: PetitionRequest): Promise<PetitionResponse> {
-  return request('POST', '/api/v1/petition', req, { skipReauth: true });
-}
-
-export interface PetitionStatusResponse {
-  status: 'pending' | 'assigned';
-  address?: string;    // set once assigned
-  expires_at?: string; // set while pending
-}
-
-export function petitionStatus(code: string): Promise<PetitionStatusResponse> {
-  return request('GET', `/api/v1/petition/status?code=${encodeURIComponent(code)}`, undefined, { skipReauth: true });
-}
-
-export interface PetitionCompleteRequest {
-  code: string;
-  identity_record: string; // base64 proto, self-signed for the ASSIGNED address
-}
-
-export function completePetition(req: PetitionCompleteRequest): Promise<RegisterResponse & { address?: string }> {
-  return request('POST', '/api/v1/petition/complete', req, { skipReauth: true });
 }
 
 export function login(address: string): Promise<LoginResponse> {
@@ -250,23 +197,30 @@ export interface IdentityLookupResponse {
   // (revoked binding / unauthorized countersigner) — distrust such identities.
   verified_tier?: number;
   identity_unverifiable?: boolean;
-  // NOTE: there is deliberately no bridge_capability here. A bridge has no email address and no
-  // directory entry — its verdicts are verified against a root-signed credential carried in the
-  // message itself (lib/crypto/bridgeAttest.ts), never by a flag the server controls.
+  // True when this address is a registered SMTP bridge. Declared because a pin covers it
+  // (trust/pinnedKey.ts: a contact silently becoming a bridge changes what their mail means),
+  // NOT because a bridge is trusted by it — a bridge's verdicts are verified against the
+  // root-signed credential carried in the message itself, never a flag the server controls. A
+  // deployment whose bridge has no directory entry at all simply never sets this.
+  bridge_capability?: boolean;
   // Effective onion-delivery policy (mailbox flag OR domain DAR). When true, the
   // compose UI auto-enables + locks the onion toggle; the server enforces it too.
   require_onion?: boolean;
-  // True when the address's domain declares admin key custody (DAR policy): the domain admin
-  // holds the account keys. A single-domain daemon has no such policy to report, so this is
-  // never set here — it is declared because the pinned-fact set is shared, and a contact whose
-  // domain turns custody ON is a change no key comparison can see (trust/pinnedKey.ts).
-  admin_key_custody?: boolean;
   // legacy marks a recipient that is NOT a DMCN identity — an ordinary email address, reachable
   // through this domain's SMTP bridge. When true, x25519_pub and relay_hints describe the BRIDGE,
   // not the recipient: the message is end-to-end encrypted as far as the bridge and travels as
   // ordinary email from there. There is no ed25519_pub, because there is no identity behind it.
+  //
+  // This backend answers a legacy address with 404 instead, so the field is never set here. It is
+  // declared because the trust code is shared with a deployment whose directory does answer this
+  // way, and because the alternative — falling through to the key comparison with no key to
+  // compare — reports ordinary bridged mail as an impersonation attempt.
   legacy?: boolean;
+  // Where to STORE for this address. On a legacy answer these describe the BRIDGE.
   relay_hints?: string[];
+  // True when the address's domain declares admin key custody (DAR policy): the
+  // domain admin holds the account keys — shown as the managed-account badge.
+  admin_key_custody?: boolean;
 }
 
 export function lookupIdentity(address: string): Promise<IdentityLookupResponse> {
@@ -293,6 +247,10 @@ export interface SendMessageRequest {
   /** Request 3-hop onion-routed delivery. The server also forces it when the
    *  recipient's record requires onion (stricter-wins). */
   onion?: boolean;
+  /** Hex of the per-compose messageId, identical across the one POST made per
+   *  recipient. Send-cap enforcement counts a multi-recipient compose as one
+   *  message but N recipients; empty ⇒ each POST is its own message. */
+  message_id?: string;
 }
 
 export interface SendMessageResponse {

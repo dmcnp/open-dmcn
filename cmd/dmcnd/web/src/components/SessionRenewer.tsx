@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { setReauthHandler, loginWithKeys } from '../lib/api/client';
-import { deployment } from '../deployment';
+import { deployment } from '@deployment';
 
 // SessionRenewer wires up transparent session renewal. When an authenticated
 // request comes back 401 (the 24h JWT expired), the API layer calls this handler

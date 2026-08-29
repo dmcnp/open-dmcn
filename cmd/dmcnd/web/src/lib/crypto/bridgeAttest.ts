@@ -8,7 +8,7 @@
 // holds only the shape of the answer and the one rule both anchors share: an attestation is
 // worth nothing until it is tied to the message carrying it.
 
-import { deployment } from '../../deployment';
+import { deployment } from '@deployment';
 
 export const CLASSIFICATION_CONTENT_TYPE = 'application/x-dmcn-bridge-classification';
 

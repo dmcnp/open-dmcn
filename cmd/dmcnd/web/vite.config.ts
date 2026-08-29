@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createHash } from 'node:crypto';
@@ -37,6 +38,15 @@ function sriPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), sriPlugin()],
+  // The two modules that are this BUILD's rather than the client's: what deployment it is,
+  // and which protobuf bundle it carries. Aliased so the shared tree names them by identity
+  // instead of by path, and can therefore be shared verbatim.
+  resolve: {
+    alias: {
+      '@deployment': fileURLToPath(new URL('./app/deployment.tsx', import.meta.url)),
+      '@proto': fileURLToPath(new URL('./app/proto/dmcn.js', import.meta.url)),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

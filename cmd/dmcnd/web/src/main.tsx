@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { deployment } from './deployment';
+import { deployment } from '@deployment';
 import './styles/tokens.css';
 
 // Title the tab after whatever this deployment calls itself (see lib/deployment.ts).

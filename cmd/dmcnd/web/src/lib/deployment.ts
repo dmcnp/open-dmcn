@@ -95,6 +95,22 @@ export interface Deployment {
   // The same, for a bridge's delivery receipt on outbound-to-legacy mail.
   verifyReceipt: (receipt: Uint8Array, senderPub: Uint8Array | null) => Promise<DeliveryReceiptView>;
 
+  // How to reach a recipient the directory has no identity for, if this deployment can at
+  // all. Two shapes, both correct: a directory that answers such a lookup by pointing at its
+  // own outbound bridge needs nothing here — the normal send path already has an address to
+  // seal to — while one that answers 404 supplies the fallback that finds a bridge and stores
+  // to it. Absent ⇒ a legacy recipient is unreachable, and the send says so.
+  //
+  // The split of duties is deliberate: `seal` and `sign` come from the composer, which owns
+  // the keys and the content, so a deployment decides only WHERE a message goes and never
+  // what is in it or what signs it.
+  sendToLegacy?: (ctx: {
+    recipient: string;
+    senderAddress: string;
+    seal: (x25519Pub: Uint8Array) => Promise<Uint8Array>;
+    sign: (bytes: Uint8Array) => Promise<Uint8Array>;
+  }) => Promise<string>;
+
   // How the account's block/allow list is stored — and therefore whether a block is
   // enforced at the relay or only honoured by this client. See lib/api/filterList.ts.
   mailFilter: MailFilterFactory;
