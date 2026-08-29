@@ -10,7 +10,7 @@ import { toBase64, fromBase64, toHex, fromHex } from '../lib/crypto/keys';
 import { SentStore } from '../lib/api/sentStore';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useContacts, type Contact } from '../lib/hooks/useContacts';
-import { checkPin, changedFacts, contactFacts, directoryFacts, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
+import { absentIdentityFacts, checkPin, changedFacts, contactFacts, directoryFacts, pinnedIdentityGoneWarning, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
 import { DEFAULT_DOMAIN } from '../lib/config';
 import { Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
@@ -103,7 +103,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const { address } = useAuth();
   const { keys } = useKeys();
   const { settings } = useSettings();
-  const { contacts, contactByAddress, nameFor, pinKey } = useContacts();
+  const { contacts, contactByAddress, nameFor, pinKey, allowlist } = useContacts();
 
   // Three recipient classes with standard email semantics. To/Cc are visible to
   // everyone; Bcc is only recorded on the sender's own Sent copy (see handleSend).
@@ -180,7 +180,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       // message is sealed to the bridge and leaves the network as ordinary email. Say so, rather
       // than showing it as a DMCN identity because a lookup happened to return 200.
       setRecipientInfo(m => ({ ...m, [key]: rec.legacy ? 'legacy' : 'dmcn' }));
-      if (rec.legacy) return; // a bridge, not a correspondent — nothing to pin
+      if (rec.legacy) {
+        // A bridge, not a correspondent — nothing to pin, but the absence itself is an
+        // observation a held pin must be compared against (see the catch branch below).
+        setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
+        return;
+      }
 
       const facts = directoryFacts(rec);
       setRecipientKeys(m => ({ ...m, [key]: facts }));
@@ -476,10 +481,11 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         // not hold, which is unrecoverable once sent. A pinned mismatch means either they rotated
         // (harmless, and re-verifying clears it) or someone else now holds the address — and we
         // cannot tell which from here, so the safe default is to stop.
-        if (checkPin(contactByAddress(rcpt), directoryFacts(recipient)) === 'changed') {
+        const observedFacts = directoryFacts(recipient);
+        if (checkPin(contactByAddress(rcpt), observedFacts) === 'changed') {
           throw new Error(
-            pinnedKeyWarning(rcpt) +
-            ' If the change is legitimate, remove them from your contacts and add them again — that pins the new key.',
+            (observedFacts.noIdentity ? pinnedIdentityGoneWarning(rcpt) : pinnedKeyWarning(rcpt)) +
+            ' Confirm it in the warning above if that is expected.',
           );
         }
         const recipientX25519 = fromBase64(recipient.x25519_pub);
@@ -537,6 +543,37 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const changedKeyRecipients = [...to, ...cc, ...bcc]
     .map(a => a.trim())
     .filter(a => a && checkPin(contactByAddress(a), recipientKeys[a.toLowerCase()]) === 'changed');
+  // Of those, the ones whose identity DISAPPEARED rather than changed keys. Same block, but a
+  // different thing to tell the reader: nothing was swapped, the mail would simply leave the
+  // network in the clear.
+  const goneRecipients = changedKeyRecipients.filter(a => recipientKeys[a.toLowerCase()]?.noIdentity);
+  const keySwapRecipients = changedKeyRecipients.filter(a => !recipientKeys[a.toLowerCase()]?.noIdentity);
+
+  // confirmChange records the state the directory is showing NOW as the verified one, which is
+  // what unblocks this recipient — permanently, until it changes again. It re-pins rather than
+  // clearing: the point of confirming is to move the pin forward, not to stop watching.
+  const confirmChange = async (addr: string) => {
+    const observed = recipientKeys[addr.toLowerCase()];
+    if (!observed) return;
+    const existing = contactByAddress(addr);
+    await allowlist({
+      address: addr,
+      name: existing?.name ?? '',
+      fingerprint: existing?.fingerprint ?? '',
+      // Keep however they were verified originally: confirming a rotation is not a reason to
+      // forget that the key was once checked in person. Only a contact we have never held
+      // falls back to the weakest provenance.
+      provenance: existing?.provenance ?? 'user_approved',
+      ...(observed.noIdentity
+        ? { noIdentity: true }
+        : {
+            ed25519Pub: observed.ed25519Pub,
+            x25519Pub: observed.x25519Pub,
+            bridgeCapability: observed.bridgeCapability,
+            adminKeyCustody: observed.adminKeyCustody,
+          }),
+    });
+  };
   // Recipients whose KEYS still match but whose pinned properties moved. Not a send blocker: no
   // message is mis-sealed by it, so refusing would be the wrong trade. Still shown, because
   // adminKeyCustody flipping on is a domain asserting that an admin now holds this account's
@@ -707,13 +744,31 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           only one that blocks sending, and because "end-to-end encrypted" sitting alone under a
           swapped key would be technically true and dangerously misleading. */}
       {changedKeyRecipients.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--danger-subtle)', color: 'var(--text-body)' }}>
-          <Icon name="alert-triangle" size={15} style={{ color: 'var(--danger)', flex: 'none', marginTop: 2 }} />
-          <span>
-            The signing key for {changedKeyRecipients.join(', ')} has changed since you verified them.
-            Sending is blocked until you confirm the change out of band — it may be a normal rotation,
-            or someone else may now hold the address.
-          </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--danger-subtle)', color: 'var(--text-body)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
+            <Icon name="alert-triangle" size={15} style={{ color: 'var(--danger)', flex: 'none', marginTop: 2 }} />
+            <span>
+              {keySwapRecipients.length > 0 && (
+                <>The signing key for {keySwapRecipients.join(', ')} has changed since you verified them.{' '}</>
+              )}
+              {goneRecipients.length > 0 && (
+                <>{goneRecipients.join(', ')} no longer {goneRecipients.length === 1 ? 'has' : 'have'} a DMCN
+                  identity, so mail would leave over a bridge as ordinary email.{' '}</>
+              )}
+              Sending is blocked until you confirm out of band. Confirming records what the directory
+              shows now, and applies until it changes again.
+            </span>
+          </div>
+          {/* One control per recipient: a compose to four people should not make you re-verify
+              three of them to reach the one that changed. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', paddingLeft: 23 }}>
+            {changedKeyRecipients.map(a => (
+              <Button key={a} size="sm" variant="secondary" leftIcon={<Icon name="shield-check" size={14} />}
+                onClick={() => { void confirmChange(a); }}>
+                Confirm {a}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 

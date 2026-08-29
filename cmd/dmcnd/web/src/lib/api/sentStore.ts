@@ -96,61 +96,6 @@ function toBody(b: StoredBody): MailboxBodyLike {
   };
 }
 
-// LegacySentEntry is the pre-envelope Sent record: a plain JSON row under the SAME
-// "sent/" namespace, written by every version of this client before Sent moved to storing
-// the real self-sealed envelope. It carries the composed plaintext directly.
-//
-// It is still READ here, and read fully. Switching the write format silently orphaned
-// every message a user had already sent — the Sent folder simply came back empty, with no
-// error, because the new reader could not decrypt these rows and skipped them. Nothing
-// needs migrating: the row already holds everything the list and the reader need, so the
-// honest fix is to render it. New sends use the envelope format; these age out on their own.
-interface LegacySentEntry {
-  v: number;
-  messageId: string;
-  threadId: string;
-  sentAt: number;
-  subject: string;
-  body: string;
-  to: string[];
-  cc: string[];
-  bcc: string[];
-}
-
-// isLegacyEntry discriminates on the plaintext `body` string, which the envelope form
-// never has (its body is sealed under a separate key).
-function isLegacyEntry(v: unknown): v is LegacySentEntry {
-  const e = v as Partial<LegacySentEntry> | null;
-  return !!e && typeof e === 'object' && typeof e.body === 'string' && typeof e.subject === 'string';
-}
-
-// SNIPPET_MAX mirrors the header snippet length so a legacy row's preview line is the
-// same length as an envelope-backed one.
-const SNIPPET_MAX = 140;
-
-function previewFromLegacy(hash: string, e: LegacySentEntry, selfAddress: string): Preview {
-  const to = e.to ?? [];
-  const cc = e.cc ?? [];
-  return {
-    hash,
-    messageId: e.messageId ?? '',
-    threadId: e.threadId ?? '',
-    senderAddress: selfAddress,
-    senderPublicKey: '',
-    recipientAddress: to[0] ?? cc[0] ?? '',
-    to,
-    cc,
-    bcc: e.bcc ?? [],
-    subject: e.subject ?? '',
-    snippet: (e.body ?? '').slice(0, SNIPPET_MAX),
-    senderDisplay: '', // legacy local rows: the owner's own mail, shown under their address
-
-    sentAt: Number(e.sentAt ?? 0),
-    bodySize: (e.body ?? '').length,
-    attachmentCount: 0,
-  };
-}
-
 function toHexBytes(b: Uint8Array): string {
   let s = '';
   for (const x of b) s += x.toString(16).padStart(2, '0');
@@ -179,16 +124,12 @@ function previewFromHeader(hash: string, h: MessageHeaderFields): Preview {
   };
 }
 
-type CachedSent =
-  | { kind: 'envelope'; entry: MailboxEntryLike; header: MessageHeaderFields }
-  | { kind: 'legacy'; body: string };
-
 export class SentStore {
   private store: PersonalStore;
   private keys: WorkingKeys;
-  // hash → what fetchFull needs to open this message: a verified header + entry for the
-  // envelope form, or the already-plaintext body for a legacy row.
-  private cache = new Map<string, CachedSent>();
+  // hash → verified header + entry, populated by listPreviews so fetchFull can decrypt
+  // the body on open without re-listing.
+  private cache = new Map<string, { entry: MailboxEntryLike; header: MessageHeaderFields }>();
 
   constructor(keys: WorkingKeys) {
     this.store = new PersonalStore(keys);
@@ -202,31 +143,29 @@ export class SentStore {
     await this.store.put(sentBodyKey(messageIdHex), encodeBody(env));
   }
 
-  // listPreviews turns every stored Sent row into an inbox-style Preview and caches what
-  // fetchFull will need. Two row shapes coexist under "sent/": the current self-sealed
-  // envelope, and the legacy plaintext record written before the format changed. Both are
-  // listed — dropping the legacy ones is what emptied people's Sent folders.
-  //
-  // A row that is neither (corrupt, or written by something else) is skipped rather than
+  // listPreviews decrypts every stored header into an inbox-style Preview and caches the
+  // header + entry for a later fetchFull. Entries it can't read are skipped rather than
   // failing the whole list.
+  //
+  // That includes rows written before Sent moved to storing the self-sealed envelope. A
+  // reader for them existed briefly and was dropped deliberately: no deployment holds such
+  // rows — the hosted fleet's mail was cleared when the format changed, and the open release
+  // predates the old format entirely — so it was carrying a migration path for data that does
+  // not exist anywhere. If that ever stops being true, rendering them is the fix (the row
+  // already holds everything the list and reader need); silently skipping them is not.
   async listPreviews(): Promise<Preview[]> {
-    const entries = await this.store.list<StoredHeader | LegacySentEntry>('sent/');
+    const entries = await this.store.list<StoredHeader>('sent/');
     const previews: Preview[] = [];
-    const next = new Map<string, CachedSent>();
+    const next = new Map<string, { entry: MailboxEntryLike; header: MessageHeaderFields }>();
     for (const e of entries) {
-      const hash = SENT_HASH_PREFIX + midFromKey(e.key);
-      if (isLegacyEntry(e.value)) {
-        next.set(hash, { kind: 'legacy', body: e.value.body });
-        previews.push(previewFromLegacy(hash, e.value, this.keys.address));
-        continue;
-      }
       try {
-        const entry = toEntry(e.value as StoredHeader);
+        const entry = toEntry(e.value);
         const header = await decryptHeader(entry, this.keys.x25519Derive, this.keys.x25519Public);
-        next.set(hash, { kind: 'envelope', entry, header });
+        const hash = SENT_HASH_PREFIX + midFromKey(e.key);
+        next.set(hash, { entry, header });
         previews.push(previewFromHeader(hash, header));
       } catch {
-        // Neither shape — skip this row, keep the rest of the folder.
+        // Unreadable entry (foreign/legacy) — skip it.
       }
     }
     this.cache = next;
@@ -239,9 +178,6 @@ export class SentStore {
   async fetchFull(hash: string): Promise<FullBody> {
     const cached = this.cache.get(hash);
     if (!cached) throw new Error('no cached header for this sent message');
-    // A legacy row already holds its plaintext; there is no separate body entry to fetch.
-    // It predates attachments and HTML in Sent, so both are legitimately empty.
-    if (cached.kind === 'legacy') return { bodyText: cached.body, attachments: [] };
     const mid = hash.startsWith(SENT_HASH_PREFIX) ? hash.slice(SENT_HASH_PREFIX.length) : hash;
     const b = await this.store.get<StoredBody>(sentBodyKey(mid));
     if (!b) throw new Error('sent body not found');
