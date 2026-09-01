@@ -4,7 +4,7 @@
    the static shell (index.html, hashed JS/CSS, icons, manifest) is.
    Bump CACHE on any shell-caching logic change. */
 
-const CACHE = 'dmcn-mail-v1';
+const CACHE = 'dmcn-mail-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -47,7 +47,11 @@ self.addEventListener('fetch', (event) => {
         return res;
       })
       .catch(() =>
-        caches.match(req).then((cached) => cached || (req.mode === 'navigate' ? caches.match('/index.html') : undefined))
+        caches.match(req)
+          .then((cached) => cached || (req.mode === 'navigate' ? caches.match('/index.html') : undefined))
+          // respondWith() throws "Failed to convert value to 'Response'" if handed undefined,
+          // so a cache miss while the network is down must still resolve to a Response.
+          .then((res) => res || new Response('Offline', { status: 504, headers: { 'Content-Type': 'text/plain' } }))
       )
   );
 });
