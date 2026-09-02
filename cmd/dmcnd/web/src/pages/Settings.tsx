@@ -172,6 +172,11 @@ export function Settings() {
   // Profile form (synced account settings). Seeded from the loaded settings doc.
   const [signature, setSignature] = useState('');
   const [composePlainText, setComposePlainText] = useState(false);
+  // Reading privacy (synced). Lives on the Privacy tab, which has no Save button, so it
+  // writes on toggle — a privacy switch that silently needed a Save press elsewhere on the
+  // page would be the worst possible way to get this one wrong.
+  const [remoteImages, setRemoteImages] = useState(false);
+  const [remoteImagesErr, setRemoteImagesErr] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
   const [fingerprint, setFingerprint] = useState('');
@@ -303,11 +308,27 @@ export function Settings() {
     onAppearanceChange();
   };
 
-  // Seed the profile form from the synced settings doc when it (re)loads.
+  // Seed the forms from the synced settings doc when it (re)loads.
   useEffect(() => {
     setSignature(settings.signature ?? '');
     setComposePlainText(settings.composePlainText === true);
-  }, [settings.signature, settings.composePlainText]);
+    setRemoteImages(settings.remoteImagesForTrusted === true);
+  }, [settings.signature, settings.composePlainText, settings.remoteImagesForTrusted]);
+
+  // Optimistic, and reverted on failure: the switch must never show "on" while mail is
+  // still blocking images (or the reverse) — the user would draw the wrong conclusion
+  // about what their client just did.
+  const applyRemoteImages = async (v: boolean) => {
+    const prev = remoteImages;
+    setRemoteImages(v);
+    setRemoteImagesErr('');
+    try {
+      await updateSettings({ remoteImagesForTrusted: v });
+    } catch (e) {
+      setRemoteImages(prev);
+      setRemoteImagesErr(e instanceof Error ? e.message : 'Could not save that setting.');
+    }
+  };
 
   const saveProfile = async () => {
     setProfileBusy(true);
@@ -491,6 +512,24 @@ export function Settings() {
                 </div>
               </div>
               <Switch checked={staySignedIn} onChange={v => { setStaySignedIn(v); setStay(v); }} />
+            </div>
+
+            <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Load remote images from senders you trust</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2, lineHeight: 'var(--leading-normal)' }}>
+                    Off (recommended): images hosted on a sender's server are never fetched, so opening a message tells
+                    them nothing. On: they load for senders on your allowlist only — pending and blocked senders stay
+                    blocked either way. A remote image is how ordinary mail measures whether, when and where you opened
+                    it, so turning this on hands that back to people you have already decided to trust.
+                  </div>
+                </div>
+                <Switch checked={remoteImages} onChange={v => void applyRemoteImages(v)} />
+              </div>
+              {remoteImagesErr && (
+                <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{remoteImagesErr}</div>
+              )}
             </div>
 
             {keys && <BlockedSenders keys={keys} />}

@@ -23,6 +23,12 @@ export interface AppSettings {
   // seeds the composer's starting mode — the per-message toggle still wins. Left
   // undefined for every existing account, which reads as "use the default".
   composePlainText?: boolean;
+  // Opt in to fetching images from the sender's own server, for senders on the allowlist
+  // only. Undefined/false — the default, and what every existing account reads as — keeps
+  // remote images blocked everywhere. It lives HERE rather than in localStorage because it
+  // is a decision about correspondents, which is account data: a device that has never seen
+  // this setting should not quietly re-block a sender the owner already decided about.
+  remoteImagesForTrusted?: boolean;
 }
 
 export const SETTINGS_KEY = 'settings/app';

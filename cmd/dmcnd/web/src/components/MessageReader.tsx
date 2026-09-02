@@ -20,6 +20,7 @@ import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust
 import { senderTrustView } from '../lib/trust/trustView';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
+import { useSettings } from '../lib/hooks/useSettings';
 import { categorizeSender } from '../lib/trust/category';
 import { directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
@@ -226,6 +227,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const { address } = useAuth();
   const { contactByAddress, nameFor, allowlist, pinKey, ready: contactsReady } = useContacts();
   const { filter: mailFilter, blockSender, ready: filterReady } = useMailFilter();
+  const { settings } = useSettings();
 
   // Extrinsic assignment for this message (labels are many; folder is single).
   const appliedLabelIds = labelsOf(msg.hash);
@@ -454,6 +456,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // HTML renders ONLY for a trusted sender (mirrors downloadsUnlocked) — a pending
   // sender's "See as plain text" peek shows escaped text, never rendered HTML.
   const htmlAllowed = !!htmlBody && downloadsUnlocked;
+  // Remote images ride on htmlAllowed rather than on a gate of their own, so opting in can
+  // only change WHAT a trusted sender's HTML may fetch — never WHICH senders get HTML. Off
+  // by default; the reader turns it on in Settings → Privacy & security.
+  const remoteImagesAllowed = htmlAllowed && settings.remoteImagesForTrusted === true;
   // Inline images (disposition=inline) render inside the HTML body, so they're kept out
   // of the downloadable-attachment list.
   const downloadAttachments = attachments.filter(a => a.disposition !== 'inline');
@@ -696,7 +702,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 </div>
               )}
               {htmlAllowed && showHtml ? (
-                <HtmlMessageBody html={htmlBody as string} attachments={attachments} />
+                <HtmlMessageBody html={htmlBody as string} attachments={attachments} allowRemoteImages={remoteImagesAllowed} />
               ) : (
                 <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', whiteSpace: 'pre-wrap', minHeight: 80 }}>
                   {bodyError && (
