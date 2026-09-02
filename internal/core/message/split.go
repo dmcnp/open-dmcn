@@ -32,7 +32,7 @@ const snippetMax = 140
 // and that adversary is a legitimate recipient who HOLDS the CEK: they can re-seal the identical
 // header plaintext under any AAD they choose, and the sender's Ed25519 signature — which covers
 // the header plaintext, not its ciphertext — still verifies. What catches that is a reader
-// checking the signed recipient_address; see MessageHeader.AddressedTo.
+// checking the signed recipient address; see MessageHeader.AddressedToKey.
 //
 // These are constants on purpose. Anything derived from the envelope risks binding a field that
 // relay.MailboxStore does not persist, which would make stored mail unreadable — see
@@ -120,30 +120,48 @@ func (h *MessageHeader) Audience() []string {
 	return out
 }
 
-// AddressedTo reports whether addr appears in the header's audience, case-insensitively.
+// AddressedToKey reports whether the sender addressed this message to the mailbox now reading
+// it: whether any address in the signed audience resolves to mailboxKey.
 //
 // WHY THIS EXISTS. It is the check that detects surreptitious forwarding — the one thing the
-// envelope's AEAD cannot do. A legitimate recipient holds the CEK, so they can re-seal a
-// message's header plaintext to a third party and the sender's signature still verifies; no
-// amount of additional authenticated data helps, because AAD is authenticated under the very
-// key the attacker holds. What they CANNOT do is change recipient_address, which the sender
-// signed. So the reader compares it against itself.
+// envelope's AEAD cannot do. A legitimate recipient holds the CEK, so it can re-seal a message's
+// header and body to a third party and the sender's signature still verifies; no additional
+// authenticated data helps, because that data is authenticated under the very key the attacker
+// holds. What an attacker CANNOT do is change recipient_address, to or cc, which the sender
+// signed. So the reader compares them against itself.
 //
-// WHERE IT MUST NOT BE CALLED. Not from DecryptHeader, and not by the bridge. The browser seals
-// the outbound-to-legacy copy with recipient_address set to the LEGACY recipient while wrapping
-// the CEK to the bridge's key, so the bridge's own address never appears in a header it is
-// meant to open. A check inside DecryptHeader would stop all outbound legacy mail.
+// WHY KEYED ON THE MAILBOX, NOT THE ADDRESS. Mailboxes are keyed by X25519 public key, and
+// address aliases share a keypair with their canonical address — so mail sent to sales@example
+// legitimately lands in the mailbox its owner reads as me@example. Comparing address strings
+// would report an account's own mail as misaddressed, and getting it right that way would mean
+// consulting an operator-signed alias marker, dragging an extension-plane feature into a check
+// every implementation has to perform. Resolving to a key needs none of that: it is one rule,
+// and a reader that has never heard of aliases applies it correctly.
 //
-// ALIASES. An account with shared address aliases must not use this directly: an alias carries
-// the same keypair as its canonical address, so both resolve to one mailbox and mail addressed
-// to either is legitimately in it. Those readers should test each Audience() entry with
-// identity.AddressNamesAccount instead.
-func (h *MessageHeader) AddressedTo(addr string) bool {
-	if addr == "" {
+// resolve maps an address to its X25519 public key, returning false when it cannot. Addresses
+// that do not resolve are skipped rather than treated as a mismatch — a directory miss is not
+// evidence of misaddressing. Callers should answer their own address from local state so the
+// common case costs no lookup at all.
+//
+// WHERE IT MUST NOT BE CALLED. Not inside DecryptHeader, and not by a bridge. A browser seals
+// its outbound-to-legacy copy with recipient_address set to the LEGACY recipient while wrapping
+// the CEK to the bridge's key, so the bridge's own mailbox key is deliberately absent from the
+// audience.
+//
+// HONEST LIMIT: this trades a local comparison for a directory answer, so a fleet willing to
+// serve a record binding the original recipient's address to the reader's key can defeat it.
+// A fleet that hostile can already do worse, and counterparty pinning covers known contacts —
+// but it is a weaker footing than a purely local check.
+func (h *MessageHeader) AddressedToKey(mailboxKey [32]byte, resolve func(string) ([32]byte, bool)) bool {
+	if mailboxKey == ([32]byte{}) || resolve == nil {
 		return false
 	}
-	for _, a := range h.Audience() {
-		if strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(addr)) {
+	for _, addr := range h.Audience() {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		if key, ok := resolve(addr); ok && key == mailboxKey {
 			return true
 		}
 	}

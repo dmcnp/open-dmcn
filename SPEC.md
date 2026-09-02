@@ -151,14 +151,56 @@ signature is computed over the canonical plaintext with no context tag.
   recipient record declares, so an envelope's blobs and its wraps can never disagree —
   generation 1 predates the labels and uses none. They are constant for the same reason the wrap
   context is minimal: nothing derived from the envelope survives storage;
-- **a reader MUST check that it is in the header's audience** (`recipient_address`, `to`, `cc`)
-  and surface a message that is not. This is the only defence against surreptitious forwarding,
-  and it cannot be replaced by an AEAD binding: a legitimate recipient holds the CEK, so it can
-  re-seal the identical header plaintext to a third party under any additional data it likes,
-  and the sender's signature — which covers the header plaintext, not its ciphertext — still
-  verifies. `recipient_address` is signed, so that is what a re-target cannot forge. A bridge
-  is the deliberate exception: an outbound-to-legacy copy names the legacy recipient while
-  being sealed to the bridge's key;
+- **the key that signs the envelope MUST be the key named in the header's `sender_public_key`.**
+  A message carries two signatures with different jobs: one over the whole encrypted envelope,
+  presented in the clear when the message is handed to a relay, and one over the header
+  plaintext, sealed inside. The outer one lets a relay confirm the party storing a message
+  controls the address it named, without learning anything about the contents; the inner one
+  tells the recipient who wrote it.
+
+  Requiring one key for both makes those two statements about the same party. It costs nothing —
+  a sender already holds one signing key — and it means a relay's admission check and a
+  recipient's authorship check cannot disagree. A relay cannot verify this itself (it holds no
+  key for the sealed header), so it is an obligation on producers.
+
+- **a reader MUST bind the claimed sender address to the key that signed.** The header signature
+  verifies against `sender_public_key`, a field the signer chose, so on its own it proves only
+  that the header is internally consistent — anyone may name another party's address, name their
+  own key, and sign. A reader MUST resolve `sender_address` and compare. Where the directory
+  answers and the key differs, the message is not from the address it names: a reader MUST NOT
+  render its body, attachments or HTML, and MUST NOT present the claimed address as attribution.
+  Where the address does not resolve, the message is reported as unverified but NOT rejected — a
+  directory outage, or an ordinary sender bridged in from legacy mail, must not empty a mailbox.
+
+  A relay cannot perform this check. It sees the transport sender that handed it the envelope,
+  which is a different, cleartext field, and it holds no key for the sealed header. The two
+  answer different questions — the transport sender governs abuse and quota, the header sender
+  governs authorship — and only a recipient can establish the second.
+
+  Note the residual: absent a signed rotation lineage in the directory, a legitimate key change
+  is indistinguishable from a forgery, so a reader SHOULD keep rejected messages retrievable
+  rather than deleting them.
+
+- **a reader MUST check that the sender addressed the message to the mailbox reading it**:
+  that some address in the signed audience (`recipient_address`, `to`, `cc`) resolves to the
+  X25519 key the envelope was sealed to. A message failing this MUST be surfaced.
+
+  This is the only defence against surreptitious forwarding, and it cannot be replaced by an
+  AEAD binding: a legitimate recipient holds the CEK, so it can re-seal the identical header
+  plaintext to a third party under any additional data it likes, and the sender's signature —
+  which covers the header plaintext, not its ciphertext — still verifies. The audience is
+  signed, so that is what a re-target cannot forge.
+
+  The comparison is on the KEY, not the address string. Mailboxes are keyed by X25519 public
+  key, so several addresses may share one mailbox; comparing strings would report an account's
+  own mail as misaddressed, and repairing that would require consulting an address-grouping
+  marker outside this specification. Resolving to a key needs none of that, and an
+  implementation unaware of any such grouping applies the rule correctly. An address that does
+  not resolve is skipped: a directory miss is not evidence of misaddressing.
+
+  Honest limit: this rests on the directory, so a fleet willing to bind the original recipient's
+  address to the reader's key can defeat it. A bridge is the deliberate exception — an
+  outbound-to-legacy copy names the legacy recipient while being sealed to the bridge's key;
 - the header's **`snippet`** is the **leading text of the body**, not a free-form summary:
   the longest valid-UTF-8 prefix of the body's first 140 bytes, empty for a non-text body.
   Producers MUST derive it from the body they are sealing. It is covered by the header
