@@ -6,7 +6,8 @@
 // verifies the body (against the signed body_hash) on open.
 
 import { aesGcmEncrypt, wrapCEK, selectSizeClass, padPayload, type RecipientInfo } from './encrypt';
-import { aesGcmDecrypt, unwrapCEK, unpadPayload } from './decrypt';
+import { unwrapCEK, unpadPayload, aesGcmDecrypt } from './decrypt';
+import { headerAAD, bodyAAD, normalizeKDF, PRODUCER_KDF } from './sealVersion';
 import { signWithKey, verify } from './sign';
 import { toPlainText } from '../html/toPlainText';
 import {
@@ -38,6 +39,7 @@ export interface SplitEnvelope {
     wrappedCek: Uint8Array;
     cekNonce: Uint8Array;
     cekTag: Uint8Array;
+    kdf?: number;
   }>;
   encryptedHeader: Uint8Array;
   headerNonce: Uint8Array;
@@ -164,7 +166,7 @@ export async function encryptSplit(input: ComposeInput): Promise<SplitEnvelope> 
   const cek = crypto.getRandomValues(new Uint8Array(32));
 
   const bClass = selectSizeClass(contentBytes.length);
-  const b = await aesGcmEncrypt(cek, padPayload(contentBytes, bClass));
+  const b = await aesGcmEncrypt(cek, padPayload(contentBytes, bClass), bodyAAD(PRODUCER_KDF));
   const addr = await bodyContentAddress(b.nonce, b.ciphertext, b.tag);
 
   // Header, signed independently with the domain-separation tag. It commits to
@@ -193,7 +195,7 @@ export async function encryptSplit(input: ComposeInput): Promise<SplitEnvelope> 
   const signedHeaderBytes = await encodeSignedHeader({ header, senderSignature: signature });
 
   const hClass = selectSizeClass(signedHeaderBytes.length);
-  const h = await aesGcmEncrypt(cek, padPayload(signedHeaderBytes, hClass));
+  const h = await aesGcmEncrypt(cek, padPayload(signedHeaderBytes, hClass), headerAAD(PRODUCER_KDF));
 
   const recipients = await Promise.all(input.recipients.map(r => wrapCEK(cek, r)));
 
@@ -221,6 +223,7 @@ export interface MailboxEntryLike {
     wrappedCek: Uint8Array;
     cekNonce: Uint8Array;
     cekTag: Uint8Array;
+    kdf?: number;
   }>;
   encryptedHeader: Uint8Array;
   headerNonce: Uint8Array;
@@ -245,6 +248,9 @@ function findRecipient(
     wrappedCek: new Uint8Array(rec.wrappedCek),
     cekNonce: new Uint8Array(rec.cekNonce),
     cekTag: new Uint8Array(rec.cekTag),
+    // Carried out because the header and body blobs' additional data is keyed on the same
+    // generation: it comes from the record, never from a guess.
+    kdf: normalizeKDF(rec.kdf),
   };
 }
 
@@ -256,12 +262,13 @@ export async function decryptHeader(
   x25519Pub: Uint8Array
 ): Promise<MessageHeaderFields> {
   const rec = findRecipient(entry.recipients, x25519Pub);
-  const cek = await unwrapCEK(rec, x25519Derive);
+  const cek = await unwrapCEK(rec, x25519Derive, x25519Pub);
   const padded = await aesGcmDecrypt(
     cek,
     new Uint8Array(entry.headerNonce),
     new Uint8Array(entry.encryptedHeader),
-    new Uint8Array(entry.headerTag)
+    new Uint8Array(entry.headerTag),
+    headerAAD(rec.kdf)
   );
   const sh = await decodeSignedHeader(unpadPayload(padded));
 
@@ -293,12 +300,13 @@ export async function decryptBody(
   x25519Pub: Uint8Array
 ): Promise<{ contentType: string; content: Uint8Array; bodyText: string; htmlBody?: string; attachments: DecryptedAttachment[] }> {
   const rec = findRecipient(entry.recipients, x25519Pub);
-  const cek = await unwrapCEK(rec, x25519Derive);
+  const cek = await unwrapCEK(rec, x25519Derive, x25519Pub);
   const padded = await aesGcmDecrypt(
     cek,
     new Uint8Array(body.bodyNonce),
     new Uint8Array(body.encryptedBody),
-    new Uint8Array(body.bodyTag)
+    new Uint8Array(body.bodyTag),
+    bodyAAD(rec.kdf)
   );
   const contentBytes = unpadPayload(padded);
 

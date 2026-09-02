@@ -16,7 +16,9 @@ import (
 const DeliverHop = "DELIVER"
 
 // onionVersion is the wire version of the onion packet format.
-const onionVersion = 1
+// onionVersion is the wire version of the onion packet format, and doubles as the layer
+// key-derivation generation a peeling relay dispatches on (onion.LayerKDFv2).
+const onionVersion = 2
 
 // layerSizeClasses bucket the DELIVERY (innermost) layer's plaintext, so the
 // message size is hidden among all messages in the same class. Mirrors the message
@@ -139,7 +141,7 @@ func sealOnionLayer(hopPub [32]byte, layer *dmcnpb.OnionLayer, bucket bool) (*dm
 	if err != nil {
 		return nil, fmt.Errorf("onion: marshal layer: %w", err)
 	}
-	sl, err := SealLayer(hopPub, frameLayer(plain, bucket))
+	sl, err := SealLayer(hopPub, frameLayer(plain, bucket), onionVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +169,7 @@ func PeelOnion(relayPriv [32]byte, pkt *dmcnpb.OnionPacket) (*dmcnpb.OnionLayer,
 	copy(sl.Tag[:], pkt.Tag)
 	sl.Ciphertext = pkt.EncryptedLayer
 
-	padded, err := OpenLayer(relayPriv, &sl)
+	padded, err := OpenLayer(relayPriv, &sl, pkt.Version)
 	if err != nil {
 		return nil, err
 	}

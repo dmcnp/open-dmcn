@@ -398,10 +398,14 @@ type MessageHeader struct {
 	SentAt           int64  `protobuf:"varint,7,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"` // Unix seconds
 	Subject          string `protobuf:"bytes,8,opt,name=subject,proto3" json:"subject,omitempty"`
 	AttachmentCount  uint32 `protobuf:"varint,9,opt,name=attachment_count,json=attachmentCount,proto3" json:"attachment_count,omitempty"`
-	BodySize         uint64 `protobuf:"varint,10,opt,name=body_size,json=bodySize,proto3" json:"body_size,omitempty"`     // plaintext body size, for UI
-	Snippet          string `protobuf:"bytes,11,opt,name=snippet,proto3" json:"snippet,omitempty"`                        // optional short preview of the body
-	ReplyToId        []byte `protobuf:"bytes,12,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"` // 16 bytes UUID; empty = not a reply
-	BodyHash         []byte `protobuf:"bytes,13,opt,name=body_hash,json=bodyHash,proto3" json:"body_hash,omitempty"`      // 32 bytes SHA-256 over canonical MessageContent
+	BodySize         uint64 `protobuf:"varint,10,opt,name=body_size,json=bodySize,proto3" json:"body_size,omitempty"` // plaintext body size, for UI
+	// Leading text of the body (longest valid-UTF-8 prefix of its first 140 bytes; empty for a
+	// non-text body). Signed, but NOT bound to the body the way body_hash is — a signer can
+	// emit a snippet that disagrees with its own body, so readers should re-derive it once the
+	// body is decrypted and surface a mismatch. See SPEC.md.
+	Snippet   string `protobuf:"bytes,11,opt,name=snippet,proto3" json:"snippet,omitempty"`
+	ReplyToId []byte `protobuf:"bytes,12,opt,name=reply_to_id,json=replyToId,proto3" json:"reply_to_id,omitempty"` // 16 bytes UUID; empty = not a reply
+	BodyHash  []byte `protobuf:"bytes,13,opt,name=body_hash,json=bodyHash,proto3" json:"body_hash,omitempty"`      // 32 bytes SHA-256 over canonical MessageContent
 	// Content address of the body ciphertext blob (body_nonce||encrypted_body||body_tag):
 	// CIDv1(raw, sha2-256), 36 bytes. Signed (covered by the header signature), so a
 	// verified header commits to the exact ciphertext blob, keylessly. Empty pre-feature.
@@ -717,6 +721,22 @@ type RecipientRecord struct {
 	WrappedCek    []byte                 `protobuf:"bytes,4,opt,name=wrapped_cek,json=wrappedCek,proto3" json:"wrapped_cek,omitempty"`            // AES-256-GCM ciphertext of CEK
 	CekNonce      []byte                 `protobuf:"bytes,5,opt,name=cek_nonce,json=cekNonce,proto3" json:"cek_nonce,omitempty"`                  // 12 bytes nonce for CEK wrapping
 	CekTag        []byte                 `protobuf:"bytes,6,opt,name=cek_tag,json=cekTag,proto3" json:"cek_tag,omitempty"`                        // 16 bytes GCM auth tag for CEK wrapping
+	// kdf names the derivation used to produce this wrap's key-wrapping key, and with it the
+	// AEAD additional data binding the envelope's header and body blobs.
+	//
+	// ABSENT (0) MEANS 1. That is a protocol rule, not a compatibility shim: every wrap written
+	// before this field existed used derivation 1, and stored envelopes are never re-encrypted.
+	//
+	//	1 = HKDF-SHA256(shared, salt="", info="dmcn-cek-wrap-v1"); no AEAD additional data.
+	//	2 = HKDF-SHA256(shared, salt="", info="dmcn-cek-wrap-v2" || eph_pub || recipient_pub),
+	//	    the kem_context of RFC 9180 section 4.1 DHKEM; header and body blobs are sealed with
+	//	    additional data "dmcn-aad-hdr-v1\0" and "dmcn-aad-body-v1\0" respectively.
+	//
+	// It lives on the recipient record rather than on the envelope because the record is what
+	// survives storage: a mailbox persists MailboxEntry/MailboxBody, which carry the recipients
+	// but drop the envelope's version, message_id and created_at. A reader MUST dispatch on this
+	// value and MUST NOT attempt trial decryption.
+	Kdf           uint32 `protobuf:"varint,7,opt,name=kdf,proto3" json:"kdf,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -791,6 +811,13 @@ func (x *RecipientRecord) GetCekTag() []byte {
 		return x.CekTag
 	}
 	return nil
+}
+
+func (x *RecipientRecord) GetKdf() uint32 {
+	if x != nil {
+		return x.Kdf
+	}
+	return 0
 }
 
 // EncryptedEnvelope is the outer transport structure for encrypted messages.
@@ -1047,7 +1074,7 @@ const file_message_proto_rawDesc = "" +
 	"\x0eMessageContent\x12-\n" +
 	"\x04body\x18\x01 \x01(\v2\x19.dmcn.message.MessageBodyR\x04body\x12@\n" +
 	"\vattachments\x18\x02 \x03(\v2\x1e.dmcn.message.AttachmentRecordR\vattachments\x12=\n" +
-	"\falternatives\x18\x03 \x03(\v2\x19.dmcn.message.MessageBodyR\falternatives\"\xd5\x01\n" +
+	"\falternatives\x18\x03 \x03(\v2\x19.dmcn.message.MessageBodyR\falternatives\"\xe7\x01\n" +
 	"\x0fRecipientRecord\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\fR\bdeviceId\x12&\n" +
 	"\x0frecipient_x_pub\x18\x02 \x01(\fR\rrecipientXPub\x12&\n" +
@@ -1055,7 +1082,8 @@ const file_message_proto_rawDesc = "" +
 	"\vwrapped_cek\x18\x04 \x01(\fR\n" +
 	"wrappedCek\x12\x1b\n" +
 	"\tcek_nonce\x18\x05 \x01(\fR\bcekNonce\x12\x17\n" +
-	"\acek_tag\x18\x06 \x01(\fR\x06cekTag\"\xc7\x05\n" +
+	"\acek_tag\x18\x06 \x01(\fR\x06cekTag\x12\x10\n" +
+	"\x03kdf\x18\a \x01(\rR\x03kdf\"\xc7\x05\n" +
 	"\x11EncryptedEnvelope\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1d\n" +
 	"\n" +

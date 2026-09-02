@@ -271,6 +271,7 @@ export async function encodeSplitEnvelope(env: {
     wrappedCek: Uint8Array;
     cekNonce: Uint8Array;
     cekTag: Uint8Array;
+    kdf?: number;
   }>;
   encryptedHeader: Uint8Array;
   headerNonce: Uint8Array;
@@ -309,6 +310,7 @@ export async function decodeMailboxEntry(data: Uint8Array): Promise<{
     wrappedCek: Uint8Array;
     cekNonce: Uint8Array;
     cekTag: Uint8Array;
+    kdf?: number;
   }>;
   encryptedHeader: Uint8Array;
   headerNonce: Uint8Array;

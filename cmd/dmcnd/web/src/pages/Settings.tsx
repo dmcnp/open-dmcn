@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Children, Fragment, useEffect, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
@@ -52,53 +52,92 @@ function StorageCard() {
   const Upgrade = deployment.storageUpgrade;
 
   return (
-    <div style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-        <Icon name="database" size={16} style={{ color: 'var(--brand)' }} />
-        <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Storage</span>
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {/* A deployment with no billing has no plan to speak of — dmcnd self-host is the whole
+          product for its owner. Name the section for what it actually contains. */}
+      <SectionHeading title={Upgrade ? 'Plan & storage' : 'Storage'} />
+      <div style={{
+        background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)',
+      }}>
+        <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-strong)' }}>Personal storage</span>
+        {localOnly ? (
+          /* Where the state lives matters more than how much of it there is. A relay that
+             hosts no personal storage is a valid deployment, but it means none of this
+             follows the account to another device — and finding that out by opening a
+             second device to an empty Sent folder reads as data loss. */
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 'var(--leading-normal)' }}>
+            This server doesn't store your mailbox state, so your sent mail, contacts, settings and
+            message flags are kept in <strong>this browser only</strong>. They won't appear on your
+            other devices, and clearing this browser's data loses them.
+          </p>
+        ) : usage == null ? (
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            {loading ? 'Loading usage…' : 'Usage unavailable right now.'}
+          </p>
+        ) : unbounded ? (
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
+            Using <strong>{formatBytes(usage.usedBytes)}</strong> — no storage limit on this account.
+          </p>
+        ) : (
+          <UsageMeter
+            value={usage.usedBytes}
+            max={usage.quotaBytes}
+            valueText={`${formatBytes(usage.usedBytes)} of ${formatBytes(usage.quotaBytes)}`}
+          />
+        )}
+        {!localOnly && (
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
+            Covers your sent mail, contacts, settings and message flags — all end-to-end encrypted and
+            stored only as ciphertext on your relay.
+          </p>
+        )}
+        {/* Whether more storage can be bought, and how, belongs to whoever runs the service. */}
+        {!localOnly && Upgrade && <Upgrade usage={usage} onChanged={refresh} />}
       </div>
-      {localOnly ? (
-        /* Where the state lives matters more than how much of it there is. A relay that
-           hosts no personal storage is a valid deployment, but it means none of this
-           follows the account to another device — and finding that out by opening a
-           second device to an empty Sent folder reads as data loss. */
-        <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 'var(--leading-normal)' }}>
-          This server doesn't store your mailbox state, so your sent mail, contacts, settings and
-          message flags are kept in <strong>this browser only</strong>. They won't appear on your
-          other devices, and clearing this browser's data loses them.
-        </p>
-      ) : usage == null ? (
-        <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-          {loading ? 'Loading usage…' : 'Usage unavailable right now.'}
-        </p>
-      ) : unbounded ? (
-        <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>
-          Using <strong>{formatBytes(usage.usedBytes)}</strong> — no storage limit on this account.
-        </p>
-      ) : (
-        <UsageMeter
-          label="Personal storage"
-          value={usage.usedBytes}
-          max={usage.quotaBytes}
-          valueText={`${formatBytes(usage.usedBytes)} of ${formatBytes(usage.quotaBytes)}`}
-        />
-      )}
-      {!localOnly && (
-        <p style={{ margin: 'var(--space-3) 0 0', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-          Covers your sent mail, contacts, settings and message flags — all end-to-end encrypted and
-          stored only as ciphertext on your relay.
-        </p>
-      )}
-      {/* Whether more storage can be bought, and how, belongs to whoever runs the service. */}
-      {!localOnly && Upgrade && <Upgrade usage={usage} onChanged={refresh} />}
+    </section>
+  );
+}
+
+// Uppercase section eyebrow, with optional right-aligned meta (a renewal date, a status).
+function SectionHeading({ title, meta }: { title: string; meta?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-4)' }}>
+      <h2 style={{ margin: 0, fontSize: 'var(--text-sm)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{title}</h2>
+      {meta && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-subtle)' }}>{meta}</span>}
     </div>
   );
 }
 
-// Settings row: title + description on the left, control on the right.
-function Row({ title, desc, children }: { title: string; desc?: string; children?: React.ReactNode }) {
+// Groups related rows behind one border, hairline-separated. The divider is drawn BETWEEN
+// rows rather than under each, so the last row never trails a border into the card edge —
+// and a conditional row that renders null takes its divider with it.
+function RowGroup({ children }: { children: React.ReactNode }) {
+  const rows = Children.toArray(children).filter(Boolean);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-6)', padding: 'var(--space-4) 0', borderBottom: '1px solid var(--border-subtle)' }}>
+    <div style={{
+      background: 'var(--surface-card)', border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column',
+    }}>
+      {rows.map((row, i) => (
+        <Fragment key={i}>
+          {i > 0 && <div style={{ height: 1, background: 'var(--border-subtle)' }} />}
+          {row}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+// Settings row: title + description on the left, control on the right. `grouped` is the
+// inside-a-RowGroup variant — inset padding, and no border of its own.
+function Row({ title, desc, grouped, children }: { title: string; desc?: string; grouped?: boolean; children?: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 'var(--space-6)',
+      padding: grouped ? 'var(--space-5) var(--space-6)' : 'var(--space-4) 0',
+      borderBottom: grouped ? undefined : '1px solid var(--border-subtle)',
+    }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>{title}</div>
         {desc && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>}
@@ -477,22 +516,32 @@ export function Settings() {
         )}
 
         {section === 'account' && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
+          <div style={{ marginTop: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+            <p style={{ margin: 0, fontSize: 'var(--text-md)', color: 'var(--text-muted)' }}>
+              Manage your identity, plan and session on this device.
+            </p>
+
             <StorageCard />
-            <Row title="Signed in as">
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)' }}>{address}</span>
-            </Row>
-            {managedDomain && (
-              <Row title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing).">
-                <Badge variant="neutral"><Icon name="shield-check" size={13} /> Managed</Badge>
-              </Row>
-            )}
-            <Row title="Switch or add account" desc="Use another identity (work, personal) in this tab, or add a new one.">
-              <Button variant="secondary" size="sm" leftIcon={<Icon name="users" size={15} />} onClick={() => navigate('/login')}>Switch account</Button>
-            </Row>
-            <Row title="Sign out" desc="Locks this account on this device and ends the session. It stays available to unlock again.">
-              <Button variant="danger" size="sm" leftIcon={<Icon name="log-out" size={15} />} onClick={handleSignOut}>Sign out</Button>
-            </Row>
+
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              <SectionHeading title="Mailbox" />
+              <RowGroup>
+                <Row grouped title="Signed in as" desc="This identity signs and decrypts your mail.">
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)', whiteSpace: 'nowrap' }}>{address}</span>
+                </Row>
+                {managedDomain ? (
+                  <Row grouped title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing).">
+                    <Badge variant="neutral"><Icon name="shield-check" size={13} /> Managed</Badge>
+                  </Row>
+                ) : null}
+                <Row grouped title="Switch or add account" desc="Use another identity in this tab, or add a new one.">
+                  <Button variant="secondary" size="sm" leftIcon={<Icon name="users" size={15} />} onClick={() => navigate('/login')}>Switch account</Button>
+                </Row>
+                <Row grouped title="Sign out" desc="Locks this account on this device and ends the session. It stays available to unlock again.">
+                  <Button variant="danger" size="sm" leftIcon={<Icon name="log-out" size={15} />} onClick={handleSignOut}>Sign out</Button>
+                </Row>
+              </RowGroup>
+            </section>
           </div>
         )}
 

@@ -19,9 +19,75 @@ var (
 	ErrDecryptionFailed = errors.New("message: decryption failed")
 )
 
-// hkdfInfo is the domain separation string for HKDF key derivation
-// when wrapping the CEK for each recipient.
-var hkdfInfo = []byte("dmcn-cek-wrap-v1")
+const (
+	// cekWrapLabelV1 is the original CEK-wrap HKDF info: a bare constant. It binds the derived
+	// key-wrapping key to nothing about who it was derived for.
+	cekWrapLabelV1 = "dmcn-cek-wrap-v1"
+	// cekWrapLabelV2 labels the context-bound derivation in cekWrapInfoV2.
+	cekWrapLabelV2 = "dmcn-cek-wrap-v2"
+)
+
+// KDF identifies a wrap's key-derivation generation, mirrored on the wire as
+// RecipientRecord.kdf. See proto/core/message.proto for the normative definition.
+//
+// The rule that makes this work without any compatibility branch: ABSENT (0) MEANS 1. Every wrap
+// written before the field existed used generation 1, and stored envelopes are never
+// re-encrypted, so that mapping is permanent rather than transitional.
+const (
+	// KDFv1 derives the key-wrapping key from a bare label and seals the split blobs with no
+	// additional data. It binds nothing about who the key was derived for.
+	KDFv1 uint32 = 1
+	// KDFv2 binds the derivation to the ephemeral and recipient keys (RFC 9180 kem_context) and
+	// seals the header and body blobs under distinct AEAD labels.
+	KDFv2 uint32 = 2
+)
+
+// producerKDF is the generation new wraps are written with. Readers dispatch on the value each
+// record carries, so this only decides what we emit.
+const producerKDF = KDFv2
+
+// normalizeKDF applies the absent-means-1 rule.
+func normalizeKDF(v uint32) uint32 {
+	if v == 0 {
+		return KDFv1
+	}
+	return v
+}
+
+// cekWrapInfoV1 is the legacy derivation context: the label alone.
+func cekWrapInfoV1() []byte { return []byte(cekWrapLabelV1) }
+
+// cekWrapInfoV2 binds the key-wrapping key to the two keys it was derived for, mirroring
+// RFC 9180 section 4.1 DHKEM's kem_context = concat(enc, pkRm) — enc being the sender's
+// ephemeral public key and pkRm the recipient's.
+//
+// Concatenation is unambiguous only because both are fixed 32-byte keys, which is why wrapCEK
+// and unwrapCEK check the widths themselves rather than trusting the parser to have run.
+//
+// Deliberately no message ID and no transcript: wrapCEK is shared with SealedBlob, which has no
+// message, and the envelope fields worth binding (message_id, created_at) are exactly the ones
+// relay.MailboxStore drops, so binding them would make stored mail unreadable.
+// cekWrapInfo returns the HKDF info for a generation, or an error for one this build does not
+// know. Refusing an unknown generation is deliberate: a reader that cannot reproduce the
+// derivation must say so rather than fall back and appear to fail authentication.
+func cekWrapInfo(kdf uint32, ephPub, rcptPub [32]byte) ([]byte, error) {
+	switch normalizeKDF(kdf) {
+	case KDFv1:
+		return cekWrapInfoV1(), nil
+	case KDFv2:
+		return cekWrapInfoV2(ephPub, rcptPub), nil
+	default:
+		return nil, fmt.Errorf("message: unknown CEK-wrap derivation %d", kdf)
+	}
+}
+
+func cekWrapInfoV2(ephPub, rcptPub [32]byte) []byte {
+	info := make([]byte, 0, len(cekWrapLabelV2)+64)
+	info = append(info, cekWrapLabelV2...)
+	info = append(info, ephPub[:]...)
+	info = append(info, rcptPub[:]...)
+	return info
+}
 
 // sizeClasses defines the payload size class buckets for traffic analysis
 // resistance. See SPEC.md §3.
@@ -50,6 +116,7 @@ type RecipientRecord struct {
 	WrappedCEK    []byte   // AES-256-GCM ciphertext of CEK
 	CEKNonce      [12]byte // 96-bit nonce for CEK wrapping
 	CEKTag        [16]byte // GCM auth tag for CEK wrapping
+	KDF           uint32   // derivation generation; 0 on the wire means KDFv1
 }
 
 // EncryptedEnvelope is the outer transport structure for encrypted messages.
@@ -169,7 +236,7 @@ func Decrypt(env *EncryptedEnvelope, recipientPrivKey [32]byte, recipientPubKey 
 	}
 
 	// Unwrap CEK
-	cek, err := unwrapCEK(rec, recipientPrivKey)
+	cek, err := unwrapCEK(rec, recipientPrivKey, recipientPubKey)
 	if err != nil {
 		return nil, fmt.Errorf("%w: unwrap CEK: %v", ErrDecryptionFailed, err)
 	}
@@ -181,7 +248,10 @@ func Decrypt(env *EncryptedEnvelope, recipientPrivKey [32]byte, recipientPubKey 
 	}
 
 	// Unpad payload
-	payload := unpadPayload(padded)
+	payload, err := unpadPayload(padded)
+	if err != nil {
+		return nil, err
+	}
 
 	// Deserialize SignedMessage
 	pb := &dmcnpb.SignedMessage{}
@@ -189,15 +259,43 @@ func Decrypt(env *EncryptedEnvelope, recipientPrivKey [32]byte, recipientPubKey 
 		return nil, fmt.Errorf("%w: unmarshal: %v", ErrDecryptionFailed, err)
 	}
 
-	return signedMessageFromProto(pb), nil
+	sm := signedMessageFromProto(pb)
+
+	// Verify here rather than leaving it to the caller. DecryptHeader (the split format) already
+	// verifies internally, and a decrypt that returns unauthenticated plaintext with nothing in
+	// the type system marking it as such is the kind of thing a later caller forgets.
+	if err := sm.Verify(); err != nil {
+		return nil, fmt.Errorf("%w: sender signature: %v", ErrDecryptionFailed, err)
+	}
+
+	// The envelope's own copies of these sit outside the sender signature, so a relay can
+	// rewrite them freely. Cross-check them against the signed payload.
+	//
+	// Only when present: an envelope rebuilt from a mailbox entry carries neither (MailboxStore
+	// persists MailboxEntry/MailboxBody, which have no message_id or created_at), so absent is
+	// not a mismatch.
+	if env.MessageID != ([16]byte{}) && env.MessageID != sm.Plaintext.MessageID {
+		return nil, fmt.Errorf("%w: envelope message ID does not match the signed payload", ErrDecryptionFailed)
+	}
+	if env.CreatedAt != 0 && env.CreatedAt != sm.Plaintext.SentAt.Unix() {
+		return nil, fmt.Errorf("%w: envelope created_at does not match the signed payload", ErrDecryptionFailed)
+	}
+
+	return sm, nil
 }
 
 // wrapCEK wraps the CEK for a single recipient using the KEM pattern:
 // 1. Generate ephemeral X25519 key pair
 // 2. X25519 shared secret = ephemeral_priv × recipient_x25519_pub
-// 3. KWK = HKDF-SHA256(shared_secret, nil, "dmcn-cek-wrap-v1")
+// 3. KWK = HKDF-SHA256(shared_secret, salt=nil, info) — see cekWrapInfoV1/V2
 // 4. AES-256-GCM encrypt CEK with KWK
 func wrapCEK(cek []byte, recipient RecipientInfo) (RecipientRecord, error) {
+	// An all-zero recipient key would make the derivation context ambiguous and the DH
+	// meaningless. X25519 rejects it as a low-order point too; this is the clearer error.
+	if recipient.X25519Pub == ([32]byte{}) {
+		return RecipientRecord{}, errors.New("wrap CEK: recipient X25519 key is all zero")
+	}
+
 	// Generate ephemeral key pair
 	ephPub, ephPriv, err := crypto.GenerateX25519KeyPair()
 	if err != nil {
@@ -210,8 +308,14 @@ func wrapCEK(cek []byte, recipient RecipientInfo) (RecipientRecord, error) {
 		return RecipientRecord{}, fmt.Errorf("key exchange: %w", err)
 	}
 
-	// Derive key-wrapping key
-	kwk, err := crypto.DeriveKey(shared[:], nil, hkdfInfo, crypto.AES256KeySize)
+	// Derive key-wrapping key. Salt is nil, matching the browser's `new Uint8Array(0)` — both
+	// become 32 zero bytes per RFC 5869 section 2.2. That equivalence is load-bearing parity:
+	// change either side and Go and the browser derive different keys.
+	info, err := cekWrapInfo(producerKDF, ephPub, recipient.X25519Pub)
+	if err != nil {
+		return RecipientRecord{}, err
+	}
+	kwk, err := crypto.DeriveKey(shared[:], nil, info, crypto.AES256KeySize)
 	if err != nil {
 		return RecipientRecord{}, fmt.Errorf("derive KWK: %w", err)
 	}
@@ -227,6 +331,7 @@ func wrapCEK(cek []byte, recipient RecipientInfo) (RecipientRecord, error) {
 		RecipientXPub: recipient.X25519Pub,
 		EphemeralXPub: ephPub,
 		WrappedCEK:    ciphertext,
+		KDF:           producerKDF,
 	}
 	copy(rec.CEKNonce[:], nonce)
 	copy(rec.CEKTag[:], tag)
@@ -234,27 +339,41 @@ func wrapCEK(cek []byte, recipient RecipientInfo) (RecipientRecord, error) {
 	return rec, nil
 }
 
-// unwrapCEK unwraps the CEK from a recipient record using the recipient's
-// X25519 private key.
-func unwrapCEK(rec *RecipientRecord, recipientPrivKey [32]byte) ([]byte, error) {
+// unwrapCEK unwraps the CEK from a recipient record using the recipient's X25519 private key.
+//
+// recipientPubKey is the READER'S OWN public key, not rec.RecipientXPub. The v2 derivation binds
+// the key-wrapping key to the recipient it was sealed for, and taking that value from the record
+// would bind it to a field the sender chose instead of one the reader knows. Callers that select
+// a record by matching rec.RecipientXPub pass an equal value; OpenSealed's try-every-record
+// fallback deliberately does not.
+//
+// The record states its own derivation generation (RecipientRecord.kdf, absent meaning 1), so
+// this dispatches rather than guessing. No trial decryption: an implementation reading this
+// format needs one field, not a catalogue of derivations to attempt in order.
+func unwrapCEK(rec *RecipientRecord, recipientPrivKey, recipientPubKey [32]byte) ([]byte, error) {
+	if rec.EphemeralXPub == ([32]byte{}) {
+		return nil, errors.New("unwrap CEK: ephemeral X25519 key is all zero")
+	}
+
+	info, err := cekWrapInfo(rec.KDF, rec.EphemeralXPub, recipientPubKey)
+	if err != nil {
+		return nil, err
+	}
+
 	// Compute shared secret
 	shared, err := crypto.X25519SharedSecret(recipientPrivKey, rec.EphemeralXPub)
 	if err != nil {
 		return nil, fmt.Errorf("key exchange: %w", err)
 	}
 
-	// Derive key-wrapping key
-	kwk, err := crypto.DeriveKey(shared[:], nil, hkdfInfo, crypto.AES256KeySize)
+	kwk, err := crypto.DeriveKey(shared[:], nil, info, crypto.AES256KeySize)
 	if err != nil {
 		return nil, fmt.Errorf("derive KWK: %w", err)
 	}
-
-	// Decrypt CEK
 	cek, err := crypto.AESGCMDecrypt(kwk, rec.CEKNonce[:], rec.WrappedCEK, rec.CEKTag[:])
 	if err != nil {
 		return nil, fmt.Errorf("unwrap CEK: %w", err)
 	}
-
 	return cek, nil
 }
 
@@ -293,17 +412,23 @@ func padPayload(payload []byte, targetSize uint32) []byte {
 }
 
 // unpadPayload removes padding and returns the original payload.
-func unpadPayload(padded []byte) []byte {
+//
+// The 4-byte length prefix lives INSIDE the AEAD, so by the time this runs the bytes are
+// authenticated: a malformed prefix means the caller opened something padPayload did not
+// produce — a bug or a format mismatch, never attacker input. Return an error rather than the
+// padded buffer, because handing padding back as payload turns a local mistake into a protobuf
+// decode failure somewhere far away.
+func unpadPayload(padded []byte) ([]byte, error) {
 	if len(padded) < 4 {
-		return padded
+		return nil, fmt.Errorf("%w: padded payload is %d bytes, shorter than its length prefix", ErrDecryptionFailed, len(padded))
 	}
 
 	actualLen := uint32(padded[0])<<24 | uint32(padded[1])<<16 | uint32(padded[2])<<8 | uint32(padded[3])
-	if int(actualLen)+4 > len(padded) {
-		return padded
+	if uint64(actualLen)+4 > uint64(len(padded)) {
+		return nil, fmt.Errorf("%w: padded length prefix %d exceeds the %d-byte buffer", ErrDecryptionFailed, actualLen, len(padded))
 	}
 
-	return padded[4 : 4+actualLen]
+	return padded[4 : 4+actualLen], nil
 }
 
 // ToProto converts an EncryptedEnvelope to its protobuf representation.
@@ -327,6 +452,7 @@ func (e *EncryptedEnvelope) ToProto() *dmcnpb.EncryptedEnvelope {
 			WrappedCek:    r.WrappedCEK,
 			CekNonce:      r.CEKNonce[:],
 			CekTag:        r.CEKTag[:],
+			Kdf:           r.KDF,
 		})
 	}
 
@@ -357,36 +483,87 @@ func EncryptedEnvelopeFromProto(pb *dmcnpb.EncryptedEnvelope) (*EncryptedEnvelop
 		PayloadSizeClass: pb.PayloadSizeClass,
 		CreatedAt:        pb.CreatedAt,
 	}
-	copy(env.MessageID[:], pb.MessageId)
-	copy(env.PayloadNonce[:], pb.PayloadNonce)
-	copy(env.PayloadTag[:], pb.PayloadTag)
-	copy(env.RatchetPubKey[:], pb.RatchetPubKey)
+	for _, f := range []struct {
+		dst, src []byte
+		name     string
+	}{
+		{env.MessageID[:], pb.MessageId, "message_id"},
+		{env.PayloadNonce[:], pb.PayloadNonce, "payload_nonce"},
+		{env.PayloadTag[:], pb.PayloadTag, "payload_tag"},
+		{env.RatchetPubKey[:], pb.RatchetPubKey, "ratchet_pub_key"},
+	} {
+		if err := fixedField(f.dst, f.src, f.name); err != nil {
+			return nil, err
+		}
+	}
 
 	if len(pb.EncryptedHeader) > 0 {
 		env.EncryptedHeader = pb.EncryptedHeader
-		copy(env.HeaderNonce[:], pb.HeaderNonce)
-		copy(env.HeaderTag[:], pb.HeaderTag)
 		env.HeaderSizeClass = pb.HeaderSizeClass
 		env.EncryptedBody = pb.EncryptedBody
-		copy(env.BodyNonce[:], pb.BodyNonce)
-		copy(env.BodyTag[:], pb.BodyTag)
 		env.BodySizeClass = pb.BodySizeClass
 		env.BodyContentAddress = pb.BodyContentAddress
+		for _, f := range []struct {
+			dst, src []byte
+			name     string
+		}{
+			{env.HeaderNonce[:], pb.HeaderNonce, "header_nonce"},
+			{env.HeaderTag[:], pb.HeaderTag, "header_tag"},
+			{env.BodyNonce[:], pb.BodyNonce, "body_nonce"},
+			{env.BodyTag[:], pb.BodyTag, "body_tag"},
+		} {
+			if err := fixedField(f.dst, f.src, f.name); err != nil {
+				return nil, err
+			}
+		}
 	}
 
-	for _, r := range pb.Recipients {
+	for i, r := range pb.Recipients {
 		rec := RecipientRecord{
 			WrappedCEK: r.WrappedCek,
+			KDF:        r.Kdf,
 		}
-		copy(rec.DeviceID[:], r.DeviceId)
-		copy(rec.RecipientXPub[:], r.RecipientXPub)
-		copy(rec.EphemeralXPub[:], r.EphemeralXPub)
-		copy(rec.CEKNonce[:], r.CekNonce)
-		copy(rec.CEKTag[:], r.CekTag)
+		for _, f := range []struct {
+			dst, src []byte
+			name     string
+		}{
+			{rec.DeviceID[:], r.DeviceId, "device_id"},
+			{rec.RecipientXPub[:], r.RecipientXPub, "recipient_x_pub"},
+			{rec.EphemeralXPub[:], r.EphemeralXPub, "ephemeral_x_pub"},
+			{rec.CEKNonce[:], r.CekNonce, "cek_nonce"},
+			{rec.CEKTag[:], r.CekTag, "cek_tag"},
+		} {
+			if err := fixedField(f.dst, f.src, f.name); err != nil {
+				return nil, fmt.Errorf("recipient %d: %w", i, err)
+			}
+		}
 		env.Recipients = append(env.Recipients, rec)
 	}
 
 	return env, nil
+}
+
+// fixedField copies src into the fixed-width dst, requiring src to be either absent or exactly
+// len(dst) bytes.
+//
+// "Absent or exact" rather than "exact": an envelope rebuilt from a mailbox entry legitimately
+// carries no message_id, payload_nonce, payload_tag or ratchet_pub_key — relay.MailboxStore
+// persists MailboxEntry/MailboxBody, which do not hold them — so demanding an exact length would
+// reject every stored message. Absent stays absent, which the reader already handles: an
+// all-zero recipient or ephemeral key is rejected outright in wrapCEK/unwrapCEK.
+//
+// What this does reject is the silent truncate-or-zero-pad that a bare copy() performed on
+// attacker-controlled network input, where a 31-byte recipient key became a different,
+// zero-padded 32-byte key.
+func fixedField(dst, src []byte, name string) error {
+	if len(src) == 0 {
+		return nil
+	}
+	if len(src) != len(dst) {
+		return fmt.Errorf("message: envelope: %s must be %d bytes, got %d", name, len(dst), len(src))
+	}
+	copy(dst, src)
+	return nil
 }
 
 // EnvelopeRatchetPubKeyIsZero checks that the RatchetPubKey field is

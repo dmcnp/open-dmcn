@@ -112,16 +112,53 @@ signature is computed over the canonical plaintext with no context tag.
   for each recipient device:
       eph         = fresh X25519 keypair
       shared      = X25519(eph_priv, recipient_pub)
-      kwk         = HKDF-SHA256(shared, info="dmcn-cek-wrap-v1")
+      kwk         = HKDF-SHA256(shared, salt="", info=<context>)
       wrapped_cek = AES-256-GCM(kwk, cek)          # nonce 12, tag 16
   ```
+
+  **Each wrap states its own derivation generation** in `recipient_record.kdf`, and a reader
+  MUST dispatch on that value. **Absent (0) means 1** — a protocol rule, not a compatibility
+  shim: every wrap written before the field existed used generation 1, and stored envelopes are
+  never re-encrypted. Two generations are defined:
+
+  | `kdf` | `info` | header/body additional data |
+  |-------|--------|------------------------------|
+  | 1 | `"dmcn-cek-wrap-v1"` | none |
+  | 2 | `"dmcn-cek-wrap-v2" ‖ eph_pub ‖ recipient_pub` | `"dmcn-aad-hdr-v1\0"` / `"dmcn-aad-body-v1\0"` |
+
+  Generation 2 is the `kem_context = concat(enc, pkRm)` of RFC 9180 §4.1 DHKEM: it binds the
+  wrapping key to the pair it was derived for, where generation 1's fixed label binds nothing.
+  Both inputs are fixed 32-byte keys, which is what makes the concatenation unambiguous.
+
+  A reader MUST NOT attempt trial decryption, and MUST reject a generation it does not know
+  rather than falling back. An implementation of this format needs to read one field, not
+  attempt a catalogue of derivations in order.
+
+  The field rides the **recipient record** rather than the envelope because the record is what
+  survives storage: a mailbox persists per-recipient entries that drop the envelope's `version`,
+  `message_id` and `created_at`. For the same reason the context carries no message identifier
+  and no transcript — and because the identical wrap is used for sealed blobs that have no
+  message at all, where the generation travels as a `kdf` member of the blob's recipient object.
 
 - sealed blobs are **padded to size-class buckets** (1 KB / 4 KB / 16 KB / 64 KB / 256 KB /
   1 MB, then round-up-to-MB; layout `[4-byte BE length][payload][zero padding]`) for
   traffic-analysis resistance;
 - envelope v2 is **split** into a small listable encrypted header (sender, subject,
   snippet, recipient lists, body commitments) and a large body, so listing an inbox never
-  reads bodies; the bcc list appears only on the sender's own copy;
+  reads bodies; the bcc list appears only on the sender's own copy. Header and body are sealed
+  under the SAME CEK with independent nonces, so each carries an AEAD additional-data label to
+  keep one from opening as the other. The labels are selected by the same `kdf` generation the
+  recipient record declares, so an envelope's blobs and its wraps can never disagree —
+  generation 1 predates the labels and uses none. They are constant for the same reason the wrap
+  context is minimal: nothing derived from the envelope survives storage;
+- **a reader MUST check that it is in the header's audience** (`recipient_address`, `to`, `cc`)
+  and surface a message that is not. This is the only defence against surreptitious forwarding,
+  and it cannot be replaced by an AEAD binding: a legitimate recipient holds the CEK, so it can
+  re-seal the identical header plaintext to a third party under any additional data it likes,
+  and the sender's signature — which covers the header plaintext, not its ciphertext — still
+  verifies. `recipient_address` is signed, so that is what a re-target cannot forge. A bridge
+  is the deliberate exception: an outbound-to-legacy copy names the legacy recipient while
+  being sealed to the bridge's key;
 - the header's **`snippet`** is the **leading text of the body**, not a free-form summary:
   the longest valid-UTF-8 prefix of the body's first 140 bytes, empty for a non-text body.
   Producers MUST derive it from the body they are sealing. It is covered by the header

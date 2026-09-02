@@ -117,6 +117,17 @@ func GenerateX25519KeyPair() (publicKey, privateKey [X25519KeySize]byte, err err
 	return publicKey, privateKey, nil
 }
 
+// X25519PublicFromPrivate derives the public half of an X25519 key pair from a private scalar,
+// for key pairs whose private half comes from somewhere other than the RNG — a KDF, say.
+func X25519PublicFromPrivate(privateKey [X25519KeySize]byte) (publicKey [X25519KeySize]byte, err error) {
+	pub, err := curve25519.X25519(privateKey[:], curve25519.Basepoint)
+	if err != nil {
+		return publicKey, fmt.Errorf("crypto: x25519 base point multiplication: %w", err)
+	}
+	copy(publicKey[:], pub)
+	return publicKey, nil
+}
+
 // X25519SharedSecret performs an X25519 Diffie-Hellman key exchange,
 // computing a shared secret from a private key and a peer's public key.
 //
@@ -161,6 +172,19 @@ func DeriveKey(secret, salt, info []byte, length int) ([]byte, error) {
 //
 // See SPEC.md §3 (payload encryption and CEK wrapping).
 func AESGCMEncrypt(key, plaintext []byte) (nonce, ciphertext, tag []byte, err error) {
+	return AESGCMEncryptAAD(key, plaintext, nil)
+}
+
+// AESGCMEncryptAAD is AESGCMEncrypt with additional authenticated data. The aad is
+// authenticated but not encrypted and is NOT carried on the wire, so a decrypting party must
+// derive byte-identical aad independently.
+//
+// That constraint is sharper than it looks: an envelope read back from a mailbox has been
+// through relay.MailboxStore, which persists MailboxEntry/MailboxBody rather than the envelope
+// and drops Version, MessageID and CreatedAt (and, in the browser's Sent store, the size
+// classes and body content address too). Deriving aad from any of those makes previously
+// stored mail permanently unreadable. See message.headerAAD/bodyAAD.
+func AESGCMEncryptAAD(key, plaintext, aad []byte) (nonce, ciphertext, tag []byte, err error) {
 	if len(key) != AES256KeySize {
 		return nil, nil, nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidKeySize, AES256KeySize, len(key))
 	}
@@ -181,11 +205,14 @@ func AESGCMEncrypt(key, plaintext []byte) (nonce, ciphertext, tag []byte, err er
 	}
 
 	// Seal appends ciphertext+tag to dst
-	sealed := gcm.Seal(nil, nonce, plaintext, nil)
+	sealed := gcm.Seal(nil, nonce, plaintext, aad)
 
-	// Split ciphertext and tag
+	// Split ciphertext and tag. The three-index slice caps ciphertext's capacity at its own
+	// length: Seal returned one array holding ciphertext||tag, so a plain two-index slice would
+	// leave the tag sitting in ciphertext's spare capacity where any later append by a caller
+	// would silently overwrite it.
 	tagOffset := len(sealed) - AESGCMTagSize
-	ciphertext = sealed[:tagOffset]
+	ciphertext = sealed[:tagOffset:tagOffset]
 	tag = sealed[tagOffset:]
 
 	return nonce, ciphertext, tag, nil
@@ -197,6 +224,12 @@ func AESGCMEncrypt(key, plaintext []byte) (nonce, ciphertext, tag []byte, err er
 //
 // See SPEC.md §3 (payload decryption and CEK unwrapping).
 func AESGCMDecrypt(key, nonce, ciphertext, tag []byte) ([]byte, error) {
+	return AESGCMDecryptAAD(key, nonce, ciphertext, tag, nil)
+}
+
+// AESGCMDecryptAAD is AESGCMDecrypt with additional authenticated data. The aad must be
+// byte-identical to the one used when sealing; see AESGCMEncryptAAD for what may go in it.
+func AESGCMDecryptAAD(key, nonce, ciphertext, tag, aad []byte) ([]byte, error) {
 	if len(key) != AES256KeySize {
 		return nil, fmt.Errorf("%w: expected %d bytes, got %d", ErrInvalidKeySize, AES256KeySize, len(key))
 	}
@@ -214,9 +247,13 @@ func AESGCMDecrypt(key, nonce, ciphertext, tag []byte) ([]byte, error) {
 		return nil, fmt.Errorf("crypto: gcm mode: %w", err)
 	}
 
-	// Rejoin ciphertext and tag for Open
-	sealed := append(ciphertext, tag...)
-	plaintext, err := gcm.Open(nil, nonce, sealed, nil)
+	// Rejoin ciphertext and tag for Open. Deliberately not append(ciphertext, tag...): when the
+	// caller's ciphertext has spare capacity, that writes the tag into the caller's own backing
+	// array. Build a fresh buffer so this function never mutates its inputs.
+	sealed := make([]byte, 0, len(ciphertext)+len(tag))
+	sealed = append(sealed, ciphertext...)
+	sealed = append(sealed, tag...)
+	plaintext, err := gcm.Open(nil, nonce, sealed, aad)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDecryptionFailed, err)
 	}

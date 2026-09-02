@@ -441,3 +441,98 @@ func TestDeriveKeyWithSalt(t *testing.T) {
 		t.Error("DeriveKey should fail with negative length")
 	}
 }
+
+// TestAESGCMEncryptDoesNotAliasTag pins that the returned ciphertext cannot be appended into the
+// tag that Seal placed immediately after it in the same array.
+//
+// Seal returns one buffer holding ciphertext||tag. Slicing it two-index left the tag inside
+// ciphertext's spare capacity, so any caller doing append(ciphertext, ...) silently overwrote it.
+// The three-index slice in AESGCMEncrypt caps the capacity so append reallocates instead.
+func TestAESGCMEncryptDoesNotAliasTag(t *testing.T) {
+	key := bytes.Repeat([]byte{0x11}, AES256KeySize)
+	nonce, ciphertext, tag, err := AESGCMEncrypt(key, []byte("some plaintext to seal"))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	tagBefore := append([]byte(nil), tag...)
+
+	if got, want := cap(ciphertext), len(ciphertext); got != want {
+		t.Errorf("ciphertext cap = %d, len = %d: spare capacity overlaps the tag", got, want)
+	}
+
+	// What a caller might plausibly do. Before the fix this clobbered the tag.
+	_ = append(ciphertext, bytes.Repeat([]byte{0xff}, 16)...)
+
+	if !bytes.Equal(tag, tagBefore) {
+		t.Fatalf("tag mutated by an append to ciphertext: %x -> %x", tagBefore, tag)
+	}
+	if _, err := AESGCMDecrypt(key, nonce, ciphertext, tag); err != nil {
+		t.Fatalf("decrypt after append: %v", err)
+	}
+}
+
+// TestAESGCMDecryptDoesNotMutateInput pins that rejoining ciphertext and tag never writes into
+// the caller's backing array. The old form was append(ciphertext, tag...), which does exactly
+// that whenever the caller's slice has spare capacity.
+func TestAESGCMDecryptDoesNotMutateInput(t *testing.T) {
+	key := bytes.Repeat([]byte{0x22}, AES256KeySize)
+	nonce, ciphertext, tag, err := AESGCMEncrypt(key, []byte("payload"))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+
+	// A ciphertext sitting in a larger buffer, with recognisable bytes after it.
+	backing := make([]byte, len(ciphertext)+32)
+	copy(backing, ciphertext)
+	for i := len(ciphertext); i < len(backing); i++ {
+		backing[i] = 0x5a
+	}
+	view := backing[:len(ciphertext)]
+
+	if _, err := AESGCMDecrypt(key, nonce, view, tag); err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	for i := len(ciphertext); i < len(backing); i++ {
+		if backing[i] != 0x5a {
+			t.Fatalf("AESGCMDecrypt wrote into the caller's buffer at offset %d", i)
+		}
+	}
+}
+
+// TestAESGCMAAD covers the additional-data variants: same output as the plain form when aad is
+// nil, and a hard failure when the aad differs between seal and open.
+func TestAESGCMAAD(t *testing.T) {
+	key := bytes.Repeat([]byte{0x33}, AES256KeySize)
+	plaintext := []byte("bound to context")
+	aad := []byte("dmcn-test-aad")
+
+	nonce, ciphertext, tag, err := AESGCMEncryptAAD(key, plaintext, aad)
+	if err != nil {
+		t.Fatalf("encrypt with aad: %v", err)
+	}
+
+	got, err := AESGCMDecryptAAD(key, nonce, ciphertext, tag, aad)
+	if err != nil {
+		t.Fatalf("decrypt with matching aad: %v", err)
+	}
+	if !bytes.Equal(got, plaintext) {
+		t.Errorf("plaintext = %q, want %q", got, plaintext)
+	}
+
+	if _, err := AESGCMDecryptAAD(key, nonce, ciphertext, tag, []byte("different")); err == nil {
+		t.Error("decrypt accepted a different aad")
+	}
+	if _, err := AESGCMDecrypt(key, nonce, ciphertext, tag); err == nil {
+		t.Error("decrypt accepted an absent aad where one was bound")
+	}
+
+	// And the nil-aad variant must stay interchangeable with the plain form, since every
+	// non-envelope caller (keystore, relay stores, onion) still uses the latter.
+	n2, c2, t2, err := AESGCMEncryptAAD(key, plaintext, nil)
+	if err != nil {
+		t.Fatalf("encrypt with nil aad: %v", err)
+	}
+	if _, err := AESGCMDecrypt(key, n2, c2, t2); err != nil {
+		t.Fatalf("plain decrypt of a nil-aad seal: %v", err)
+	}
+}

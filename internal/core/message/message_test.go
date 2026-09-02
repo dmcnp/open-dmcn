@@ -363,7 +363,10 @@ func TestPadUnpadRoundTrip(t *testing.T) {
 		t.Errorf("padded length = %d, want 1024", len(padded))
 	}
 
-	unpadded := unpadPayload(padded)
+	unpadded, err := unpadPayload(padded)
+	if err != nil {
+		t.Fatalf("unpadPayload: %v", err)
+	}
 	if !bytes.Equal(unpadded, payload) {
 		t.Errorf("unpadded = %q, want %q", unpadded, payload)
 	}
@@ -500,17 +503,38 @@ func TestMessageWithAttachments(t *testing.T) {
 	}
 }
 
+// TestUnpadPayloadEdgeCases pins that a malformed length prefix is an ERROR, not a silent
+// pass-through of the padded buffer.
+//
+// This inverts what the function used to do. The prefix sits inside the AEAD, so a bad value
+// means the caller opened something padPayload never produced — returning the padding as if it
+// were payload just moved the failure to a protobuf decode far away from the cause.
 func TestUnpadPayloadEdgeCases(t *testing.T) {
-	// Too short
-	short := []byte{0, 0}
-	if result := unpadPayload(short); !bytes.Equal(result, short) {
-		t.Error("unpadPayload should return input when too short")
+	// Too short to hold the length prefix at all.
+	if _, err := unpadPayload([]byte{0, 0}); err == nil {
+		t.Error("unpadPayload should reject a buffer shorter than its length prefix")
 	}
 
-	// Length exceeds buffer
-	bad := []byte{0, 0, 0, 255, 0} // claims 255 bytes but buffer has 1
-	if result := unpadPayload(bad); !bytes.Equal(result, bad) {
-		t.Error("unpadPayload should return input when length exceeds buffer")
+	// Prefix claims more than the buffer holds.
+	if _, err := unpadPayload([]byte{0, 0, 0, 255, 0}); err == nil {
+		t.Error("unpadPayload should reject a length prefix that exceeds the buffer")
+	}
+
+	// High bit set: 0x80000000 bytes claimed. Guards the Go/browser parity trap — the browser's
+	// unpadPayload used signed 32-bit shifts, so this went NEGATIVE, slipped past the bounds
+	// check and returned an empty array where Go returned the whole padded buffer. Both now
+	// reject it.
+	if _, err := unpadPayload([]byte{0x80, 0, 0, 0, 0, 0, 0, 0}); err == nil {
+		t.Error("unpadPayload should reject a length prefix with the high bit set")
+	}
+
+	// Exact fit is still valid.
+	got, err := unpadPayload([]byte{0, 0, 0, 2, 0xaa, 0xbb})
+	if err != nil {
+		t.Fatalf("unpadPayload on an exact fit: %v", err)
+	}
+	if !bytes.Equal(got, []byte{0xaa, 0xbb}) {
+		t.Errorf("unpadPayload = %x, want aabb", got)
 	}
 }
 

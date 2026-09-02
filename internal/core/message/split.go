@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -17,6 +18,44 @@ const ctxMsgHeader = "dmcn-msg-header-v1\x00"
 
 // snippetMax is how many bytes of a text body are previewed in the header.
 const snippetMax = 140
+
+// aadHeaderV1 and aadBodyV1 are the AEAD additional-data labels distinguishing the two blobs a
+// split envelope seals under ONE CEK.
+//
+// Be honest about what they buy: hygiene, not a vulnerability fix. Header and body share a CEK
+// and differ only by nonce, so without a label a relay can serve the header blob where the body
+// belongs and it AEAD-opens successfully, failing later on body_hash. The labels move that
+// rejection to the AEAD, where it belongs. Nothing leaks either way, and body_hash already
+// catches it unconditionally.
+//
+// They are NOT a defence against surreptitious forwarding. AAD is authenticated under the CEK,
+// and that adversary is a legitimate recipient who HOLDS the CEK: they can re-seal the identical
+// header plaintext under any AAD they choose, and the sender's Ed25519 signature — which covers
+// the header plaintext, not its ciphertext — still verifies. What catches that is a reader
+// checking the signed recipient_address; see MessageHeader.AddressedTo.
+//
+// These are constants on purpose. Anything derived from the envelope risks binding a field that
+// relay.MailboxStore does not persist, which would make stored mail unreadable — see
+// crypto.AESGCMEncryptAAD.
+const (
+	aadHeaderV1 = "dmcn-aad-hdr-v1\x00"
+	aadBodyV1   = "dmcn-aad-body-v1\x00"
+)
+
+// headerAAD and bodyAAD return the additional data for a given derivation generation.
+//
+// They key off the SAME value the recipient record carries, so an envelope's blobs and its wraps
+// can never disagree: a reader unwraps the CEK, learns the generation from the record it used,
+// and opens the blobs with the matching data. Generation 1 predates the labels and used none.
+func headerAAD(kdf uint32) []byte { return sealAAD(kdf, aadHeaderV1) }
+func bodyAAD(kdf uint32) []byte   { return sealAAD(kdf, aadBodyV1) }
+
+func sealAAD(kdf uint32, label string) []byte {
+	if normalizeKDF(kdf) == KDFv1 {
+		return nil
+	}
+	return []byte(label)
+}
 
 // ErrBodyHashMismatch means a fetched body does not match the (signed) header's
 // commitment — the body was tampered with or swapped.
@@ -64,6 +103,51 @@ type MessageHeader struct {
 type SignedHeader struct {
 	Header          MessageHeader
 	SenderSignature [64]byte
+}
+
+// Audience returns every address this header names as a recipient: the per-copy
+// recipient_address followed by the visible To and Cc lists.
+//
+// Bcc is deliberately excluded. It is populated only on the sender's own Sent self-copy, so
+// including it would make a Sent copy look "addressed to" people no recipient copy names.
+func (h *MessageHeader) Audience() []string {
+	out := make([]string, 0, 1+len(h.To)+len(h.Cc))
+	if h.RecipientAddress != "" {
+		out = append(out, h.RecipientAddress)
+	}
+	out = append(out, h.To...)
+	out = append(out, h.Cc...)
+	return out
+}
+
+// AddressedTo reports whether addr appears in the header's audience, case-insensitively.
+//
+// WHY THIS EXISTS. It is the check that detects surreptitious forwarding — the one thing the
+// envelope's AEAD cannot do. A legitimate recipient holds the CEK, so they can re-seal a
+// message's header plaintext to a third party and the sender's signature still verifies; no
+// amount of additional authenticated data helps, because AAD is authenticated under the very
+// key the attacker holds. What they CANNOT do is change recipient_address, which the sender
+// signed. So the reader compares it against itself.
+//
+// WHERE IT MUST NOT BE CALLED. Not from DecryptHeader, and not by the bridge. The browser seals
+// the outbound-to-legacy copy with recipient_address set to the LEGACY recipient while wrapping
+// the CEK to the bridge's key, so the bridge's own address never appears in a header it is
+// meant to open. A check inside DecryptHeader would stop all outbound legacy mail.
+//
+// ALIASES. An account with shared address aliases must not use this directly: an alias carries
+// the same keypair as its canonical address, so both resolve to one mailbox and mail addressed
+// to either is legitimately in it. Those readers should test each Audience() entry with
+// identity.AddressNamesAccount instead.
+func (h *MessageHeader) AddressedTo(addr string) bool {
+	if addr == "" {
+		return false
+	}
+	for _, a := range h.Audience() {
+		if strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(addr)) {
+			return true
+		}
+	}
+	return false
 }
 
 // MessageContent is the large part of a message: body + attachments.
@@ -297,9 +381,18 @@ func EncryptSplit(sh *SignedHeader, content *MessageContent, recipients []Recipi
 		return nil, fmt.Errorf("message: encrypt split: CEK: %w", err)
 	}
 
+	// Work on a copy. Below, this function stamps BodyContentAddress into the header and
+	// re-signs it, so sealing one SignedHeader twice would silently give the second copy a
+	// header committing to the FIRST copy's body. Every caller today does one Split per
+	// EncryptSplit, which is the only reason mutating in place was safe. A shallow copy is
+	// enough: the fields mutated here are a slice header and a fixed-size array, so the
+	// caller's Header slices are never written through.
+	shCopy := *sh
+	sh = &shCopy
+
 	// Body first: it is the content-addressed unit.
 	bClass := selectSizeClass(uint32(len(bodyBytes)))
-	bNonce, bCT, bTag, err := crypto.AESGCMEncrypt(cek, padPayload(bodyBytes, bClass))
+	bNonce, bCT, bTag, err := crypto.AESGCMEncryptAAD(cek, padPayload(bodyBytes, bClass), bodyAAD(producerKDF))
 	if err != nil {
 		return nil, fmt.Errorf("message: encrypt split: body: %w", err)
 	}
@@ -325,7 +418,7 @@ func EncryptSplit(sh *SignedHeader, content *MessageContent, recipients []Recipi
 		return nil, fmt.Errorf("message: encrypt split: marshal header: %w", err)
 	}
 	hClass := selectSizeClass(uint32(len(headerBytes)))
-	hNonce, hCT, hTag, err := crypto.AESGCMEncrypt(cek, padPayload(headerBytes, hClass))
+	hNonce, hCT, hTag, err := crypto.AESGCMEncryptAAD(cek, padPayload(headerBytes, hClass), headerAAD(producerKDF))
 	if err != nil {
 		return nil, fmt.Errorf("message: encrypt split: header: %w", err)
 	}
@@ -357,14 +450,20 @@ func EncryptSplit(sh *SignedHeader, content *MessageContent, recipients []Recipi
 	return env, nil
 }
 
-// unwrapFor finds the recipient's wrapped CEK in the envelope and unwraps it.
-func (e *EncryptedEnvelope) unwrapFor(recipientPriv, recipientPub [32]byte) ([]byte, error) {
+// unwrapFor returns the CEK and the derivation generation the matching record declared. The
+// caller needs the second value: the blobs' AEAD data is keyed on the same generation, so it
+// comes from the record rather than from a guess.
+func (e *EncryptedEnvelope) unwrapFor(recipientPriv, recipientPub [32]byte) ([]byte, uint32, error) {
 	for i := range e.Recipients {
 		if e.Recipients[i].RecipientXPub == recipientPub {
-			return unwrapCEK(&e.Recipients[i], recipientPriv)
+			cek, err := unwrapCEK(&e.Recipients[i], recipientPriv, recipientPub)
+			if err != nil {
+				return nil, 0, err
+			}
+			return cek, normalizeKDF(e.Recipients[i].KDF), nil
 		}
 	}
-	return nil, ErrRecipientNotFound
+	return nil, 0, ErrRecipientNotFound
 }
 
 // DecryptHeader unwraps the CEK, decrypts the header, and verifies its signature.
@@ -374,16 +473,20 @@ func DecryptHeader(env *EncryptedEnvelope, recipientPriv, recipientPub [32]byte)
 	if !env.IsSplit() {
 		return nil, errors.New("message: envelope is not split (no header)")
 	}
-	cek, err := env.unwrapFor(recipientPriv, recipientPub)
+	cek, kdf, err := env.unwrapFor(recipientPriv, recipientPub)
 	if err != nil {
 		return nil, err
 	}
-	padded, err := crypto.AESGCMDecrypt(cek, env.HeaderNonce[:], env.EncryptedHeader, env.HeaderTag[:])
+	padded, err := crypto.AESGCMDecryptAAD(cek, env.HeaderNonce[:], env.EncryptedHeader, env.HeaderTag[:], headerAAD(kdf))
 	if err != nil {
 		return nil, fmt.Errorf("%w: header: %v", ErrDecryptionFailed, err)
 	}
+	unpadded, err := unpadPayload(padded)
+	if err != nil {
+		return nil, err
+	}
 	pb := &dmcnpb.SignedHeader{}
-	if err := proto.Unmarshal(unpadPayload(padded), pb); err != nil {
+	if err := proto.Unmarshal(unpadded, pb); err != nil {
 		return nil, fmt.Errorf("%w: header unmarshal: %v", ErrDecryptionFailed, err)
 	}
 	sh := &SignedHeader{Header: messageHeaderFromProto(pb.GetHeader())}
@@ -400,16 +503,20 @@ func DecryptBody(env *EncryptedEnvelope, header *MessageHeader, recipientPriv, r
 	if !env.IsSplit() {
 		return nil, errors.New("message: envelope is not split (no body)")
 	}
-	cek, err := env.unwrapFor(recipientPriv, recipientPub)
+	cek, kdf, err := env.unwrapFor(recipientPriv, recipientPub)
 	if err != nil {
 		return nil, err
 	}
-	padded, err := crypto.AESGCMDecrypt(cek, env.BodyNonce[:], env.EncryptedBody, env.BodyTag[:])
+	padded, err := crypto.AESGCMDecryptAAD(cek, env.BodyNonce[:], env.EncryptedBody, env.BodyTag[:], bodyAAD(kdf))
 	if err != nil {
 		return nil, fmt.Errorf("%w: body: %v", ErrDecryptionFailed, err)
 	}
+	unpadded, err := unpadPayload(padded)
+	if err != nil {
+		return nil, err
+	}
 	pb := &dmcnpb.MessageContent{}
-	if err := proto.Unmarshal(unpadPayload(padded), pb); err != nil {
+	if err := proto.Unmarshal(unpadded, pb); err != nil {
 		return nil, fmt.Errorf("%w: body unmarshal: %v", ErrDecryptionFailed, err)
 	}
 	content := messageContentFromProto(pb)

@@ -1,6 +1,5 @@
 import { importX25519PublicKey } from './keys';
-
-const CEK_WRAP_INFO = new TextEncoder().encode('dmcn-cek-wrap-v1');
+import { cekWrapInfo, PRODUCER_KDF } from './sealVersion';
 const SIZE_CLASSES = [1024, 4096, 16384, 65536, 262144, 1048576];
 
 export interface RecipientInfo {
@@ -15,6 +14,9 @@ export interface RecipientRecord {
   wrappedCek: Uint8Array;
   cekNonce: Uint8Array;  // 12 bytes
   cekTag: Uint8Array;    // 16 bytes
+  // Derivation generation this wrap was written with (RecipientRecord.kdf on the wire).
+  // Omitted/0 means generation 1; see sealVersion.ts.
+  kdf?: number;
 }
 
 export function selectSizeClass(payloadSize: number): number {
@@ -40,15 +42,22 @@ export function padPayload(payload: Uint8Array, targetSize: number): Uint8Array 
   return padded;
 }
 
+// aesGcmEncrypt seals plaintext, optionally binding additional authenticated data.
+//
+// aad is authenticated but not encrypted and is NOT carried on the wire, so the opener must
+// derive byte-identical bytes independently. Only values that survive every persistence path
+// may go in it: an envelope read back from a mailbox has lost version, messageId and createdAt
+// (and, from the Sent store, the size classes and body content address too), so binding any of
+// those makes previously stored mail permanently unreadable. See Go crypto.AESGCMEncryptAAD.
 export async function aesGcmEncrypt(
   key: Uint8Array,
-  plaintext: Uint8Array
+  plaintext: Uint8Array,
+  aad?: Uint8Array
 ): Promise<{ nonce: Uint8Array; ciphertext: Uint8Array; tag: Uint8Array }> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const aesKey = await crypto.subtle.importKey('raw', key, 'AES-GCM', false, ['encrypt']);
-  const encrypted = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, plaintext)
-  );
+  const gcm = { name: 'AES-GCM', iv: nonce, tagLength: 128, ...(aad ? { additionalData: aad as BufferSource } : {}) };
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt(gcm, aesKey, plaintext));
   return {
     nonce,
     ciphertext: encrypted.slice(0, encrypted.length - 16),
@@ -72,10 +81,13 @@ export async function wrapCEK(cek: Uint8Array, recipient: RecipientInfo): Promis
   );
   const shared = new Uint8Array(sharedBits);
 
-  // Derive key-wrapping key via HKDF
+  // Derive key-wrapping key via HKDF. The empty salt matches Go's nil — both become 32 zero
+  // bytes per RFC 5869 section 2.2. That equivalence is load-bearing parity: change either side
+  // and Go and the browser derive different keys.
+  const info = cekWrapInfo(PRODUCER_KDF, ephPubRaw, recipient.x25519Pub);
   const sharedKey = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
   const kwk = await crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: CEK_WRAP_INFO },
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info },
     sharedKey,
     { name: 'AES-GCM', length: 256 },
     true,
@@ -93,5 +105,7 @@ export async function wrapCEK(cek: Uint8Array, recipient: RecipientInfo): Promis
     wrappedCek: ciphertext,
     cekNonce: nonce,
     cekTag: tag,
+    // The wrap states its own derivation generation, so a reader dispatches instead of guessing.
+    kdf: PRODUCER_KDF,
   };
 }

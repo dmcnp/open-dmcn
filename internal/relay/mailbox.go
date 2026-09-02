@@ -85,6 +85,11 @@ func recipientsToProto(recs []message.RecipientRecord) []*dmcnpb.RecipientRecord
 			WrappedCek:    r.WrappedCEK,
 			CekNonce:      r.CEKNonce[:],
 			CekTag:        r.CEKTag[:],
+			// Kdf MUST be carried. It names the derivation the wrap used, so dropping it here
+			// makes every stored message unreadable AND changes the envelope's canonical bytes,
+			// breaking the STORE signature the relay recomputes. This hand-written conversion is
+			// exactly where protocol fields go missing — add new ones here too.
+			Kdf: r.KDF,
 		}
 	}
 	return out

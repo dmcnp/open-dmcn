@@ -10730,6 +10730,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {Uint8Array|null} [wrappedCek] RecipientRecord wrappedCek
              * @property {Uint8Array|null} [cekNonce] RecipientRecord cekNonce
              * @property {Uint8Array|null} [cekTag] RecipientRecord cekTag
+             * @property {number|null} [kdf] RecipientRecord kdf
              */
 
             /**
@@ -10796,6 +10797,14 @@ export const dmcn = $root.dmcn = (() => {
             RecipientRecord.prototype.cekTag = $util.newBuffer([]);
 
             /**
+             * RecipientRecord kdf.
+             * @member {number} kdf
+             * @memberof dmcn.message.RecipientRecord
+             * @instance
+             */
+            RecipientRecord.prototype.kdf = 0;
+
+            /**
              * Creates a new RecipientRecord instance using the specified properties.
              * @function create
              * @memberof dmcn.message.RecipientRecord
@@ -10835,6 +10844,8 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.cekNonce);
                 if (message.cekTag != null && Object.hasOwnProperty.call(message, "cekTag"))
                     writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.cekTag);
+                if (message.kdf != null && Object.hasOwnProperty.call(message, "kdf"))
+                    writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.kdf);
                 return writer;
             };
 
@@ -10899,6 +10910,10 @@ export const dmcn = $root.dmcn = (() => {
                             message.cekTag = reader.bytes();
                             break;
                         }
+                    case 7: {
+                            message.kdf = reader.uint32();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -10956,6 +10971,9 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.cekTag != null && Object.hasOwnProperty.call(message, "cekTag"))
                     if (!(message.cekTag && typeof message.cekTag.length === "number" || $util.isString(message.cekTag)))
                         return "cekTag: buffer expected";
+                if (message.kdf != null && Object.hasOwnProperty.call(message, "kdf"))
+                    if (!$util.isInteger(message.kdf))
+                        return "kdf: integer expected";
                 return null;
             };
 
@@ -11007,6 +11025,8 @@ export const dmcn = $root.dmcn = (() => {
                         $util.base64.decode(object.cekTag, message.cekTag = $util.newBuffer($util.base64.length(object.cekTag)), 0);
                     else if (object.cekTag.length >= 0)
                         message.cekTag = object.cekTag;
+                if (object.kdf != null)
+                    message.kdf = object.kdf >>> 0;
                 return message;
             };
 
@@ -11070,6 +11090,7 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.cekTag = $util.newBuffer(object.cekTag);
                     }
+                    object.kdf = 0;
                 }
                 if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
                     object.deviceId = options.bytes === String ? $util.base64.encode(message.deviceId, 0, message.deviceId.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceId) : message.deviceId;
@@ -11083,6 +11104,8 @@ export const dmcn = $root.dmcn = (() => {
                     object.cekNonce = options.bytes === String ? $util.base64.encode(message.cekNonce, 0, message.cekNonce.length) : options.bytes === Array ? Array.prototype.slice.call(message.cekNonce) : message.cekNonce;
                 if (message.cekTag != null && Object.hasOwnProperty.call(message, "cekTag"))
                     object.cekTag = options.bytes === String ? $util.base64.encode(message.cekTag, 0, message.cekTag.length) : options.bytes === Array ? Array.prototype.slice.call(message.cekTag) : message.cekTag;
+                if (message.kdf != null && Object.hasOwnProperty.call(message, "kdf"))
+                    object.kdf = message.kdf;
                 return object;
             };
 

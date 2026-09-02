@@ -20,11 +20,11 @@ func TestSealOpenRoundTrip(t *testing.T) {
 	pub, priv := mustKeyPair(t)
 	plaintext := []byte("next_hop=DELIVER|inner payload bytes")
 
-	sl, err := SealLayer(pub, plaintext)
+	sl, err := SealLayer(pub, plaintext, LayerKDFv2)
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	got, err := OpenLayer(priv, sl)
+	got, err := OpenLayer(priv, sl, LayerKDFv2)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -36,18 +36,18 @@ func TestSealOpenRoundTrip(t *testing.T) {
 func TestOpenWithWrongKeyFails(t *testing.T) {
 	pub, _ := mustKeyPair(t)
 	_, otherPriv := mustKeyPair(t)
-	sl, err := SealLayer(pub, []byte("secret"))
+	sl, err := SealLayer(pub, []byte("secret"), LayerKDFv2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := OpenLayer(otherPriv, sl); err == nil {
+	if _, err := OpenLayer(otherPriv, sl, LayerKDFv2); err == nil {
 		t.Fatal("opening with the wrong relay key must fail")
 	}
 }
 
 func TestOpenTamperedFails(t *testing.T) {
 	pub, priv := mustKeyPair(t)
-	sl, err := SealLayer(pub, []byte("secret payload"))
+	sl, err := SealLayer(pub, []byte("secret payload"), LayerKDFv2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,14 +55,14 @@ func TestOpenTamperedFails(t *testing.T) {
 		bad := *sl
 		bad.Ciphertext = append([]byte(nil), sl.Ciphertext...)
 		bad.Ciphertext[0] ^= 1
-		if _, err := OpenLayer(priv, &bad); err == nil {
+		if _, err := OpenLayer(priv, &bad, LayerKDFv2); err == nil {
 			t.Fatal("tampered ciphertext must fail the AEAD tag")
 		}
 	})
 	t.Run("ephemeral", func(t *testing.T) {
 		bad := *sl
 		bad.EphemeralXPub[0] ^= 1
-		if _, err := OpenLayer(priv, &bad); err == nil {
+		if _, err := OpenLayer(priv, &bad, LayerKDFv2); err == nil {
 			t.Fatal("tampered ephemeral key must fail")
 		}
 	})
@@ -72,11 +72,11 @@ func TestOpenTamperedFails(t *testing.T) {
 // the same relay are unlinkable (different ephemeral pub + ciphertext).
 func TestSealUsesFreshEphemeral(t *testing.T) {
 	pub, _ := mustKeyPair(t)
-	a, err := SealLayer(pub, []byte("x"))
+	a, err := SealLayer(pub, []byte("x"), LayerKDFv2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := SealLayer(pub, []byte("x"))
+	b, err := SealLayer(pub, []byte("x"), LayerKDFv2)
 	if err != nil {
 		t.Fatal(err)
 	}

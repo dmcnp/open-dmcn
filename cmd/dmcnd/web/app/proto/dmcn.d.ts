@@ -3335,6 +3335,9 @@ export namespace dmcn {
 
             /** RecipientRecord cekTag */
             cekTag?: (Uint8Array|null);
+
+            /** RecipientRecord kdf */
+            kdf?: (number|null);
         }
 
         /** Represents a RecipientRecord. */
@@ -3363,6 +3366,9 @@ export namespace dmcn {
 
             /** RecipientRecord cekTag. */
             public cekTag: Uint8Array;
+
+            /** RecipientRecord kdf. */
+            public kdf: number;
 
             /**
              * Creates a new RecipientRecord instance using the specified properties.

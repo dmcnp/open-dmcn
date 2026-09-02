@@ -17,7 +17,10 @@ func TestPayloadPaddingRoundTripAtBoundaries(t *testing.T) {
 		if sc < uint32(n)+4 {
 			t.Fatalf("size %d: class %d does not leave room for the length prefix", n, sc)
 		}
-		got := unpadPayload(padPayload(payload, sc))
+		got, err := unpadPayload(padPayload(payload, sc))
+		if err != nil {
+			t.Fatalf("size %d (class %d): unpadPayload: %v", n, sc, err)
+		}
 		if !bytes.Equal(got, payload) {
 			t.Fatalf("size %d (class %d): round-trip mismatch, got %d bytes", n, sc, len(got))
 		}

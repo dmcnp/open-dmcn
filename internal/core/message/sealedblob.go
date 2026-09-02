@@ -32,6 +32,10 @@ type sealedRecipient struct {
 	WrappedCEK    []byte `json:"wrapped_cek"`    // AES-256-GCM ciphertext of the CEK
 	CEKNonce      []byte `json:"cek_nonce"`      // 12 bytes
 	CEKTag        []byte `json:"cek_tag"`        // 16 bytes
+	// KDF is the derivation generation, same meaning as RecipientRecord.kdf: omitted means 1.
+	// A sealed blob has no envelope and no version of its own, so the wrap carries it here for
+	// the same reason it rides the recipient record on the wire — it is what survives storage.
+	KDF uint32 `json:"kdf,omitempty"`
 }
 
 // SealToRecipients encrypts plaintext under a fresh CEK and wraps that CEK to each
@@ -60,6 +64,7 @@ func SealToRecipients(plaintext []byte, recipients [][32]byte) (*SealedBlob, err
 			WrappedCEK:    rec.WrappedCEK,
 			CEKNonce:      append([]byte{}, rec.CEKNonce[:]...),
 			CEKTag:        append([]byte{}, rec.CEKTag[:]...),
+			KDF:           rec.KDF,
 		})
 	}
 	return b, nil
@@ -74,29 +79,36 @@ func OpenSealed(b *SealedBlob, priv [32]byte, pub [32]byte) ([]byte, error) {
 		return nil, errors.New("message: open: empty sealed blob")
 	}
 	for _, sr := range b.Recipients {
-		if len(sr.RecipientXPub) == 32 && [32]byte(sr.RecipientXPub) != pub {
+		// Take only an exact match. The earlier form guarded the comparison on len == 32, so a
+		// record with a malformed pub was NOT skipped — it fell through and was tried here as
+		// though it were ours. RecipientXPub is now an input to the KEM derivation, so a
+		// malformed one must be left to the fallback rather than treated as a match.
+		if len(sr.RecipientXPub) != 32 || [32]byte(sr.RecipientXPub) != pub {
 			continue
 		}
-		if pt, err := tryOpen(b, &sr, priv); err == nil {
+		if pt, err := tryOpen(b, &sr, priv, pub); err == nil {
 			return pt, nil
 		}
 	}
 	// Fallback: pub may not be recorded (e.g. caller passed a different key); try all.
 	for _, sr := range b.Recipients {
-		if pt, err := tryOpen(b, &sr, priv); err == nil {
+		if pt, err := tryOpen(b, &sr, priv, pub); err == nil {
 			return pt, nil
 		}
 	}
 	return nil, errors.New("message: open: no recipient record opened with this key")
 }
 
-func tryOpen(b *SealedBlob, sr *sealedRecipient, priv [32]byte) ([]byte, error) {
-	rr := &RecipientRecord{WrappedCEK: sr.WrappedCEK}
+// tryOpen opens one recipient record. pub is the READER'S own public key and is passed through
+// to unwrapCEK as the derivation context — never sr.RecipientXPub, which is whatever the sealer
+// wrote and is exactly what this function's caller may be iterating past.
+func tryOpen(b *SealedBlob, sr *sealedRecipient, priv, pub [32]byte) ([]byte, error) {
+	rr := &RecipientRecord{WrappedCEK: sr.WrappedCEK, KDF: sr.KDF}
 	copy(rr.RecipientXPub[:], sr.RecipientXPub)
 	copy(rr.EphemeralXPub[:], sr.EphemeralXPub)
 	copy(rr.CEKNonce[:], sr.CEKNonce)
 	copy(rr.CEKTag[:], sr.CEKTag)
-	cek, err := unwrapCEK(rr, priv)
+	cek, err := unwrapCEK(rr, priv, pub)
 	if err != nil {
 		return nil, err
 	}

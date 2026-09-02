@@ -17,6 +17,9 @@ interface SealedRecipientJSON {
   wrapped_cek: string;
   cek_nonce: string;
   cek_tag: string;
+  // Derivation generation, same meaning as RecipientRecord.kdf: omitted means 1. A sealed blob
+  // has no envelope and no version of its own, so the wrap carries it here.
+  kdf?: number;
 }
 
 export interface SealedBlobJSON {
@@ -46,6 +49,7 @@ export async function sealToRecipients(
       wrapped_cek: toBase64(r.wrappedCek),
       cek_nonce: toBase64(r.cekNonce),
       cek_tag: toBase64(r.cekTag),
+      ...(r.kdf ? { kdf: r.kdf } : {}),
     });
   }
   return { nonce: toBase64(nonce), ciphertext: toBase64(ciphertext), tag: toBase64(tag), recipients };
@@ -72,8 +76,13 @@ export async function openSealed(
           wrappedCek: fromBase64(r.wrapped_cek),
           cekNonce: fromBase64(r.cek_nonce),
           cekTag: fromBase64(r.cek_tag),
+          kdf: r.kdf,
         },
-        x25519Derive
+        x25519Derive,
+        // The reader's OWN key, never r.recipient_xpub: this loop deliberately tries records
+        // that are not ours, and the v2 derivation must not be bound to a value the sealer
+        // chose. Matches Go's tryOpen.
+        x25519Pub
       );
       return await aesGcmDecrypt(cek, fromBase64(blob.nonce), fromBase64(blob.ciphertext), fromBase64(blob.tag));
     } catch (e) {
