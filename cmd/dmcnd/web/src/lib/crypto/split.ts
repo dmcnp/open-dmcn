@@ -18,6 +18,7 @@ import {
   decodeMessageContent,
   type MessageHeaderFields,
 } from './protobuf';
+import { bufferSource } from './bytes';
 
 // Domain separation tag for the header signature (matches ctxMsgHeader in Go).
 const CTX_MSG_HEADER = (() => {
@@ -95,7 +96,7 @@ export interface ComposeInput {
 }
 
 async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', data));
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', bufferSource(data)));
 }
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {

@@ -22,3 +22,7 @@ type Env = {
 };
 
 declare const env: Env;
+
+// Side-effect stylesheet imports (`import './styles/tokens.css'`) resolve to nothing at the type
+// level; vite handles them at build time.
+declare module '*.css';

@@ -164,7 +164,6 @@ export function Import() {
 
       const { session_token } = await importIdentity({
         address,
-        challenge_nonce: challenge.challenge_nonce,
         challenge_signature: toBase64(signature),
       });
 

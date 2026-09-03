@@ -9,6 +9,7 @@
 
 import { toBase64, fromBase64 } from './keys';
 import { isInstalledApp } from '../appContext';
+import { bufferSource } from './bytes';
 
 const PRF_INFO = new TextEncoder().encode('dmcn-webkeys-prf-v1');
 
@@ -68,7 +69,7 @@ export function isPasskeySupported(): boolean {
 }
 
 async function aesKeyFromPRF(secret: Uint8Array): Promise<CryptoKey> {
-  const base = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey']);
+  const base = await crypto.subtle.importKey('raw', bufferSource(secret), 'HKDF', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: PRF_INFO },
     base,

@@ -15,6 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { importX25519PrivateKey, importX25519PublicKey } from './keys';
 import { unwrapCEK, aesGcmDecrypt, unpadPayload } from './decrypt';
 import { cekWrapInfo, cekWrapInfoV2, headerAAD, bodyAAD, AAD_HEADER_V1, AAD_BODY_V1, KDF_V1, KDF_V2 } from './sealVersion';
+import { bufferSource } from './bytes';
 
 const VEC = {
   ephPub: 'a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209',
@@ -40,9 +41,9 @@ const unhex = (s: string) => new Uint8Array((s.match(/../g) ?? []).map(h => pars
 const fill = (b: number) => new Uint8Array(32).fill(b);
 
 async function kwkFor(shared: Uint8Array, info: Uint8Array): Promise<Uint8Array> {
-  const sharedKey = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+  const sharedKey = await crypto.subtle.importKey('raw', bufferSource(shared), 'HKDF', false, ['deriveKey']);
   const kwk = await crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info },
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: bufferSource(info) },
     sharedKey,
     { name: 'AES-GCM', length: 256 },
     true,

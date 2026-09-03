@@ -1,5 +1,6 @@
 import { argon2id } from '@noble/hashes/argon2';
 import { toBase64, fromBase64 } from './keys';
+import { bufferSource } from './bytes';
 
 // The password path wraps the identity keys under a key derived from the user's
 // passphrase. The derivation is Argon2id (memory-hard) rather than a fast KDF: the
@@ -40,7 +41,7 @@ async function derivePassphraseKey(
     p: params.p,
     dkLen: 32,
   });
-  return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, usage);
+  return crypto.subtle.importKey('raw', bufferSource(raw), 'AES-GCM', false, usage);
 }
 
 // encryptKeysWithKey/decryptKeysWithKey use a pre-derived AES-GCM key instead of
@@ -49,7 +50,7 @@ async function derivePassphraseKey(
 export async function encryptKeysWithKey(keyBytes: Uint8Array, aesKey: CryptoKey): Promise<EncryptedBundle> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, keyBytes)
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, bufferSource(keyBytes))
   );
   return {
     salt: '',
@@ -66,7 +67,7 @@ export async function decryptKeysWithKey(bundle: EncryptedBundle, aesKey: Crypto
   combined.set(ciphertext);
   combined.set(tag, ciphertext.length);
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromBase64(bundle.nonce), tagLength: 128 },
+    { name: 'AES-GCM', iv: bufferSource(fromBase64(bundle.nonce)), tagLength: 128 },
     aesKey,
     combined
   );
@@ -79,7 +80,7 @@ export async function encryptKeys(keyBytes: Uint8Array, passphrase: string): Pro
 
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = new Uint8Array(
-    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, keyBytes)
+    await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce, tagLength: 128 }, aesKey, bufferSource(keyBytes))
   );
 
   // Web Crypto appends the tag to the ciphertext — split them.
@@ -104,7 +105,7 @@ export async function decryptKeys(bundle: EncryptedBundle, passphrase: string): 
   combined.set(tag, ciphertext.length);
 
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromBase64(bundle.nonce), tagLength: 128 },
+    { name: 'AES-GCM', iv: bufferSource(fromBase64(bundle.nonce)), tagLength: 128 },
     aesKey,
     combined
   );

@@ -1,5 +1,6 @@
 import { importX25519PublicKey } from './keys';
 import { cekWrapInfo, PRODUCER_KDF } from './sealVersion';
+import { bufferSource } from './bytes';
 const SIZE_CLASSES = [1024, 4096, 16384, 65536, 262144, 1048576];
 
 export interface RecipientInfo {
@@ -55,9 +56,9 @@ export async function aesGcmEncrypt(
   aad?: Uint8Array
 ): Promise<{ nonce: Uint8Array; ciphertext: Uint8Array; tag: Uint8Array }> {
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const aesKey = await crypto.subtle.importKey('raw', key, 'AES-GCM', false, ['encrypt']);
-  const gcm = { name: 'AES-GCM', iv: nonce, tagLength: 128, ...(aad ? { additionalData: aad as BufferSource } : {}) };
-  const encrypted = new Uint8Array(await crypto.subtle.encrypt(gcm, aesKey, plaintext));
+  const aesKey = await crypto.subtle.importKey('raw', bufferSource(key), 'AES-GCM', false, ['encrypt']);
+  const gcm = { name: 'AES-GCM', iv: nonce, tagLength: 128, ...(aad ? { additionalData: bufferSource(aad) } : {}) };
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt(gcm, aesKey, bufferSource(plaintext)));
   return {
     nonce,
     ciphertext: encrypted.slice(0, encrypted.length - 16),
@@ -67,7 +68,9 @@ export async function aesGcmEncrypt(
 
 export async function wrapCEK(cek: Uint8Array, recipient: RecipientInfo): Promise<RecipientRecord> {
   // Generate ephemeral X25519 key pair
-  const ephKey = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+  // The lib's generateKey overloads narrow to a key PAIR only for the algorithms they name; X25519
+  // is not among them, so the union is asserted here — X25519 always yields a pair.
+  const ephKey = (await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits'])) as CryptoKeyPair;
   const ephPubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', ephKey.publicKey));
 
   // Import recipient public key
@@ -85,9 +88,9 @@ export async function wrapCEK(cek: Uint8Array, recipient: RecipientInfo): Promis
   // bytes per RFC 5869 section 2.2. That equivalence is load-bearing parity: change either side
   // and Go and the browser derive different keys.
   const info = cekWrapInfo(PRODUCER_KDF, ephPubRaw, recipient.x25519Pub);
-  const sharedKey = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+  const sharedKey = await crypto.subtle.importKey('raw', bufferSource(shared), 'HKDF', false, ['deriveKey']);
   const kwk = await crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info },
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: bufferSource(info) },
     sharedKey,
     { name: 'AES-GCM', length: 256 },
     true,

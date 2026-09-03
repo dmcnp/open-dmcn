@@ -110,7 +110,6 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 type loginVerifyRequest struct {
 	Address            string `json:"address"`
 	ChallengeSignature string `json:"challenge_signature"`
-	ChallengeNonce     string `json:"challenge_nonce"`
 }
 
 // HandleLoginVerify handles the second step of login: it verifies the signed
@@ -198,7 +197,6 @@ func (h *AuthHandler) HandleImportChallenge(w http.ResponseWriter, r *http.Reque
 // proof — the encrypted keystore stays in the browser, never sent here.
 type importRequest struct {
 	Address            string `json:"address"`
-	ChallengeNonce     string `json:"challenge_nonce"`
 	ChallengeSignature string `json:"challenge_signature"`
 }
 

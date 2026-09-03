@@ -1,10 +1,11 @@
 import { importEd25519PrivateKey, importEd25519PublicKey } from './keys';
+import { bufferSource } from './bytes';
 
 // signWithKey signs with a non-extractable Ed25519 CryptoKey handle (the working
 // key). Resident, day-to-day signing goes through this so the private bytes never
 // re-enter JS reach.
 export async function signWithKey(key: CryptoKey, data: Uint8Array): Promise<Uint8Array> {
-  const sig = await crypto.subtle.sign('Ed25519', key, data);
+  const sig = await crypto.subtle.sign('Ed25519', key, bufferSource(data));
   return new Uint8Array(sig);
 }
 
@@ -18,5 +19,5 @@ export async function sign(ed25519Seed: Uint8Array, data: Uint8Array): Promise<U
 
 export async function verify(ed25519Pub: Uint8Array, data: Uint8Array, signature: Uint8Array): Promise<boolean> {
   const key = await importEd25519PublicKey(ed25519Pub);
-  return crypto.subtle.verify('Ed25519', key, signature, data);
+  return crypto.subtle.verify('Ed25519', key, bufferSource(signature), bufferSource(data));
 }

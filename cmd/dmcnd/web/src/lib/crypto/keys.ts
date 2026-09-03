@@ -1,3 +1,4 @@
+import { bufferSource } from './bytes';
 // Ed25519 key generation and import/export
 // X25519 key generation and import/export
 
@@ -48,7 +49,9 @@ export async function generateIdentityKeyPair(): Promise<IdentityKeyPair> {
   ed25519Private.set(ed25519PubRaw, 32);
 
   // Generate X25519 key pair
-  const x25519Key = await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits']);
+  // X25519 always yields a key PAIR; the lib's generateKey overloads narrow only for the algorithms
+  // they name, so the union is asserted here.
+  const x25519Key = (await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits'])) as CryptoKeyPair;
   const x25519Pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', x25519Key.privateKey));
   const x25519PubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', x25519Key.publicKey));
 
@@ -80,7 +83,7 @@ export async function importEd25519PrivateKey(seed: Uint8Array): Promise<CryptoK
 
 // Import Ed25519 public key from 32-byte raw key
 export async function importEd25519PublicKey(raw: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', raw, 'Ed25519', false, ['verify']);
+  return crypto.subtle.importKey('raw', bufferSource(raw), 'Ed25519', false, ['verify']);
 }
 
 // Import X25519 private key from 32-byte raw key
@@ -93,7 +96,7 @@ export async function importX25519PrivateKey(raw: Uint8Array): Promise<CryptoKey
 
 // Import X25519 public key from 32-byte raw key
 export async function importX25519PublicKey(raw: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', raw, { name: 'X25519' }, false, []);
+  return crypto.subtle.importKey('raw', bufferSource(raw), { name: 'X25519' }, false, []);
 }
 
 // keyPairFromPayloadJSON parses the canonical web key JSON (the same shape

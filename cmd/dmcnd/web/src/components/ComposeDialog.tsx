@@ -20,6 +20,7 @@ import { RichTextEditor, type RichTextEditorHandle, type InsertedImage } from '.
 import { sanitizeOutgoing } from '../lib/html/sanitize';
 import { toPlainText } from '../lib/html/toPlainText';
 import { fromPlainText } from '../lib/html/fromPlainText';
+import { bufferSource } from '../lib/crypto/bytes';
 
 
 // Total attachment cap per message (body + all attachments ride inline in one sealed
@@ -399,7 +400,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     // for the Sent record's acceptHashes.
     const storeEnvelope = async (envelope: SplitEnvelope, recipient: string, viaOnion: boolean): Promise<string> => {
       const envBytes = await encodeSplitEnvelope(envelope);
-      const envHash = new Uint8Array(await crypto.subtle.digest('SHA-256', envBytes));
+      const envHash = new Uint8Array(await crypto.subtle.digest('SHA-256', bufferSource(envBytes)));
       const envSignature = await signWithKey(k.ed25519Sign, envHash);
       const res = await sendMessage({
         sender_address: selfAddress,

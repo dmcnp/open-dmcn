@@ -69,7 +69,6 @@ func postLoginVerify(t *testing.T, h *api.AuthHandler, address, nonceB64, sigB64
 	body, _ := json.Marshal(map[string]string{
 		"address":             address,
 		"challenge_signature": sigB64,
-		"challenge_nonce":     nonceB64,
 	})
 	req := httptest.NewRequest("POST", "/api/v1/login/verify", strings.NewReader(string(body)))
 	rr := httptest.NewRecorder()
@@ -185,7 +184,6 @@ func TestHandleImport_Success(t *testing.T) {
 
 	rr := postImport(t, h, map[string]interface{}{
 		"address":             "alice@dmcn.me",
-		"challenge_nonce":     nonceB64,
 		"challenge_signature": base64.StdEncoding.EncodeToString(sig),
 	})
 	if rr.Code != http.StatusOK {
@@ -213,7 +211,6 @@ func TestHandleImport_WrongKeyRejected(t *testing.T) {
 
 	rr := postImport(t, h, map[string]interface{}{
 		"address":             "alice@dmcn.me",
-		"challenge_nonce":     nonceB64,
 		"challenge_signature": base64.StdEncoding.EncodeToString(sig),
 	})
 	if rr.Code != http.StatusUnauthorized {
@@ -238,7 +235,6 @@ func TestHandleImport_NoPendingChallenge(t *testing.T) {
 
 	rr := postImport(t, h, map[string]interface{}{
 		"address":             "alice@dmcn.me",
-		"challenge_nonce":     base64.StdEncoding.EncodeToString(make([]byte, 32)),
 		"challenge_signature": base64.StdEncoding.EncodeToString(make([]byte, 64)),
 	})
 	if rr.Code != http.StatusBadRequest {

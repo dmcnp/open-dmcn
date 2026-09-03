@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode, createElement } from 'react';
-import { setSessionToken, getSessionToken } from '../api/client';
+import { createContext, useContext, useState, useCallback, ReactNode, createElement } from 'react';
+import { setSessionToken } from '../api/client';
 
 interface AuthState {
   isAuthenticated: boolean;

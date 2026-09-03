@@ -1,5 +1,6 @@
 import { importX25519PublicKey } from './keys';
 import { cekWrapInfo } from './sealVersion';
+import { bufferSource } from './bytes';
 
 interface RecipientRecord {
   recipientXPub: Uint8Array;
@@ -17,11 +18,11 @@ export async function aesGcmDecrypt(
   tag: Uint8Array,
   aad?: Uint8Array
 ): Promise<Uint8Array> {
-  const aesKey = await crypto.subtle.importKey('raw', key, 'AES-GCM', false, ['decrypt']);
+  const aesKey = await crypto.subtle.importKey('raw', bufferSource(key), 'AES-GCM', false, ['decrypt']);
   const combined = new Uint8Array(ciphertext.length + tag.length);
   combined.set(ciphertext);
   combined.set(tag, ciphertext.length);
-  const gcm = { name: 'AES-GCM', iv: nonce, tagLength: 128, ...(aad ? { additionalData: aad as BufferSource } : {}) };
+  const gcm = { name: 'AES-GCM', iv: bufferSource(nonce), tagLength: 128, ...(aad ? { additionalData: bufferSource(aad) } : {}) };
   const decrypted = await crypto.subtle.decrypt(gcm, aesKey, combined);
   return new Uint8Array(decrypted);
 }
@@ -73,7 +74,7 @@ export async function unwrapCEK(
   );
   const sharedKey = await crypto.subtle.importKey('raw', new Uint8Array(sharedBits), 'HKDF', false, ['deriveKey']);
   const kwk = await crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info },
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: bufferSource(info) },
     sharedKey,
     { name: 'AES-GCM', length: 256 },
     true,
