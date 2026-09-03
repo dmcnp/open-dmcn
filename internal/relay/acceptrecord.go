@@ -26,6 +26,11 @@ func storageFailure(reason string) bool { return strings.HasPrefix(reason, stora
 // {accepted, reason} and adding a code field would be a core schema change.
 const ReasonRebindNeedsRemoval = "rebind: root-signed removal required"
 
+// ReasonDARNotAnchored prefixes the rejection of a domain's FIRST DAR (the genesis write, which has
+// no prior root to chain to) whose fingerprint is not published in _dmcn.<domain>. Publishers match
+// on it to give the operator the right next step (publish the TXT, then retry).
+const ReasonDARNotAnchored = "genesis DAR: fingerprint is not anchored in _dmcn DNS"
+
 // AcceptRecord is the ONLY way a record may enter this node's RecordStore. Every write path — the
 // remote PutRecord push and the node's own local write in Node.FanOutRecord — goes through it, so
 // the store is closed under legitimate succession by construction rather than by every call site
@@ -149,11 +154,11 @@ func (r *Relay) checkReservedLocalPart(ctx context.Context, rec *identity.Identi
 	return "", true
 }
 
-// acceptDAR enforces root-key continuity. dar.Verify() only proves the record was signed by the key
-// it carries — it is self-anchoring, and nothing on this path checks the DNS fingerprint. Without
-// continuity any admitted peer could install a DAR naming its own root key, and every downstream
-// check that trusts the local DAR (RemovalIsRootSigned, and therefore the rebind gate itself) would
-// inherit the forgery.
+// acceptDAR admits a DAR by root-key continuity, or — for a domain this node holds no DAR for — by
+// the _dmcn DNS anchor. dar.Verify() only proves the record was signed by the key it carries (it is
+// self-anchoring), so without those checks any admitted peer could install a DAR naming its own
+// root key, and every downstream check that trusts the local DAR (RemovalIsRootSigned, and
+// therefore the rebind gate itself) would inherit the forgery.
 func (r *Relay) acceptDAR(ctx context.Context, data []byte) (bool, string) {
 	dar, err := identity.DomainAuthorityRecordFromProtoBytes(data)
 	if err != nil {
@@ -162,7 +167,8 @@ func (r *Relay) acceptDAR(ctx context.Context, data []byte) (bool, string) {
 	if err := dar.Verify(); err != nil {
 		return false, "DAR self-signature invalid"
 	}
-	if existing, _ := r.records.GetDAR(ctx, dar.Domain); existing != nil {
+	existing, _ := r.records.GetDAR(ctx, dar.Domain)
+	if existing != nil {
 		if !darAcknowledges(dar, existing.AuthorityEd25519) {
 			return false, fmt.Sprintf("DAR for %s does not acknowledge the currently trusted root key (rotation must supersede it)", dar.Domain)
 		}
@@ -175,6 +181,15 @@ func (r *Relay) acceptDAR(ctx context.Context, data []byte) (bool, string) {
 			if prior, err := r.records.GetDARBytes(ctx, dar.Domain); err == nil && !bytes.Equal(prior, data) {
 				return false, fmt.Sprintf("conflicting DAR for %s at revision %d (a change must advance the revision)", dar.Domain, dar.Revision)
 			}
+		}
+	} else if r.darAnchor != nil {
+		// Genesis DAR: no prior root to chain to, so the write-time gate is the _dmcn fingerprint
+		// anchor. Fail-closed on purpose: the self-host flow publishes the TXT before the DAR, so
+		// a rejection here means the record arrived early or from someone who is not the domain's
+		// operator, and a lookup failure must not let an unanchored root become the key every
+		// later check trusts.
+		if err := r.darAnchor(ctx, dar.Domain, dar.Fingerprint()); err != nil {
+			return false, fmt.Sprintf("%s: publish the _dmcn TXT for %s first: %v", ReasonDARNotAnchored, dar.Domain, err)
 		}
 	}
 	if err := r.records.PutDAR(ctx, dar); err != nil {

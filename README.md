@@ -246,7 +246,9 @@ dmcndcli domain init --domain mesh.example \
 #   → _dmcn.mesh.example.  TXT  "dmcn-verification=v1; fp=<40-hex>; seed=/ip4/…/p2p/…"
 
 # Hand that record to a running daemon, which serves nothing until it has one. Sends only the
-# signed public record — the root key stays here. Safe to re-run.
+# signed public record — the root key stays here. Safe to re-run. Publish the TXT first: a daemon
+# refuses a domain's FIRST authority record until _dmcn resolves with its fingerprint (later
+# re-publishes and rotations chain to the stored root and need no DNS).
 dmcndcli domain publish --domain mesh.example --peers /ip4/<host>/tcp/7400/p2p/<peer-id>
 
 # Reprint the DNS record from the existing root — new seed address, moved node. Mints nothing.

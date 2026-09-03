@@ -144,6 +144,9 @@ type Relay struct {
 	// bootstraps from DNS seeds, fetches these here, and verifies each against the domain's DNS
 	// fingerprint. nil ⇒ this node serves no records (a pure client / relay).
 	records *RecordStore
+	// darAnchor (optional) verifies a domain's DAR fingerprint against its _dmcn DNS anchor; consulted
+	// only when accepting a domain's FIRST DAR (later ones chain to the stored root).
+	darAnchor func(context.Context, string, string) error
 
 	log        logr.Logger
 	startTime  time.Time
@@ -248,6 +251,7 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 		storageQuota: cfg.storageQuota,
 		replicates:   cfg.replicates,
 		records:      cfg.records,
+		darAnchor:    cfg.darAnchor,
 	}
 	return r
 }
@@ -280,6 +284,7 @@ type relayOptions struct {
 	storageQuota uint64
 	replicates   func(context.Context, string) bool
 	records      *RecordStore
+	darAnchor    func(context.Context, string, string) error
 }
 
 // WithMailboxFilter enables recipient mail filtering: filterStore yields each
@@ -336,6 +341,21 @@ func WithReplicatePolicy(check func(context.Context, string) bool) Option {
 func WithRecordStore(rs *RecordStore) Option {
 	return func(o *relayOptions) {
 		o.records = rs
+	}
+}
+
+// WithDARAnchor supplies the DNS verifier consulted when the node accepts a domain's FIRST
+// DomainAuthorityRecord. A DAR is self-anchoring — its signature only proves the key it carries
+// signed it — so a genesis write has no prior root key to chain to; anchoring the fingerprint in
+// _dmcn.<domain> is what makes the first root the domain owner's. Later DARs are admitted by
+// root-key continuity instead, which needs no DNS.
+//
+// The check is fail-closed. node.New always wires it (the registry's verifier: real DNS, the
+// node's static _dmcn map, or the dev stub), so a dev setup passes by the stub, not by leniency.
+// nil = no genesis anchoring (a relay built without a node, e.g. in tests).
+func WithDARAnchor(f func(ctx context.Context, domain, fingerprint string) error) Option {
+	return func(o *relayOptions) {
+		o.darAnchor = f
 	}
 }
 

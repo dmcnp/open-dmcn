@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ds "github.com/ipfs/go-datastore"
@@ -286,8 +287,37 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 	// Set for serving (mailbox) nodes below; nil for pure clients.
 	var recStore *relay.RecordStore
 
+	// Genesis-DAR anchoring for the relay's record-admission path (AcceptRecord). A domain's FIRST
+	// DAR has no prior root to chain to, so before it can become the root every later check trusts
+	// it is checked against the domain's _dmcn fingerprint — with the same verifier the registry
+	// uses reader-side: cfg.DNSVerifier when set (the dev stub), else the node's static _dmcn map
+	// first and real DNS after. The node pointer is late-bound: the relay calls the hook only on
+	// requests, after New returns, and resolving through the node honours SetStaticDNS.
+	var self atomic.Pointer[Node]
+	darAnchor := cfg.DNSVerifier
+	if darAnchor == nil {
+		darAnchor = func(ctx context.Context, domain, fingerprint string) error {
+			n := self.Load()
+			if n == nil {
+				return domainverify.Verify(ctx, domain, fingerprint)
+			}
+			rec, err := n.resolveDomain(ctx, domain)
+			if err != nil {
+				return err
+			}
+			if rec.Fingerprint == "" {
+				return fmt.Errorf("_dmcn.%s publishes no fp= fingerprint", domain)
+			}
+			if !strings.EqualFold(rec.Fingerprint, fingerprint) {
+				return fmt.Errorf("DAR fingerprint %s != _dmcn.%s anchor %s", fingerprint, domain, rec.Fingerprint)
+			}
+			return nil
+		}
+	}
+
 	relayOpts := []relay.Option{
 		relay.WithPeers(cfg.Peers),
+		relay.WithDARAnchor(darAnchor),
 		// Enforce per-domain policy (require-countersign) on mailbox reads.
 		relay.WithFetchPolicy(reg.AddressUsable),
 		// Learn each hosted mailbox's effective onion policy (mailbox OR domain) at FETCH.
@@ -458,6 +488,7 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		ctx:              ctx,
 		cancel:           cancel,
 	}
+	self.Store(n)
 
 	// Install the record source: every registry Lookup* (and thus every credential/DAR
 	// verification path) reads through the fleet resolver + local RecordStore.
