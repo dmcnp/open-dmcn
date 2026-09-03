@@ -1,0 +1,22 @@
+/* UsageMeter: interaction-state CSS (hover/active/focus/disabled cannot be expressed inline).
+   All visuals reference DMCN tokens. */
+.dmcn-usage{display:flex;flex-direction:column;gap:6px;font-family:var(--font-sans);width:100%;}
+.dmcn-usage__head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+.dmcn-usage__label{font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-body);}
+.dmcn-usage__value{font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-strong);
+  font-variant-numeric:tabular-nums;white-space:nowrap;}
+.dmcn-usage__track{position:relative;width:100%;background:var(--surface-sunken);
+  overflow:hidden;}
+.dmcn-usage--sm .dmcn-usage__track{height:6px;}
+.dmcn-usage--md .dmcn-usage__track{height:8px;}
+.dmcn-usage--lg .dmcn-usage__track{height:12px;}
+.dmcn-usage__fill{height:100%;
+  transition:width var(--ease-out,ease) .4s, background-color .3s;min-width:2px;}
+.dmcn-usage--brand   .dmcn-usage__fill{background:var(--brand);}
+.dmcn-usage--success .dmcn-usage__fill{background:var(--success);}
+.dmcn-usage--warning .dmcn-usage__fill{background:var(--warning);}
+.dmcn-usage--danger  .dmcn-usage__fill{background:var(--danger);}
+.dmcn-usage--brand   .dmcn-usage__value{color:var(--brand-text);}
+.dmcn-usage--warning .dmcn-usage__value{color:var(--warning);}
+.dmcn-usage--danger  .dmcn-usage__value{color:var(--danger);}
+.dmcn-usage__caption{font-size:var(--text-xs);color:var(--text-muted);}

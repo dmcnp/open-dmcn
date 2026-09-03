@@ -1,89 +1,33 @@
 import { signWithKey } from '../crypto/sign';
 import { fromBase64, toBase64 } from '../crypto/keys';
+import { ApiError, BearerSession, fetchJSON } from './bearer';
 
-let sessionToken: string | null = null;
+export { ApiError };
+
+// The mail client's own session: a JWT the server mints from a challenge signed with the
+// in-memory key. SessionRenewer installs the renewal hook (setReauthHandler) that re-mints it
+// when a request comes back 401; see BearerSession for the single-flight semantics.
+const session = new BearerSession();
 
 export function setSessionToken(token: string | null) {
-  sessionToken = token;
+  session.set(token);
 }
 
 export function getSessionToken(): string | null {
-  return sessionToken;
+  return session.get();
 }
-
-// Session-renewal hook. The app registers a handler (see SessionRenewer) that
-// re-mints the JWT from the in-memory key when a request comes back 401. Renewal
-// is single-flighted so a burst of concurrent 401s (e.g. the mailbox poll plus
-// another call) triggers exactly one renewal.
-let reauthHandler: (() => Promise<string | null>) | null = null;
-let reauthInflight: Promise<string | null> | null = null;
 
 export function setReauthHandler(fn: (() => Promise<string | null>) | null) {
-  reauthHandler = fn;
-}
-
-function runReauth(): Promise<string | null> {
-  if (!reauthHandler) return Promise.resolve(null);
-  if (!reauthInflight) {
-    reauthInflight = reauthHandler().finally(() => {
-      reauthInflight = null;
-    });
-  }
-  return reauthInflight;
+  session.setMinter(fn);
 }
 
 interface RequestOpts {
-  retried?: boolean; // internal: set on the single post-renewal retry
   skipReauth?: boolean; // public/auth endpoints opt out (no session to renew)
   token?: string; // explicit bearer, bypassing the module token (see logoutToken)
 }
 
-// ApiError carries the HTTP status and the server's optional machine-readable
-// error code (e.g. "admin_key_custody") so callers can branch on the cause;
-// err.message still holds the human-readable error for existing consumers.
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  constructor(message: string, status: number, code?: string) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
-async function request<T>(method: string, path: string, body?: unknown, opts: RequestOpts = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const bearer = opts.token ?? sessionToken;
-  if (bearer) {
-    headers['Authorization'] = `Bearer ${bearer}`;
-  }
-
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  // Expired/invalid session: transparently renew the token once and retry. The
-  // retry re-reads the now-fresh module token. If renewal can't recover, fall
-  // through to the normal error path (the handler also redirects to login).
-  if (res.status === 401 && !opts.retried && !opts.skipReauth && reauthHandler) {
-    const fresh = await runReauth();
-    if (fresh) {
-      return request<T>(method, path, body, { ...opts, retried: true });
-    }
-  }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(err.error || `HTTP ${res.status}`, res.status, err.code);
-  }
-
-  if (res.status === 204) return undefined as T;
-  return res.json();
+function request<T>(method: string, path: string, body?: unknown, opts: RequestOpts = {}): Promise<T> {
+  return fetchJSON<T>(method, path, body, { session, token: opts.token, renew: !opts.skipReauth });
 }
 
 // Generic authenticated POST on the global session that participates in session

@@ -11,3 +11,21 @@ export function bufferSource(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   if (bytes.buffer instanceof ArrayBuffer) return bytes as Uint8Array<ArrayBuffer>;
   return new Uint8Array(bytes);
 }
+
+// Hex encoding. toHex/fromHex are re-exported from keys.ts for its existing importers.
+export function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function fromHex(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+// randomHex is n random bytes as a 2n-character hex id (tab ids, label ids).
+export function randomHex(n: number): string {
+  return toHex(crypto.getRandomValues(new Uint8Array(n)));
+}

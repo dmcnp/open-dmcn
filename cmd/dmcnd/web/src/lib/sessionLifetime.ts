@@ -18,6 +18,7 @@
 // persists across browser restarts for one-click access.
 
 import { storageKey } from './appContext';
+import { randomHex } from './crypto/bytes';
 
 // Namespaced per context (see appContext.storageKey): an installed app and a browser
 // tab are separate devices to their user, so turning on "stay signed in" in one must
@@ -35,8 +36,7 @@ export function setStaySignedIn(on: boolean): void {
 }
 
 function randomId(): string {
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+  return randomHex(16);
 }
 
 // getTabId returns this tab's stable id (created on first use). It lives in

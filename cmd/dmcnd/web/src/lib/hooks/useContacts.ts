@@ -5,6 +5,7 @@ import { loadPin, loadPins, savePin, deletePin, makePin, reconcilePin, type PinA
 import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
+import { usePolling } from './usePolling';
 
 export interface Contact {
   address: string;
@@ -171,6 +172,7 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
   // The account these contacts (and their pins) belong to. Pins are namespaced by owner
   // so several accounts unlocked in one tab never read each other's.
   const ownerRef = useRef<string>('');
+  const loadRef = useRef<() => void>(() => {});
 
   // Gate on the account session (token + auth), not just keys: during device
   // pairing `keys` is installed a beat BEFORE the real account session token is
@@ -207,29 +209,22 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
         .catch(() => { /* transient */ })
         .finally(() => { if (!cancelled) setReady(true); });
 
+    loadRef.current = load;
     migrateLegacy(store).finally(load);
 
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine) load();
-    }, STORAGE_POLL_INTERVAL_MS);
-    const onWake = () => { if (document.visibilityState === 'visible' && navigator.onLine) load(); };
-    document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('online', onWake);
-    window.addEventListener('focus', onWake);
 
     return () => {
       cancelled = true;
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('online', onWake);
-      window.removeEventListener('focus', onWake);
       storeRef.current = null;
       ownerRef.current = '';
+      loadRef.current = () => {};
       setReady(false);
       setRecords([]);
       setPinAlerts([]);
     };
   }, [keys, sessionToken, isAuthenticated]);
+
+  usePolling(() => loadRef.current(), STORAGE_POLL_INTERVAL_MS);
 
   const contacts = useMemo<Contact[]>(
     () => records.map(r => ({ address: r.address, name: r.name, fingerprint: r.fingerprint })).sort(byName),

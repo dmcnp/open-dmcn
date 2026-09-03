@@ -3,6 +3,7 @@ import { FlagStore, type FlagRecord, type FlagDelta } from '../api/flagStore';
 import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
+import { usePolling } from './usePolling';
 
 // useFlags owns the extrinsic per-message metadata (read/unread, archived, starred,
 // labels) from the "flags/" namespace of the personal store. Views (Inbox excludes
@@ -56,26 +57,17 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     syncRef.current = doSync;
     doSync();
 
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine) doSync();
-    }, STORAGE_POLL_INTERVAL_MS);
-    const onWake = () => { if (document.visibilityState === 'visible' && navigator.onLine) doSync(); };
-    document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('online', onWake);
-    window.addEventListener('focus', onWake);
 
     return () => {
       cancelled = true;
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('online', onWake);
-      window.removeEventListener('focus', onWake);
       storeRef.current = null;
       flagsRef.current = new Map();
       syncRef.current = () => {};
       setFlags(new Map());
     };
   }, [keys, sessionToken, isAuthenticated]);
+
+  usePolling(() => syncRef.current(), STORAGE_POLL_INTERVAL_MS);
 
   const refreshFlags = useCallback(() => syncRef.current(), []);
 

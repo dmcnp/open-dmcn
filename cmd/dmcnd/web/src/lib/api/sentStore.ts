@@ -11,7 +11,7 @@ import type { Preview, FullBody } from './mailboxRest';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type SplitEnvelope } from '../crypto/split';
 import type { MessageHeaderFields } from '../crypto/protobuf';
-import { toBase64, fromBase64 } from '../crypto/keys';
+import { toBase64, fromBase64, toHex } from '../crypto/keys';
 
 // A synthetic hash keys each Sent row, distinct from real mailbox hashes so the two
 // sources never collide.
@@ -96,21 +96,16 @@ function toBody(b: StoredBody): MailboxBodyLike {
   };
 }
 
-function toHexBytes(b: Uint8Array): string {
-  let s = '';
-  for (const x of b) s += x.toString(16).padStart(2, '0');
-  return s;
-}
 
 // previewFromHeader maps a verified header to the shared Preview shape the list/reader
 // render — identical to how the mailbox builds previews from its headers.
 function previewFromHeader(hash: string, h: MessageHeaderFields): Preview {
   return {
     hash,
-    messageId: toHexBytes(h.messageId),
-    threadId: toHexBytes(h.threadId),
+    messageId: toHex(h.messageId),
+    threadId: toHex(h.threadId),
     senderAddress: h.senderAddress,
-    senderPublicKey: toHexBytes(h.senderPublicKey),
+    senderPublicKey: toHex(h.senderPublicKey),
     recipientAddress: h.recipientAddress,
     to: h.to ?? [],
     cc: h.cc ?? [],

@@ -8,7 +8,7 @@ import { signWithKey } from '../crypto/sign';
 import { postJSONAs } from './client';
 import { decodeMailboxEntry, decodeMailboxBody, type MessageHeaderFields } from '../crypto/protobuf';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type DecryptedAttachment } from '../crypto/split';
-import { fromBase64, toBase64 } from '../crypto/keys';
+import { fromBase64, toBase64, toHex } from '../crypto/keys';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
 export interface FullBody {
@@ -47,12 +47,8 @@ export interface Preview {
   attachmentCount: number;
 }
 
-function toHex(b: Uint8Array | undefined): string {
-  if (!b) return '';
-  let s = '';
-  for (const x of b) s += x.toString(16).padStart(2, '0');
-  return s;
-}
+// A header field the bundle may leave unset renders as an empty id.
+const hexOrEmpty = (b: Uint8Array | undefined): string => (b ? toHex(b) : '');
 
 interface CachedEntry {
   entry: MailboxEntryLike;
@@ -177,10 +173,10 @@ export class MailboxSync {
     for (const [hash, c] of this.cache) {
       previews.push({
         hash,
-        messageId: toHex(c.header.messageId),
-        threadId: toHex(c.header.threadId),
+        messageId: hexOrEmpty(c.header.messageId),
+        threadId: hexOrEmpty(c.header.threadId),
         senderAddress: c.header.senderAddress,
-        senderPublicKey: toHex(c.header.senderPublicKey),
+        senderPublicKey: hexOrEmpty(c.header.senderPublicKey),
         recipientAddress: c.header.recipientAddress,
         to: c.header.to ?? [],
         cc: c.header.cc ?? [],

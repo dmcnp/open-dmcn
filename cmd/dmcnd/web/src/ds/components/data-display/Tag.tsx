@@ -1,29 +1,5 @@
 import React from 'react';
-
-let _tagStyles = false;
-function ensureTagStyles(): void {
-  if (_tagStyles || typeof document === 'undefined') return;
-  _tagStyles = true;
-  const s = document.createElement('style');
-  s.setAttribute('data-dmcn', 'tag');
-  s.textContent = `
-.dmcn-tag{
-  display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);
-  font-size:var(--text-sm);color:var(--text-body);background:var(--surface-card);
-  border:1px solid var(--border-default);border-radius:var(--radius-sm);
-  padding:3px 8px;line-height:1.2;white-space:nowrap;
-}
-.dmcn-tag__swatch{width:8px;height:8px;border-radius:var(--radius-full);flex:none;}
-.dmcn-tag__remove{
-  display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
-  margin-right:-2px;border:none;background:transparent;color:var(--text-subtle);cursor:pointer;
-  border-radius:var(--radius-sm);
-}
-.dmcn-tag__remove:hover{background:var(--surface-active);color:var(--text-strong);}
-.dmcn-tag__remove svg{width:11px;height:11px;stroke-width:2.5;}
-`;
-  document.head.appendChild(s);
-}
+import './Tag.css';
 
 const X = (): React.ReactElement => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="square">
@@ -49,7 +25,6 @@ export function Tag({
   children,
   ...rest
 }: TagProps): React.ReactElement {
-  ensureTagStyles();
   const cls = ['dmcn-tag', className].filter(Boolean).join(' ');
   return (
     <span className={cls} {...rest}>

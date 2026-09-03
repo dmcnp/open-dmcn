@@ -3,6 +3,7 @@ import type { DeviceAccount } from '../accounts';
 import { loadUnlockedKeys } from '../accounts';
 import { fetchAccountUnread, forgetAccountUnread } from '../api/accountUnread';
 import { BACKGROUND_UNREAD_INTERVAL_MS } from '../config';
+import { usePolling } from './usePolling';
 
 // Unread counts for the accounts this tab holds unlocked but isn't currently acting
 // as — what puts a dot on the account switcher when mail lands somewhere else.
@@ -79,19 +80,9 @@ export function useBackgroundUnread(accounts: DeviceAccount[] | null, activeAddr
     .join('|');
   useEffect(() => { void refresh(); }, [targetSig, refresh]);
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine) void refresh();
-    }, BACKGROUND_UNREAD_INTERVAL_MS);
-    const onWake = () => { if (document.visibilityState === 'visible' && navigator.onLine) void refresh(); };
-    document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('online', onWake);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('online', onWake);
-    };
-  }, [refresh]);
+  // No focus trigger: the active account's own sync already refreshes on focus, and these
+  // counts are a background nicety.
+  usePolling(() => { void refresh(); }, BACKGROUND_UNREAD_INTERVAL_MS, { onFocus: false });
 
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
   return { counts, total, refresh };

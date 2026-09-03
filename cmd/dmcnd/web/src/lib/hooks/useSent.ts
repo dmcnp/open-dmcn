@@ -4,6 +4,7 @@ import { SentStore, SENT_HASH_PREFIX } from '../api/sentStore';
 import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
+import { usePolling } from './usePolling';
 
 // The Sent folder reads self-sealed message envelopes from the owner-only personal store
 // ("sent/" + "sent-body/" namespaces), not the mailbox. Each is a normal split envelope,
@@ -54,25 +55,16 @@ export function SentProvider({ children }: { children: ReactNode }) {
     syncRef.current = doSync;
     doSync();
 
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine) doSync();
-    }, STORAGE_POLL_INTERVAL_MS);
-    const onWake = () => { if (document.visibilityState === 'visible' && navigator.onLine) doSync(); };
-    document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('online', onWake);
-    window.addEventListener('focus', onWake);
 
     return () => {
       cancelled = true;
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('online', onWake);
-      window.removeEventListener('focus', onWake);
       storeRef.current = null;
       syncRef.current = () => {};
       setSent([]);
     };
   }, [keys, sessionToken, isAuthenticated, address]);
+
+  usePolling(() => syncRef.current(), STORAGE_POLL_INTERVAL_MS);
 
   const refreshSent = useCallback(() => syncRef.current(), []);
   const fetchSentFull = useCallback((hash: string): Promise<FullBody> => {

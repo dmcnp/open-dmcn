@@ -26,6 +26,7 @@ import { directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
 import { deployment } from '@deployment';
+import { formatBytes, formatDate, formatTime } from '../lib/format';
 
 // attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
 // NEVER shown with a trust shield: even the best case (SPF/DKIM/DMARC pass + an operator-
@@ -135,17 +136,6 @@ const assignSelectStyle: CSSProperties = {
   borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer',
 };
 
-function formatDate(sec: number): string {
-  return new Date(sec * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-}
-function formatTime(sec: number): string {
-  return new Date(sec * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // System attachments carried for protocol purposes are consumed elsewhere and hidden
 // from the user-facing attachment list: the bridge attestation and delivery receipt, the

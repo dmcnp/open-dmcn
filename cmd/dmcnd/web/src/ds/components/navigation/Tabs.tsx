@@ -1,32 +1,5 @@
 import React from 'react';
-
-let _tabsStyles = false;
-function ensureTabsStyles(): void {
-  if (_tabsStyles || typeof document === 'undefined') return;
-  _tabsStyles = true;
-  const s = document.createElement('style');
-  s.setAttribute('data-dmcn', 'tabs');
-  s.textContent = `
-.dmcn-tabs{display:flex;gap:var(--space-1);border-bottom:1px solid var(--border-default);font-family:var(--font-sans);}
-.dmcn-tab{
-  position:relative;appearance:none;border:none;background:transparent;cursor:pointer;
-  font-family:inherit;font-size:var(--text-md);font-weight:var(--weight-medium);
-  color:var(--text-muted);padding:var(--space-3) var(--space-3);margin-bottom:-1px;
-  border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:var(--space-2);
-  transition:color var(--dur-fast) var(--ease-standard);
-}
-.dmcn-tab:hover{color:var(--text-strong);}
-.dmcn-tab--active{color:var(--brand-text);border-bottom-color:var(--brand);}
-.dmcn-tab:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm);}
-.dmcn-tab svg{width:16px;height:16px;}
-.dmcn-tab__count{
-  font-size:var(--text-2xs);font-weight:var(--weight-semibold);color:var(--text-muted);
-  background:var(--surface-sunken);padding:1px 6px;border-radius:var(--radius-sm);
-}
-.dmcn-tab--active .dmcn-tab__count{background:var(--brand-subtle);color:var(--brand-text);}
-`;
-  document.head.appendChild(s);
-}
+import './Tabs.css';
 
 export interface TabItem {
   value: string;
@@ -55,7 +28,6 @@ export function Tabs({
   className = '',
   ...rest
 }: TabsProps): React.ReactElement {
-  ensureTabsStyles();
   const cls = ['dmcn-tabs', className].filter(Boolean).join(' ');
   return (
     <div className={cls} role="tablist" {...rest}>

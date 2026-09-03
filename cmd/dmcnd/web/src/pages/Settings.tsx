@@ -24,22 +24,9 @@ import { Badge, Button, Input, Textarea, Switch, Tabs, UsageMeter } from '../ds'
 import { useStorageMode } from '../lib/hooks/useStorageMode';
 import { deployment } from '@deployment';
 import { Icon } from '../components/Icon';
+import { formatBytes } from '../lib/format';
 
 type Section = 'profile' | 'privacy' | 'appearance' | 'account';
-
-// formatBytes renders a byte count as a compact human string (e.g. "8.2 MiB").
-// Binary units with binary labels: the storage meter is a METERED surface, which
-// per the settled unit convention reports GiB against the GiB-provisioned ceiling
-// (e.g. "3.8 GiB of 4 GiB") — never the marketed GB, otherwise a user near the
-// cap would read a false over-limit.
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  const units = ['KiB', 'MiB', 'GiB', 'TiB'];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v >= 100 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
-}
 
 // StorageCard surfaces the owner's personal-storage usage (Sent, contacts,
 // settings, flags) against their effective quota. An unbounded quota (0) shows the

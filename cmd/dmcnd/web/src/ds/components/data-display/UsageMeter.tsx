@@ -1,35 +1,5 @@
 import React from 'react';
-
-let _usageStyles = false;
-function ensureUsageStyles(): void {
-  if (_usageStyles || typeof document === 'undefined') return;
-  _usageStyles = true;
-  const s = document.createElement('style');
-  s.setAttribute('data-dmcn', 'usage-meter');
-  s.textContent = `
-.dmcn-usage{display:flex;flex-direction:column;gap:6px;font-family:var(--font-sans);width:100%;}
-.dmcn-usage__head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
-.dmcn-usage__label{font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-body);}
-.dmcn-usage__value{font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-strong);
-  font-variant-numeric:tabular-nums;white-space:nowrap;}
-.dmcn-usage__track{position:relative;width:100%;background:var(--surface-sunken);
-  overflow:hidden;}
-.dmcn-usage--sm .dmcn-usage__track{height:6px;}
-.dmcn-usage--md .dmcn-usage__track{height:8px;}
-.dmcn-usage--lg .dmcn-usage__track{height:12px;}
-.dmcn-usage__fill{height:100%;
-  transition:width var(--ease-out,ease) .4s, background-color .3s;min-width:2px;}
-.dmcn-usage--brand   .dmcn-usage__fill{background:var(--brand);}
-.dmcn-usage--success .dmcn-usage__fill{background:var(--success);}
-.dmcn-usage--warning .dmcn-usage__fill{background:var(--warning);}
-.dmcn-usage--danger  .dmcn-usage__fill{background:var(--danger);}
-.dmcn-usage--brand   .dmcn-usage__value{color:var(--brand-text);}
-.dmcn-usage--warning .dmcn-usage__value{color:var(--warning);}
-.dmcn-usage--danger  .dmcn-usage__value{color:var(--danger);}
-.dmcn-usage__caption{font-size:var(--text-xs);color:var(--text-muted);}
-`;
-  document.head.appendChild(s);
-}
+import './UsageMeter.css';
 
 /** Props for the quota / usage indicator. */
 export interface UsageMeterProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
@@ -71,7 +41,6 @@ export function UsageMeter({
   className = '',
   ...rest
 }: UsageMeterProps): React.ReactElement {
-  ensureUsageStyles();
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
   const resolved =
     variant !== 'auto' ? variant : pct >= 90 ? 'danger' : pct >= 75 ? 'warning' : 'brand';

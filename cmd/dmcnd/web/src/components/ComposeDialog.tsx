@@ -21,18 +21,13 @@ import { sanitizeOutgoing } from '../lib/html/sanitize';
 import { toPlainText } from '../lib/html/toPlainText';
 import { fromPlainText } from '../lib/html/fromPlainText';
 import { bufferSource } from '../lib/crypto/bytes';
+import { formatBytes } from '../lib/format';
 
 
 // Total attachment cap per message (body + all attachments ride inline in one sealed
 // blob). ~25 MB: works with the existing size-class padding (rounds to whole MB above
 // 1 MB) and stays reasonable for browser memory + the relay's in-memory store.
 const MAX_TOTAL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // truncateFilename shortens a long name in the MIDDLE so the chip fits the compose
 // box while keeping the start and the extension (the full name is in the title tip).

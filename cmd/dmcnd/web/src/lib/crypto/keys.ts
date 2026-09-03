@@ -150,15 +150,5 @@ export function fromBase64(b64: string): Uint8Array {
   return bytes;
 }
 
-// Hex encoding helpers
-export function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-export function fromHex(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
+// Hex encoding helpers live in bytes.ts; re-exported here for the existing importers.
+export { toHex, fromHex } from './bytes';

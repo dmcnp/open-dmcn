@@ -20,6 +20,7 @@ import { MessageReader } from '../components/MessageReader';
 import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
 import { deployment } from '@deployment';
+import { formatWhen } from '../lib/format';
 
 // Control messages this deployment carries (device pairing, countersign requests) are
 // surfaced in their own panels, not the normal mail folders. Empty on a deployment whose
@@ -27,19 +28,6 @@ import { deployment } from '@deployment';
 // A function, not a module-level Set: `deployment` imports screens that import this module,
 // and a value read during module evaluation would depend on which side of that cycle ran first.
 const controlSubjects = () => new Set<string>(deployment.controlSubjects);
-
-function formatWhen(sec: number): string {
-  const d = new Date(sec * 1000);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-  const opts: Intl.DateTimeFormatOptions =
-    d.getFullYear() === now.getFullYear()
-      ? { month: 'short', day: 'numeric' }
-      : { month: 'short', day: 'numeric', year: '2-digit' };
-  return d.toLocaleDateString([], opts);
-}
 
 // A displayed row: one Preview plus every mailbox hash it stands for. Normally one
 // hash, but Sent rows fold all copies sharing a messageId together (a defensive

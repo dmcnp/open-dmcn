@@ -3,6 +3,7 @@ import { LabelStore, emptyLabelsDoc, type LabelsDoc, type LabelDef, type FolderD
 import { StorageConflictError } from '../api/personalStore';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
+import { randomHex } from '../crypto/bytes';
 
 // useLabels owns the label + folder DEFINITIONS (names/colors) from
 // "settings/labels". Definitions are a low-churn singleton, so writes use
@@ -13,10 +14,7 @@ import { useAuth } from './useAuth';
 
 // A short random id for a new label/folder.
 function newId(): string {
-  const b = crypto.getRandomValues(new Uint8Array(8));
-  let s = '';
-  for (const x of b) s += x.toString(16).padStart(2, '0');
-  return s;
+  return randomHex(8);
 }
 
 // Default palette offered when creating a label.

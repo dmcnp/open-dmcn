@@ -4,6 +4,7 @@ import { ApiError } from '../api/client';
 import { POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
+import { usePolling } from './usePolling';
 
 export type { Preview } from '../api/mailboxRest';
 
@@ -69,23 +70,9 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
 
     doSync(); // initial sync
 
-    // Poll only while foregrounded + online; refresh immediately when we regain
-    // focus / visibility / connectivity. Backgrounded tabs pause (better for
-    // battery, and they can't do anything useful offline anyway).
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine) doSync();
-    }, POLL_INTERVAL_MS);
-    const onWake = () => { if (document.visibilityState === 'visible' && navigator.onLine) doSync(); };
-    document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('online', onWake);
-    window.addEventListener('focus', onWake);
 
     return () => {
       cancelled = true;
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('online', onWake);
-      window.removeEventListener('focus', onWake);
       client.close();
       clientRef.current = null;
       syncRef.current = () => {};
@@ -93,6 +80,8 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
       setAccessState('ok');
     };
   }, [keys, sessionToken, isAuthenticated]);
+
+  usePolling(() => syncRef.current(), POLL_INTERVAL_MS);
 
   const refresh = useCallback(() => syncRef.current(), []);
 
