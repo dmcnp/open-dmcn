@@ -130,9 +130,10 @@ export interface ImportChallengeResponse {
   challenge_nonce: string;
 }
 
+// The signed challenge is enough: the server holds the pending nonce per address and verifies
+// the signature over that, so the nonce is never sent back.
 export interface ImportRequest {
   address: string;
-  challenge_nonce: string;
   challenge_signature: string;
 }
 
@@ -148,11 +149,10 @@ export function login(address: string): Promise<LoginResponse> {
   return request('POST', '/api/v1/login', { address }, { skipReauth: true });
 }
 
-export function loginVerify(address: string, challengeSignature: string, challengeNonce: string): Promise<SessionResponse> {
+export function loginVerify(address: string, challengeSignature: string): Promise<SessionResponse> {
   return request('POST', '/api/v1/login/verify', {
     address,
     challenge_signature: challengeSignature,
-    challenge_nonce: challengeNonce,
   }, { skipReauth: true });
 }
 
@@ -160,7 +160,7 @@ export function loginVerify(address: string, challengeSignature: string, challen
 // exchange it for a session token. Shared by the Login page and silent renewal.
 export async function verifyChallenge(address: string, signKey: CryptoKey, challengeNonce: string): Promise<string> {
   const signature = await signWithKey(signKey, fromBase64(challengeNonce));
-  const { session_token } = await loginVerify(address, toBase64(signature), challengeNonce);
+  const { session_token } = await loginVerify(address, toBase64(signature));
   return session_token;
 }
 
