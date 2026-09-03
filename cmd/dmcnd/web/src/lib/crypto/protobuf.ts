@@ -76,21 +76,6 @@ export async function decodeIdentityRecord(data: Uint8Array): Promise<any> {
   return IdentityRecord.decode(data);
 }
 
-// encodeCountersignBinding is the exact byte sequence the domain authority signs
-// when countersigning an address: an IdentityRecord with ONLY the minimal binding
-// fields set. Must match Go's domainCountersignableBytes (identity.go).
-export async function encodeCountersignBinding(b: {
-  address: string;
-  ed25519PublicKey: Uint8Array;
-  x25519PublicKey: Uint8Array;
-  domainCountersignedAt: number;
-  domainCountersignerPubkey: Uint8Array;
-}): Promise<Uint8Array> {
-  const root = await getRoot();
-  const IdentityRecord = root.lookupType('dmcn.identity.IdentityRecord');
-  return IdentityRecord.encode(IdentityRecord.create(canonical(b))).finish();
-}
-
 // Encode identity record WITHOUT selfSignature (for signing)
 export async function encodeIdentitySignableBytes(record: {
   version: number;

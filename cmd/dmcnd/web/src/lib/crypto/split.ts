@@ -108,8 +108,8 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
 
 // bodyContentAddress is the CIDv1(raw, sha2-256) of the body blob
 // (body_nonce||encrypted_body||body_tag): 0x01 0x55 0x12 0x20 || SHA-256(blob).
-// Byte-for-byte parity with Go message.ComputeBodyContentAddress.
-async function bodyContentAddress(nonce: Uint8Array, ciphertext: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
+// Byte-for-byte parity with Go message.ComputeBodyContentAddress — pinned by parityvector.test.ts.
+export async function bodyContentAddress(nonce: Uint8Array, ciphertext: Uint8Array, tag: Uint8Array): Promise<Uint8Array> {
   const digest = await sha256(concat(concat(nonce, ciphertext), tag));
   const out = new Uint8Array(36);
   out.set([0x01, 0x55, 0x12, 0x20], 0); // CIDv1 / raw codec / sha2-256 / length 32
@@ -129,7 +129,7 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 // The prefix IS the contract (SPEC.md), not a choice this composer makes: a producer derives
 // the snippet from the body it is sealing. Nothing binds the two the way body_hash binds the
 // body, so a reader holding the body can re-derive and compare — Go's message.VerifySnippet.
-function snippetOf(contentType: string, content: Uint8Array): string {
+export function snippetOf(contentType: string, content: Uint8Array): string {
   if (contentType !== 'text/plain') return '';
   let s = content.length > SNIPPET_MAX ? content.slice(0, SNIPPET_MAX) : content;
   while (s.length > 0) {
