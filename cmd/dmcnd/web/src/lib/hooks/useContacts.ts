@@ -36,17 +36,22 @@ function recordsSig(list: ContactRecord[]): string {
     .join('\n');
 }
 
+// readLegacyContacts returns the device-local contact list, or null when there is none or it
+// cannot be read (storage blocked, unparsable) — the two cases migrateLegacy treats alike.
+function readLegacyContacts(): Contact[] | null {
+  try {
+    const raw = localStorage.getItem(LEGACY_KEY);
+    return raw ? (JSON.parse(raw) as Contact[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 // migrateLegacy imports any device-local (localStorage) contacts into the synced
 // store once, then clears them — so upgrading users don't lose their address book.
 async function migrateLegacy(store: ContactStore): Promise<void> {
-  let saved: Contact[] = [];
-  try {
-    const raw = localStorage.getItem(LEGACY_KEY);
-    if (!raw) return;
-    saved = JSON.parse(raw) as Contact[];
-  } catch {
-    return;
-  }
+  const saved = readLegacyContacts();
+  if (saved === null) return; // nothing stored, or unreadable — leave it alone
   if (!Array.isArray(saved) || saved.length === 0) {
     localStorage.removeItem(LEGACY_KEY);
     return;

@@ -209,7 +209,6 @@ export async function createPasskeyPRF(address: string): Promise<PasskeyEnrollme
     secret = await evalPRF(credentialId, prfSalt);
   }
   if (!secret) {
-    // eslint-disable-next-line no-console
     console.warn('[passkey] PRF unavailable for this authenticator', {
       prfEnabledAtCreate: ext?.prf?.enabled,
       // Which authenticator actually answered — the useful half of a bug report.
@@ -237,7 +236,7 @@ export async function unlockPasskeyPRF(credentialIdB64: string, prfSaltB64: stri
     // you" as the same error, so the message has to carry both — and name the way
     // out, since a passkey that can't be reached here is otherwise a dead end.
     if (isNotAllowed(e)) {
-      throw new Error(isInstalledApp() ? PASSKEY_UNAVAILABLE_APP_MSG : PASSKEY_UNAVAILABLE_MSG);
+      throw new Error(isInstalledApp() ? PASSKEY_UNAVAILABLE_APP_MSG : PASSKEY_UNAVAILABLE_MSG, { cause: e });
     }
     throw e;
   }

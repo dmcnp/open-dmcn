@@ -77,7 +77,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     // Emit <b>/<i> tags rather than style-carrying spans: cleaner mail HTML, and it
     // survives the outgoing allowlist (which drops style attributes).
     try { document.execCommand('styleWithCSS', false, 'false'); } catch { /* not supported; tags are the default anyway */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- uncontrolled editor: seeded once from initialHtml on mount, never re-seeded (see the invariant above)
   }, []);
 
   const syncActive = () => {

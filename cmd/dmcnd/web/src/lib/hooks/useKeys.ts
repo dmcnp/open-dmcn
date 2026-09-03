@@ -91,7 +91,7 @@ export function KeysProvider({ children }: { children: ReactNode }) {
       if (!cancelled) { setBoth(wk); setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [address]);
+  }, [address, setBoth]);
 
   // Announce this tab is open (any tab, authenticated or not) so other tabs' GC keeps
   // its handle and reaps only genuine closed-tab orphans.

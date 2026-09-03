@@ -366,7 +366,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
         setBridgeResolved(true); // body failed — unblock the UI so the error can render.
       });
     return () => { cancelled = true; };
-  }, [msg.hash, openMessageFull, openFull]);
+  }, [msg.hash, msg.senderPublicKey, openMessageFull, openFull]);
 
   // Evaluate native-sender trust (skip your own Sent copies). The header key is
   // already signature-verified upstream; this anchors it to the directory + the

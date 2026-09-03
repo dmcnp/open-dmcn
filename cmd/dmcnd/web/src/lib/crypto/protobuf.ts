@@ -26,6 +26,14 @@ async function getRoot(): Promise<typeof staticRoot> {
   return staticRoot;
 }
 
+// decodeAs is the one place the untyped reflection decode meets the declared shapes below. The
+// generated codec returns an untyped message; the shape each decode* function declares is the
+// contract Go's canonical encoding guarantees, so the cast lives here, once, instead of an
+// `as any` at every call site.
+function decodeAs<T>(type: StaticType, data: Uint8Array): T {
+  return type.decode(data) as T;
+}
+
 export async function encodeIdentityRecord(record: {
   version: number;
   address: string;
@@ -234,7 +242,7 @@ export async function decodeSignedHeader(data: Uint8Array): Promise<{
 }> {
   const root = await getRoot();
   const SignedHeader = root.lookupType('dmcn.message.SignedHeader');
-  return SignedHeader.decode(data) as any;
+  return decodeAs(SignedHeader, data);
 }
 
 export async function encodeMessageContent(c: {
@@ -257,7 +265,7 @@ export async function decodeMessageContent(data: Uint8Array): Promise<{
 }> {
   const root = await getRoot();
   const MessageContent = root.lookupType('dmcn.message.MessageContent');
-  return MessageContent.decode(data) as any;
+  return decodeAs(MessageContent, data);
 }
 
 export async function encodeSplitEnvelope(env: {
@@ -319,7 +327,7 @@ export async function decodeMailboxEntry(data: Uint8Array): Promise<{
 }> {
   const root = await getRoot();
   const MailboxEntry = root.lookupType('dmcn.relay.MailboxEntry');
-  return MailboxEntry.decode(data) as any;
+  return decodeAs(MailboxEntry, data);
 }
 
 export async function decodeMailboxBody(data: Uint8Array): Promise<{
@@ -330,5 +338,5 @@ export async function decodeMailboxBody(data: Uint8Array): Promise<{
 }> {
   const root = await getRoot();
   const MailboxBody = root.lookupType('dmcn.relay.MailboxBody');
-  return MailboxBody.decode(data) as any;
+  return decodeAs(MailboxBody, data);
 }

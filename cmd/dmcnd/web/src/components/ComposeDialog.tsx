@@ -204,7 +204,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   useEffect(() => {
     to.forEach(r => void inspectRecipient(r));
     cc.forEach(r => void inspectRecipient(r));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot on open: only the pre-filled recipients; later additions are inspected as they are entered
   }, []);
 
   // On a reply, drop the caret at the very top so the user types ABOVE the signature/quote.
@@ -213,7 +213,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     if (richMode) { editorRef.current?.focus(true); return; }
     const el = bodyRef.current;
     if (el) { el.focus(); el.setSelectionRange(0, 0); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- caret placement on open only; re-running on mode changes would yank the caret mid-edit
   }, []);
 
   // The settings doc syncs asynchronously, so it can land after the composer opened.
@@ -238,7 +238,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     setBody(plainScaffold(settings.signature));
     richInitial.current = htmlScaffold(settings.signature);
     editorRef.current?.setHTML(richInitial.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the setting alone by design: re-seeds once, only while the body is untouched
   }, [settings.signature]);
 
   // toggleMode converts the body rather than discarding it. The HTML is stashed so a
@@ -509,7 +509,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             // and every hop after it — and a fleet withholding one record produces exactly this.
             // Same refusal as a changed key, for the same reason: it is unrecoverable once sent.
             if (checkPin(contactByAddress(rcpt), absentIdentityFacts()) === 'changed') {
-              throw new Error(pinnedIdentityGoneWarning(rcpt) + ' Confirm it in the warning above if that is expected.');
+              throw new Error(pinnedIdentityGoneWarning(rcpt) + ' Confirm it in the warning above if that is expected.', { cause: e });
             }
             await deployment.sendToLegacy({
               recipient: rcpt,
