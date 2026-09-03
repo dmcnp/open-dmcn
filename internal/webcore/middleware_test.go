@@ -256,3 +256,39 @@ func TestRateLimitMiddleware_OverLimit(t *testing.T) {
 		t.Fatalf("expected 429, got %d", rr.Code)
 	}
 }
+
+// imgSrcOf returns the img-src directive from a CSP header ("" when absent).
+func imgSrcOf(csp string) string {
+	for _, d := range strings.Split(csp, ";") {
+		if d = strings.TrimSpace(d); strings.HasPrefix(d, "img-src ") {
+			return d
+		}
+	}
+	return ""
+}
+
+// The remote-image ceiling is opt-in, and has to be: a srcdoc frame inherits this policy
+// and can only narrow it, so the mail client cannot show a remote image unless img-src
+// here allows one. Everything else — the marketing sites — must keep the tight default,
+// since widening it there buys nothing and costs a post-XSS beacon channel.
+func TestCSPMiddleware_RemoteImages(t *testing.T) {
+	serve := func(cfg webcore.CSPConfig) string {
+		rr := httptest.NewRecorder()
+		webcore.CSPMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})).ServeHTTP(rr, httptest.NewRequest("GET", "/test", nil))
+		return rr.Header().Get("Content-Security-Policy")
+	}
+
+	if got := imgSrcOf(serve(webcore.CSPConfig{})); got != "img-src 'self' data:" {
+		t.Fatalf("expected no remote images by default, got %q", got)
+	}
+	if got := imgSrcOf(serve(webcore.CSPConfig{RemoteImages: true})); !strings.Contains(got, " https:") {
+		t.Fatalf("expected https: in img-src with RemoteImages, got %q", got)
+	}
+	// Widening img-src must not drag anything else open. connect-src is the directive
+	// that actually governs exfiltration, and it stays same-origin.
+	if csp := serve(webcore.CSPConfig{RemoteImages: true}); !strings.Contains(csp, "connect-src 'self';") {
+		t.Fatalf("expected connect-src to stay same-origin, got %q", csp)
+	}
+}

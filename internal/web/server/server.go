@@ -80,7 +80,7 @@ func New(cfg Config, logger logr.Logger) *Server {
 	// there is no external account service to widen connect-src for.
 	// FrameSelf: the reader renders HTML mail inside a same-origin sandboxed srcdoc
 	// iframe, which frame-src 'none' would block outright.
-	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, FrameSelf: true})
+	csp := webcore.CSPMiddleware(webcore.CSPConfig{DevMode: cfg.DevMode, FrameSelf: true, RemoteImages: true})
 	handler := csp(webcore.CORSMiddleware(cfg.DevMode, origins)(mux))
 	return &Server{
 		httpServer: &http.Server{

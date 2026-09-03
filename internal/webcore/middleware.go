@@ -116,6 +116,30 @@ type CSPConfig struct {
 	// iframe — the HTML-email renderer, a srcdoc frame with neither allow-scripts nor
 	// allow-same-origin. Without it the frame is blocked outright by frame-src 'none'.
 	FrameSelf bool
+
+	// RemoteImages adds https: to img-src, which is what makes the reader's opt-in
+	// "load remote images from senders you trust" possible at all.
+	//
+	// It has to live HERE, on the parent document, and that is worth being blunt about.
+	// A srcdoc frame INHERITS the embedding document's CSP and the effective policy is
+	// the intersection, so the renderer's own tighter policy can never widen what this
+	// header allows — without this, the frame's img-src https: is silently overruled and
+	// images fail with no signal the app can see.
+	//
+	// The ceiling is unconditional even though the feature is not: the preference lives
+	// in the owner's sealed personal KV, which the server cannot read, so there is no
+	// per-user header to emit. What stays conditional is enforcement, in two places the
+	// server does not own — the sanitizer strips the src outright unless the reader opted
+	// in AND the sender is allowlisted, and the frame's own meta CSP refuses the fetch on
+	// top of that. This directive only stops being a third, unconditional blocker.
+	//
+	// The cost, stated plainly: post-XSS, img-src https: is a one-way beacon an attacker
+	// can encode data into, which img-src 'self' data: denied. connect-src 'self' is
+	// untouched, and the main document renders no untrusted HTML (all of it goes to the
+	// sandboxed frame), so this needs script execution to reach. The fix that gives the
+	// feature back without the ceiling is rendering mail on a SEPARATE origin, which
+	// inherits nothing — real work, not a flag, and not done here.
+	RemoteImages bool
 }
 
 // CSPMiddleware returns a middleware that sets Content-Security-Policy and the
@@ -146,6 +170,9 @@ func CSPMiddleware(cfg CSPConfig) func(http.Handler) http.Handler {
 	}
 	// Same-origin sandboxed iframe (HTML-email renderer). The frame itself carries an
 	// even tighter CSP + a no-allow-scripts sandbox; this only permits framing 'self'.
+	if cfg.RemoteImages {
+		imgExtra += " https:"
+	}
 	if cfg.FrameSelf {
 		frameSrc = "'self'"
 	}
