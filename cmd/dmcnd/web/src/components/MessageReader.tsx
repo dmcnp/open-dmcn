@@ -95,6 +95,67 @@ function attestationView(a: BridgeAttestation, senderAddress: string): {
   }
 }
 
+// GateReason names WHY the pending-queue gate is holding a body back. The four reasons are
+// not interchangeable, and the difference decides what the reader can DO about it: an unknown
+// sender is a question about a PERSON, which trusting settles for good; a legacy message the
+// bridge could not authenticate is a doubt about THIS message that no decision about the
+// address can ever settle, because the address is precisely the part anyone can forge. Saying
+// "you don't know this sender yet" in that second case both misdescribes the problem and
+// points at an action that will not lift the gate.
+type GateReason = 'blocked' | 'unauthenticated' | 'impersonation' | 'unknown';
+
+// gateView is the gate's copy for one reason. `who` is the sender address as displayed,
+// `bridged` whether the message arrived over legacy email (its unknown-sender case is a
+// different statement: nothing about it is end-to-end verified), `known` whether the sender is
+// already on the owner's allowlist.
+function gateView(reason: GateReason, who: string, bridged: boolean, known: boolean): {
+  icon: 'clock' | 'alert-triangle' | 'shield-off';
+  color: string;
+  title: string;
+  detail: string;
+} {
+  switch (reason) {
+    case 'blocked':
+      return {
+        icon: 'shield-off',
+        color: 'var(--danger)',
+        title: 'You blocked this sender',
+        detail: `${who} is on your blocklist, so this message stays hidden. Manage the list in Settings if that was a mistake.`,
+      };
+    case 'unauthenticated':
+      return {
+        icon: 'alert-triangle',
+        color: 'var(--warning)',
+        title: `This message may not be from ${who}`,
+        detail: known
+          ? `You trust this sender, but legacy email carries no identity of its own and this message did not fully authenticate (details below) — so nothing here can confirm it really came from them. Trusting the address cannot answer that; this is a decision about this one message.`
+          : `It came in over legacy email through a bridge and did not fully authenticate (details below), so anyone could have put ${who} on it. They are not on your allowlist either — decide how to handle it before reading the contents.`,
+      };
+    case 'impersonation':
+      return {
+        icon: 'alert-triangle',
+        color: 'var(--danger)',
+        title: 'Verify this sender before you read this',
+        detail: `The key that signed this message is not the one the directory publishes for ${who} (details below). If they really did rotate their key, trusting them again re-checks it against the directory and clears this.`,
+      };
+    case 'unknown':
+      // `known` is not redundant here: a sender ON the allowlist still reaches this gate when the
+      // verdict that would have admitted them could not be reached (an unreachable directory, an
+      // unverifiable bridge classification). Telling that reader they "don't know this sender"
+      // and pointing them at an allowlist they already added them to describes neither.
+      return {
+        icon: 'clock',
+        color: 'var(--warning)',
+        title: known ? 'Check this message before you read it' : 'You don’t know this sender yet',
+        detail: known
+          ? `${bridged ? 'This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified.' : 'This message is genuine and end-to-end encrypted.'} It still doesn’t match what you have on file for ${who} — confirm it before reading the contents.`
+          : bridged
+            ? `This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. ${who} isn’t on your allowlist — decide how to handle it before reading the contents.`
+            : `This message is genuine and end-to-end encrypted, but ${who} isn’t on your allowlist. Decide how to handle it before reading the contents.`,
+      };
+  }
+}
+
 // calloutColors resolves the inline background/foreground for a trust callout. The neutral
 // variant has no `--neutral-subtle` token, so map it explicitly to the sunken surface.
 function calloutColors(variant: 'neutral' | 'success' | 'warning' | 'danger'): { bg: string; fg: string } {
@@ -252,6 +313,14 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // Pending-queue gate: a non-allowlisted sender's body stays hidden until the owner
   // either trusts them or explicitly reveals it as plain text (§14.2, accept-once).
   const [revealed, setRevealed] = useState(false);
+  // The owner's explicit decision about THIS message — the escape hatch for the gates that
+  // trusting an address cannot lift. Bridged legacy mail whose SPF/DKIM/DMARC checks did not
+  // pass is re-gated on every arrival by design (the address alone is spoofable, so an
+  // allowlist entry can't stand in for the authentication that is missing); without a
+  // per-message override there would be no way to ever read one. Deliberately scoped to the
+  // open message: it unlocks exactly what trusting the sender unlocks (the HTML rendering,
+  // attachment downloads) and asserts nothing about the next message claiming the same address.
+  const [messageTrusted, setMessageTrusted] = useState(false);
   const [actioning, setActioning] = useState(false);
   // User-facing attachments (internal/protocol ones filtered out) + per-file download
   // acknowledgments. Downloads are gated on sender TRUST, NOT on `revealed`: the
@@ -439,10 +508,31 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   } else {
     category = base;
   }
-  const gated = trustReady && category !== 'allowlisted';
-  // Attachment downloads unlock on sender TRUST only (own message or allowlisted), or a
-  // per-file "download anyway" acknowledgment. Deliberately independent of `revealed`.
-  const downloadsUnlocked = ownMessage || category === 'allowlisted';
+  // The reason the gate will give, derived from the same facts that closed it.
+  const gateReason: GateReason = category === 'blocked'
+    ? 'blocked'
+    : bridgedLegacy && !bridgeAuthenticated
+      ? 'unauthenticated'
+      : nativeDanger
+        ? 'impersonation'
+        : 'unknown';
+  // "I trust the sender" is offered only where it can actually change the outcome. For an
+  // allowlisted legacy sender whose message failed its checks it provably cannot — the entry
+  // is already there and the bridge still cannot authenticate this message — and for a blocked
+  // sender the filter decides before the allowlist is ever consulted. A button that silently
+  // does nothing is what made trusting feel broken on exactly the mail that needs the decision.
+  const trustActionable = gateReason !== 'blocked' && !(senderIsLegacyContact && gateReason === 'unauthenticated');
+  // The per-message override, offered exactly where trusting the address cannot lift the gate.
+  // Not for 'blocked' (that gate is the owner's own standing decision, lifted by unblocking)
+  // and not for 'impersonation' (the directory says this signature is not the sender's, so the
+  // safe plain-text peek stays the only way in — re-verifying the key is the real remedy).
+  const overrideActionable = gateReason === 'unauthenticated';
+  const gated = trustReady && category !== 'allowlisted' && !messageTrusted;
+  // Attachment downloads unlock on sender TRUST (own message or allowlisted) or on the owner's
+  // explicit decision about this message, plus the per-file "download anyway" acknowledgment.
+  // Deliberately independent of `revealed`: the plain-text peek is safe because the text is
+  // escaped and a binary download is not, so peeking is not a decision.
+  const downloadsUnlocked = ownMessage || category === 'allowlisted' || messageTrusted;
   // HTML renders ONLY for a trusted sender (mirrors downloadsUnlocked) — a pending
   // sender's "See as plain text" peek shows escaped text, never rendered HTML.
   const htmlAllowed = !!htmlBody && downloadsUnlocked;
@@ -456,7 +546,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
 
   // Reset per-message UI (accept-once reveal + prior trust verdict) when the open
   // message changes, so nothing from the previous message lingers.
-  useEffect(() => { setRevealed(false); setNativeTrust(null); setNativeTrustReady(false); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
+  useEffect(() => { setRevealed(false); setMessageTrusted(false); setNativeTrust(null); setNativeTrustReady(false); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
 
   // Lazy key-pin (§14.1.2): once a message from an unpinned CONTACT verifies with the header key
   // matching the directory key, record the keys so a later unsigned change is detectable. Runs at
@@ -497,6 +587,12 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
           fingerprint: '',
           provenance: 'user_approved',
         });
+        // The owner made this decision with this message's verdict in front of them, so it
+        // opens THIS message — even though the allowlist entry alone will not open the next
+        // one (unauthenticated legacy mail is re-gated every time, above). Without this the
+        // click was a silent no-op on precisely the mail it was offered for: the contact was
+        // written, the gate stayed shut, and nothing said why.
+        setMessageTrusted(true);
       } else {
         const dir = await lookupIdentity(msg.senderAddress);
         await allowlist({
@@ -549,6 +645,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const { primary: counterpartyName, secondary: counterpartyAddress } =
     senderLabel(counterparty, contactName, sentView ? '' : msg.senderDisplay);
   const namedCounterparty = counterpartyAddress !== '';
+  // The gate's copy, resolved once from the reason the gate closed for.
+  const gv = gateView(gateReason, counterparty, !!av, !!senderContact);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-page)' }}>
@@ -648,8 +746,11 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
               behind a decision. "See as plain text" is a deliberate, small deviation
               from §14.2.1's strict hide — but DMCN bodies are text/plain rendered as an
               escaped React string (no HTML, images, or remote content), so revealing is
-              inherently sanitized. Until trust data is loaded, show a neutral placeholder
-              rather than flashing the gate or the body. */}
+              inherently sanitized. "Show this message" is the fuller override, offered
+              only where the gate is about THIS message rather than about the sender: it
+              grants the open message what trusting the sender would grant it, and expires
+              with it. Until trust data is loaded, show a neutral placeholder rather than
+              flashing the gate or the body. */}
           {!trustReady ? (
             <div style={{ marginTop: 'var(--space-6)', minHeight: 80 }}>
               <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>Loading…</span>
@@ -657,30 +758,49 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
           ) : gated && !revealed ? (
             <div style={{ marginTop: 'var(--space-6)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--surface-sunken)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
-                <Icon name="clock" size={18} style={{ color: 'var(--warning)', marginTop: 2, flex: 'none' }} />
+                <Icon name={gv.icon} size={18} style={{ color: gv.color, marginTop: 2, flex: 'none' }} />
                 <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>You don’t know this sender yet</div>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>
-                    {av
-                      ? <>This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. {counterparty} isn’t on your allowlist — decide how to handle it before reading the contents.</>
-                      : <>This message is genuine and end-to-end encrypted, but {counterparty} isn’t on your allowlist. Decide how to handle it before reading the contents.</>}
-                  </div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>{gv.title}</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>{gv.detail}</div>
                 </div>
               </div>
               <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                <Button leftIcon={<Icon name="shield-check" size={16} />} onClick={handleTrust} disabled={actioning}>I trust the sender</Button>
+                {trustActionable && (
+                  <Button leftIcon={<Icon name="shield-check" size={16} />} onClick={handleTrust} disabled={actioning}>I trust the sender</Button>
+                )}
+                {overrideActionable && (
+                  <Button variant={trustActionable ? 'secondary' : 'primary'} leftIcon={<Icon name="unlock" size={16} />} onClick={() => setMessageTrusted(true)}>Show this message</Button>
+                )}
                 <Button variant="secondary" leftIcon={<Icon name="eye" size={16} />} onClick={() => setRevealed(true)}>See as plain text</Button>
                 <Button variant="secondary" leftIcon={<Icon name="trash" size={16} />} onClick={handleDelete} disabled={actioning}>Delete this message</Button>
-                <Button variant="danger" leftIcon={<Icon name="alert-octagon" size={16} />} onClick={handleBlock} disabled={actioning}>Block this sender</Button>
+                {gateReason !== 'blocked' && (
+                  <Button variant="danger" leftIcon={<Icon name="alert-octagon" size={16} />} onClick={handleBlock} disabled={actioning}>Block this sender</Button>
+                )}
               </div>
             </div>
           ) : (
             <>
+              {messageTrusted && category !== 'allowlisted' && (
+                <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+                  <Icon name="unlock" size={16} style={{ color: 'var(--warning)', flex: 'none' }} />
+                  <span style={{ flex: 1, minWidth: 160 }}>Shown because you asked for it. Nothing about the sender changed — the checks below still stand, and the next message from this address will ask again.</span>
+                  <Button size="sm" variant="danger" leftIcon={<Icon name="alert-octagon" size={14} />} onClick={handleBlock} disabled={actioning}>Block</Button>
+                </div>
+              )}
               {gated && revealed && (
                 <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
                   <Icon name="eye" size={16} style={{ color: 'var(--warning)', flex: 'none' }} />
-                  <span style={{ flex: 1, minWidth: 160 }}>Shown as plain text — you haven’t added this sender to your allowlist.{htmlBody ? ' The HTML version stays hidden until you trust the sender.' : ''}</span>
-                  <Button size="sm" leftIcon={<Icon name="shield-check" size={14} />} onClick={handleTrust} disabled={actioning}>Trust</Button>
+                  <span style={{ flex: 1, minWidth: 160 }}>
+                    {overrideActionable
+                      ? `Shown as plain text — nothing could authenticate this message’s sender.${htmlBody ? ' The HTML version stays hidden until you choose to show it.' : ''}`
+                      : `Shown as plain text — you haven’t added this sender to your allowlist.${htmlBody ? ' The HTML version stays hidden until you trust the sender.' : ''}`}
+                  </span>
+                  {trustActionable && (
+                    <Button size="sm" leftIcon={<Icon name="shield-check" size={14} />} onClick={handleTrust} disabled={actioning}>Trust</Button>
+                  )}
+                  {overrideActionable && (
+                    <Button size="sm" variant={trustActionable ? 'secondary' : 'primary'} leftIcon={<Icon name="unlock" size={14} />} onClick={() => setMessageTrusted(true)}>Show this message</Button>
+                  )}
                   <Button size="sm" variant="danger" leftIcon={<Icon name="alert-octagon" size={14} />} onClick={handleBlock} disabled={actioning}>Block</Button>
                 </div>
               )}
