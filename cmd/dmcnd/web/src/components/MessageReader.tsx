@@ -822,7 +822,18 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                     </div>
                   )}
                   {!bodyError && body === null && <span style={{ color: 'var(--text-muted)' }}>Loading…</span>}
-                  {body !== null && body}
+                  {/* An empty text rendering is a real outcome, not a failure — an image-only
+                      campaign mail renders down to no text at all — but an empty panel reads as
+                      one. Say which it is, and say it especially behind the gate, where the
+                      reader's next move is a decision about HTML they have not been shown. */}
+                  {body !== null && body.trim() === '' && (
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {htmlBody
+                        ? 'This message has no text version — everything it says is in its HTML rendering.'
+                        : 'This message has no text content.'}
+                    </span>
+                  )}
+                  {body !== null && body.trim() !== '' && body}
                 </div>
               )}
             </>

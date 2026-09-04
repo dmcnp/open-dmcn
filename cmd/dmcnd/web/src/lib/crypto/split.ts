@@ -339,15 +339,21 @@ export async function decryptBody(
   const textPart = parts.find(p => p.contentType === 'text/plain');
   const htmlPart = parts.find(p => p.contentType === 'text/html');
   const htmlBody = htmlPart ? new TextDecoder().decode(new Uint8Array(htmlPart.content)) : undefined;
-  // No text/plain part at all — legacy mail that shipped HTML only, wrapped by a bridge
-  // predating the bridge-side rendering. Render the HTML down to text rather than handing
-  // the reader the markup as its "plain text": the plain-text peek exists precisely for a
-  // sender whose HTML we refuse to render, and showing the source there is unreadable.
-  const bodyText = textPart
-    ? new TextDecoder().decode(new Uint8Array(textPart.content))
+  // No usable text/plain part — legacy mail that shipped HTML only (wrapped by a bridge
+  // predating the bridge-side rendering), or one whose text half is blank: campaign
+  // builders routinely emit multipart/alternative with an empty text part, and a bridge
+  // that took it at face value delivered a message with no readable body at all. Render
+  // the HTML down to text rather than handing the reader the markup as its "plain text":
+  // the plain-text peek exists precisely for a sender whose HTML we refuse to render, and
+  // showing the source there is unreadable. A blank part is therefore treated as absent —
+  // here as well as at the bridge, because the messages already in the mailbox were
+  // delivered under the old rule and are not re-wrapped.
+  const textRaw = textPart ? new TextDecoder().decode(new Uint8Array(textPart.content)) : undefined;
+  const bodyText = textRaw !== undefined && textRaw.trim() !== ''
+    ? textRaw
     : htmlBody !== undefined
       ? toPlainText(htmlBody)
-      : new TextDecoder().decode(raw);
+      : textRaw ?? new TextDecoder().decode(raw);
 
   const attachments: DecryptedAttachment[] = (content.attachments ?? []).map(a => ({
     filename: a.filename,
