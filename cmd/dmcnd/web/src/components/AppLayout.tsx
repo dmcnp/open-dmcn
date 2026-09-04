@@ -200,7 +200,10 @@ export function AppLayout() {
           transition: 'opacity var(--dur-normal) var(--ease-standard)',
         }} />
       )}
-      <nav style={sidebarStyle}>
+      {/* Off-canvas on a phone, the closed drawer is not part of the page: inert keeps its
+          controls out of the tab order and away from clicks, aria-hidden out of the
+          accessibility tree — otherwise "the first Compose button" is one nobody can see. */}
+      <nav style={sidebarStyle} inert={isMobile && !drawerOpen} aria-hidden={isMobile && !drawerOpen}>
         <div style={{ padding: railCollapsed ? 'var(--space-3) 0' : 'var(--space-4)', display: 'flex', justifyContent: 'center' }}>
           {railCollapsed ? (
             <IconButton variant="solid" size="lg" aria-label="Compose" onClick={() => openCompose(null)}>

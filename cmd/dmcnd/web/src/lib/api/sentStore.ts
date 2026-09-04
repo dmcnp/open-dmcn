@@ -10,6 +10,7 @@ import { PersonalStore } from './personalStore';
 import type { Preview, FullBody } from './mailboxRest';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type SplitEnvelope } from '../crypto/split';
+import { KDF_V1, KDF_V2 } from '../crypto/sealVersion';
 import type { MessageHeaderFields } from '../crypto/protobuf';
 import { toBase64, fromBase64, toHex } from '../crypto/keys';
 
@@ -40,8 +41,12 @@ interface StoredRecipient {
   wrappedCek: string;
   cekNonce: string;
   cekTag: string;
+  // The CEK-wrap / AEAD generation this slot was sealed with (sealVersion.ts). It rides on
+  // the wire beside the slot and is stored here for the same reason: the reader dispatches
+  // on it, and a row that lost it can only be opened by guessing (openStoredHeader).
+  kdf?: number;
 }
-interface StoredHeader {
+export interface StoredHeader {
   recipients: StoredRecipient[];
   encryptedHeader: string;
   headerNonce: string;
@@ -53,7 +58,7 @@ interface StoredBody {
   bodyTag: string;
 }
 
-function encodeHeader(env: SplitEnvelope): StoredHeader {
+export function encodeStoredHeader(env: SplitEnvelope): StoredHeader {
   return {
     recipients: env.recipients.map(r => ({
       recipientXPub: toBase64(r.recipientXPub),
@@ -61,6 +66,7 @@ function encodeHeader(env: SplitEnvelope): StoredHeader {
       wrappedCek: toBase64(r.wrappedCek),
       cekNonce: toBase64(r.cekNonce),
       cekTag: toBase64(r.cekTag),
+      kdf: r.kdf,
     })),
     encryptedHeader: toBase64(env.encryptedHeader),
     headerNonce: toBase64(env.headerNonce),
@@ -74,7 +80,7 @@ function encodeBody(env: SplitEnvelope): StoredBody {
     bodyTag: toBase64(env.bodyTag),
   };
 }
-function toEntry(h: StoredHeader): MailboxEntryLike {
+function toEntry(h: StoredHeader, kdf?: number): MailboxEntryLike {
   return {
     recipients: h.recipients.map(r => ({
       recipientXPub: fromBase64(r.recipientXPub),
@@ -82,12 +88,40 @@ function toEntry(h: StoredHeader): MailboxEntryLike {
       wrappedCek: fromBase64(r.wrappedCek),
       cekNonce: fromBase64(r.cekNonce),
       cekTag: fromBase64(r.cekTag),
+      kdf: kdf ?? r.kdf,
     })),
     encryptedHeader: fromBase64(h.encryptedHeader),
     headerNonce: fromBase64(h.headerNonce),
     headerTag: fromBase64(h.headerTag),
   };
 }
+// openStoredHeader decrypts a stored Sent header and returns it with the entry it opened
+// under, which is what the body decrypt later reads its generation from.
+//
+// A row that carries no generation was written either by a client that sealed with the
+// current generation but did not yet store the field (the hosted client from the field's
+// arrival until this store learnt to keep it — every send in that window vanished from Sent
+// with an OperationError), or by one that predates the field and sealed with the first.
+// Nothing in the row says which, so each generation is tried newest first: two
+// authenticated attempts, so a wrong guess fails and never mis-decrypts.
+export async function openStoredHeader(
+  h: StoredHeader,
+  x25519Derive: CryptoKey,
+  x25519Pub: Uint8Array
+): Promise<{ entry: MailboxEntryLike; header: MessageHeaderFields }> {
+  const candidates = h.recipients.every(r => r.kdf !== undefined) ? [undefined] : [KDF_V2, KDF_V1];
+  let lastErr: unknown;
+  for (const kdf of candidates) {
+    const entry = toEntry(h, kdf);
+    try {
+      return { entry, header: await decryptHeader(entry, x25519Derive, x25519Pub) };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 function toBody(b: StoredBody): MailboxBodyLike {
   return {
     encryptedBody: fromBase64(b.encryptedBody),
@@ -134,7 +168,7 @@ export class SentStore {
   // putEnvelope stores a self-sealed split envelope as a listed header entry plus a lazy
   // body entry.
   async putEnvelope(messageIdHex: string, env: SplitEnvelope): Promise<void> {
-    await this.store.put(sentKey(messageIdHex), encodeHeader(env));
+    await this.store.put(sentKey(messageIdHex), encodeStoredHeader(env));
     await this.store.put(sentBodyKey(messageIdHex), encodeBody(env));
   }
 
@@ -154,13 +188,14 @@ export class SentStore {
     const next = new Map<string, { entry: MailboxEntryLike; header: MessageHeaderFields }>();
     for (const e of entries) {
       try {
-        const entry = toEntry(e.value);
-        const header = await decryptHeader(entry, this.keys.x25519Derive, this.keys.x25519Public);
+        const { entry, header } = await openStoredHeader(e.value, this.keys.x25519Derive, this.keys.x25519Public);
         const hash = SENT_HASH_PREFIX + midFromKey(e.key);
         next.set(hash, { entry, header });
         previews.push(previewFromHeader(hash, header));
-      } catch {
-        // Unreadable entry (foreign/legacy) — skip it.
+      } catch (err) {
+        // Unreadable entry (foreign/legacy) — skip it, but say so: a Sent folder that is
+        // silently short of a row it just wrote is undiagnosable from the page.
+        console.warn('Sent: skipping an unreadable entry', e.key, err);
       }
     }
     this.cache = next;

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { toBase64 } from '../lib/crypto/keys';
 import { sanitizeIncoming } from '../lib/html/sanitize';
 import type { DecryptedAttachment } from '../lib/crypto/split';
@@ -46,7 +46,34 @@ export interface HtmlMessageBodyProps {
   allowRemoteImages?: boolean;
 }
 
+// The frame cannot be sized to its document: the document has an opaque origin on purpose
+// (no allow-same-origin to read its height from here, no allow-scripts to have it report
+// one), and a fixed 600px box left a long message scrolling inside a small window on a phone.
+// So the frame takes the reader's visible height instead — a long message scrolls in a frame
+// that fills the screen, a short one has room to spare — and iOS Safari, which grows a frame
+// to fit its document, grows it from there.
+const MIN_FRAME_HEIGHT = 320;
+const FRAME_INSET = 32; // the reader's own padding above and below the frame
+
+function useReaderHeight(): [RefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(600);
+  useEffect(() => {
+    let scroller = ref.current?.parentElement ?? null;
+    while (scroller && !/^(auto|scroll)$/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    if (!scroller) return;
+    const target = scroller;
+    const fit = () => setHeight(Math.max(MIN_FRAME_HEIGHT, target.clientHeight - FRAME_INSET));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, height];
+}
+
 export function HtmlMessageBody({ html, attachments, allowRemoteImages = false }: HtmlMessageBodyProps) {
+  const [frameRef, height] = useReaderHeight();
   const { doc, blockedRemote } = useMemo(() => {
     const inline = buildInlineMap(attachments);
     const { html: clean, blockedRemote } = sanitizeIncoming(html, inline, { allowRemoteImages });
@@ -57,7 +84,20 @@ export function HtmlMessageBody({ html, attachments, allowRemoteImages = false }
       // referrerPolicy covers the document load; this covers the subresources inside it.
       '<meta name="referrer" content="no-referrer">' +
       '<base target="_blank">' +
-      '<style>html,body{margin:0;padding:12px;font:14px/1.5 system-ui,-apple-system,sans-serif;color:#111;background:#fff;word-break:break-word;overflow-wrap:anywhere}img{max-width:100%;height:auto}a{color:#0b5fff}</style>' +
+      // The frame is as wide as the screen and no wider, so nothing inside it may be either:
+      // a code block keeps its whitespace but wraps, a long word breaks, a picture shrinks,
+      // and a table or box that names its own width — legacy mail does, in attributes and
+      // inline styles — is capped at the frame. Content past the right edge of a phone is
+      // not scrolled to, it is lost; and iOS Safari grows an iframe to fit its document, so
+      // an overflowing document there widens the frame itself past the screen.
+      '<style>' +
+      '*,*::before,*::after{box-sizing:border-box}' +
+      'html,body{margin:0;padding:12px;font:14px/1.5 system-ui,-apple-system,sans-serif;color:#111;background:#fff;word-break:break-word;overflow-wrap:anywhere}' +
+      'pre{white-space:pre-wrap;overflow-wrap:anywhere}' +
+      'img,video{max-width:100%!important;height:auto}' +
+      'table,div,p,blockquote,pre,figure,td,th{max-width:100%!important;min-width:0!important}' +
+      'a{color:#0b5fff}' +
+      '</style>' +
       `</head><body>${clean}</body></html>`;
     return { doc: shell, blockedRemote };
   }, [html, attachments, allowRemoteImages]);
@@ -76,13 +116,18 @@ export function HtmlMessageBody({ html, attachments, allowRemoteImages = false }
       )}
       {/* Sandboxed: NO allow-scripts, NO allow-same-origin. allow-popups(+escape) only so
           links open in a normal new tab. referrerPolicy hides the URL from link targets. */}
-      <iframe
-        title="Message content"
-        srcDoc={doc}
-        sandbox="allow-popups allow-popups-to-escape-sandbox"
-        referrerPolicy="no-referrer"
-        style={{ width: '100%', height: 600, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: '#fff' }}
-      />
+      {/* width 1px + min-width 100% is the iOS Safari idiom: it lays the document out at the
+          frame's width instead of the document's, so the frame cannot grow past the screen;
+          and if anything still overflows, the wrapper scrolls sideways rather than the reader. */}
+      <div ref={frameRef} style={{ maxWidth: '100%', overflowX: 'auto' }}>
+        <iframe
+          title="Message content"
+          srcDoc={doc}
+          sandbox="allow-popups allow-popups-to-escape-sandbox"
+          referrerPolicy="no-referrer"
+          style={{ display: 'block', width: 1, minWidth: '100%', boxSizing: 'border-box', height, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: '#fff' }}
+        />
+      </div>
     </div>
   );
 }

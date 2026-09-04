@@ -110,13 +110,15 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     getHTML() {
       const el = elRef.current;
       if (!el) return '';
-      // Work on a clone so the visible editor keeps its previewable data: URIs.
-      const clone = el.cloneNode(true) as HTMLElement;
-      for (const img of Array.from(clone.querySelectorAll('img[data-cid]'))) {
+      // Rewritten in an inert document rather than a clone: a detached <img> still fetches
+      // whatever src it is handed, and a cid: URL is nothing the page may load (the CSP
+      // reported every send as a violation).
+      const doc = new DOMParser().parseFromString(el.innerHTML, 'text/html');
+      for (const img of Array.from(doc.querySelectorAll('img[data-cid]'))) {
         img.setAttribute('src', `cid:${img.getAttribute('data-cid')}`);
         img.removeAttribute('data-cid');
       }
-      return clone.innerHTML;
+      return doc.body.innerHTML;
     },
     setHTML(html: string) {
       if (elRef.current) elRef.current.innerHTML = html;
