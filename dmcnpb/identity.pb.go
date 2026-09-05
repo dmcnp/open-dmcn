@@ -245,27 +245,6 @@ type IdentityRecord struct {
 	VerificationTier VerificationTier       `protobuf:"varint,8,opt,name=verification_tier,json=verificationTier,proto3,enum=dmcn.identity.VerificationTier" json:"verification_tier,omitempty"`
 	Attestations     []*AttestationRecord   `protobuf:"bytes,9,rep,name=attestations,proto3" json:"attestations,omitempty"`
 	SelfSignature    []byte                 `protobuf:"bytes,10,opt,name=self_signature,json=selfSignature,proto3" json:"self_signature,omitempty"` // 64 bytes Ed25519 sig over all preceding fields
-	// DEPRECATED, always false. A bridge is infrastructure and has no identity record at all:
-	// it is a peer whose key carries a `bridge` credential, and recipients verify its
-	// attestations against that credential (see BridgeClassificationRecord.bridge_credential in
-	// bridge.proto, and SPEC.md §7). This flag existed when a bridge held a `bridge@<domain>`
-	// mailbox that clients looked up to decide whether to believe its SPF/DKIM/DMARC verdict —
-	// which made a trust decision depend on a directory lookup rather than on a signature.
-	//
-	// The field is retained rather than removed because it is covered by the owner
-	// self-signature: dropping it would change signable_bytes and invalidate every identity
-	// record ever signed. Implementations MUST NOT set it and MUST NOT treat it as a trust
-	// signal. Do not reuse field 19 for anything else.
-	//
-	// Deprecated: Marked as deprecated in identity.proto.
-	BridgeCapability bool `protobuf:"varint,19,opt,name=bridge_capability,json=bridgeCapability,proto3" json:"bridge_capability,omitempty"`
-	// Domain Authority countersignature (SPEC.md §2). Present when a
-	// domain authority — directly, or via a delegated sub-authority — vouches for
-	// this address↔keys binding. Excluded from the self-signature: the authority
-	// signs after the user self-signs.
-	DomainCountersignature    []byte `protobuf:"bytes,20,opt,name=domain_countersignature,json=domainCountersignature,proto3" json:"domain_countersignature,omitempty"`            // 64 bytes Ed25519 over the binding
-	DomainCountersignedAt     int64  `protobuf:"varint,21,opt,name=domain_countersigned_at,json=domainCountersignedAt,proto3" json:"domain_countersigned_at,omitempty"`            // Unix seconds; authenticated time of countersigning
-	DomainCountersignerPubkey []byte `protobuf:"bytes,22,opt,name=domain_countersigner_pubkey,json=domainCountersignerPubkey,proto3" json:"domain_countersigner_pubkey,omitempty"` // 32 bytes Ed25519 of the root or sub-authority signer
 	// require_onion: the mailbox owner requires inbound mail to arrive via onion
 	// routing (senders use onion; the recipient's relay rejects direct STOREs).
 	// Covered by the self-signature. See SPEC.md §6.
@@ -399,35 +378,6 @@ func (x *IdentityRecord) GetSelfSignature() []byte {
 	return nil
 }
 
-// Deprecated: Marked as deprecated in identity.proto.
-func (x *IdentityRecord) GetBridgeCapability() bool {
-	if x != nil {
-		return x.BridgeCapability
-	}
-	return false
-}
-
-func (x *IdentityRecord) GetDomainCountersignature() []byte {
-	if x != nil {
-		return x.DomainCountersignature
-	}
-	return nil
-}
-
-func (x *IdentityRecord) GetDomainCountersignedAt() int64 {
-	if x != nil {
-		return x.DomainCountersignedAt
-	}
-	return 0
-}
-
-func (x *IdentityRecord) GetDomainCountersignerPubkey() []byte {
-	if x != nil {
-		return x.DomainCountersignerPubkey
-	}
-	return nil
-}
-
 func (x *IdentityRecord) GetRequireOnion() bool {
 	if x != nil {
 		return x.RequireOnion
@@ -466,12 +416,24 @@ func (x *IdentityRecord) GetOperatorCredentials() []*Credential {
 // AuthorityKey is one entry in a domain root authority's key timeline.
 // effective_from-only: a key is effective from effective_from until the next
 // key's effective_from; the latest key is open-ended (SPEC.md §2).
+//
+// BOTH key halves are retained for a retired root, not just the signing half, and the
+// second one is easy to mistake for dead weight: nothing reads it. It is here because the
+// DNS anchor is a fingerprint over the PAIR — the first 20 bytes of
+// SHA-256(ed25519_pub ‖ x25519_pub), SPEC.md §1 — so keeping both halves is the only thing
+// that makes a superseded key's fingerprint recomputable, and with it the `_dmcn` fp= value
+// that was published while that key was current. Signature verification uses
+// ed25519_public_key alone, and the live anchor comes from the CURRENT root pair on the DAR
+// itself, so no code path recomputes a historical fingerprint today. Dropping x25519 would
+// foreclose ever checking a rotation history against anchors observed in the past — and,
+// because the pair is covered by the DAR self-signature, would invalidate every DAR that
+// has ever rotated a root key.
 type AuthorityKey struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	Ed25519PublicKey []byte                 `protobuf:"bytes,1,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"` // 32 bytes
-	X25519PublicKey  []byte                 `protobuf:"bytes,2,opt,name=x25519_public_key,json=x25519PublicKey,proto3" json:"x25519_public_key,omitempty"`    // 32 bytes
-	EffectiveFrom    int64                  `protobuf:"varint,3,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`           // Unix seconds
-	RotationReason   uint32                 `protobuf:"varint,4,opt,name=rotation_reason,json=rotationReason,proto3" json:"rotation_reason,omitempty"`        // carried-unenforced; for the future revocation phase
+	Ed25519PublicKey []byte                 `protobuf:"bytes,1,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"` // 32 bytes — the retired signing key; what root-key-at-time selects on
+	X25519PublicKey  []byte                 `protobuf:"bytes,2,opt,name=x25519_public_key,json=x25519PublicKey,proto3" json:"x25519_public_key,omitempty"`    // 32 bytes — its agreement half; retained for the historical fingerprint above
+	EffectiveFrom    int64                  `protobuf:"varint,3,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`           // Unix seconds — effective until the next key's effective_from
+	RotationReason   uint32                 `protobuf:"varint,4,opt,name=rotation_reason,json=rotationReason,proto3" json:"rotation_reason,omitempty"`        // carried-unenforced, no producer; reserved for the revocation phase
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -534,85 +496,6 @@ func (x *AuthorityKey) GetRotationReason() uint32 {
 	return 0
 }
 
-// SubAuthority is a key the domain root delegates countersigning to
-// (SPEC.md §2). Covered by the DAR self-signature. Retired by
-// setting effective_until; the entry is kept so earlier countersigs stay valid.
-type SubAuthority struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Ed25519PublicKey []byte                 `protobuf:"bytes,1,opt,name=ed25519_public_key,json=ed25519PublicKey,proto3" json:"ed25519_public_key,omitempty"` // 32 bytes
-	Scope            string                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`                                                 // "" = whole domain
-	EffectiveFrom    int64                  `protobuf:"varint,3,opt,name=effective_from,json=effectiveFrom,proto3" json:"effective_from,omitempty"`           // Unix seconds
-	EffectiveUntil   int64                  `protobuf:"varint,4,opt,name=effective_until,json=effectiveUntil,proto3" json:"effective_until,omitempty"`        // Unix seconds; 0 = open-ended
-	Permissions      uint32                 `protobuf:"varint,5,opt,name=permissions,proto3" json:"permissions,omitempty"`                                    // carried-unenforced
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *SubAuthority) Reset() {
-	*x = SubAuthority{}
-	mi := &file_identity_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubAuthority) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubAuthority) ProtoMessage() {}
-
-func (x *SubAuthority) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubAuthority.ProtoReflect.Descriptor instead.
-func (*SubAuthority) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *SubAuthority) GetEd25519PublicKey() []byte {
-	if x != nil {
-		return x.Ed25519PublicKey
-	}
-	return nil
-}
-
-func (x *SubAuthority) GetScope() string {
-	if x != nil {
-		return x.Scope
-	}
-	return ""
-}
-
-func (x *SubAuthority) GetEffectiveFrom() int64 {
-	if x != nil {
-		return x.EffectiveFrom
-	}
-	return 0
-}
-
-func (x *SubAuthority) GetEffectiveUntil() int64 {
-	if x != nil {
-		return x.EffectiveUntil
-	}
-	return 0
-}
-
-func (x *SubAuthority) GetPermissions() uint32 {
-	if x != nil {
-		return x.Permissions
-	}
-	return 0
-}
-
 // DomainAuthorityRecord declares a domain's authority key (DNS-proven) and the
 // keys it authorizes to countersign addresses under the domain. Served by the
 // domain's fleet and verified against the domain's DNS fingerprint anchor.
@@ -624,7 +507,6 @@ type DomainAuthorityRecord struct {
 	AuthorityX25519PublicKey  []byte                 `protobuf:"bytes,4,opt,name=authority_x25519_public_key,json=authorityX25519PublicKey,proto3" json:"authority_x25519_public_key,omitempty"`    // 32 bytes — CURRENT root key
 	AuthorityEffectiveFrom    int64                  `protobuf:"varint,5,opt,name=authority_effective_from,json=authorityEffectiveFrom,proto3" json:"authority_effective_from,omitempty"`           // Unix seconds — current key's start
 	SupersededKeys            []*AuthorityKey        `protobuf:"bytes,6,rep,name=superseded_keys,json=supersededKeys,proto3" json:"superseded_keys,omitempty"`                                      // root rotation history
-	SubAuthorities            []*SubAuthority        `protobuf:"bytes,7,rep,name=sub_authorities,json=subAuthorities,proto3" json:"sub_authorities,omitempty"`                                      // delegated signers (append-only)
 	PolicyFlags               uint32                 `protobuf:"varint,8,opt,name=policy_flags,json=policyFlags,proto3" json:"policy_flags,omitempty"`                                              // carried-unenforced
 	CreatedAt                 int64                  `protobuf:"varint,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`                                                    // Unix seconds
 	Revision                  uint64                 `protobuf:"varint,10,opt,name=revision,proto3" json:"revision,omitempty"`                                                                      // monotonic; bumped on every republish
@@ -650,7 +532,7 @@ type DomainAuthorityRecord struct {
 
 func (x *DomainAuthorityRecord) Reset() {
 	*x = DomainAuthorityRecord{}
-	mi := &file_identity_proto_msgTypes[4]
+	mi := &file_identity_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -662,7 +544,7 @@ func (x *DomainAuthorityRecord) String() string {
 func (*DomainAuthorityRecord) ProtoMessage() {}
 
 func (x *DomainAuthorityRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[4]
+	mi := &file_identity_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -675,7 +557,7 @@ func (x *DomainAuthorityRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainAuthorityRecord.ProtoReflect.Descriptor instead.
 func (*DomainAuthorityRecord) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{4}
+	return file_identity_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DomainAuthorityRecord) GetVersion() uint32 {
@@ -716,13 +598,6 @@ func (x *DomainAuthorityRecord) GetAuthorityEffectiveFrom() int64 {
 func (x *DomainAuthorityRecord) GetSupersededKeys() []*AuthorityKey {
 	if x != nil {
 		return x.SupersededKeys
-	}
-	return nil
-}
-
-func (x *DomainAuthorityRecord) GetSubAuthorities() []*SubAuthority {
-	if x != nil {
-		return x.SubAuthorities
 	}
 	return nil
 }
@@ -790,7 +665,7 @@ type FleetNode struct {
 
 func (x *FleetNode) Reset() {
 	*x = FleetNode{}
-	mi := &file_identity_proto_msgTypes[5]
+	mi := &file_identity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +677,7 @@ func (x *FleetNode) String() string {
 func (*FleetNode) ProtoMessage() {}
 
 func (x *FleetNode) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[5]
+	mi := &file_identity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +690,7 @@ func (x *FleetNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FleetNode.ProtoReflect.Descriptor instead.
 func (*FleetNode) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{5}
+	return file_identity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *FleetNode) GetPeerId() string {
@@ -861,7 +736,7 @@ type FleetRoster struct {
 
 func (x *FleetRoster) Reset() {
 	*x = FleetRoster{}
-	mi := &file_identity_proto_msgTypes[6]
+	mi := &file_identity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -873,7 +748,7 @@ func (x *FleetRoster) String() string {
 func (*FleetRoster) ProtoMessage() {}
 
 func (x *FleetRoster) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[6]
+	mi := &file_identity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -886,7 +761,7 @@ func (x *FleetRoster) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FleetRoster.ProtoReflect.Descriptor instead.
 func (*FleetRoster) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{6}
+	return file_identity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FleetRoster) GetVersion() uint32 {
@@ -958,7 +833,7 @@ type Credential struct {
 
 func (x *Credential) Reset() {
 	*x = Credential{}
-	mi := &file_identity_proto_msgTypes[7]
+	mi := &file_identity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +845,7 @@ func (x *Credential) String() string {
 func (*Credential) ProtoMessage() {}
 
 func (x *Credential) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[7]
+	mi := &file_identity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +858,7 @@ func (x *Credential) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Credential.ProtoReflect.Descriptor instead.
 func (*Credential) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{7}
+	return file_identity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Credential) GetVersion() uint32 {
@@ -1100,7 +975,7 @@ type CredentialBlock struct {
 
 func (x *CredentialBlock) Reset() {
 	*x = CredentialBlock{}
-	mi := &file_identity_proto_msgTypes[8]
+	mi := &file_identity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1112,7 +987,7 @@ func (x *CredentialBlock) String() string {
 func (*CredentialBlock) ProtoMessage() {}
 
 func (x *CredentialBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[8]
+	mi := &file_identity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1125,7 +1000,7 @@ func (x *CredentialBlock) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialBlock.ProtoReflect.Descriptor instead.
 func (*CredentialBlock) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{8}
+	return file_identity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CredentialBlock) GetPubkey() []byte {
@@ -1177,7 +1052,7 @@ type CredentialBlockList struct {
 
 func (x *CredentialBlockList) Reset() {
 	*x = CredentialBlockList{}
-	mi := &file_identity_proto_msgTypes[9]
+	mi := &file_identity_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1189,7 +1064,7 @@ func (x *CredentialBlockList) String() string {
 func (*CredentialBlockList) ProtoMessage() {}
 
 func (x *CredentialBlockList) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[9]
+	mi := &file_identity_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1202,7 +1077,7 @@ func (x *CredentialBlockList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialBlockList.ProtoReflect.Descriptor instead.
 func (*CredentialBlockList) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{9}
+	return file_identity_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CredentialBlockList) GetDomain() string {
@@ -1245,7 +1120,7 @@ type CredentialBundle struct {
 
 func (x *CredentialBundle) Reset() {
 	*x = CredentialBundle{}
-	mi := &file_identity_proto_msgTypes[10]
+	mi := &file_identity_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1257,7 +1132,7 @@ func (x *CredentialBundle) String() string {
 func (*CredentialBundle) ProtoMessage() {}
 
 func (x *CredentialBundle) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[10]
+	mi := &file_identity_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1270,7 +1145,7 @@ func (x *CredentialBundle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialBundle.ProtoReflect.Descriptor instead.
 func (*CredentialBundle) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{10}
+	return file_identity_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CredentialBundle) GetCredential() *Credential {
@@ -1303,7 +1178,7 @@ type JoinRequest struct {
 
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
-	mi := &file_identity_proto_msgTypes[11]
+	mi := &file_identity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1315,7 +1190,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[11]
+	mi := &file_identity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1328,7 +1203,7 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{11}
+	return file_identity_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *JoinRequest) GetCredential() *Credential {
@@ -1365,7 +1240,7 @@ type JoinResponse struct {
 
 func (x *JoinResponse) Reset() {
 	*x = JoinResponse{}
-	mi := &file_identity_proto_msgTypes[12]
+	mi := &file_identity_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1377,7 +1252,7 @@ func (x *JoinResponse) String() string {
 func (*JoinResponse) ProtoMessage() {}
 
 func (x *JoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[12]
+	mi := &file_identity_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1390,7 +1265,7 @@ func (x *JoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinResponse.ProtoReflect.Descriptor instead.
 func (*JoinResponse) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{12}
+	return file_identity_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *JoinResponse) GetAccepted() bool {
@@ -1440,7 +1315,7 @@ type RemovedBinding struct {
 
 func (x *RemovedBinding) Reset() {
 	*x = RemovedBinding{}
-	mi := &file_identity_proto_msgTypes[13]
+	mi := &file_identity_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1452,7 +1327,7 @@ func (x *RemovedBinding) String() string {
 func (*RemovedBinding) ProtoMessage() {}
 
 func (x *RemovedBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[13]
+	mi := &file_identity_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1465,7 +1340,7 @@ func (x *RemovedBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemovedBinding.ProtoReflect.Descriptor instead.
 func (*RemovedBinding) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{13}
+	return file_identity_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RemovedBinding) GetEd25519PublicKey() []byte {
@@ -1500,7 +1375,7 @@ type AddressRemovalRecord struct {
 
 func (x *AddressRemovalRecord) Reset() {
 	*x = AddressRemovalRecord{}
-	mi := &file_identity_proto_msgTypes[14]
+	mi := &file_identity_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1512,7 +1387,7 @@ func (x *AddressRemovalRecord) String() string {
 func (*AddressRemovalRecord) ProtoMessage() {}
 
 func (x *AddressRemovalRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[14]
+	mi := &file_identity_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1525,7 +1400,7 @@ func (x *AddressRemovalRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddressRemovalRecord.ProtoReflect.Descriptor instead.
 func (*AddressRemovalRecord) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{14}
+	return file_identity_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AddressRemovalRecord) GetVersion() uint32 {
@@ -1594,7 +1469,7 @@ type CompromisedKey struct {
 
 func (x *CompromisedKey) Reset() {
 	*x = CompromisedKey{}
-	mi := &file_identity_proto_msgTypes[15]
+	mi := &file_identity_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1606,7 +1481,7 @@ func (x *CompromisedKey) String() string {
 func (*CompromisedKey) ProtoMessage() {}
 
 func (x *CompromisedKey) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[15]
+	mi := &file_identity_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1619,7 +1494,7 @@ func (x *CompromisedKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompromisedKey.ProtoReflect.Descriptor instead.
 func (*CompromisedKey) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{15}
+	return file_identity_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CompromisedKey) GetEd25519PublicKey() []byte {
@@ -1655,20 +1530,14 @@ type RelayDescriptor struct {
 	Multiaddrs      []string               `protobuf:"bytes,3,rep,name=multiaddrs,proto3" json:"multiaddrs,omitempty"`
 	CreatedAt       int64                  `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // Unix seconds
 	Revision        uint64                 `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`                    // monotonic; bumped on republish
-	Signature       []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`                   // node libp2p-key sig over fields 1-5,7 (not the countersig)
-	// Domain binding (DMCN PKI / domain-anchored federation). The node self-asserts
-	// the domain it serves (field 7, covered by the self-signature); the domain
-	// authority — root or a PermVouchNode sub-authority — countersigns the stable
-	// {domain, peer_id, x25519} binding (fields 8-10). The countersignature covers
-	// only that binding, NOT multiaddrs/revision, so it survives liveness re-publish.
-	Domain                    string `protobuf:"bytes,7,opt,name=domain,proto3" json:"domain,omitempty"`                                                                           // domain this node belongs to (e.g. "example.com")
-	DomainCountersignature    []byte `protobuf:"bytes,8,opt,name=domain_countersignature,json=domainCountersignature,proto3" json:"domain_countersignature,omitempty"`             // 64 bytes Ed25519 over the binding
-	DomainCountersignedAt     int64  `protobuf:"varint,9,opt,name=domain_countersigned_at,json=domainCountersignedAt,proto3" json:"domain_countersigned_at,omitempty"`             // Unix seconds; authenticated countersign time
-	DomainCountersignerPubkey []byte `protobuf:"bytes,10,opt,name=domain_countersigner_pubkey,json=domainCountersignerPubkey,proto3" json:"domain_countersigner_pubkey,omitempty"` // 32 bytes Ed25519 of the root/sub-authority signer
-	// credential (Credential PKI): the node's membership credential (role "node"),
-	// so onion route selection can verify a relay's trust by credential without
-	// connecting to it. Replaces the domain_countersignature fields above. Subject is
-	// the peer ID's key, so it can't be swapped onto another descriptor.
+	Signature       []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`                   // node libp2p-key sig over fields 1-5,7
+	// The domain this node serves — self-asserted and covered by the signature above, which the
+	// peer ID itself anchors. It labels the node; it does not prove membership. That is the
+	// credential's job.
+	Domain string `protobuf:"bytes,7,opt,name=domain,proto3" json:"domain,omitempty"` // e.g. "example.com"
+	// The node's membership credential (role "node"): who vouches that this peer serves `domain`.
+	// Its subject is the peer ID's key, so it cannot be swapped onto another descriptor, and onion
+	// route selection can check a relay's trust without connecting to it.
 	Credential    *Credential `protobuf:"bytes,11,opt,name=credential,proto3" json:"credential,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1676,7 +1545,7 @@ type RelayDescriptor struct {
 
 func (x *RelayDescriptor) Reset() {
 	*x = RelayDescriptor{}
-	mi := &file_identity_proto_msgTypes[16]
+	mi := &file_identity_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1688,7 +1557,7 @@ func (x *RelayDescriptor) String() string {
 func (*RelayDescriptor) ProtoMessage() {}
 
 func (x *RelayDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[16]
+	mi := &file_identity_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1701,7 +1570,7 @@ func (x *RelayDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelayDescriptor.ProtoReflect.Descriptor instead.
 func (*RelayDescriptor) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{16}
+	return file_identity_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *RelayDescriptor) GetPeerId() string {
@@ -1753,27 +1622,6 @@ func (x *RelayDescriptor) GetDomain() string {
 	return ""
 }
 
-func (x *RelayDescriptor) GetDomainCountersignature() []byte {
-	if x != nil {
-		return x.DomainCountersignature
-	}
-	return nil
-}
-
-func (x *RelayDescriptor) GetDomainCountersignedAt() int64 {
-	if x != nil {
-		return x.DomainCountersignedAt
-	}
-	return 0
-}
-
-func (x *RelayDescriptor) GetDomainCountersignerPubkey() []byte {
-	if x != nil {
-		return x.DomainCountersignerPubkey
-	}
-	return nil
-}
-
 func (x *RelayDescriptor) GetCredential() *Credential {
 	if x != nil {
 		return x.Credential
@@ -1798,7 +1646,7 @@ type KeyCompromiseRecord struct {
 
 func (x *KeyCompromiseRecord) Reset() {
 	*x = KeyCompromiseRecord{}
-	mi := &file_identity_proto_msgTypes[17]
+	mi := &file_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1810,7 +1658,7 @@ func (x *KeyCompromiseRecord) String() string {
 func (*KeyCompromiseRecord) ProtoMessage() {}
 
 func (x *KeyCompromiseRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[17]
+	mi := &file_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1823,7 +1671,7 @@ func (x *KeyCompromiseRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyCompromiseRecord.ProtoReflect.Descriptor instead.
 func (*KeyCompromiseRecord) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{17}
+	return file_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *KeyCompromiseRecord) GetVersion() uint32 {
@@ -1883,7 +1731,7 @@ const file_identity_proto_rawDesc = "" +
 	"attestedAt\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\a \x01(\x03R\texpiresAt\x12\x1c\n" +
-	"\tsignature\x18\b \x01(\fR\tsignature\"\xc2\b\n" +
+	"\tsignature\x18\b \x01(\fR\tsignature\"\xda\a\n" +
 	"\x0eIdentityRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12,\n" +
@@ -1898,35 +1746,24 @@ const file_identity_proto_rawDesc = "" +
 	"\x11verification_tier\x18\b \x01(\x0e2\x1f.dmcn.identity.VerificationTierR\x10verificationTier\x12D\n" +
 	"\fattestations\x18\t \x03(\v2 .dmcn.identity.AttestationRecordR\fattestations\x12%\n" +
 	"\x0eself_signature\x18\n" +
-	" \x01(\fR\rselfSignature\x12/\n" +
-	"\x11bridge_capability\x18\x13 \x01(\bB\x02\x18\x01R\x10bridgeCapability\x127\n" +
-	"\x17domain_countersignature\x18\x14 \x01(\fR\x16domainCountersignature\x126\n" +
-	"\x17domain_countersigned_at\x18\x15 \x01(\x03R\x15domainCountersignedAt\x12>\n" +
-	"\x1bdomain_countersigner_pubkey\x18\x16 \x01(\fR\x19domainCountersignerPubkey\x12#\n" +
+	" \x01(\fR\rselfSignature\x12#\n" +
 	"\rrequire_onion\x18\x17 \x01(\bR\frequireOnion\x12H\n" +
 	"\x12address_credential\x18\x18 \x01(\v2\x19.dmcn.identity.CredentialR\x11addressCredential\x12H\n" +
 	"\x12routing_credential\x18\x19 \x01(\v2\x19.dmcn.identity.CredentialR\x11routingCredential\x12\x1a\n" +
 	"\brevision\x18\x1a \x01(\x04R\brevision\x12L\n" +
-	"\x14operator_credentials\x18\x1c \x03(\v2\x19.dmcn.identity.CredentialR\x13operatorCredentialsJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x1b\x10\x1cR\x06claimsR\rclaim_recordsR\x06policyR\fpolicy_flagsR\x0fguardian_policyR\x0frate_credential\"\xb8\x01\n" +
+	"\x14operator_credentials\x18\x1c \x03(\v2\x19.dmcn.identity.CredentialR\x13operatorCredentialsJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17J\x04\b\x1b\x10\x1cR\x06claimsR\rclaim_recordsR\x06policyR\fpolicy_flagsR\x0fguardian_policyR\x11bridge_capabilityR\x17domain_countersignatureR\x17domain_countersigned_atR\x1bdomain_countersigner_pubkeyR\x0frate_credential\"\xb8\x01\n" +
 	"\fAuthorityKey\x12,\n" +
 	"\x12ed25519_public_key\x18\x01 \x01(\fR\x10ed25519PublicKey\x12*\n" +
 	"\x11x25519_public_key\x18\x02 \x01(\fR\x0fx25519PublicKey\x12%\n" +
 	"\x0eeffective_from\x18\x03 \x01(\x03R\reffectiveFrom\x12'\n" +
-	"\x0frotation_reason\x18\x04 \x01(\rR\x0erotationReason\"\xc4\x01\n" +
-	"\fSubAuthority\x12,\n" +
-	"\x12ed25519_public_key\x18\x01 \x01(\fR\x10ed25519PublicKey\x12\x14\n" +
-	"\x05scope\x18\x02 \x01(\tR\x05scope\x12%\n" +
-	"\x0eeffective_from\x18\x03 \x01(\x03R\reffectiveFrom\x12'\n" +
-	"\x0feffective_until\x18\x04 \x01(\x03R\x0eeffectiveUntil\x12 \n" +
-	"\vpermissions\x18\x05 \x01(\rR\vpermissions\"\xb9\x05\n" +
+	"\x0frotation_reason\x18\x04 \x01(\rR\x0erotationReason\"\x8a\x05\n" +
 	"\x15DomainAuthorityRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12?\n" +
 	"\x1cauthority_ed25519_public_key\x18\x03 \x01(\fR\x19authorityEd25519PublicKey\x12=\n" +
 	"\x1bauthority_x25519_public_key\x18\x04 \x01(\fR\x18authorityX25519PublicKey\x128\n" +
 	"\x18authority_effective_from\x18\x05 \x01(\x03R\x16authorityEffectiveFrom\x12D\n" +
-	"\x0fsuperseded_keys\x18\x06 \x03(\v2\x1b.dmcn.identity.AuthorityKeyR\x0esupersededKeys\x12D\n" +
-	"\x0fsub_authorities\x18\a \x03(\v2\x1b.dmcn.identity.SubAuthorityR\x0esubAuthorities\x12!\n" +
+	"\x0fsuperseded_keys\x18\x06 \x03(\v2\x1b.dmcn.identity.AuthorityKeyR\x0esupersededKeys\x12!\n" +
 	"\fpolicy_flags\x18\b \x01(\rR\vpolicyFlags\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\t \x01(\x03R\tcreatedAt\x12\x1a\n" +
@@ -1935,7 +1772,7 @@ const file_identity_proto_rawDesc = "" +
 	"\x0eself_signature\x18\v \x01(\fR\rselfSignature\x12N\n" +
 	"\x15authority_credentials\x18\f \x03(\v2\x19.dmcn.identity.CredentialR\x14authorityCredentials\x120\n" +
 	"\x14reserved_local_parts\x18\r \x03(\tR\x12reservedLocalParts\x12!\n" +
-	"\ffleet_domain\x18\x0e \x01(\tR\vfleetDomain\"Z\n" +
+	"\ffleet_domain\x18\x0e \x01(\tR\vfleetDomainJ\x04\b\a\x10\bR\x0fsub_authorities\"Z\n" +
 	"\tFleetNode\x12\x17\n" +
 	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x12\x1e\n" +
 	"\n" +
@@ -2022,7 +1859,7 @@ const file_identity_proto_rawDesc = "" +
 	"\x0eCompromisedKey\x12,\n" +
 	"\x12ed25519_public_key\x18\x01 \x01(\fR\x10ed25519PublicKey\x12%\n" +
 	"\x0ecompromised_at\x18\x02 \x01(\x03R\rcompromisedAt\x12'\n" +
-	"\x0fretention_until\x18\x03 \x01(\x03R\x0eretentionUntil\"\xd3\x03\n" +
+	"\x0fretention_until\x18\x03 \x01(\x03R\x0eretentionUntil\"\x83\x03\n" +
 	"\x0fRelayDescriptor\x12\x17\n" +
 	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x12*\n" +
 	"\x11x25519_public_key\x18\x02 \x01(\fR\x0fx25519PublicKey\x12\x1e\n" +
@@ -2033,14 +1870,12 @@ const file_identity_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1a\n" +
 	"\brevision\x18\x05 \x01(\x04R\brevision\x12\x1c\n" +
 	"\tsignature\x18\x06 \x01(\fR\tsignature\x12\x16\n" +
-	"\x06domain\x18\a \x01(\tR\x06domain\x127\n" +
-	"\x17domain_countersignature\x18\b \x01(\fR\x16domainCountersignature\x126\n" +
-	"\x17domain_countersigned_at\x18\t \x01(\x03R\x15domainCountersignedAt\x12>\n" +
-	"\x1bdomain_countersigner_pubkey\x18\n" +
-	" \x01(\fR\x19domainCountersignerPubkey\x129\n" +
+	"\x06domain\x18\a \x01(\tR\x06domain\x129\n" +
 	"\n" +
 	"credential\x18\v \x01(\v2\x19.dmcn.identity.CredentialR\n" +
-	"credential\"\xf3\x01\n" +
+	"credentialJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vR\x17domain_countersignatureR\x17domain_countersigned_atR\x1bdomain_countersigner_pubkey\"\xf3\x01\n" +
 	"\x13KeyCompromiseRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12H\n" +
@@ -2073,59 +1908,57 @@ func file_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_identity_proto_goTypes = []any{
 	(VerificationTier)(0),         // 0: dmcn.identity.VerificationTier
 	(AttestationType)(0),          // 1: dmcn.identity.AttestationType
 	(*AttestationRecord)(nil),     // 2: dmcn.identity.AttestationRecord
 	(*IdentityRecord)(nil),        // 3: dmcn.identity.IdentityRecord
 	(*AuthorityKey)(nil),          // 4: dmcn.identity.AuthorityKey
-	(*SubAuthority)(nil),          // 5: dmcn.identity.SubAuthority
-	(*DomainAuthorityRecord)(nil), // 6: dmcn.identity.DomainAuthorityRecord
-	(*FleetNode)(nil),             // 7: dmcn.identity.FleetNode
-	(*FleetRoster)(nil),           // 8: dmcn.identity.FleetRoster
-	(*Credential)(nil),            // 9: dmcn.identity.Credential
-	(*CredentialBlock)(nil),       // 10: dmcn.identity.CredentialBlock
-	(*CredentialBlockList)(nil),   // 11: dmcn.identity.CredentialBlockList
-	(*CredentialBundle)(nil),      // 12: dmcn.identity.CredentialBundle
-	(*JoinRequest)(nil),           // 13: dmcn.identity.JoinRequest
-	(*JoinResponse)(nil),          // 14: dmcn.identity.JoinResponse
-	(*RemovedBinding)(nil),        // 15: dmcn.identity.RemovedBinding
-	(*AddressRemovalRecord)(nil),  // 16: dmcn.identity.AddressRemovalRecord
-	(*CompromisedKey)(nil),        // 17: dmcn.identity.CompromisedKey
-	(*RelayDescriptor)(nil),       // 18: dmcn.identity.RelayDescriptor
-	(*KeyCompromiseRecord)(nil),   // 19: dmcn.identity.KeyCompromiseRecord
-	nil,                           // 20: dmcn.identity.Credential.AttributesEntry
+	(*DomainAuthorityRecord)(nil), // 5: dmcn.identity.DomainAuthorityRecord
+	(*FleetNode)(nil),             // 6: dmcn.identity.FleetNode
+	(*FleetRoster)(nil),           // 7: dmcn.identity.FleetRoster
+	(*Credential)(nil),            // 8: dmcn.identity.Credential
+	(*CredentialBlock)(nil),       // 9: dmcn.identity.CredentialBlock
+	(*CredentialBlockList)(nil),   // 10: dmcn.identity.CredentialBlockList
+	(*CredentialBundle)(nil),      // 11: dmcn.identity.CredentialBundle
+	(*JoinRequest)(nil),           // 12: dmcn.identity.JoinRequest
+	(*JoinResponse)(nil),          // 13: dmcn.identity.JoinResponse
+	(*RemovedBinding)(nil),        // 14: dmcn.identity.RemovedBinding
+	(*AddressRemovalRecord)(nil),  // 15: dmcn.identity.AddressRemovalRecord
+	(*CompromisedKey)(nil),        // 16: dmcn.identity.CompromisedKey
+	(*RelayDescriptor)(nil),       // 17: dmcn.identity.RelayDescriptor
+	(*KeyCompromiseRecord)(nil),   // 18: dmcn.identity.KeyCompromiseRecord
+	nil,                           // 19: dmcn.identity.Credential.AttributesEntry
 }
 var file_identity_proto_depIdxs = []int32{
 	1,  // 0: dmcn.identity.AttestationRecord.attestation_type:type_name -> dmcn.identity.AttestationType
 	0,  // 1: dmcn.identity.IdentityRecord.verification_tier:type_name -> dmcn.identity.VerificationTier
 	2,  // 2: dmcn.identity.IdentityRecord.attestations:type_name -> dmcn.identity.AttestationRecord
-	9,  // 3: dmcn.identity.IdentityRecord.address_credential:type_name -> dmcn.identity.Credential
-	9,  // 4: dmcn.identity.IdentityRecord.routing_credential:type_name -> dmcn.identity.Credential
-	9,  // 5: dmcn.identity.IdentityRecord.operator_credentials:type_name -> dmcn.identity.Credential
+	8,  // 3: dmcn.identity.IdentityRecord.address_credential:type_name -> dmcn.identity.Credential
+	8,  // 4: dmcn.identity.IdentityRecord.routing_credential:type_name -> dmcn.identity.Credential
+	8,  // 5: dmcn.identity.IdentityRecord.operator_credentials:type_name -> dmcn.identity.Credential
 	4,  // 6: dmcn.identity.DomainAuthorityRecord.superseded_keys:type_name -> dmcn.identity.AuthorityKey
-	5,  // 7: dmcn.identity.DomainAuthorityRecord.sub_authorities:type_name -> dmcn.identity.SubAuthority
-	9,  // 8: dmcn.identity.DomainAuthorityRecord.authority_credentials:type_name -> dmcn.identity.Credential
-	7,  // 9: dmcn.identity.FleetRoster.nodes:type_name -> dmcn.identity.FleetNode
-	20, // 10: dmcn.identity.Credential.attributes:type_name -> dmcn.identity.Credential.AttributesEntry
-	10, // 11: dmcn.identity.CredentialBlockList.blocks:type_name -> dmcn.identity.CredentialBlock
-	9,  // 12: dmcn.identity.CredentialBundle.credential:type_name -> dmcn.identity.Credential
-	6,  // 13: dmcn.identity.CredentialBundle.dar:type_name -> dmcn.identity.DomainAuthorityRecord
-	9,  // 14: dmcn.identity.JoinRequest.credential:type_name -> dmcn.identity.Credential
-	6,  // 15: dmcn.identity.JoinRequest.dar:type_name -> dmcn.identity.DomainAuthorityRecord
-	12, // 16: dmcn.identity.JoinRequest.bundles:type_name -> dmcn.identity.CredentialBundle
-	9,  // 17: dmcn.identity.JoinResponse.credential:type_name -> dmcn.identity.Credential
-	6,  // 18: dmcn.identity.JoinResponse.dar:type_name -> dmcn.identity.DomainAuthorityRecord
-	12, // 19: dmcn.identity.JoinResponse.bundles:type_name -> dmcn.identity.CredentialBundle
-	15, // 20: dmcn.identity.AddressRemovalRecord.removed_bindings:type_name -> dmcn.identity.RemovedBinding
-	9,  // 21: dmcn.identity.RelayDescriptor.credential:type_name -> dmcn.identity.Credential
-	17, // 22: dmcn.identity.KeyCompromiseRecord.compromised_keys:type_name -> dmcn.identity.CompromisedKey
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	8,  // 7: dmcn.identity.DomainAuthorityRecord.authority_credentials:type_name -> dmcn.identity.Credential
+	6,  // 8: dmcn.identity.FleetRoster.nodes:type_name -> dmcn.identity.FleetNode
+	19, // 9: dmcn.identity.Credential.attributes:type_name -> dmcn.identity.Credential.AttributesEntry
+	9,  // 10: dmcn.identity.CredentialBlockList.blocks:type_name -> dmcn.identity.CredentialBlock
+	8,  // 11: dmcn.identity.CredentialBundle.credential:type_name -> dmcn.identity.Credential
+	5,  // 12: dmcn.identity.CredentialBundle.dar:type_name -> dmcn.identity.DomainAuthorityRecord
+	8,  // 13: dmcn.identity.JoinRequest.credential:type_name -> dmcn.identity.Credential
+	5,  // 14: dmcn.identity.JoinRequest.dar:type_name -> dmcn.identity.DomainAuthorityRecord
+	11, // 15: dmcn.identity.JoinRequest.bundles:type_name -> dmcn.identity.CredentialBundle
+	8,  // 16: dmcn.identity.JoinResponse.credential:type_name -> dmcn.identity.Credential
+	5,  // 17: dmcn.identity.JoinResponse.dar:type_name -> dmcn.identity.DomainAuthorityRecord
+	11, // 18: dmcn.identity.JoinResponse.bundles:type_name -> dmcn.identity.CredentialBundle
+	14, // 19: dmcn.identity.AddressRemovalRecord.removed_bindings:type_name -> dmcn.identity.RemovedBinding
+	8,  // 20: dmcn.identity.RelayDescriptor.credential:type_name -> dmcn.identity.Credential
+	16, // 21: dmcn.identity.KeyCompromiseRecord.compromised_keys:type_name -> dmcn.identity.CompromisedKey
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_identity_proto_init() }
@@ -2139,7 +1972,7 @@ func file_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_proto_rawDesc), len(file_identity_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   19,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

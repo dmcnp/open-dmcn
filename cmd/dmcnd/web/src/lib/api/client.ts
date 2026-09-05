@@ -141,12 +141,6 @@ export interface IdentityLookupResponse {
   // (revoked binding / unauthorized countersigner) — distrust such identities.
   verified_tier?: number;
   identity_unverifiable?: boolean;
-  // True when this address is a registered SMTP bridge. Declared because a pin covers it
-  // (trust/pinnedKey.ts: a contact silently becoming a bridge changes what their mail means),
-  // NOT because a bridge is trusted by it — a bridge's verdicts are verified against the
-  // root-signed credential carried in the message itself, never a flag the server controls. A
-  // deployment whose bridge has no directory entry at all simply never sets this.
-  bridge_capability?: boolean;
   // Effective onion-delivery policy (mailbox flag OR domain DAR). When true, the
   // compose UI auto-enables + locks the onion toggle; the server enforces it too.
   require_onion?: boolean;

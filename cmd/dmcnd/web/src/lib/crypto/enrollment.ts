@@ -50,7 +50,7 @@ export async function buildSelfSignedRecord(
     version: 1, address,
     ed25519PublicKey: keys.ed25519Public, x25519PublicKey: keys.x25519Public,
     createdAt: keys.createdAt, expiresAt: 0, relayHints: relay_hints,
-    verificationTier: 0, bridgeCapability: false,
+    verificationTier: 0,
     // Match Go's NewIdentityRecord, which starts at 1. Covered by the self-signature, and
     // canonical() strips defaults — so 1 is emitted where 0 was stripped. Old records keep
     // verifying: Verify() recomputes the signable bytes from the record's own fields.

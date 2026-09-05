@@ -51,7 +51,6 @@ export interface ContactRecord {
   // v3 pinned properties. Not keys, but not owner-signed either: adminKeyCustody is
   // domain DAR policy an operator controls unilaterally, so a silent flip is exactly
   // the change a key comparison cannot see. See trust/pinnedKey.ts PinnedFacts.
-  bridgeCapability?: boolean;
   adminKeyCustody?: boolean;
   // noIdentity marks a contact the owner confirmed has NO DMCN identity, after having
   // verified one for them previously. Distinct from a plain keyless row, which only means
@@ -163,7 +162,6 @@ export class ContactStore {
       v: 3,
       ed25519Pub: facts.ed25519Pub,
       x25519Pub: facts.x25519Pub,
-      bridgeCapability: facts.bridgeCapability,
       adminKeyCustody: facts.adminKeyCustody,
       pinSeq: Math.max(1, Math.floor(seq)),
       pinnedAt: Date.now(),

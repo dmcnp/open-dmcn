@@ -194,18 +194,6 @@ export namespace dmcn {
             /** IdentityRecord selfSignature */
             selfSignature?: (Uint8Array|null);
 
-            /** IdentityRecord bridgeCapability */
-            bridgeCapability?: (boolean|null);
-
-            /** IdentityRecord domainCountersignature */
-            domainCountersignature?: (Uint8Array|null);
-
-            /** IdentityRecord domainCountersignedAt */
-            domainCountersignedAt?: (number|Long|null);
-
-            /** IdentityRecord domainCountersignerPubkey */
-            domainCountersignerPubkey?: (Uint8Array|null);
-
             /** IdentityRecord requireOnion */
             requireOnion?: (boolean|null);
 
@@ -260,18 +248,6 @@ export namespace dmcn {
 
             /** IdentityRecord selfSignature. */
             public selfSignature: Uint8Array;
-
-            /** IdentityRecord bridgeCapability. */
-            public bridgeCapability: boolean;
-
-            /** IdentityRecord domainCountersignature. */
-            public domainCountersignature: Uint8Array;
-
-            /** IdentityRecord domainCountersignedAt. */
-            public domainCountersignedAt: (number|Long);
-
-            /** IdentityRecord domainCountersignerPubkey. */
-            public domainCountersignerPubkey: Uint8Array;
 
             /** IdentityRecord requireOnion. */
             public requireOnion: boolean;
@@ -481,127 +457,6 @@ export namespace dmcn {
             public static getTypeUrl(typeUrlPrefix?: string): string;
         }
 
-        /** Properties of a SubAuthority. */
-        interface ISubAuthority {
-
-            /** SubAuthority ed25519PublicKey */
-            ed25519PublicKey?: (Uint8Array|null);
-
-            /** SubAuthority scope */
-            scope?: (string|null);
-
-            /** SubAuthority effectiveFrom */
-            effectiveFrom?: (number|Long|null);
-
-            /** SubAuthority effectiveUntil */
-            effectiveUntil?: (number|Long|null);
-
-            /** SubAuthority permissions */
-            permissions?: (number|null);
-        }
-
-        /** Represents a SubAuthority. */
-        class SubAuthority implements ISubAuthority {
-
-            /**
-             * Constructs a new SubAuthority.
-             * @param [properties] Properties to set
-             */
-            constructor(properties?: dmcn.identity.ISubAuthority);
-
-            /** SubAuthority ed25519PublicKey. */
-            public ed25519PublicKey: Uint8Array;
-
-            /** SubAuthority scope. */
-            public scope: string;
-
-            /** SubAuthority effectiveFrom. */
-            public effectiveFrom: (number|Long);
-
-            /** SubAuthority effectiveUntil. */
-            public effectiveUntil: (number|Long);
-
-            /** SubAuthority permissions. */
-            public permissions: number;
-
-            /**
-             * Creates a new SubAuthority instance using the specified properties.
-             * @param [properties] Properties to set
-             * @returns SubAuthority instance
-             */
-            public static create(properties?: dmcn.identity.ISubAuthority): dmcn.identity.SubAuthority;
-
-            /**
-             * Encodes the specified SubAuthority message. Does not implicitly {@link dmcn.identity.SubAuthority.verify|verify} messages.
-             * @param message SubAuthority message or plain object to encode
-             * @param [writer] Writer to encode to
-             * @returns Writer
-             */
-            public static encode(message: dmcn.identity.ISubAuthority, writer?: $protobuf.Writer): $protobuf.Writer;
-
-            /**
-             * Encodes the specified SubAuthority message, length delimited. Does not implicitly {@link dmcn.identity.SubAuthority.verify|verify} messages.
-             * @param message SubAuthority message or plain object to encode
-             * @param [writer] Writer to encode to
-             * @returns Writer
-             */
-            public static encodeDelimited(message: dmcn.identity.ISubAuthority, writer?: $protobuf.Writer): $protobuf.Writer;
-
-            /**
-             * Decodes a SubAuthority message from the specified reader or buffer.
-             * @param reader Reader or buffer to decode from
-             * @param [length] Message length if known beforehand
-             * @returns SubAuthority
-             * @throws {Error} If the payload is not a reader or valid buffer
-             * @throws {$protobuf.util.ProtocolError} If required fields are missing
-             */
-            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.identity.SubAuthority;
-
-            /**
-             * Decodes a SubAuthority message from the specified reader or buffer, length delimited.
-             * @param reader Reader or buffer to decode from
-             * @returns SubAuthority
-             * @throws {Error} If the payload is not a reader or valid buffer
-             * @throws {$protobuf.util.ProtocolError} If required fields are missing
-             */
-            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.identity.SubAuthority;
-
-            /**
-             * Verifies a SubAuthority message.
-             * @param message Plain object to verify
-             * @returns `null` if valid, otherwise the reason why it is not
-             */
-            public static verify(message: { [k: string]: any }): (string|null);
-
-            /**
-             * Creates a SubAuthority message from a plain object. Also converts values to their respective internal types.
-             * @param object Plain object
-             * @returns SubAuthority
-             */
-            public static fromObject(object: { [k: string]: any }): dmcn.identity.SubAuthority;
-
-            /**
-             * Creates a plain object from a SubAuthority message. Also converts values to other types if specified.
-             * @param message SubAuthority
-             * @param [options] Conversion options
-             * @returns Plain object
-             */
-            public static toObject(message: dmcn.identity.SubAuthority, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-            /**
-             * Converts this SubAuthority to JSON.
-             * @returns JSON object
-             */
-            public toJSON(): { [k: string]: any };
-
-            /**
-             * Gets the default type url for SubAuthority
-             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
-             * @returns The default type url
-             */
-            public static getTypeUrl(typeUrlPrefix?: string): string;
-        }
-
         /** Properties of a DomainAuthorityRecord. */
         interface IDomainAuthorityRecord {
 
@@ -622,9 +477,6 @@ export namespace dmcn {
 
             /** DomainAuthorityRecord supersededKeys */
             supersededKeys?: (dmcn.identity.IAuthorityKey[]|null);
-
-            /** DomainAuthorityRecord subAuthorities */
-            subAuthorities?: (dmcn.identity.ISubAuthority[]|null);
 
             /** DomainAuthorityRecord policyFlags */
             policyFlags?: (number|null);
@@ -674,9 +526,6 @@ export namespace dmcn {
 
             /** DomainAuthorityRecord supersededKeys. */
             public supersededKeys: dmcn.identity.IAuthorityKey[];
-
-            /** DomainAuthorityRecord subAuthorities. */
-            public subAuthorities: dmcn.identity.ISubAuthority[];
 
             /** DomainAuthorityRecord policyFlags. */
             public policyFlags: number;
@@ -2126,15 +1975,6 @@ export namespace dmcn {
             /** RelayDescriptor domain */
             domain?: (string|null);
 
-            /** RelayDescriptor domainCountersignature */
-            domainCountersignature?: (Uint8Array|null);
-
-            /** RelayDescriptor domainCountersignedAt */
-            domainCountersignedAt?: (number|Long|null);
-
-            /** RelayDescriptor domainCountersignerPubkey */
-            domainCountersignerPubkey?: (Uint8Array|null);
-
             /** RelayDescriptor credential */
             credential?: (dmcn.identity.ICredential|null);
         }
@@ -2168,15 +2008,6 @@ export namespace dmcn {
 
             /** RelayDescriptor domain. */
             public domain: string;
-
-            /** RelayDescriptor domainCountersignature. */
-            public domainCountersignature: Uint8Array;
-
-            /** RelayDescriptor domainCountersignedAt. */
-            public domainCountersignedAt: (number|Long);
-
-            /** RelayDescriptor domainCountersignerPubkey. */
-            public domainCountersignerPubkey: Uint8Array;
 
             /** RelayDescriptor credential. */
             public credential?: (dmcn.identity.ICredential|null);

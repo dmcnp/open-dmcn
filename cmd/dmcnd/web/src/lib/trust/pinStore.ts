@@ -143,7 +143,6 @@ export function reconcilePin(
   const localFacts: PinnedFacts = {
     ed25519Pub: local.ed25519Pub,
     x25519Pub: local.x25519Pub,
-    bridgeCapability: local.bridgeCapability,
     adminKeyCustody: local.adminKeyCustody,
   };
 
@@ -180,6 +179,5 @@ export function reconcilePin(
 export function samePin(a: PinnedFacts, b: PinnedFacts): boolean {
   return a.ed25519Pub === b.ed25519Pub
     && a.x25519Pub === b.x25519Pub
-    && a.bridgeCapability === b.bridgeCapability
     && a.adminKeyCustody === b.adminKeyCustody;
 }

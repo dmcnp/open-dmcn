@@ -59,8 +59,11 @@ func TestHandleRelayHints(t *testing.T) {
 // bridged message's SPF/DKIM/DMARC verdict. That made a trust decision depend on a lookup the
 // server answers — and it only existed because a bridge used to hold a `bridge@<domain>` mailbox.
 // A bridge is infrastructure with no email address now, and its verdicts are verified against a
-// root-signed credential carried inside the message itself. Re-adding this field would quietly
-// reintroduce a server-controlled trust signal.
+// root-signed credential carried inside the message itself.
+//
+// The schema field is gone (identity.proto field 19, gravestoned), so a record can no longer
+// carry the claim at all. This guards the remaining half: that nobody reintroduces a
+// server-asserted bridge flag in the directory JSON by hand.
 func TestHandleLookup_DoesNotReportBridgeCapability(t *testing.T) {
 	kp, err := identity.GenerateIdentityKeyPair()
 	if err != nil {
@@ -71,7 +74,6 @@ func TestHandleLookup_DoesNotReportBridgeCapability(t *testing.T) {
 		Ed25519Public:    kp.Ed25519Public,
 		X25519Public:     kp.X25519Public,
 		VerificationTier: identity.TierDomainDNS,
-		BridgeCapability: true, // even when the record itself claims it
 	}
 	h := api.NewIdentityHandler(
 		func(context.Context, string) (*identity.IdentityRecord, error) { return rec, nil },
@@ -114,7 +116,6 @@ func TestHandleLookup_VerifiedTier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
-	rec.BridgeCapability = true
 	if err := rec.Sign(kp); err != nil {
 		t.Fatalf("sign: %v", err)
 	}

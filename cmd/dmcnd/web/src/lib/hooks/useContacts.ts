@@ -31,7 +31,7 @@ function recordsSig(list: ContactRecord[]): string {
     .map(r => [
       normAddr(r.address), r.v, r.updatedAt, r.name, r.fingerprint, r.provenance ?? '',
       r.ed25519Pub ?? '', r.x25519Pub ?? '',
-      r.bridgeCapability ? '1' : '', r.adminKeyCustody ? '1' : '', r.pinSeq ?? 0,
+      r.adminKeyCustody ? '1' : '', r.pinSeq ?? 0,
     ].join('|'))
     .sort()
     .join('\n');
@@ -115,7 +115,6 @@ export interface AllowlistInput {
   provenance: TrustProvenance;
   ed25519Pub?: string; // base64 std
   x25519Pub?: string;  // base64 std
-  bridgeCapability?: boolean;
   adminKeyCustody?: boolean;
   // Set when the owner is confirming that this address has NO DMCN identity (see
   // trust/pinnedKey.ts). Mutually exclusive with the key fields in practice.
@@ -282,7 +281,6 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
         : {
             ed25519Pub: input.ed25519Pub!,
             x25519Pub: input.x25519Pub ?? '',
-            bridgeCapability: input.bridgeCapability === true,
             adminKeyCustody: input.adminKeyCustody === true,
           };
       // Allowlisting is the owner deliberately deciding to trust these keys, and it is

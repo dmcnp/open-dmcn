@@ -43,7 +43,6 @@ export async function encodeIdentityRecord(record: {
   expiresAt: number;
   relayHints: string[];
   verificationTier: number;
-  bridgeCapability: boolean;
   requireOnion?: boolean;
   // Owner-signed monotonic version. Go's NewIdentityRecord starts at 1; the browser omitted it
   // entirely (encoding 0), which made "monotonic" false across the two producers — a Go-built
@@ -52,16 +51,11 @@ export async function encodeIdentityRecord(record: {
   // it, so a hostile rebind just picks its own value.
   revision?: number;
   selfSignature?: Uint8Array;
-  // Domain countersignature (optional). Excluded from signableBytes, so adding it
-  // does not invalidate the self-signature.
-  domainCountersignature?: Uint8Array;
-  domainCountersignedAt?: number;
-  domainCountersignerPubkey?: Uint8Array;
 }): Promise<Uint8Array> {
   const root = await getRoot();
   const IdentityRecord = root.lookupType('dmcn.identity.IdentityRecord');
-  // canonical() strips JS default-valued fields (e.g. verificationTier=0,
-  // bridgeCapability=false) so the bytes match Go's proto3 deterministic marshal
+  // canonical() strips JS default-valued fields (e.g. verificationTier=0) so the
+  // bytes match Go's proto3 deterministic marshal
   // — required for a tier-0 ephemeral record's self-signature to verify.
   const msg = IdentityRecord.create(canonical(record));
   return IdentityRecord.encode(msg).finish();
@@ -86,7 +80,6 @@ export async function encodeIdentitySignableBytes(record: {
   expiresAt: number;
   relayHints: string[];
   verificationTier: number;
-  bridgeCapability: boolean;
   requireOnion?: boolean;
   revision?: number;
 }): Promise<Uint8Array> {

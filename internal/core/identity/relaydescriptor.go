@@ -1,7 +1,6 @@
 package identity
 
 import (
-	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"time"
@@ -17,14 +16,12 @@ import (
 // which have the peer-ID machinery) — this package only models the data and the
 // deterministic SignableBytes the signature covers.
 //
-// Domain binding (DMCN PKI): the node self-asserts the Domain it serves (covered
-// by the libp2p self-signature), and the domain authority — root or a delegated
-// sub-authority — countersigns the stable {Domain, PeerID, X25519Public} binding.
-// The countersignature deliberately excludes Multiaddrs/Revision/CreatedAt so it
-// survives the frequent liveness re-publish (the node bumps those without needing
-// a fresh countersignature). A descriptor with a valid countersignature, whose
-// signer is authorized by the domain's DNS-anchored DAR, proves the node belongs
-// to the domain — the unit of federation in the domain-anchored model.
+// Domain binding: the node self-asserts the Domain it serves, covered by the
+// libp2p self-signature that the peer ID itself anchors. That labels the node but
+// proves nothing about membership — Credential does that, and it is what federation
+// is decided on. (Schema fields 8-10 once carried a domain-authority countersignature
+// over the {Domain, PeerID, X25519Public} binding; it was never implemented, and the
+// numbers are gravestoned in identity.proto.)
 type RelayDescriptor struct {
 	PeerID       string
 	X25519Public [32]byte
@@ -33,23 +30,19 @@ type RelayDescriptor struct {
 	Revision     uint64
 	Signature    []byte
 
-	// Domain binding (optional — empty Domain ⇒ legacy self-anchored-only descriptor).
-	Domain                 string
-	DomainCountersignature [64]byte
-	DomainCountersignedAt  time.Time
-	DomainCountersignerPub ed25519.PublicKey
+	// Domain the node self-asserts it serves (empty ⇒ unbound, self-anchored only).
+	Domain string
 
 	// Credential (Credential PKI) is the node's membership credential (role "node"),
-	// carried so route selection can verify a relay by credential. Subject == PeerID's
-	// key. Successor to the domain countersignature above.
+	// carried so route selection can verify a relay by credential. Subject == PeerID's key.
 	Credential *Credential
 }
 
 // SignableBytes is the deterministic serialization the node's identity key signs
 // over: everything it self-asserts (peer ID, onion key, addrs, time, revision,
-// domain) but NOT the libp2p signature itself nor the domain countersignature
-// (which the authority adds afterward). Exported so the node (signer) and the
-// registry (verifier) agree on the bytes.
+// domain) but NOT the libp2p signature itself, and not the Credential, which the
+// issuer signs separately. Exported so the node (signer) and the registry
+// (verifier) agree on the bytes.
 func (d *RelayDescriptor) SignableBytes() ([]byte, error) {
 	pb := &dmcnpb.RelayDescriptor{
 		PeerId:          d.PeerID,
@@ -58,18 +51,13 @@ func (d *RelayDescriptor) SignableBytes() ([]byte, error) {
 		CreatedAt:       d.CreatedAt.Unix(),
 		Revision:        d.Revision,
 		Domain:          d.Domain,
-		// Signature + domain-countersig fields intentionally omitted.
+		// Signature intentionally omitted — this is what we sign over.
 	}
 	data, err := protoMarshal(pb)
 	if err != nil {
 		return nil, fmt.Errorf("relay descriptor: marshal: %w", err)
 	}
 	return data, nil
-}
-
-// HasDomainCountersignature reports whether a (legacy) domain countersignature is present.
-func (d *RelayDescriptor) HasDomainCountersignature() bool {
-	return d.Domain != "" && d.DomainCountersignature != [64]byte{}
 }
 
 // ToProto converts the descriptor to its protobuf representation.
@@ -82,11 +70,6 @@ func (d *RelayDescriptor) ToProto() *dmcnpb.RelayDescriptor {
 		Revision:        d.Revision,
 		Signature:       d.Signature,
 		Domain:          d.Domain,
-	}
-	if d.HasDomainCountersignature() {
-		pb.DomainCountersignature = d.DomainCountersignature[:]
-		pb.DomainCountersignedAt = d.DomainCountersignedAt.Unix()
-		pb.DomainCountersignerPubkey = d.DomainCountersignerPub
 	}
 	if d.Credential != nil {
 		pb.Credential = d.Credential.ToProto()
@@ -108,11 +91,6 @@ func RelayDescriptorFromProto(pb *dmcnpb.RelayDescriptor) (*RelayDescriptor, err
 		Domain:     pb.Domain,
 	}
 	copy(d.X25519Public[:], pb.X25519PublicKey)
-	if len(pb.DomainCountersignature) == 64 {
-		copy(d.DomainCountersignature[:], pb.DomainCountersignature)
-		d.DomainCountersignedAt = time.Unix(pb.DomainCountersignedAt, 0).UTC()
-		d.DomainCountersignerPub = ed25519.PublicKey(pb.DomainCountersignerPubkey)
-	}
 	if pb.Credential != nil {
 		cred, err := CredentialFromProto(pb.Credential)
 		if err != nil {

@@ -61,26 +61,22 @@ message IdentityRecord {
   reserved 16, 17, 18;
   reserved "policy", "policy_flags", "guardian_policy";
 
-  // DEPRECATED, always false. A bridge is infrastructure and has no identity record at all:
-  // it is a peer whose key carries a `bridge` credential, and recipients verify its
-  // attestations against that credential (see BridgeClassificationRecord.bridge_credential in
-  // bridge.proto, and SPEC.md §7). This flag existed when a bridge held a `bridge@<domain>`
-  // mailbox that clients looked up to decide whether to believe its SPF/DKIM/DMARC verdict —
-  // which made a trust decision depend on a directory lookup rather than on a signature.
-  //
-  // The field is retained rather than removed because it is covered by the owner
-  // self-signature: dropping it would change signable_bytes and invalidate every identity
-  // record ever signed. Implementations MUST NOT set it and MUST NOT treat it as a trust
-  // signal. Do not reuse field 19 for anything else.
-  bool bridge_capability = 19 [deprecated = true];
+  // GRAVESTONE: field 19 was bridge_capability, a flag clients looked up to decide whether to
+  // believe a bridge's SPF/DKIM/DMARC verdict — a trust decision resting on a directory lookup
+  // rather than a signature. A bridge is infrastructure with no identity record: its peer key
+  // carries a `bridge` credential and recipients verify attestations against that
+  // (BridgeClassificationRecord.bridge_credential, SPEC.md §7). No producer ever set it true, so
+  // the false bool contributed no bytes and removing it left signable_bytes byte-identical.
+  // Do not reuse 19.
+  reserved 19;
+  reserved "bridge_capability";
 
-  // Domain Authority countersignature (SPEC.md §2). Present when a
-  // domain authority — directly, or via a delegated sub-authority — vouches for
-  // this address↔keys binding. Excluded from the self-signature: the authority
-  // signs after the user self-signs.
-  bytes domain_countersignature = 20;       // 64 bytes Ed25519 over the binding
-  int64 domain_countersigned_at = 21;       // Unix seconds; authenticated time of countersigning
-  bytes domain_countersigner_pubkey = 22;   // 32 bytes Ed25519 of the root or sub-authority signer
+  // GRAVESTONE: fields 20-22 were domain_countersignature/_at/_pubkey, the pre-Credential-PKI
+  // domain attestation of this address↔keys binding. Superseded by address_credential (24).
+  // They had no Go representation and were excluded from the self-signature, so nothing on the
+  // wire ever carried them. Do not reuse 20-22.
+  reserved 20, 21, 22;
+  reserved "domain_countersignature", "domain_countersigned_at", "domain_countersigner_pubkey";
 
   // require_onion: the mailbox owner requires inbound mail to arrive via onion
   // routing (senders use onion; the recipient's relay rejects direct STOREs).
@@ -127,22 +123,23 @@ message IdentityRecord {
 // AuthorityKey is one entry in a domain root authority's key timeline.
 // effective_from-only: a key is effective from effective_from until the next
 // key's effective_from; the latest key is open-ended (SPEC.md §2).
+//
+// BOTH key halves are retained for a retired root, not just the signing half, and the
+// second one is easy to mistake for dead weight: nothing reads it. It is here because the
+// DNS anchor is a fingerprint over the PAIR — the first 20 bytes of
+// SHA-256(ed25519_pub ‖ x25519_pub), SPEC.md §1 — so keeping both halves is the only thing
+// that makes a superseded key's fingerprint recomputable, and with it the `_dmcn` fp= value
+// that was published while that key was current. Signature verification uses
+// ed25519_public_key alone, and the live anchor comes from the CURRENT root pair on the DAR
+// itself, so no code path recomputes a historical fingerprint today. Dropping x25519 would
+// foreclose ever checking a rotation history against anchors observed in the past — and,
+// because the pair is covered by the DAR self-signature, would invalidate every DAR that
+// has ever rotated a root key.
 message AuthorityKey {
-  bytes ed25519_public_key = 1;  // 32 bytes
-  bytes x25519_public_key = 2;   // 32 bytes
-  int64 effective_from = 3;      // Unix seconds
-  uint32 rotation_reason = 4;    // carried-unenforced; for the future revocation phase
-}
-
-// SubAuthority is a key the domain root delegates countersigning to
-// (SPEC.md §2). Covered by the DAR self-signature. Retired by
-// setting effective_until; the entry is kept so earlier countersigs stay valid.
-message SubAuthority {
-  bytes ed25519_public_key = 1;  // 32 bytes
-  string scope = 2;              // "" = whole domain
-  int64 effective_from = 3;      // Unix seconds
-  int64 effective_until = 4;     // Unix seconds; 0 = open-ended
-  uint32 permissions = 5;        // carried-unenforced
+  bytes ed25519_public_key = 1;  // 32 bytes — the retired signing key; what root-key-at-time selects on
+  bytes x25519_public_key = 2;   // 32 bytes — its agreement half; retained for the historical fingerprint above
+  int64 effective_from = 3;      // Unix seconds — effective until the next key's effective_from
+  uint32 rotation_reason = 4;    // carried-unenforced, no producer; reserved for the revocation phase
 }
 
 // DomainAuthorityRecord declares a domain's authority key (DNS-proven) and the
@@ -155,7 +152,12 @@ message DomainAuthorityRecord {
   bytes authority_x25519_public_key = 4;    // 32 bytes — CURRENT root key
   int64 authority_effective_from = 5;       // Unix seconds — current key's start
   repeated AuthorityKey superseded_keys = 6; // root rotation history
-  repeated SubAuthority sub_authorities = 7; // delegated signers (append-only)
+  // GRAVESTONE: field 7 was sub_authorities, a bespoke delegated-signer list with a free-form
+  // `permissions` bitmask. Superseded by authority_credentials (12) — issuer Credentials whose
+  // `grants` govern delegation under a monotone calculus. Never had a Go representation.
+  // Do not reuse 7.
+  reserved 7;
+  reserved "sub_authorities";
   uint32 policy_flags = 8;                   // carried-unenforced
   int64 created_at = 9;                      // Unix seconds
   uint64 revision = 10;                      // monotonic; bumped on every republish
@@ -319,22 +321,23 @@ message RelayDescriptor {
   repeated string multiaddrs = 3;
   int64 created_at = 4;          // Unix seconds
   uint64 revision = 5;           // monotonic; bumped on republish
-  bytes signature = 6;          // node libp2p-key sig over fields 1-5,7 (not the countersig)
+  bytes signature = 6;          // node libp2p-key sig over fields 1-5,7
 
-  // Domain binding (DMCN PKI / domain-anchored federation). The node self-asserts
-  // the domain it serves (field 7, covered by the self-signature); the domain
-  // authority — root or a PermVouchNode sub-authority — countersigns the stable
-  // {domain, peer_id, x25519} binding (fields 8-10). The countersignature covers
-  // only that binding, NOT multiaddrs/revision, so it survives liveness re-publish.
-  string domain = 7;                        // domain this node belongs to (e.g. "example.com")
-  bytes domain_countersignature = 8;        // 64 bytes Ed25519 over the binding
-  int64 domain_countersigned_at = 9;        // Unix seconds; authenticated countersign time
-  bytes domain_countersigner_pubkey = 10;   // 32 bytes Ed25519 of the root/sub-authority signer
+  // The domain this node serves — self-asserted and covered by the signature above, which the
+  // peer ID itself anchors. It labels the node; it does not prove membership. That is the
+  // credential's job.
+  string domain = 7;             // e.g. "example.com"
 
-  // credential (Credential PKI): the node's membership credential (role "node"),
-  // so onion route selection can verify a relay's trust by credential without
-  // connecting to it. Replaces the domain_countersignature fields above. Subject is
-  // the peer ID's key, so it can't be swapped onto another descriptor.
+  // GRAVESTONE: fields 8-10 were domain_countersignature/_at/_pubkey, a domain authority's
+  // countersignature over the {domain, peer_id, x25519} binding. Superseded by credential (11).
+  // No code ever assigned them — the only writer was gated on a predicate that could not become
+  // true — and nothing verified them. Do not reuse 8-10.
+  reserved 8, 9, 10;
+  reserved "domain_countersignature", "domain_countersigned_at", "domain_countersigner_pubkey";
+
+  // The node's membership credential (role "node"): who vouches that this peer serves `domain`.
+  // Its subject is the peer ID's key, so it cannot be swapped onto another descriptor, and onion
+  // route selection can check a relay's trust without connecting to it.
   Credential credential = 11;
 }
 

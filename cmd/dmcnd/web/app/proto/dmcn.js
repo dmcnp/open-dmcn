@@ -559,10 +559,6 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.identity.VerificationTier|null} [verificationTier] IdentityRecord verificationTier
              * @property {Array.<dmcn.identity.IAttestationRecord>|null} [attestations] IdentityRecord attestations
              * @property {Uint8Array|null} [selfSignature] IdentityRecord selfSignature
-             * @property {boolean|null} [bridgeCapability] IdentityRecord bridgeCapability
-             * @property {Uint8Array|null} [domainCountersignature] IdentityRecord domainCountersignature
-             * @property {number|Long|null} [domainCountersignedAt] IdentityRecord domainCountersignedAt
-             * @property {Uint8Array|null} [domainCountersignerPubkey] IdentityRecord domainCountersignerPubkey
              * @property {boolean|null} [requireOnion] IdentityRecord requireOnion
              * @property {dmcn.identity.ICredential|null} [addressCredential] IdentityRecord addressCredential
              * @property {dmcn.identity.ICredential|null} [routingCredential] IdentityRecord routingCredential
@@ -669,38 +665,6 @@ export const dmcn = $root.dmcn = (() => {
             IdentityRecord.prototype.selfSignature = $util.newBuffer([]);
 
             /**
-             * IdentityRecord bridgeCapability.
-             * @member {boolean} bridgeCapability
-             * @memberof dmcn.identity.IdentityRecord
-             * @instance
-             */
-            IdentityRecord.prototype.bridgeCapability = false;
-
-            /**
-             * IdentityRecord domainCountersignature.
-             * @member {Uint8Array} domainCountersignature
-             * @memberof dmcn.identity.IdentityRecord
-             * @instance
-             */
-            IdentityRecord.prototype.domainCountersignature = $util.newBuffer([]);
-
-            /**
-             * IdentityRecord domainCountersignedAt.
-             * @member {number|Long} domainCountersignedAt
-             * @memberof dmcn.identity.IdentityRecord
-             * @instance
-             */
-            IdentityRecord.prototype.domainCountersignedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-            /**
-             * IdentityRecord domainCountersignerPubkey.
-             * @member {Uint8Array} domainCountersignerPubkey
-             * @memberof dmcn.identity.IdentityRecord
-             * @instance
-             */
-            IdentityRecord.prototype.domainCountersignerPubkey = $util.newBuffer([]);
-
-            /**
              * IdentityRecord requireOnion.
              * @member {boolean} requireOnion
              * @memberof dmcn.identity.IdentityRecord
@@ -790,14 +754,6 @@ export const dmcn = $root.dmcn = (() => {
                         $root.dmcn.identity.AttestationRecord.encode(message.attestations[i], writer.uint32(/* id 9, wireType 2 =*/74).fork(), q + 1).ldelim();
                 if (message.selfSignature != null && Object.hasOwnProperty.call(message, "selfSignature"))
                     writer.uint32(/* id 10, wireType 2 =*/82).bytes(message.selfSignature);
-                if (message.bridgeCapability != null && Object.hasOwnProperty.call(message, "bridgeCapability"))
-                    writer.uint32(/* id 19, wireType 0 =*/152).bool(message.bridgeCapability);
-                if (message.domainCountersignature != null && Object.hasOwnProperty.call(message, "domainCountersignature"))
-                    writer.uint32(/* id 20, wireType 2 =*/162).bytes(message.domainCountersignature);
-                if (message.domainCountersignedAt != null && Object.hasOwnProperty.call(message, "domainCountersignedAt"))
-                    writer.uint32(/* id 21, wireType 0 =*/168).int64(message.domainCountersignedAt);
-                if (message.domainCountersignerPubkey != null && Object.hasOwnProperty.call(message, "domainCountersignerPubkey"))
-                    writer.uint32(/* id 22, wireType 2 =*/178).bytes(message.domainCountersignerPubkey);
                 if (message.requireOnion != null && Object.hasOwnProperty.call(message, "requireOnion"))
                     writer.uint32(/* id 23, wireType 0 =*/184).bool(message.requireOnion);
                 if (message.addressCredential != null && Object.hasOwnProperty.call(message, "addressCredential"))
@@ -891,22 +847,6 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 10: {
                             message.selfSignature = reader.bytes();
-                            break;
-                        }
-                    case 19: {
-                            message.bridgeCapability = reader.bool();
-                            break;
-                        }
-                    case 20: {
-                            message.domainCountersignature = reader.bytes();
-                            break;
-                        }
-                    case 21: {
-                            message.domainCountersignedAt = reader.int64();
-                            break;
-                        }
-                    case 22: {
-                            message.domainCountersignerPubkey = reader.bytes();
                             break;
                         }
                     case 23: {
@@ -1016,18 +956,6 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.selfSignature != null && Object.hasOwnProperty.call(message, "selfSignature"))
                     if (!(message.selfSignature && typeof message.selfSignature.length === "number" || $util.isString(message.selfSignature)))
                         return "selfSignature: buffer expected";
-                if (message.bridgeCapability != null && Object.hasOwnProperty.call(message, "bridgeCapability"))
-                    if (typeof message.bridgeCapability !== "boolean")
-                        return "bridgeCapability: boolean expected";
-                if (message.domainCountersignature != null && Object.hasOwnProperty.call(message, "domainCountersignature"))
-                    if (!(message.domainCountersignature && typeof message.domainCountersignature.length === "number" || $util.isString(message.domainCountersignature)))
-                        return "domainCountersignature: buffer expected";
-                if (message.domainCountersignedAt != null && Object.hasOwnProperty.call(message, "domainCountersignedAt"))
-                    if (!$util.isInteger(message.domainCountersignedAt) && !(message.domainCountersignedAt && $util.isInteger(message.domainCountersignedAt.low) && $util.isInteger(message.domainCountersignedAt.high)))
-                        return "domainCountersignedAt: integer|Long expected";
-                if (message.domainCountersignerPubkey != null && Object.hasOwnProperty.call(message, "domainCountersignerPubkey"))
-                    if (!(message.domainCountersignerPubkey && typeof message.domainCountersignerPubkey.length === "number" || $util.isString(message.domainCountersignerPubkey)))
-                        return "domainCountersignerPubkey: buffer expected";
                 if (message.requireOnion != null && Object.hasOwnProperty.call(message, "requireOnion"))
                     if (typeof message.requireOnion !== "boolean")
                         return "requireOnion: boolean expected";
@@ -1148,27 +1076,6 @@ export const dmcn = $root.dmcn = (() => {
                         $util.base64.decode(object.selfSignature, message.selfSignature = $util.newBuffer($util.base64.length(object.selfSignature)), 0);
                     else if (object.selfSignature.length >= 0)
                         message.selfSignature = object.selfSignature;
-                if (object.bridgeCapability != null)
-                    message.bridgeCapability = Boolean(object.bridgeCapability);
-                if (object.domainCountersignature != null)
-                    if (typeof object.domainCountersignature === "string")
-                        $util.base64.decode(object.domainCountersignature, message.domainCountersignature = $util.newBuffer($util.base64.length(object.domainCountersignature)), 0);
-                    else if (object.domainCountersignature.length >= 0)
-                        message.domainCountersignature = object.domainCountersignature;
-                if (object.domainCountersignedAt != null)
-                    if ($util.Long)
-                        message.domainCountersignedAt = $util.Long.fromValue(object.domainCountersignedAt, false);
-                    else if (typeof object.domainCountersignedAt === "string")
-                        message.domainCountersignedAt = parseInt(object.domainCountersignedAt, 10);
-                    else if (typeof object.domainCountersignedAt === "number")
-                        message.domainCountersignedAt = object.domainCountersignedAt;
-                    else if (typeof object.domainCountersignedAt === "object")
-                        message.domainCountersignedAt = new $util.LongBits(object.domainCountersignedAt.low >>> 0, object.domainCountersignedAt.high >>> 0).toNumber();
-                if (object.domainCountersignerPubkey != null)
-                    if (typeof object.domainCountersignerPubkey === "string")
-                        $util.base64.decode(object.domainCountersignerPubkey, message.domainCountersignerPubkey = $util.newBuffer($util.base64.length(object.domainCountersignerPubkey)), 0);
-                    else if (object.domainCountersignerPubkey.length >= 0)
-                        message.domainCountersignerPubkey = object.domainCountersignerPubkey;
                 if (object.requireOnion != null)
                     message.requireOnion = Boolean(object.requireOnion);
                 if (object.addressCredential != null) {
@@ -1260,26 +1167,6 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.selfSignature = $util.newBuffer(object.selfSignature);
                     }
-                    object.bridgeCapability = false;
-                    if (options.bytes === String)
-                        object.domainCountersignature = "";
-                    else {
-                        object.domainCountersignature = [];
-                        if (options.bytes !== Array)
-                            object.domainCountersignature = $util.newBuffer(object.domainCountersignature);
-                    }
-                    if ($util.Long) {
-                        let long = new $util.Long(0, 0, false);
-                        object.domainCountersignedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
-                    } else
-                        object.domainCountersignedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
-                    if (options.bytes === String)
-                        object.domainCountersignerPubkey = "";
-                    else {
-                        object.domainCountersignerPubkey = [];
-                        if (options.bytes !== Array)
-                            object.domainCountersignerPubkey = $util.newBuffer(object.domainCountersignerPubkey);
-                    }
                     object.requireOnion = false;
                     object.addressCredential = null;
                     object.routingCredential = null;
@@ -1325,19 +1212,6 @@ export const dmcn = $root.dmcn = (() => {
                 }
                 if (message.selfSignature != null && Object.hasOwnProperty.call(message, "selfSignature"))
                     object.selfSignature = options.bytes === String ? $util.base64.encode(message.selfSignature, 0, message.selfSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.selfSignature) : message.selfSignature;
-                if (message.bridgeCapability != null && Object.hasOwnProperty.call(message, "bridgeCapability"))
-                    object.bridgeCapability = message.bridgeCapability;
-                if (message.domainCountersignature != null && Object.hasOwnProperty.call(message, "domainCountersignature"))
-                    object.domainCountersignature = options.bytes === String ? $util.base64.encode(message.domainCountersignature, 0, message.domainCountersignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.domainCountersignature) : message.domainCountersignature;
-                if (message.domainCountersignedAt != null && Object.hasOwnProperty.call(message, "domainCountersignedAt"))
-                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
-                        object.domainCountersignedAt = typeof message.domainCountersignedAt === "number" ? BigInt(message.domainCountersignedAt) : $util.Long.fromBits(message.domainCountersignedAt.low >>> 0, message.domainCountersignedAt.high >>> 0, false).toBigInt();
-                    else if (typeof message.domainCountersignedAt === "number")
-                        object.domainCountersignedAt = options.longs === String ? String(message.domainCountersignedAt) : message.domainCountersignedAt;
-                    else
-                        object.domainCountersignedAt = options.longs === String ? $util.Long.prototype.toString.call(message.domainCountersignedAt) : options.longs === Number ? new $util.LongBits(message.domainCountersignedAt.low >>> 0, message.domainCountersignedAt.high >>> 0).toNumber() : message.domainCountersignedAt;
-                if (message.domainCountersignerPubkey != null && Object.hasOwnProperty.call(message, "domainCountersignerPubkey"))
-                    object.domainCountersignerPubkey = options.bytes === String ? $util.base64.encode(message.domainCountersignerPubkey, 0, message.domainCountersignerPubkey.length) : options.bytes === Array ? Array.prototype.slice.call(message.domainCountersignerPubkey) : message.domainCountersignerPubkey;
                 if (message.requireOnion != null && Object.hasOwnProperty.call(message, "requireOnion"))
                     object.requireOnion = message.requireOnion;
                 if (message.addressCredential != null && Object.hasOwnProperty.call(message, "addressCredential"))
@@ -1719,367 +1593,6 @@ export const dmcn = $root.dmcn = (() => {
             return AuthorityKey;
         })();
 
-        identity.SubAuthority = (function() {
-
-            /**
-             * Properties of a SubAuthority.
-             * @memberof dmcn.identity
-             * @interface ISubAuthority
-             * @property {Uint8Array|null} [ed25519PublicKey] SubAuthority ed25519PublicKey
-             * @property {string|null} [scope] SubAuthority scope
-             * @property {number|Long|null} [effectiveFrom] SubAuthority effectiveFrom
-             * @property {number|Long|null} [effectiveUntil] SubAuthority effectiveUntil
-             * @property {number|null} [permissions] SubAuthority permissions
-             */
-
-            /**
-             * Constructs a new SubAuthority.
-             * @memberof dmcn.identity
-             * @classdesc Represents a SubAuthority.
-             * @implements ISubAuthority
-             * @constructor
-             * @param {dmcn.identity.ISubAuthority=} [properties] Properties to set
-             */
-            function SubAuthority(properties) {
-                if (properties)
-                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
-                            this[keys[i]] = properties[keys[i]];
-            }
-
-            /**
-             * SubAuthority ed25519PublicKey.
-             * @member {Uint8Array} ed25519PublicKey
-             * @memberof dmcn.identity.SubAuthority
-             * @instance
-             */
-            SubAuthority.prototype.ed25519PublicKey = $util.newBuffer([]);
-
-            /**
-             * SubAuthority scope.
-             * @member {string} scope
-             * @memberof dmcn.identity.SubAuthority
-             * @instance
-             */
-            SubAuthority.prototype.scope = "";
-
-            /**
-             * SubAuthority effectiveFrom.
-             * @member {number|Long} effectiveFrom
-             * @memberof dmcn.identity.SubAuthority
-             * @instance
-             */
-            SubAuthority.prototype.effectiveFrom = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-            /**
-             * SubAuthority effectiveUntil.
-             * @member {number|Long} effectiveUntil
-             * @memberof dmcn.identity.SubAuthority
-             * @instance
-             */
-            SubAuthority.prototype.effectiveUntil = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-            /**
-             * SubAuthority permissions.
-             * @member {number} permissions
-             * @memberof dmcn.identity.SubAuthority
-             * @instance
-             */
-            SubAuthority.prototype.permissions = 0;
-
-            /**
-             * Creates a new SubAuthority instance using the specified properties.
-             * @function create
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {dmcn.identity.ISubAuthority=} [properties] Properties to set
-             * @returns {dmcn.identity.SubAuthority} SubAuthority instance
-             */
-            SubAuthority.create = function create(properties) {
-                return new SubAuthority(properties);
-            };
-
-            /**
-             * Encodes the specified SubAuthority message. Does not implicitly {@link dmcn.identity.SubAuthority.verify|verify} messages.
-             * @function encode
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {dmcn.identity.ISubAuthority} message SubAuthority message or plain object to encode
-             * @param {$protobuf.Writer} [writer] Writer to encode to
-             * @returns {$protobuf.Writer} Writer
-             */
-            SubAuthority.encode = function encode(message, writer, q) {
-                if (!writer)
-                    writer = $Writer.create();
-                if (q === undefined)
-                    q = 0;
-                if (q > $util.recursionLimit)
-                    throw Error("max depth exceeded");
-                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
-                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.ed25519PublicKey);
-                if (message.scope != null && Object.hasOwnProperty.call(message, "scope"))
-                    writer.uint32(/* id 2, wireType 2 =*/18).string(message.scope);
-                if (message.effectiveFrom != null && Object.hasOwnProperty.call(message, "effectiveFrom"))
-                    writer.uint32(/* id 3, wireType 0 =*/24).int64(message.effectiveFrom);
-                if (message.effectiveUntil != null && Object.hasOwnProperty.call(message, "effectiveUntil"))
-                    writer.uint32(/* id 4, wireType 0 =*/32).int64(message.effectiveUntil);
-                if (message.permissions != null && Object.hasOwnProperty.call(message, "permissions"))
-                    writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.permissions);
-                return writer;
-            };
-
-            /**
-             * Encodes the specified SubAuthority message, length delimited. Does not implicitly {@link dmcn.identity.SubAuthority.verify|verify} messages.
-             * @function encodeDelimited
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {dmcn.identity.ISubAuthority} message SubAuthority message or plain object to encode
-             * @param {$protobuf.Writer} [writer] Writer to encode to
-             * @returns {$protobuf.Writer} Writer
-             */
-            SubAuthority.encodeDelimited = function encodeDelimited(message, writer) {
-                return this.encode(message, writer).ldelim();
-            };
-
-            /**
-             * Decodes a SubAuthority message from the specified reader or buffer.
-             * @function decode
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @param {number} [length] Message length if known beforehand
-             * @returns {dmcn.identity.SubAuthority} SubAuthority
-             * @throws {Error} If the payload is not a reader or valid buffer
-             * @throws {$protobuf.util.ProtocolError} If required fields are missing
-             */
-            SubAuthority.decode = function decode(reader, length, error, long) {
-                if (!(reader instanceof $Reader))
-                    reader = $Reader.create(reader);
-                if (long === undefined)
-                    long = 0;
-                if (long > $Reader.recursionLimit)
-                    throw Error("maximum nesting depth exceeded");
-                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.identity.SubAuthority();
-                while (reader.pos < end) {
-                    let tag = reader.uint32();
-                    if (tag === error)
-                        break;
-                    switch (tag >>> 3) {
-                    case 1: {
-                            message.ed25519PublicKey = reader.bytes();
-                            break;
-                        }
-                    case 2: {
-                            message.scope = reader.string();
-                            break;
-                        }
-                    case 3: {
-                            message.effectiveFrom = reader.int64();
-                            break;
-                        }
-                    case 4: {
-                            message.effectiveUntil = reader.int64();
-                            break;
-                        }
-                    case 5: {
-                            message.permissions = reader.uint32();
-                            break;
-                        }
-                    default:
-                        reader.skipType(tag & 7, long);
-                        break;
-                    }
-                }
-                return message;
-            };
-
-            /**
-             * Decodes a SubAuthority message from the specified reader or buffer, length delimited.
-             * @function decodeDelimited
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {dmcn.identity.SubAuthority} SubAuthority
-             * @throws {Error} If the payload is not a reader or valid buffer
-             * @throws {$protobuf.util.ProtocolError} If required fields are missing
-             */
-            SubAuthority.decodeDelimited = function decodeDelimited(reader) {
-                if (!(reader instanceof $Reader))
-                    reader = new $Reader(reader);
-                return this.decode(reader, reader.uint32());
-            };
-
-            /**
-             * Verifies a SubAuthority message.
-             * @function verify
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {Object.<string,*>} message Plain object to verify
-             * @returns {string|null} `null` if valid, otherwise the reason why it is not
-             */
-            SubAuthority.verify = function verify(message, long) {
-                if (typeof message !== "object" || message === null)
-                    return "object expected";
-                if (long === undefined)
-                    long = 0;
-                if (long > $util.recursionLimit)
-                    return "maximum nesting depth exceeded";
-                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
-                    if (!(message.ed25519PublicKey && typeof message.ed25519PublicKey.length === "number" || $util.isString(message.ed25519PublicKey)))
-                        return "ed25519PublicKey: buffer expected";
-                if (message.scope != null && Object.hasOwnProperty.call(message, "scope"))
-                    if (!$util.isString(message.scope))
-                        return "scope: string expected";
-                if (message.effectiveFrom != null && Object.hasOwnProperty.call(message, "effectiveFrom"))
-                    if (!$util.isInteger(message.effectiveFrom) && !(message.effectiveFrom && $util.isInteger(message.effectiveFrom.low) && $util.isInteger(message.effectiveFrom.high)))
-                        return "effectiveFrom: integer|Long expected";
-                if (message.effectiveUntil != null && Object.hasOwnProperty.call(message, "effectiveUntil"))
-                    if (!$util.isInteger(message.effectiveUntil) && !(message.effectiveUntil && $util.isInteger(message.effectiveUntil.low) && $util.isInteger(message.effectiveUntil.high)))
-                        return "effectiveUntil: integer|Long expected";
-                if (message.permissions != null && Object.hasOwnProperty.call(message, "permissions"))
-                    if (!$util.isInteger(message.permissions))
-                        return "permissions: integer expected";
-                return null;
-            };
-
-            /**
-             * Creates a SubAuthority message from a plain object. Also converts values to their respective internal types.
-             * @function fromObject
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {Object.<string,*>} object Plain object
-             * @returns {dmcn.identity.SubAuthority} SubAuthority
-             */
-            SubAuthority.fromObject = function fromObject(object, long) {
-                if (object instanceof $root.dmcn.identity.SubAuthority)
-                    return object;
-                if (!$util.isObject(object))
-                    throw TypeError(".dmcn.identity.SubAuthority: object expected");
-                if (long === undefined)
-                    long = 0;
-                if (long > $util.recursionLimit)
-                    throw Error("maximum nesting depth exceeded");
-                let message = new $root.dmcn.identity.SubAuthority();
-                if (object.ed25519PublicKey != null)
-                    if (typeof object.ed25519PublicKey === "string")
-                        $util.base64.decode(object.ed25519PublicKey, message.ed25519PublicKey = $util.newBuffer($util.base64.length(object.ed25519PublicKey)), 0);
-                    else if (object.ed25519PublicKey.length >= 0)
-                        message.ed25519PublicKey = object.ed25519PublicKey;
-                if (object.scope != null)
-                    message.scope = String(object.scope);
-                if (object.effectiveFrom != null)
-                    if ($util.Long)
-                        message.effectiveFrom = $util.Long.fromValue(object.effectiveFrom, false);
-                    else if (typeof object.effectiveFrom === "string")
-                        message.effectiveFrom = parseInt(object.effectiveFrom, 10);
-                    else if (typeof object.effectiveFrom === "number")
-                        message.effectiveFrom = object.effectiveFrom;
-                    else if (typeof object.effectiveFrom === "object")
-                        message.effectiveFrom = new $util.LongBits(object.effectiveFrom.low >>> 0, object.effectiveFrom.high >>> 0).toNumber();
-                if (object.effectiveUntil != null)
-                    if ($util.Long)
-                        message.effectiveUntil = $util.Long.fromValue(object.effectiveUntil, false);
-                    else if (typeof object.effectiveUntil === "string")
-                        message.effectiveUntil = parseInt(object.effectiveUntil, 10);
-                    else if (typeof object.effectiveUntil === "number")
-                        message.effectiveUntil = object.effectiveUntil;
-                    else if (typeof object.effectiveUntil === "object")
-                        message.effectiveUntil = new $util.LongBits(object.effectiveUntil.low >>> 0, object.effectiveUntil.high >>> 0).toNumber();
-                if (object.permissions != null)
-                    message.permissions = object.permissions >>> 0;
-                return message;
-            };
-
-            /**
-             * Creates a plain object from a SubAuthority message. Also converts values to other types if specified.
-             * @function toObject
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {dmcn.identity.SubAuthority} message SubAuthority
-             * @param {$protobuf.IConversionOptions} [options] Conversion options
-             * @returns {Object.<string,*>} Plain object
-             */
-            SubAuthority.toObject = function toObject(message, options, q) {
-                if (!options)
-                    options = {};
-                if (q === undefined)
-                    q = 0;
-                if (q > $util.recursionLimit)
-                    throw Error("max depth exceeded");
-                let object = {};
-                if (options.defaults) {
-                    if (options.bytes === String)
-                        object.ed25519PublicKey = "";
-                    else {
-                        object.ed25519PublicKey = [];
-                        if (options.bytes !== Array)
-                            object.ed25519PublicKey = $util.newBuffer(object.ed25519PublicKey);
-                    }
-                    object.scope = "";
-                    if ($util.Long) {
-                        let long = new $util.Long(0, 0, false);
-                        object.effectiveFrom = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
-                    } else
-                        object.effectiveFrom = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
-                    if ($util.Long) {
-                        let long = new $util.Long(0, 0, false);
-                        object.effectiveUntil = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
-                    } else
-                        object.effectiveUntil = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
-                    object.permissions = 0;
-                }
-                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
-                    object.ed25519PublicKey = options.bytes === String ? $util.base64.encode(message.ed25519PublicKey, 0, message.ed25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.ed25519PublicKey) : message.ed25519PublicKey;
-                if (message.scope != null && Object.hasOwnProperty.call(message, "scope"))
-                    object.scope = message.scope;
-                if (message.effectiveFrom != null && Object.hasOwnProperty.call(message, "effectiveFrom"))
-                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
-                        object.effectiveFrom = typeof message.effectiveFrom === "number" ? BigInt(message.effectiveFrom) : $util.Long.fromBits(message.effectiveFrom.low >>> 0, message.effectiveFrom.high >>> 0, false).toBigInt();
-                    else if (typeof message.effectiveFrom === "number")
-                        object.effectiveFrom = options.longs === String ? String(message.effectiveFrom) : message.effectiveFrom;
-                    else
-                        object.effectiveFrom = options.longs === String ? $util.Long.prototype.toString.call(message.effectiveFrom) : options.longs === Number ? new $util.LongBits(message.effectiveFrom.low >>> 0, message.effectiveFrom.high >>> 0).toNumber() : message.effectiveFrom;
-                if (message.effectiveUntil != null && Object.hasOwnProperty.call(message, "effectiveUntil"))
-                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
-                        object.effectiveUntil = typeof message.effectiveUntil === "number" ? BigInt(message.effectiveUntil) : $util.Long.fromBits(message.effectiveUntil.low >>> 0, message.effectiveUntil.high >>> 0, false).toBigInt();
-                    else if (typeof message.effectiveUntil === "number")
-                        object.effectiveUntil = options.longs === String ? String(message.effectiveUntil) : message.effectiveUntil;
-                    else
-                        object.effectiveUntil = options.longs === String ? $util.Long.prototype.toString.call(message.effectiveUntil) : options.longs === Number ? new $util.LongBits(message.effectiveUntil.low >>> 0, message.effectiveUntil.high >>> 0).toNumber() : message.effectiveUntil;
-                if (message.permissions != null && Object.hasOwnProperty.call(message, "permissions"))
-                    object.permissions = message.permissions;
-                return object;
-            };
-
-            /**
-             * Converts this SubAuthority to JSON.
-             * @function toJSON
-             * @memberof dmcn.identity.SubAuthority
-             * @instance
-             * @returns {Object.<string,*>} JSON object
-             */
-            SubAuthority.prototype.toJSON = function toJSON() {
-                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-            };
-
-            /**
-             * Gets the default type url for SubAuthority
-             * @function getTypeUrl
-             * @memberof dmcn.identity.SubAuthority
-             * @static
-             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
-             * @returns {string} The default type url
-             */
-            SubAuthority.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
-                if (typeUrlPrefix === undefined) {
-                    typeUrlPrefix = "type.googleapis.com";
-                }
-                return typeUrlPrefix + "/dmcn.identity.SubAuthority";
-            };
-
-            return SubAuthority;
-        })();
-
         identity.DomainAuthorityRecord = (function() {
 
             /**
@@ -2092,7 +1605,6 @@ export const dmcn = $root.dmcn = (() => {
              * @property {Uint8Array|null} [authorityX25519PublicKey] DomainAuthorityRecord authorityX25519PublicKey
              * @property {number|Long|null} [authorityEffectiveFrom] DomainAuthorityRecord authorityEffectiveFrom
              * @property {Array.<dmcn.identity.IAuthorityKey>|null} [supersededKeys] DomainAuthorityRecord supersededKeys
-             * @property {Array.<dmcn.identity.ISubAuthority>|null} [subAuthorities] DomainAuthorityRecord subAuthorities
              * @property {number|null} [policyFlags] DomainAuthorityRecord policyFlags
              * @property {number|Long|null} [createdAt] DomainAuthorityRecord createdAt
              * @property {number|Long|null} [revision] DomainAuthorityRecord revision
@@ -2112,7 +1624,6 @@ export const dmcn = $root.dmcn = (() => {
              */
             function DomainAuthorityRecord(properties) {
                 this.supersededKeys = [];
-                this.subAuthorities = [];
                 this.authorityCredentials = [];
                 this.reservedLocalParts = [];
                 if (properties)
@@ -2168,14 +1679,6 @@ export const dmcn = $root.dmcn = (() => {
              * @instance
              */
             DomainAuthorityRecord.prototype.supersededKeys = $util.emptyArray;
-
-            /**
-             * DomainAuthorityRecord subAuthorities.
-             * @member {Array.<dmcn.identity.ISubAuthority>} subAuthorities
-             * @memberof dmcn.identity.DomainAuthorityRecord
-             * @instance
-             */
-            DomainAuthorityRecord.prototype.subAuthorities = $util.emptyArray;
 
             /**
              * DomainAuthorityRecord policyFlags.
@@ -2274,9 +1777,6 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.supersededKeys != null && message.supersededKeys.length)
                     for (let i = 0; i < message.supersededKeys.length; ++i)
                         $root.dmcn.identity.AuthorityKey.encode(message.supersededKeys[i], writer.uint32(/* id 6, wireType 2 =*/50).fork(), q + 1).ldelim();
-                if (message.subAuthorities != null && message.subAuthorities.length)
-                    for (let i = 0; i < message.subAuthorities.length; ++i)
-                        $root.dmcn.identity.SubAuthority.encode(message.subAuthorities[i], writer.uint32(/* id 7, wireType 2 =*/58).fork(), q + 1).ldelim();
                 if (message.policyFlags != null && Object.hasOwnProperty.call(message, "policyFlags"))
                     writer.uint32(/* id 8, wireType 0 =*/64).uint32(message.policyFlags);
                 if (message.createdAt != null && Object.hasOwnProperty.call(message, "createdAt"))
@@ -2357,12 +1857,6 @@ export const dmcn = $root.dmcn = (() => {
                             if (!(message.supersededKeys && message.supersededKeys.length))
                                 message.supersededKeys = [];
                             message.supersededKeys.push($root.dmcn.identity.AuthorityKey.decode(reader, reader.uint32(), undefined, long + 1));
-                            break;
-                        }
-                    case 7: {
-                            if (!(message.subAuthorities && message.subAuthorities.length))
-                                message.subAuthorities = [];
-                            message.subAuthorities.push($root.dmcn.identity.SubAuthority.decode(reader, reader.uint32(), undefined, long + 1));
                             break;
                         }
                     case 8: {
@@ -2460,15 +1954,6 @@ export const dmcn = $root.dmcn = (() => {
                             return "supersededKeys." + error;
                     }
                 }
-                if (message.subAuthorities != null && Object.hasOwnProperty.call(message, "subAuthorities")) {
-                    if (!Array.isArray(message.subAuthorities))
-                        return "subAuthorities: array expected";
-                    for (let i = 0; i < message.subAuthorities.length; ++i) {
-                        let error = $root.dmcn.identity.SubAuthority.verify(message.subAuthorities[i], long + 1);
-                        if (error)
-                            return "subAuthorities." + error;
-                    }
-                }
                 if (message.policyFlags != null && Object.hasOwnProperty.call(message, "policyFlags"))
                     if (!$util.isInteger(message.policyFlags))
                         return "policyFlags: integer expected";
@@ -2554,16 +2039,6 @@ export const dmcn = $root.dmcn = (() => {
                         message.supersededKeys[i] = $root.dmcn.identity.AuthorityKey.fromObject(object.supersededKeys[i], long + 1);
                     }
                 }
-                if (object.subAuthorities) {
-                    if (!Array.isArray(object.subAuthorities))
-                        throw TypeError(".dmcn.identity.DomainAuthorityRecord.subAuthorities: array expected");
-                    message.subAuthorities = [];
-                    for (let i = 0; i < object.subAuthorities.length; ++i) {
-                        if (!$util.isObject(object.subAuthorities[i]))
-                            throw TypeError(".dmcn.identity.DomainAuthorityRecord.subAuthorities: object expected");
-                        message.subAuthorities[i] = $root.dmcn.identity.SubAuthority.fromObject(object.subAuthorities[i], long + 1);
-                    }
-                }
                 if (object.policyFlags != null)
                     message.policyFlags = object.policyFlags >>> 0;
                 if (object.createdAt != null)
@@ -2630,7 +2105,6 @@ export const dmcn = $root.dmcn = (() => {
                 let object = {};
                 if (options.arrays || options.defaults) {
                     object.supersededKeys = [];
-                    object.subAuthorities = [];
                     object.authorityCredentials = [];
                     object.reservedLocalParts = [];
                 }
@@ -2695,11 +2169,6 @@ export const dmcn = $root.dmcn = (() => {
                     object.supersededKeys = [];
                     for (let j = 0; j < message.supersededKeys.length; ++j)
                         object.supersededKeys[j] = $root.dmcn.identity.AuthorityKey.toObject(message.supersededKeys[j], options, q + 1);
-                }
-                if (message.subAuthorities && message.subAuthorities.length) {
-                    object.subAuthorities = [];
-                    for (let j = 0; j < message.subAuthorities.length; ++j)
-                        object.subAuthorities[j] = $root.dmcn.identity.SubAuthority.toObject(message.subAuthorities[j], options, q + 1);
                 }
                 if (message.policyFlags != null && Object.hasOwnProperty.call(message, "policyFlags"))
                     object.policyFlags = message.policyFlags;
@@ -6845,9 +6314,6 @@ export const dmcn = $root.dmcn = (() => {
              * @property {number|Long|null} [revision] RelayDescriptor revision
              * @property {Uint8Array|null} [signature] RelayDescriptor signature
              * @property {string|null} [domain] RelayDescriptor domain
-             * @property {Uint8Array|null} [domainCountersignature] RelayDescriptor domainCountersignature
-             * @property {number|Long|null} [domainCountersignedAt] RelayDescriptor domainCountersignedAt
-             * @property {Uint8Array|null} [domainCountersignerPubkey] RelayDescriptor domainCountersignerPubkey
              * @property {dmcn.identity.ICredential|null} [credential] RelayDescriptor credential
              */
 
@@ -6924,30 +6390,6 @@ export const dmcn = $root.dmcn = (() => {
             RelayDescriptor.prototype.domain = "";
 
             /**
-             * RelayDescriptor domainCountersignature.
-             * @member {Uint8Array} domainCountersignature
-             * @memberof dmcn.identity.RelayDescriptor
-             * @instance
-             */
-            RelayDescriptor.prototype.domainCountersignature = $util.newBuffer([]);
-
-            /**
-             * RelayDescriptor domainCountersignedAt.
-             * @member {number|Long} domainCountersignedAt
-             * @memberof dmcn.identity.RelayDescriptor
-             * @instance
-             */
-            RelayDescriptor.prototype.domainCountersignedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-            /**
-             * RelayDescriptor domainCountersignerPubkey.
-             * @member {Uint8Array} domainCountersignerPubkey
-             * @memberof dmcn.identity.RelayDescriptor
-             * @instance
-             */
-            RelayDescriptor.prototype.domainCountersignerPubkey = $util.newBuffer([]);
-
-            /**
              * RelayDescriptor credential.
              * @member {dmcn.identity.ICredential|null|undefined} credential
              * @memberof dmcn.identity.RelayDescriptor
@@ -6998,12 +6440,6 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.signature);
                 if (message.domain != null && Object.hasOwnProperty.call(message, "domain"))
                     writer.uint32(/* id 7, wireType 2 =*/58).string(message.domain);
-                if (message.domainCountersignature != null && Object.hasOwnProperty.call(message, "domainCountersignature"))
-                    writer.uint32(/* id 8, wireType 2 =*/66).bytes(message.domainCountersignature);
-                if (message.domainCountersignedAt != null && Object.hasOwnProperty.call(message, "domainCountersignedAt"))
-                    writer.uint32(/* id 9, wireType 0 =*/72).int64(message.domainCountersignedAt);
-                if (message.domainCountersignerPubkey != null && Object.hasOwnProperty.call(message, "domainCountersignerPubkey"))
-                    writer.uint32(/* id 10, wireType 2 =*/82).bytes(message.domainCountersignerPubkey);
                 if (message.credential != null && Object.hasOwnProperty.call(message, "credential"))
                     $root.dmcn.identity.Credential.encode(message.credential, writer.uint32(/* id 11, wireType 2 =*/90).fork(), q + 1).ldelim();
                 return writer;
@@ -7076,18 +6512,6 @@ export const dmcn = $root.dmcn = (() => {
                             message.domain = reader.string();
                             break;
                         }
-                    case 8: {
-                            message.domainCountersignature = reader.bytes();
-                            break;
-                        }
-                    case 9: {
-                            message.domainCountersignedAt = reader.int64();
-                            break;
-                        }
-                    case 10: {
-                            message.domainCountersignerPubkey = reader.bytes();
-                            break;
-                        }
                     case 11: {
                             message.credential = $root.dmcn.identity.Credential.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
@@ -7156,15 +6580,6 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.domain != null && Object.hasOwnProperty.call(message, "domain"))
                     if (!$util.isString(message.domain))
                         return "domain: string expected";
-                if (message.domainCountersignature != null && Object.hasOwnProperty.call(message, "domainCountersignature"))
-                    if (!(message.domainCountersignature && typeof message.domainCountersignature.length === "number" || $util.isString(message.domainCountersignature)))
-                        return "domainCountersignature: buffer expected";
-                if (message.domainCountersignedAt != null && Object.hasOwnProperty.call(message, "domainCountersignedAt"))
-                    if (!$util.isInteger(message.domainCountersignedAt) && !(message.domainCountersignedAt && $util.isInteger(message.domainCountersignedAt.low) && $util.isInteger(message.domainCountersignedAt.high)))
-                        return "domainCountersignedAt: integer|Long expected";
-                if (message.domainCountersignerPubkey != null && Object.hasOwnProperty.call(message, "domainCountersignerPubkey"))
-                    if (!(message.domainCountersignerPubkey && typeof message.domainCountersignerPubkey.length === "number" || $util.isString(message.domainCountersignerPubkey)))
-                        return "domainCountersignerPubkey: buffer expected";
                 if (message.credential != null && Object.hasOwnProperty.call(message, "credential")) {
                     let error = $root.dmcn.identity.Credential.verify(message.credential, long + 1);
                     if (error)
@@ -7230,25 +6645,6 @@ export const dmcn = $root.dmcn = (() => {
                         message.signature = object.signature;
                 if (object.domain != null)
                     message.domain = String(object.domain);
-                if (object.domainCountersignature != null)
-                    if (typeof object.domainCountersignature === "string")
-                        $util.base64.decode(object.domainCountersignature, message.domainCountersignature = $util.newBuffer($util.base64.length(object.domainCountersignature)), 0);
-                    else if (object.domainCountersignature.length >= 0)
-                        message.domainCountersignature = object.domainCountersignature;
-                if (object.domainCountersignedAt != null)
-                    if ($util.Long)
-                        message.domainCountersignedAt = $util.Long.fromValue(object.domainCountersignedAt, false);
-                    else if (typeof object.domainCountersignedAt === "string")
-                        message.domainCountersignedAt = parseInt(object.domainCountersignedAt, 10);
-                    else if (typeof object.domainCountersignedAt === "number")
-                        message.domainCountersignedAt = object.domainCountersignedAt;
-                    else if (typeof object.domainCountersignedAt === "object")
-                        message.domainCountersignedAt = new $util.LongBits(object.domainCountersignedAt.low >>> 0, object.domainCountersignedAt.high >>> 0).toNumber();
-                if (object.domainCountersignerPubkey != null)
-                    if (typeof object.domainCountersignerPubkey === "string")
-                        $util.base64.decode(object.domainCountersignerPubkey, message.domainCountersignerPubkey = $util.newBuffer($util.base64.length(object.domainCountersignerPubkey)), 0);
-                    else if (object.domainCountersignerPubkey.length >= 0)
-                        message.domainCountersignerPubkey = object.domainCountersignerPubkey;
                 if (object.credential != null) {
                     if (!$util.isObject(object.credential))
                         throw TypeError(".dmcn.identity.RelayDescriptor.credential: object expected");
@@ -7303,25 +6699,6 @@ export const dmcn = $root.dmcn = (() => {
                             object.signature = $util.newBuffer(object.signature);
                     }
                     object.domain = "";
-                    if (options.bytes === String)
-                        object.domainCountersignature = "";
-                    else {
-                        object.domainCountersignature = [];
-                        if (options.bytes !== Array)
-                            object.domainCountersignature = $util.newBuffer(object.domainCountersignature);
-                    }
-                    if ($util.Long) {
-                        let long = new $util.Long(0, 0, false);
-                        object.domainCountersignedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
-                    } else
-                        object.domainCountersignedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
-                    if (options.bytes === String)
-                        object.domainCountersignerPubkey = "";
-                    else {
-                        object.domainCountersignerPubkey = [];
-                        if (options.bytes !== Array)
-                            object.domainCountersignerPubkey = $util.newBuffer(object.domainCountersignerPubkey);
-                    }
                     object.credential = null;
                 }
                 if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
@@ -7351,17 +6728,6 @@ export const dmcn = $root.dmcn = (() => {
                     object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
                 if (message.domain != null && Object.hasOwnProperty.call(message, "domain"))
                     object.domain = message.domain;
-                if (message.domainCountersignature != null && Object.hasOwnProperty.call(message, "domainCountersignature"))
-                    object.domainCountersignature = options.bytes === String ? $util.base64.encode(message.domainCountersignature, 0, message.domainCountersignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.domainCountersignature) : message.domainCountersignature;
-                if (message.domainCountersignedAt != null && Object.hasOwnProperty.call(message, "domainCountersignedAt"))
-                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
-                        object.domainCountersignedAt = typeof message.domainCountersignedAt === "number" ? BigInt(message.domainCountersignedAt) : $util.Long.fromBits(message.domainCountersignedAt.low >>> 0, message.domainCountersignedAt.high >>> 0, false).toBigInt();
-                    else if (typeof message.domainCountersignedAt === "number")
-                        object.domainCountersignedAt = options.longs === String ? String(message.domainCountersignedAt) : message.domainCountersignedAt;
-                    else
-                        object.domainCountersignedAt = options.longs === String ? $util.Long.prototype.toString.call(message.domainCountersignedAt) : options.longs === Number ? new $util.LongBits(message.domainCountersignedAt.low >>> 0, message.domainCountersignedAt.high >>> 0).toNumber() : message.domainCountersignedAt;
-                if (message.domainCountersignerPubkey != null && Object.hasOwnProperty.call(message, "domainCountersignerPubkey"))
-                    object.domainCountersignerPubkey = options.bytes === String ? $util.base64.encode(message.domainCountersignerPubkey, 0, message.domainCountersignerPubkey.length) : options.bytes === Array ? Array.prototype.slice.call(message.domainCountersignerPubkey) : message.domainCountersignerPubkey;
                 if (message.credential != null && Object.hasOwnProperty.call(message, "credential"))
                     object.credential = $root.dmcn.identity.Credential.toObject(message.credential, options, q + 1);
                 return object;

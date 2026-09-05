@@ -162,12 +162,6 @@ type IdentityRecord struct {
 	ExpiresAt        time.Time // zero = no expiry
 	RelayHints       []string
 	VerificationTier VerificationTier
-	// BridgeCapability is DEPRECATED and always false. A bridge is infrastructure and has no
-	// identity record: it is a peer whose key carries a `bridge` credential, verified per
-	// SPEC.md §7. The field survives only because it is covered by the owner self-signature —
-	// removing it would change signableBytes and invalidate every record ever signed. Do not
-	// set it, and do not treat it as a trust signal.
-	BridgeCapability bool
 	RequireOnion     bool // mailbox owner requires inbound mail via onion routing
 	// Revision is the owner-signed monotonic version of the identity core, bumped on every
 	// owner re-sign. Covered by the self-signature (only the owner can advance it), it drives
@@ -328,7 +322,6 @@ func (r *IdentityRecord) signableBytes() ([]byte, error) {
 		// RelayHints intentionally omitted — it is operator-owned (carried in the
 		// RoutingCredential), not covered by the owner self-signature.
 		VerificationTier: dmcnpb.VerificationTier(r.VerificationTier),
-		BridgeCapability: r.BridgeCapability,
 		RequireOnion:     r.RequireOnion,
 		Revision:         r.Revision, // owner-signed monotonic version (anti-rollback)
 		// SelfSignature intentionally omitted — this is what we sign over
@@ -362,7 +355,6 @@ func (r *IdentityRecord) ToProto() *dmcnpb.IdentityRecord {
 		ExpiresAt:        unixOrZero(r.ExpiresAt),
 		RelayHints:       r.RelayHints,
 		VerificationTier: dmcnpb.VerificationTier(r.VerificationTier),
-		BridgeCapability: r.BridgeCapability,
 		RequireOnion:     r.RequireOnion,
 		Revision:         r.Revision,
 		SelfSignature:    r.SelfSignature[:],
@@ -408,7 +400,6 @@ func IdentityRecordFromProto(pb *dmcnpb.IdentityRecord) (*IdentityRecord, error)
 		ExpiresAt:        expiresAt,
 		RelayHints:       pb.RelayHints,
 		VerificationTier: VerificationTier(pb.VerificationTier),
-		BridgeCapability: pb.BridgeCapability,
 		RequireOnion:     pb.RequireOnion,
 		Revision:         pb.Revision,
 		SelfSignature:    selfSig,

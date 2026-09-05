@@ -201,9 +201,45 @@ signature is computed over the canonical plaintext with no context tag.</p>
 for each recipient device:
     eph         = fresh X25519 keypair
     shared      = X25519(eph_priv, recipient_pub)
-    kwk         = HKDF-SHA256(shared, info=&quot;dmcn-cek-wrap-v1&quot;)
+    kwk         = HKDF-SHA256(shared, salt=&quot;&quot;, info=&lt;context&gt;)
     wrapped_cek = AES-256-GCM(kwk, cek)          # nonce 12, tag 16
 </code></pre>
+<p><strong>Each wrap states its own derivation generation</strong> in <code>recipient_record.kdf</code>, and a reader
+MUST dispatch on that value. <strong>Absent (0) means 1</strong> — a protocol rule, not a compatibility
+shim: every wrap written before the field existed used generation 1, and stored envelopes are
+never re-encrypted. Two generations are defined:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>kdf</code></th>
+<th><code>info</code></th>
+<th>header/body additional data</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>&quot;dmcn-cek-wrap-v1&quot;</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>&quot;dmcn-cek-wrap-v2&quot; ‖ eph_pub ‖ recipient_pub</code></td>
+<td><code>&quot;dmcn-aad-hdr-v1\0&quot;</code> / <code>&quot;dmcn-aad-body-v1\0&quot;</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Generation 2 is the <code>kem_context = concat(enc, pkRm)</code> of RFC 9180 §4.1 DHKEM: it binds the
+wrapping key to the pair it was derived for, where generation 1's fixed label binds nothing.
+Both inputs are fixed 32-byte keys, which is what makes the concatenation unambiguous.</p>
+<p>A reader MUST NOT attempt trial decryption, and MUST reject a generation it does not know
+rather than falling back. An implementation of this format needs to read one field, not
+attempt a catalogue of derivations in order.</p>
+<p>The field rides the <strong>recipient record</strong> rather than the envelope because the record is what
+survives storage: a mailbox persists per-recipient entries that drop the envelope's <code>version</code>,
+<code>message_id</code> and <code>created_at</code>. For the same reason the context carries no message identifier
+and no transcript — and because the identical wrap is used for sealed blobs that have no
+message at all, where the generation travels as a <code>kdf</code> member of the blob's recipient object.</p>
 </li>
 <li>
 <p>sealed blobs are <strong>padded to size-class buckets</strong> (1 KB / 4 KB / 16 KB / 64 KB / 256 KB /
@@ -213,7 +249,60 @@ traffic-analysis resistance;</p>
 <li>
 <p>envelope v2 is <strong>split</strong> into a small listable encrypted header (sender, subject,
 snippet, recipient lists, body commitments) and a large body, so listing an inbox never
-reads bodies; the bcc list appears only on the sender's own copy;</p>
+reads bodies; the bcc list appears only on the sender's own copy. Header and body are sealed
+under the SAME CEK with independent nonces, so each carries an AEAD additional-data label to
+keep one from opening as the other. The labels are selected by the same <code>kdf</code> generation the
+recipient record declares, so an envelope's blobs and its wraps can never disagree —
+generation 1 predates the labels and uses none. They are constant for the same reason the wrap
+context is minimal: nothing derived from the envelope survives storage;</p>
+</li>
+<li>
+<p><strong>the key that signs the envelope MUST be the key named in the header's <code>sender_public_key</code>.</strong>
+A message carries two signatures with different jobs: one over the whole encrypted envelope,
+presented in the clear when the message is handed to a relay, and one over the header
+plaintext, sealed inside. The outer one lets a relay confirm the party storing a message
+controls the address it named, without learning anything about the contents; the inner one
+tells the recipient who wrote it.</p>
+<p>Requiring one key for both makes those two statements about the same party. It costs nothing —
+a sender already holds one signing key — and it means a relay's admission check and a
+recipient's authorship check cannot disagree. A relay cannot verify this itself (it holds no
+key for the sealed header), so it is an obligation on producers.</p>
+</li>
+<li>
+<p><strong>a reader MUST bind the claimed sender address to the key that signed.</strong> The header signature
+verifies against <code>sender_public_key</code>, a field the signer chose, so on its own it proves only
+that the header is internally consistent — anyone may name another party's address, name their
+own key, and sign. A reader MUST resolve <code>sender_address</code> and compare. Where the directory
+answers and the key differs, the message is not from the address it names: a reader MUST NOT
+render its body, attachments or HTML, and MUST NOT present the claimed address as attribution.
+Where the address does not resolve, the message is reported as unverified but NOT rejected — a
+directory outage, or an ordinary sender bridged in from legacy mail, must not empty a mailbox.</p>
+<p>A relay cannot perform this check. It sees the transport sender that handed it the envelope,
+which is a different, cleartext field, and it holds no key for the sealed header. The two
+answer different questions — the transport sender governs abuse and quota, the header sender
+governs authorship — and only a recipient can establish the second.</p>
+<p>Note the residual: absent a signed rotation lineage in the directory, a legitimate key change
+is indistinguishable from a forgery, so a reader SHOULD keep rejected messages retrievable
+rather than deleting them.</p>
+</li>
+<li>
+<p><strong>a reader MUST check that the sender addressed the message to the mailbox reading it</strong>:
+that some address in the signed audience (<code>recipient_address</code>, <code>to</code>, <code>cc</code>) resolves to the
+X25519 key the envelope was sealed to. A message failing this MUST be surfaced.</p>
+<p>This is the only defence against surreptitious forwarding, and it cannot be replaced by an
+AEAD binding: a legitimate recipient holds the CEK, so it can re-seal the identical header
+plaintext to a third party under any additional data it likes, and the sender's signature —
+which covers the header plaintext, not its ciphertext — still verifies. The audience is
+signed, so that is what a re-target cannot forge.</p>
+<p>The comparison is on the KEY, not the address string. Mailboxes are keyed by X25519 public
+key, so several addresses may share one mailbox; comparing strings would report an account's
+own mail as misaddressed, and repairing that would require consulting an address-grouping
+marker outside this specification. Resolving to a key needs none of that, and an
+implementation unaware of any such grouping applies the rule correctly. An address that does
+not resolve is skipped: a directory miss is not evidence of misaddressing.</p>
+<p>Honest limit: this rests on the directory, so a fleet willing to bind the original recipient's
+address to the reader's key can defeat it. A bridge is the deliberate exception — an
+outbound-to-legacy copy names the legacy recipient while being sealed to the bridge's key;</p>
 </li>
 <li>
 <p>the header's <strong><code>snippet</code></strong> is the <strong>leading text of the body</strong>, not a free-form summary:

@@ -340,7 +340,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const contactSig = senderContact
     ? [
         senderContact.provenance ?? '', senderContact.ed25519Pub ?? '', senderContact.x25519Pub ?? '',
-        senderContact.bridgeCapability ? '1' : '', senderContact.adminKeyCustody ? '1' : '', senderContact.pinSeq ?? 0,
+        senderContact.adminKeyCustody ? '1' : '', senderContact.pinSeq ?? 0,
       ].join(':')
     : '';
 

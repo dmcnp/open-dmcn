@@ -36,8 +36,6 @@ import type { ContactRecord } from '../api/contactStore';
 //                 covered by any owner signature, so this is the field a compelled
 //                 operator can flip without touching a user key. false → true means the
 //                 domain now asserts that an admin holds this account's keys.
-//   bridgeCapability — owner-signed; a contact silently becoming a bridge changes what
-//                 their mail means (bridged mail carries a classification, not authorship).
 //
 // Deliberately NOT pinned: `fingerprint` is derived from the two keys (identity.go
 // fingerprintOf), so comparing it is redundant with comparing them. `verified_tier`
@@ -48,7 +46,6 @@ import type { ContactRecord } from '../api/contactStore';
 export interface PinnedFacts {
   ed25519Pub: string; // base64 std, as served by the directory
   x25519Pub: string;  // base64 std
-  bridgeCapability: boolean;
   adminKeyCustody: boolean;
   // noIdentity records the CONFIRMED ABSENCE of a DMCN identity: the owner was shown that a
   // counterparty they had verified now resolves to no record at all, and said that was
@@ -67,7 +64,6 @@ export interface PinnedFacts {
 export interface DirectoryFacts {
   ed25519_pub: string;
   x25519_pub: string;
-  bridge_capability?: boolean;
   admin_key_custody?: boolean;
   // Set by a directory that answers a lookup for a non-DMCN address by pointing at its
   // outbound bridge. A successful response carrying no identity is still an ANSWER about
@@ -85,7 +81,7 @@ export type PinVerdict =
 // a fact set — the shape a legacy (bridge-only) address resolves to. Used both to compare
 // against a held pin and, once the owner confirms it, to pin.
 export function absentIdentityFacts(): PinnedFacts {
-  return { ed25519Pub: '', x25519Pub: '', bridgeCapability: false, adminKeyCustody: false, noIdentity: true };
+  return { ed25519Pub: '', x25519Pub: '', adminKeyCustody: false, noIdentity: true };
 }
 
 // directoryFacts projects a directory response onto the pinned fact set.
@@ -96,7 +92,6 @@ export function directoryFacts(dir: DirectoryFacts): PinnedFacts {
   return {
     ed25519Pub: dir.ed25519_pub ?? '',
     x25519Pub: dir.x25519_pub ?? '',
-    bridgeCapability: dir.bridge_capability === true,
     adminKeyCustody: dir.admin_key_custody === true,
   };
 }
@@ -110,7 +105,6 @@ export function contactFacts(contact: ContactRecord | undefined): PinnedFacts | 
   return {
     ed25519Pub: contact.ed25519Pub,
     x25519Pub: contact.x25519Pub ?? '',
-    bridgeCapability: contact.bridgeCapability === true,
     adminKeyCustody: contact.adminKeyCustody === true,
   };
 }
@@ -129,7 +123,6 @@ export function changedFacts(pinned: PinnedFacts, observed: PinnedFacts): string
   if (pinned.ed25519Pub && pinned.ed25519Pub !== observed.ed25519Pub) out.push('signing key');
   if (pinned.x25519Pub && pinned.x25519Pub !== observed.x25519Pub) out.push('encryption key');
   if (pinned.adminKeyCustody !== observed.adminKeyCustody) out.push('admin key custody');
-  if (pinned.bridgeCapability !== observed.bridgeCapability) out.push('bridge capability');
   return out;
 }
 

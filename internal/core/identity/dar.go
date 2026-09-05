@@ -55,11 +55,21 @@ var DefaultReservedLocalParts = []string{
 // effective from EffectiveFrom until the next key's EffectiveFrom; the latest
 // key is open-ended. There is deliberately no end timestamp, so a key can never
 // expire into a gap before its replacement exists.
+// AuthorityKey is one entry in the domain root's key timeline: a retired root key and the
+// instant it became effective (it stays effective until the next entry's EffectiveFrom).
+//
+// X25519Public is retained but read by nothing, which makes it look removable. It is not.
+// The DNS anchor is a fingerprint over the PAIR (fingerprintOf, SPEC.md §1), so both halves
+// are what make a superseded key's fingerprint recomputable — and with it the `_dmcn` fp=
+// that was live while that key was current. RootKeyAt and darRootKeys select on Ed25519Public
+// alone, and Fingerprint() anchors the CURRENT pair off the DAR itself, so nothing recomputes
+// a historical one today. Dropping it would foreclose that check and, because the pair is
+// covered by the DAR self-signature, invalidate every DAR that has ever rotated.
 type AuthorityKey struct {
 	Ed25519Public  ed25519.PublicKey
 	X25519Public   [32]byte
 	EffectiveFrom  time.Time
-	RotationReason uint32
+	RotationReason uint32 // carried-unenforced, no producer; reserved for the revocation phase
 }
 
 // DomainAuthorityRecord declares a domain's authority key and the credentials it

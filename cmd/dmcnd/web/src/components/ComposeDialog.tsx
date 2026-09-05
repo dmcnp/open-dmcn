@@ -619,7 +619,6 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         : {
             ed25519Pub: observed.ed25519Pub,
             x25519Pub: observed.x25519Pub,
-            bridgeCapability: observed.bridgeCapability,
             adminKeyCustody: observed.adminKeyCustody,
           }),
     });
