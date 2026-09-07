@@ -456,6 +456,19 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // straight to the correct verdict instead of flashing "unknown" (or a native verdict on a
   // legacy address) first.
   const tv = contactsReady && filterReady && bridgeResolved && !av && !rv && nativeTrust ? senderTrustView(nativeTrust) : null;
+  // The encryption statement appears twice — as the badge beside the subject and as the callout
+  // under the body — and unlike av/rv/tv it has no view object to carry its glyph, so the two
+  // sites were free to disagree, and did (a lock above, a shield or an envelope below). One const,
+  // read by both, so the pair can only ever move together.
+  //
+  // Which glyph is not a free choice: `shield-check` already MEANS "a DMCN identity, therefore
+  // end to end" everywhere else in the client — it is what the teal list shield claims in
+  // KindIcon, upgraded to blue for a trusted contact — so native dmcn mail keeps it here and the
+  // reader's two badges read as the same vocabulary the list speaks, teal beside blue. Bridged
+  // legacy mail gets a plain `lock` instead, because it is genuinely the weaker statement: the
+  // bridge→you hop is encrypted, but nothing about the sender is cryptographically established,
+  // and lending it the shield would claim exactly the thing that did not happen.
+  const cryptoIcon = av ? 'lock' : 'shield-check';
   // A verified bridge classification means the DMCN "sender" is a legacy email relayed by a
   // trusted bridge. Allowlist/block it by ADDRESS only — there is no directory key to pin, and the
   // shared bridge key (in sender_public_key) must never be pinned or blocked.
@@ -674,7 +687,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             {/* Legacy mail is encrypted only on the bridge→you hop (it crossed plaintext SMTP
                 first), so tone the badge down from the brand "Encrypted" (which signals full E2E)
                 to a neutral "Encrypted to you". The callout below spells out the caveat. */}
-            <Badge variant={av ? 'neutral' : 'brand'} icon={<Icon name="lock" size={12} />}>{av ? 'Encrypted to you' : 'Encrypted'}</Badge>
+            <Badge variant={av ? 'neutral' : 'brand'} icon={<Icon name={cryptoIcon} size={12} />}>{av ? 'Encrypted to you' : 'Encrypted'}</Badge>
             {av && <Badge variant={av.variant} icon={<Icon name={av.icon} size={12} />}>{av.label}</Badge>}
             {rv && <Badge variant={rv.variant} icon={<Icon name={rv.icon} size={12} />}>{rv.label}</Badge>}
             {tv && <Badge variant={tv.variant} icon={<Icon name={tv.icon} size={12} />}>{tv.label}</Badge>}
@@ -876,14 +889,19 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             </div>
           )}
 
+          {/* The ENCRYPTION callout: the long form of the "Encrypted"/"Encrypted to you" badge
+              beside the subject, so it carries that badge's glyph (cryptoIcon) in both branches.
+              The legacy branch used to show an envelope here while its badge showed a lock, which
+              spent the bridged-mail glyph on a sentence about encryption and left one statement
+              wearing two icons. */}
           {av ? (
             <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name="mail" size={16} />
+              <Icon name={cryptoIcon} size={16} />
               Encrypted from the bridge to you. The original email crossed standard email (SMTP) before reaching the bridge, which isn’t end-to-end encrypted.
             </div>
           ) : rv ? null : (
             <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name="shield-check" size={16} />
+              <Icon name={cryptoIcon} size={16} />
               End-to-end encrypted over dmcn — only you and {contactName} can read this.
             </div>
           )}
