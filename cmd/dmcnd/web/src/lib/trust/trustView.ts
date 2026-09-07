@@ -20,13 +20,20 @@ export interface TrustView {
 // blue "trust-contact" colour (matching the compose recipient shields); the label
 // conveys the verification strength. DMCN-but-not-a-contact senders are teal (see
 // senderTrustView 'domain_verified').
+//
+// "Trusted contact" is the wording for this blue everywhere it appears — the reader
+// badge here, the compose recipient chips, the mail-row shield. Deliberately CONTACT
+// and not "sender": the same blue marks a RECIPIENT in compose and in Sent rows, where
+// "sender" would be plainly wrong, and it is the contact list the owner actually
+// operates to grant it. The stronger provenances name how trust was established and
+// this is their neutral default, so they read as one family.
 export function provenanceView(p: TrustProvenance): { variant: BadgeVariant; label: string } {
   switch (p) {
     case 'in_person':       return { variant: 'trust-contact', label: 'Verified in person' };
     case 'fingerprint':     return { variant: 'trust-contact', label: 'Fingerprint verified' };
     case 'network_vouched': return { variant: 'trust-contact', label: 'Network vouched' };
     case 'org_verified':    return { variant: 'trust-contact', label: 'Organisationally verified' };
-    case 'user_approved':   return { variant: 'trust-contact', label: 'Trusted sender' };
+    case 'user_approved':   return { variant: 'trust-contact', label: 'Trusted contact' };
   }
 }
 
@@ -36,8 +43,8 @@ export function senderTrustView(t: SenderTrust): TrustView {
   switch (t.kind) {
     case 'allowlisted': {
       // Trusted contact → blue (matches the compose recipient shields).
-      const pv = t.provenance ? provenanceView(t.provenance) : { variant: 'trust-contact' as BadgeVariant, label: 'Trusted sender' };
-      return { variant: pv.variant, icon: 'shield-check', label: pv.label, detail: 'This is from a trusted sender in your contacts — their identity is confirmed.' };
+      const pv = t.provenance ? provenanceView(t.provenance) : { variant: 'trust-contact' as BadgeVariant, label: 'Trusted contact' };
+      return { variant: pv.variant, icon: 'shield-check', label: pv.label, detail: 'This is from a trusted contact — their identity is confirmed.' };
     }
     case 'domain_verified':
       // DMCN identity, not (yet) a contact → brand teal (matches the compose recipient shields).

@@ -261,12 +261,34 @@ export function AppLayout() {
             <Icon name="log-out" size={17} style={{ color: 'var(--text-muted)' }} />
             {!railCollapsed && <span>Sign out</span>}
           </button>
-          <div title={railCollapsed ? 'End-to-end encrypted' : undefined} style={{
+          {/* A standing fact about THIS CLIENT, which is the only kind of claim that
+              belongs in permanent chrome. It deliberately does not say "end-to-end
+              encrypted", which this slot used to: that is a per-message property the row
+              shields and the reader state precisely, and it is not even true of every
+              message — mail bridged to or from legacy email crosses SMTP in the clear, so
+              a blanket badge asserted something the inbox itself contradicts one row down.
+              Who performs the encryption has no such exception: this browser seals every
+              outbound path before anything leaves it — DMCN mail to the recipient's key,
+              personal-store writes to the owner's own, and mail bound for legacy email to
+              the bridge's — so the server never receives plaintext to encrypt.
+              Every word here is doing work. "BY your device" and not "on" it: "on" reads
+              as a claim about data AT REST here, and in local storage mode the personal
+              store writes its values as plaintext objects into IndexedDB
+              (api/personalStore.ts, the local branch of put), so that reading is false in
+              exactly the self-host deployment. "By" and not "FROM" either: "encrypted
+              from your device" invites the reader to finish it with "...to them", which is
+              the end-to-end claim this badge used to make and which bridged mail breaks —
+              that encryption terminates at the bridge. "By" states only who does the
+              sealing and makes no promise about how far it reaches, which is the one
+              claim with no exception. Muted lock glyph, not a teal shield: the shield
+              vocabulary belongs to the per-counterparty verdicts (KindIcon, trustView)
+              and this must not be mistaken for one. */}
+          <div title={railCollapsed ? 'Encrypted by your device' : undefined} style={{
             padding: railCollapsed ? 'var(--space-3) 0' : 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center',
             justifyContent: railCollapsed ? 'center' : 'flex-start', gap: 'var(--space-2)', borderTop: '1px solid var(--border-subtle)',
           }}>
-            <Icon name="shield-check" size={16} style={{ color: 'var(--brand)' }} />
-            {!railCollapsed && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>End-to-end encrypted</span>}
+            <Icon name="lock" size={16} style={{ color: 'var(--text-muted)' }} />
+            {!railCollapsed && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Encrypted by your device</span>}
           </div>
         </div>
       </nav>

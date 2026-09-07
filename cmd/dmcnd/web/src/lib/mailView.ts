@@ -60,3 +60,10 @@ export function previewText(snippet: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+// recipientsOf lists everyone a message went to (To + Cc), falling back to the single
+// recipientAddress for the pre-feature copies that carry no lists. A Sent row is "about"
+// the first of them, so the row's label and its shield can never disagree about who that is.
+export function recipientsOf(m: Addressed): string[] {
+  return m.to.length || m.cc.length ? [...m.to, ...m.cc] : [m.recipientAddress];
+}

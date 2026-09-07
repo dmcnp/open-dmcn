@@ -13,7 +13,7 @@ import { hasPinnedKey } from '../lib/trust/pinnedKey';
 import { contactKind } from '../lib/trust/senderKind';
 
 // The DMCN-vs-legacy distinction (see senderKind.ts) is what's worth a glance in
-// this list; the allowlist provenance ("trusted sender") is not, since every row
+// this list; the allowlist provenance ("Trusted contact") is not, since every row
 // here is by definition allowlisted.
 
 type Mode = { kind: 'add' } | { kind: 'edit'; address: string } | null;

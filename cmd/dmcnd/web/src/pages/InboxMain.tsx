@@ -9,7 +9,7 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
-import { isReceivedForMe, previewText } from '../lib/mailView';
+import { isReceivedForMe, previewText, recipientsOf } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
 import { IconButton } from '../ds';
 import { Icon } from '../components/Icon';
@@ -62,8 +62,8 @@ function groupSent(previews: Preview[]): Row[] {
 
 const SWIPE_W = 176; // px revealed by swiping a row left on mobile (Archive + Delete)
 
-function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inArchive, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover }: {
-  msg: Preview; sent: boolean; unknownSender?: boolean; mobile: boolean; hovered: boolean;
+function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover }: {
+  msg: Preview; sent: boolean; unknownSender?: boolean; trustedSender?: boolean; mobile: boolean; hovered: boolean;
   read: boolean; starred: boolean; inArchive: boolean; nameFor: (address: string) => string;
   onOpen: () => void; onDelete: () => void; onArchive: () => void; onToggleStar: () => void; onHover: (h: boolean) => void;
 }) {
@@ -90,7 +90,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
   // For a sent message the "who" is the full recipient audience (To + Cc). Falls back
   // to the singular recipientAddress for pre-feature messages with no lists. Every
   // recipient address goes through nameFor, so a contact shows under the name its owner gave it.
-  const recipientList = msg.to.length || msg.cc.length ? [...msg.to, ...msg.cc] : [msg.recipientAddress];
+  const recipientList = recipientsOf(msg);
   const whoAddress = sent ? recipientList[0] : msg.senderAddress;
   // Owner-given contact name first, then the display name the message carried (legacy
   // mail's From name), then the address. The row is a scanning surface with one narrow
@@ -150,7 +150,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
               {unread && <span style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: 'var(--brand)', alignSelf: 'center' }} />}
-              <span style={{ alignSelf: 'center', display: 'inline-flex', marginRight: 2 }}><KindIcon kind={kind} size={14} /></span>
+              <span style={{ alignSelf: 'center', display: 'inline-flex', marginRight: 2 }}><KindIcon kind={kind} trusted={trustedSender} size={14} /></span>
               <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sent ? sentLabel : who}
               </span>
@@ -196,7 +196,7 @@ function MailRow({ msg, sent, unknownSender, mobile, hovered, read, starred, inA
           describes the message but lives in the left rail with it (where mail clients
           put it) rather than floating in the middle of the subject text. */}
       <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <KindIcon kind={kind} size={14} />
+        <KindIcon kind={kind} trusted={trustedSender} size={14} />
         <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sent ? `To: ${who}` : who}
         </span>
@@ -259,6 +259,20 @@ export function InboxMain() {
   // bridge-SPF-DKIM-DMARC checks), so a spoofable address match here carries no trust weight.
   const catOf = (m: Preview): 'allowlisted' | 'pending' | 'blocked' =>
     isSent(m.senderAddress) ? 'allowlisted' : categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
+
+  // Whether the row's shield turns blue: the counterparty is in the owner's contacts.
+  // For received mail that is the key-checked `allowlisted` category — categorizeSender
+  // demotes a contact whose signing key no longer matches the pinned one back to pending —
+  // and the shield is only blue when it is also a shield at all, i.e. the directory key
+  // matched the header key (useCounterpartyKind). So blue means: verified DMCN identity AND
+  // a pinned key that still holds AND someone the owner allowlisted. Mail from myself is
+  // excluded: I am not one of my own contacts, and the reader makes no trust claim about it
+  // either. Like the "New" tag this is a glanceable hint, not an access decision — the
+  // reader still runs the full check when the message is opened.
+  const trustedOf = (m: Preview): boolean =>
+    folder === 'sent'
+      ? !!contactByAddress(recipientsOf(m)[0])
+      : !isSent(m.senderAddress) && catOf(m) === 'allowlisted';
 
   const q = filter.trim().toLowerCase();
   const matchesQ = (m: Preview) =>
@@ -404,6 +418,7 @@ export function InboxMain() {
                   msg={msg}
                   sent={folder === 'sent'}
                   unknownSender={folder !== 'sent' && catOf(msg) === 'pending'}
+                  trustedSender={trustedOf(msg)}
                   mobile={isMobile}
                   hovered={hovered === msg.hash}
                   read={isRead(msg.hash)}
