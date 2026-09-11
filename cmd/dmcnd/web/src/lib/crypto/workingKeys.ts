@@ -11,6 +11,7 @@
 
 import type { IdentityKeyPair } from './keys';
 import { importEd25519PrivateKey, importX25519PrivateKey } from './keys';
+import { bufferSource } from './bytes';
 import { WORKING_STORE, idbGet, idbGetAllKeys, idbPut, idbDelete } from './idb';
 import { isStaySignedIn, tabWorkingPrefix, parseTabWorkingRef } from '../sessionLifetime';
 
@@ -22,6 +23,13 @@ export interface WorkingKeys {
   deviceId: Uint8Array;       // 16 bytes
   createdAt: number;          // Unix seconds
   address: string;            // owning account (validates the handle matches the session)
+  // The account seed imported as a non-extractable HKDF root, ['deriveBits'] only. A
+  // deployment that derives further keys from the account (per-address throwaway keypairs,
+  // say) derives them from this handle rather than from the seed, which is gone by the time
+  // anything asks: the seed never sits in JS after import, and the handle can only produce
+  // OUTPUTS of the KDF, never the seed itself. Absent on handles persisted by an older client;
+  // loadUnlockedKeys treats such a handle as stale.
+  aliasRoot?: CryptoKey;
 }
 
 // Handles are keyed by a session ref (see sessionLifetime.workingKeyRef): per-tab
@@ -34,13 +42,15 @@ export interface WorkingKeys {
 // handles for `address`. The caller discards the raw IdentityKeyPair afterwards.
 export async function importWorkingKeys(address: string, kp: IdentityKeyPair): Promise<WorkingKeys> {
   const seed = kp.ed25519Private.slice(0, 32);
-  const [ed25519Sign, x25519Derive] = await Promise.all([
+  const [ed25519Sign, x25519Derive, aliasRoot] = await Promise.all([
     importEd25519PrivateKey(seed),
     importX25519PrivateKey(kp.x25519Private),
+    crypto.subtle.importKey('raw', bufferSource(seed), 'HKDF', false, ['deriveBits']),
   ]);
   return {
     ed25519Sign,
     x25519Derive,
+    aliasRoot,
     ed25519Public: kp.ed25519Public,
     x25519Public: kp.x25519Public,
     deviceId: kp.deviceId,

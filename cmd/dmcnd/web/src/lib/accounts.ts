@@ -83,6 +83,12 @@ export async function loadUnlockedKeys(address: string, ks?: LocalKeystore | nul
     await clearWorkingKeys(ref);
     return null;
   }
+  // A handle persisted before the KDF root existed cannot derive anything; one re-unlock
+  // imports a complete set, and that beats a feature that silently does not work.
+  if (!wk.aliasRoot) {
+    await clearWorkingKeys(ref);
+    return null;
+  }
   return wk;
 }
 

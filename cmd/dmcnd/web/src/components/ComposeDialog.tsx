@@ -1,5 +1,6 @@
 import type { ComposeReplyTo } from '../lib/compose';
 import { deployment } from '@deployment';
+import type { AccountIdentity } from '../lib/deployment';
 import { useState, useRef, useEffect } from 'react';
 import type { CSSProperties, ReactNode, KeyboardEvent } from 'react';
 import { useAuth } from '../lib/hooks/useAuth';
@@ -98,15 +99,15 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   // deployment.senderAddresses); otherwise it is the signed-in address and no row is shown. A
   // reply goes out as the alias the other side wrote to, and that alias is not kept as a
   // recipient: the reader could only strip the signed-in address, since it does not know the rest.
-  const [senders, setSenders] = useState<string[]>([]);
+  const [senders, setSenders] = useState<AccountIdentity[]>([]);
   const [from, setFrom] = useState<string>(address ?? '');
   useEffect(() => {
-    if (!deployment.senderAddresses || !address) return;
+    if (!deployment.identities || !address || !keys) return;
     let cancelled = false;
-    deployment.senderAddresses().then(list => {
+    deployment.identities(keys).then(list => {
       if (cancelled) return;
       setSenders(list);
-      const ours = new Set(list.map(a => a.toLowerCase()));
+      const ours = new Set(list.map(a => a.address.toLowerCase()));
       const reached = (replyTo?.sentTo ?? []).map(a => a.toLowerCase()).find(a => ours.has(a));
       if (reached) {
         setFrom(reached);
@@ -116,7 +117,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     }).catch(() => { /* no From row; the signed-in address sends */ });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- replyTo is fixed for the dialog's life
-  }, [address]);
+  }, [address, keys]);
   const [pendingTo, setPendingTo] = useState('');
   const [pendingCc, setPendingCc] = useState('');
   const [pendingBcc, setPendingBcc] = useState('');
@@ -409,8 +410,10 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
     // Capture the non-null key handle + own address for the closure below — TS
     // narrowing from the guard above doesn't carry into a nested function.
-    const k = keys;
+    // `k` is whoever this goes out AS: the chosen identity's keys (an isolated alias signs
+    // with its own derived key; a shared one with the account's), or the account's.
     const selfAddress = from || address;
+    const k = senders.find(a => a.address.toLowerCase() === selfAddress.toLowerCase())?.keys ?? keys;
 
     // Encode, sign over the envelope hash, and STORE one envelope. The private key
     // never leaves the browser; the server only relays the signed bytes. recipient
@@ -583,14 +586,16 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       // the relay STORE path, onion, or the free-ride guard (the full bcc audience rides on
       // this self-copy only). Best-effort: the message is already delivered, so a Sent-copy
       // failure must not fail the send.
+      // Sealed to the ACCOUNT's key whichever identity sent it: Sent is one list, read with
+      // one key, and the header still says which address it went out as.
       try {
         const selfEnvelope = await encryptSplit({
           ...common,
           recipientAddress: selfAddress,
           bcc: bccList,
-          recipients: [{ deviceId: k.deviceId, x25519Pub: k.x25519Public }],
+          recipients: [{ deviceId: keys.deviceId, x25519Pub: keys.x25519Public }],
         });
-        await new SentStore(k).putEnvelope(toHex(messageId), selfEnvelope);
+        await new SentStore(keys).putEnvelope(toHex(messageId), selfEnvelope);
       } catch (copyErr) {
         console.warn('Sent copy could not be saved (message delivered):', copyErr);
       }
@@ -698,7 +703,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             style={{ flex: 1, minWidth: 0, background: 'transparent', color: 'var(--text-body)', border: 'none', fontSize: 'inherit', fontFamily: 'inherit', cursor: 'pointer' }}
           >
             <option value={address ?? ''}>{address}</option>
-            {senders.map(a => <option key={a} value={a}>{a}</option>)}
+            {senders.map(a => <option key={a.address} value={a.address}>{a.address}</option>)}
           </select>
         </div>
       )}

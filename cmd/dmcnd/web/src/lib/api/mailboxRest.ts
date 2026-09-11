@@ -10,6 +10,7 @@ import { decodeMailboxEntry, decodeMailboxBody, type MessageHeaderFields } from 
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type DecryptedAttachment } from '../crypto/split';
 import { fromBase64, toBase64, toHex } from '../crypto/keys';
 import type { WorkingKeys } from '../crypto/workingKeys';
+import type { AccountIdentity } from '../deployment';
 
 export interface FullBody {
   bodyText: string;
@@ -45,6 +46,11 @@ export interface Preview {
   sentAt: number;
   bodySize: number;
   attachmentCount: number;
+  // The account's OTHER address this copy was sealed to, when it was: an isolated alias's mail
+  // is filed in this one mailbox by the home relay, still sealed to the alias's own key, and
+  // this is how the reader says which address the sender wrote to. Unset for the account's
+  // own key (which a shared alias also uses).
+  deliveredTo?: string;
 }
 
 // A header field the bundle may leave unset renders as an empty id.
@@ -53,6 +59,38 @@ const hexOrEmpty = (b: Uint8Array | undefined): string => (b ? toHex(b) : '');
 interface CachedEntry {
   entry: MailboxEntryLike;
   header: MessageHeaderFields;
+  // The keys this copy was sealed to — the body opens with the same ones.
+  keys: WorkingKeys;
+  deliveredTo?: string;
+}
+
+// keyringFor lays out the keys a mailbox may hold copies sealed to: the account's own first,
+// then each isolated identity's, by the hex of the X25519 key a recipient record names.
+async function keyringFor(keys: WorkingKeys, identities?: () => Promise<AccountIdentity[]>): Promise<Map<string, { keys: WorkingKeys; address?: string }>> {
+  const ring = new Map<string, { keys: WorkingKeys; address?: string }>();
+  ring.set(toHex(keys.x25519Public), { keys });
+  if (!identities) return ring;
+  let list: AccountIdentity[] = [];
+  try {
+    list = await identities();
+  } catch (err) {
+    // The account's own mail still opens; only derived-key copies wait for the next poll.
+    console.warn('identities unavailable; opening with the account key only', err);
+  }
+  for (const id of list) {
+    const hex = toHex(id.keys.x25519Public);
+    if (!ring.has(hex)) ring.set(hex, { keys: id.keys, address: id.address });
+  }
+  return ring;
+}
+
+// sealedToOurs finds which of our keys a copy was sealed to.
+function sealedToOurs(entry: MailboxEntryLike, ring: Map<string, { keys: WorkingKeys; address?: string }>): { keys: WorkingKeys; address?: string } | undefined {
+  for (const r of entry.recipients) {
+    const hit = ring.get(toHex(new Uint8Array(r.recipientXPub)));
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 interface ChallengeResp { correlation_id: string; nonce: string }
@@ -72,13 +110,17 @@ export class MailboxSync {
   // background account being counted by the switcher. When absent, they go through
   // the global session, which transparently renews on expiry.
   private explicitToken?: string;
+  // The account's other identities (deployment.identities), consulted once per list so a copy
+  // sealed to a derived key opens with that key. Absent ⇒ the account key alone.
+  private identities?: () => Promise<AccountIdentity[]>;
 
   // Errors surface via the returned promises (list/fetchFull/deleteMessage reject),
   // so callers handle them at the call site — no separate error channel needed.
-  constructor(keys: WorkingKeys, onPreviews: (p: Preview[]) => void, explicitToken?: string) {
+  constructor(keys: WorkingKeys, onPreviews: (p: Preview[]) => void, explicitToken?: string, identities?: () => Promise<AccountIdentity[]>) {
     this.keys = keys;
     this.onPreviews = onPreviews;
     this.explicitToken = explicitToken;
+    this.identities = identities;
   }
 
   // No persistent connection to tear down; kept for drop-in compatibility.
@@ -105,6 +147,7 @@ export class MailboxSync {
   // anything no longer present), and emits the sorted previews.
   async list(): Promise<Preview[]> {
     const seen = new Set<string>();
+    const ring = await keyringFor(this.keys, this.identities);
     let cursor = '';
     do {
       const ch = await this.challenge({ op: 'list', cursor });
@@ -118,8 +161,10 @@ export class MailboxSync {
         if (this.cache.has(e.hash)) continue;
         try {
           const entryProto = (await decodeMailboxEntry(fromBase64(e.entry))) as unknown as MailboxEntryLike;
-          const header = await decryptHeader(entryProto, this.keys.x25519Derive, this.keys.x25519Public);
-          this.cache.set(e.hash, { entry: entryProto, header });
+          const ours = sealedToOurs(entryProto, ring);
+          if (!ours) throw new Error('sealed to none of this account\'s keys');
+          const header = await decryptHeader(entryProto, ours.keys.x25519Derive, ours.keys.x25519Public);
+          this.cache.set(e.hash, { entry: entryProto, header, keys: ours.keys, deliveredTo: ours.address });
         } catch (err) {
           console.error('preview decrypt failed for', e.hash, err);
         }
@@ -153,7 +198,7 @@ export class MailboxSync {
     const ch = await this.challenge({ op: 'body', hash });
     const res = await this.complete<BodyResp>(ch.correlation_id, ch.nonce);
     const bodyProto = (await decodeMailboxBody(fromBase64(res.body))) as unknown as MailboxBodyLike;
-    const content = await decryptBody(cached.entry, bodyProto, cached.header, this.keys.x25519Derive, this.keys.x25519Public);
+    const content = await decryptBody(cached.entry, bodyProto, cached.header, cached.keys.x25519Derive, cached.keys.x25519Public);
     return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
   }
 
@@ -187,6 +232,7 @@ export class MailboxSync {
         sentAt: Number(c.header.sentAt),
         bodySize: Number(c.header.bodySize),
         attachmentCount: c.header.attachmentCount,
+        deliveredTo: c.deliveredTo,
       });
     }
     previews.sort((a, b) => b.sentAt - a.sentAt);

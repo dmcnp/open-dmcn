@@ -31,7 +31,7 @@ async function mintToken(address: string, wk: WorkingKeys): Promise<string> {
 
 async function countWithToken(address: string, wk: WorkingKeys, token: string): Promise<number> {
   let sync = syncs.get(address);
-  if (!sync) { sync = new MailboxSync(wk, () => { /* no subscribers */ }, token); syncs.set(address, sync); }
+  if (!sync) { sync = new MailboxSync(wk, () => { /* no subscribers */ }, token, deployment.identities ? () => deployment.identities!(wk, token) : undefined); syncs.set(address, sync); }
   const [previews, flags, filter] = await Promise.all([
     sync.list(),
     new FlagStore(wk, token).list(),

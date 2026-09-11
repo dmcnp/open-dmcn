@@ -5,6 +5,7 @@ import { POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 import { usePolling } from './usePolling';
+import { deployment } from '@deployment';
 
 export type { Preview } from '../api/mailboxRest';
 
@@ -42,7 +43,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!keys || !sessionToken || !isAuthenticated) return;
 
-    const client = new MailboxSync(keys, setMessages);
+    const client = new MailboxSync(keys, setMessages, undefined, deployment.identities ? () => deployment.identities!(keys) : undefined);
     clientRef.current = client;
 
     let cancelled = false;

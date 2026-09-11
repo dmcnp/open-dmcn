@@ -719,7 +719,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 </div>
               )}
               <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                {sentByMe ? 'from me' : 'to me'} &middot; {formatDate(msg.sentAt)} &middot; {formatTime(msg.sentAt)}
+                {sentByMe ? 'from me' : msg.deliveredTo ? `to me at ${msg.deliveredTo}` : 'to me'} &middot; {formatDate(msg.sentAt)} &middot; {formatTime(msg.sentAt)}
               </div>
             </div>
             <IconButton aria-label="Reply" onClick={() => onReply(buildReply(false))}><Icon name="reply" /></IconButton>

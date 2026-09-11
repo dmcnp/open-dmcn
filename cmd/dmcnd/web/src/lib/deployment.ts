@@ -17,6 +17,15 @@ import type { MailFilterFactory } from './api/filterList';
 import type { StorageUsage } from './api/personalStore';
 import type { WorkingKeys } from './crypto/workingKeys';
 
+// AccountIdentity is one address of an account together with the keys that act as it. For a
+// shared alias `keys` is the account's own working set; for an isolated alias it is a derived
+// set that the deployment holds only as non-extractable handles.
+export interface AccountIdentity {
+  address: string;
+  keys: WorkingKeys;
+  kind: 'shared' | 'isolated';
+}
+
 export interface Deployment {
   // Who this client says it is, on the pre-auth screens.
   //
@@ -92,12 +101,15 @@ export interface Deployment {
   // root and has no alias concept). Receives the working keys because the alias record is
   // self-signed by the account's own key — that signature is what makes the alias the owner's.
   aliases?: ComponentType<{ address: string; keys: WorkingKeys }>;
-  // The addresses this account may send AS beyond its own — its shared aliases, on a deployment
-  // that has them. The composer offers a From row when this returns any; absent ⇒ no row, and
-  // every message goes out as the signed-in address. Sending as one of these needs no extra
-  // key: a shared alias is the account's own keypair under another name, and the relay verifies
-  // the signature against that address's published key.
-  senderAddresses?: () => Promise<string[]>;
+  // The account's other addresses, with the keys that read and send as each: a shared alias
+  // is the account's own keypair under another name; an isolated one carries keys the
+  // deployment derives from the account (see WorkingKeys.aliasRoot). The composer offers a From
+  // row when this returns any, the mailbox uses it to open mail sealed to a derived key, and
+  // the reader labels such mail with the address it arrived at. Called often — once per
+  // mailbox poll — so the deployment should cache and refresh on its own terms. explicitToken
+  // names a background account's session (the unread counter); absent ⇒ the signed-in one.
+  // Absent from the seam ⇒ one address, one key.
+  identities?: (keys: WorkingKeys, explicitToken?: string) => Promise<AccountIdentity[]>;
 
   // The left-rail rows for those sections. A component rather than a data list because the
   // rows carry live counts (pending device pairings, address requests) that only the
