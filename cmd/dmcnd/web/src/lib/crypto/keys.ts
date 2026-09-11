@@ -99,6 +99,32 @@ export async function importX25519PublicKey(raw: Uint8Array): Promise<CryptoKey>
   return crypto.subtle.importKey('raw', bufferSource(raw), { name: 'X25519' }, false, []);
 }
 
+// ed25519PublicFromSeed derives the public half of a 32-byte Ed25519 seed. WebCrypto has no
+// operation for this directly; importing the seed as an EXTRACTABLE PKCS8 key and exporting it as
+// JWK yields the public key in `x`. For keys that are derived rather than generated, where no
+// public half was ever handed to us.
+export async function ed25519PublicFromSeed(seed: Uint8Array): Promise<Uint8Array> {
+  const pkcs8 = new Uint8Array(48);
+  pkcs8.set(ED25519_PKCS8_PREFIX, 0);
+  pkcs8.set(seed, 16);
+  const key = await crypto.subtle.importKey('pkcs8', pkcs8, 'Ed25519', true, ['sign']);
+  const jwk = await crypto.subtle.exportKey('jwk', key);
+  if (!jwk.x) throw new Error('Ed25519 JWK export carried no public key');
+  return fromBase64(jwk.x.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(jwk.x.length / 4) * 4, '='));
+}
+
+// x25519PublicFromPrivate derives the public half of an X25519 scalar by multiplying the base
+// point — the same operation Go's crypto.X25519PublicFromPrivate performs. WebCrypto clamps the
+// scalar per RFC 7748 exactly as Go's curve25519 does, so a KDF-derived scalar yields the same
+// public key on both sides (pinned by aliasDerive.test.ts against Go's vector).
+export async function x25519PublicFromPrivate(priv: Uint8Array): Promise<Uint8Array> {
+  const key = await importX25519PrivateKey(priv);
+  const base = new Uint8Array(32);
+  base[0] = 9;
+  const basePub = await importX25519PublicKey(base);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'X25519', public: basePub }, key, 256));
+}
+
 // keyPairFromPayloadJSON parses the canonical web key JSON (the same shape
 // keyPairToPayloadJSON / the register + import flows produce) back into a key pair.
 export function keyPairFromPayloadJSON(bytes: Uint8Array): IdentityKeyPair {

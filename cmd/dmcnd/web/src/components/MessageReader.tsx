@@ -383,7 +383,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
         `<div>On ${escapeHtml(when)}, ${escapeHtml(who)} wrote:</div>` +
         `<blockquote>${inner}</blockquote>`;
     }
-    return { to, cc, subject: msg.subject, quote, quoteHtml, replyToId: msg.messageId, threadId: msg.threadId };
+    // Which of our addresses the reply goes out as is the composer's call (it knows the aliases);
+    // hand it what the original was addressed to, or sent from when the original is ours.
+    const sentTo = sentByMe ? [msg.senderAddress] : [...msg.to, ...msg.cc];
+    return { to, cc, subject: msg.subject, quote, quoteHtml, replyToId: msg.messageId, threadId: msg.threadId, sentTo };
   };
   // Show Reply All only when it would add recipients beyond the plain reply (à la Gmail).
   const replyAll = buildReply(true);

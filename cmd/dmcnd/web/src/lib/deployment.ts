@@ -15,6 +15,7 @@ import type { BridgeAttestation } from './crypto/bridgeAttest';
 import type { DeliveryReceiptView } from './crypto/receiptAttest';
 import type { MailFilterFactory } from './api/filterList';
 import type { StorageUsage } from './api/personalStore';
+import type { WorkingKeys } from './crypto/workingKeys';
 
 export interface Deployment {
   // Who this client says it is, on the pre-auth screens.
@@ -85,6 +86,18 @@ export interface Deployment {
   // Storage card in Settings; absent ⇒ the card just reports usage, which is the honest
   // answer on a deployment that sells nothing.
   storageUpgrade?: ComponentType<{ usage: StorageUsage | null; onChanged: () => void }>;
+  // Extra addresses on the same account, if this deployment can mint them. Rendered as its own
+  // card in Settings; absent ⇒ no card, which is the honest answer on a deployment whose
+  // addresses are assigned out of band (the reference daemon answers petitions from an offline
+  // root and has no alias concept). Receives the working keys because the alias record is
+  // self-signed by the account's own key — that signature is what makes the alias the owner's.
+  aliases?: ComponentType<{ address: string; keys: WorkingKeys }>;
+  // The addresses this account may send AS beyond its own — its shared aliases, on a deployment
+  // that has them. The composer offers a From row when this returns any; absent ⇒ no row, and
+  // every message goes out as the signed-in address. Sending as one of these needs no extra
+  // key: a shared alias is the account's own keypair under another name, and the relay verifies
+  // the signature against that address's published key.
+  senderAddresses?: () => Promise<string[]>;
 
   // The left-rail rows for those sections. A component rather than a data list because the
   // rows carry live counts (pending device pairings, address requests) that only the

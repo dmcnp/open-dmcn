@@ -11,6 +11,12 @@ export interface ComposeReplyTo {
   cc?: string[];
   // Raw subject; the "Re:" prefix is applied by the composer.
   subject: string;
+  // The addresses the original was sent to (for our own message: the one it was sent from). A
+  // reply goes out as whichever of these is ours — the alias the other side knows us by, not a
+  // canonical they have never seen — and none of ours is kept as a recipient. Only the composer
+  // knows which addresses are ours (see deployment.senderAddresses), so the reader passes the
+  // whole list. Absent ⇒ the signed-in address sends.
+  sentTo?: string[];
   // Prebuilt Gmail-style quoted original, placed below the signature. `quote` is the
   // plain-text form; `quoteHtml` the HTML one (sanitized, cid: images dropped). The
   // composer picks whichever matches its current mode.

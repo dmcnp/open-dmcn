@@ -87,11 +87,36 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const { settings } = useSettings();
   const { contacts, nameFor, contactByAddress, pinKey, allowlist } = useContacts();
 
+
   // Three recipient classes with standard email semantics. To/Cc are visible to
   // everyone; Bcc is only recorded on the sender's own Sent copy (see handleSend).
   const [to, setTo] = useState<string[]>(replyTo?.to ?? []);
   const [cc, setCc] = useState<string[]>(replyTo?.cc ?? []);
   const [bcc, setBcc] = useState<string[]>([]);
+
+  // Which of our addresses this goes out as. Only a choice on a deployment with aliases (see
+  // deployment.senderAddresses); otherwise it is the signed-in address and no row is shown. A
+  // reply goes out as the alias the other side wrote to, and that alias is not kept as a
+  // recipient: the reader could only strip the signed-in address, since it does not know the rest.
+  const [senders, setSenders] = useState<string[]>([]);
+  const [from, setFrom] = useState<string>(address ?? '');
+  useEffect(() => {
+    if (!deployment.senderAddresses || !address) return;
+    let cancelled = false;
+    deployment.senderAddresses().then(list => {
+      if (cancelled) return;
+      setSenders(list);
+      const ours = new Set(list.map(a => a.toLowerCase()));
+      const reached = (replyTo?.sentTo ?? []).map(a => a.toLowerCase()).find(a => ours.has(a));
+      if (reached) {
+        setFrom(reached);
+        setTo(prev => prev.filter(a => !ours.has(a.toLowerCase())));
+        setCc(prev => prev.filter(a => !ours.has(a.toLowerCase())));
+      }
+    }).catch(() => { /* no From row; the signed-in address sends */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replyTo is fixed for the dialog's life
+  }, [address]);
   const [pendingTo, setPendingTo] = useState('');
   const [pendingCc, setPendingCc] = useState('');
   const [pendingBcc, setPendingBcc] = useState('');
@@ -385,7 +410,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     // Capture the non-null key handle + own address for the closure below — TS
     // narrowing from the guard above doesn't carry into a nested function.
     const k = keys;
-    const selfAddress = address;
+    const selfAddress = from || address;
 
     // Encode, sign over the envelope hash, and STORE one envelope. The private key
     // never leaves the browser; the server only relays the signed bytes. recipient
@@ -661,6 +686,22 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           <Icon name="x" size={18} />
         </button>
       </div>
+
+      {/* From: only when there is a choice to make. */}
+      {senders.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderBottom: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)' }}>
+          <span style={{ color: 'var(--text-muted)', minWidth: 32 }}>From</span>
+          <select
+            aria-label="From"
+            value={from}
+            onChange={e => setFrom(e.target.value)}
+            style={{ flex: 1, minWidth: 0, background: 'transparent', color: 'var(--text-body)', border: 'none', fontSize: 'inherit', fontFamily: 'inherit', cursor: 'pointer' }}
+          >
+            <option value={address ?? ''}>{address}</option>
+            {senders.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Recipients */}
       <RecipientField

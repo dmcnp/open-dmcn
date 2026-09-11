@@ -148,6 +148,7 @@ function SegOption({ active, onClick, children }: { active: boolean; onClick: ()
 export function Settings() {
   const { address, clearSession } = useAuth();
   const { keys, clearKeys } = useKeys();
+  const Aliases = deployment.aliases;
   const navigate = useNavigate();
   const embedded = !useIsMobile();
   // The shell hands down onAppearanceChange so toggling theme/density here re-themes
@@ -548,6 +549,7 @@ export function Settings() {
             </p>
 
             <StorageCard />
+            {Aliases && keys && address && <Aliases address={address} keys={keys} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />
