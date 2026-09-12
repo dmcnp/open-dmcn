@@ -164,6 +164,32 @@ export interface MessageHeaderFields {
 // plain objects (e.g. a nested MessageBody) but leaves Uint8Array/arrays intact.
 // Fixed-size zero BYTE fields that Go always writes (e.g. reply_to_id = 16 zero
 // bytes) are non-empty Uint8Arrays, so they survive — callers add them explicitly.
+// An address-removal record: the tombstone that retires a binding. `removedBindings` carries the
+// keys being retired with the time each was. Signed over the context-prefixed signable bytes
+// (crypto/identity.ts removalSigningBytes) — with self_signature cleared, exactly as Go's
+// AddressRemovalRecord.signableBytes() does.
+export interface RemovalRecordFields {
+  version: number;
+  domain: string;
+  address: string;
+  removedBindings: { ed25519PublicKey: Uint8Array; removedAt: number }[];
+  revision: number;
+  createdAt: number;
+}
+
+export async function encodeRemovalSignableBytes(rm: RemovalRecordFields): Promise<Uint8Array> {
+  const root = await getRoot();
+  const AddressRemovalRecord = root.lookupType('dmcn.identity.AddressRemovalRecord');
+  const msg = AddressRemovalRecord.create(canonical({ ...rm, selfSignature: undefined }));
+  return AddressRemovalRecord.encode(msg).finish();
+}
+
+export async function encodeRemovalRecord(rm: RemovalRecordFields & { selfSignature: Uint8Array }): Promise<Uint8Array> {
+  const root = await getRoot();
+  const AddressRemovalRecord = root.lookupType('dmcn.identity.AddressRemovalRecord');
+  return AddressRemovalRecord.encode(AddressRemovalRecord.create(canonical(rm))).finish();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function canonical(value: any): any {
   if (value instanceof Uint8Array) return value;

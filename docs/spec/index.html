@@ -158,6 +158,34 @@ overlay a foreign majority could censor. NXDOMAIN / no <code>_dmcn</code> record
 does not exist; transient DNS failure fails closed.</p>
 </li>
 <li>
+<p><strong>Retiring an address — <code>AddressRemovalRecord</code>.</strong> An address is taken out of service by an
+append-only, per-address removal record, keyed on <code>SHA-256(address)</code>, listing the
+<code>(key, removedAt)</code> bindings it tombstones. A tombstone does <strong>two</strong> jobs, and they have
+<strong>different signers</strong>:</p>
+<ol>
+<li><strong>Suppression.</strong> A tombstoned binding stops verifying: readers MUST drop it to
+<code>TierUnverified</code>, and a serving node MUST stop serving it and MUST NOT authenticate a
+FETCH against it. This may be signed <strong>either by a domain root key, or by the address's
+own key</strong> — the holder of an address may always stop being reachable at it, without
+the operator.</li>
+<li><strong>Re-binding.</strong> Allowing a <em>different</em> key to take the address over MUST require a
+<strong>root-signed</strong> record. An owner-signed retirement MUST NOT authorise a re-bind.</li>
+</ol>
+<p>The reason for (2) is the recoverability of a stolen key: an attacker who holds the key can
+read mail, but cannot take the address permanently, because re-binding needs the offline
+root. If a key could authorise its own replacement, key compromise would stop being
+recoverable and become a permanent takeover.</p>
+<p>A removal record is <strong>bound to the address it names</strong> — <code>Removed()</code> matches on the key
+alone, so a retirement at one address MUST NOT suppress another address the same key holds.
+The two signers are told apart by <strong>which key verifies the signature</strong>; no field on the wire
+distinguishes them and the signed bytes are unchanged.</p>
+<p><strong>Precedence.</strong> A root-signed record MAY displace an owner-signed one — that is the operator
+override, and it is how a self-retired address can still be rotated or reissued. An
+owner-signed record MUST NOT displace a root-signed one, or a stolen key could overwrite the
+operator's tombstone and block the recovery rule (2) exists to preserve. The append-only
+rule (the binding set may only grow) and revision monotonicity apply across both.</p>
+</li>
+<li>
 <p><strong>Verification tiers:</strong> addresses register at <code>TierUnverified</code> (valid but untrusted) and
 are raised to <code>TierDomainDNS</code> by a domain attestation. Verification is enforced
 <em>reader-side</em>, so unverified addresses still exist and function; trust is an upgrade,

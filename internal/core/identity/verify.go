@@ -68,10 +68,13 @@ func VerifyManagedRecord(rec *IdentityRecord, dar *DomainAuthorityRecord, blocks
 	if err := VerifyCredential(cred, dar, blocks, now); err != nil {
 		return TierUnverified, fmt.Errorf("identity: address credential: %w", err)
 	}
-	// A root-signed removal tombstone still invalidates the binding.
-	if removal != nil && RemovalIsRootSigned(dar, removal) {
+	// A removal tombstone still invalidates the binding. Either signer suppresses: the domain
+	// root (the operator retiring or rotating an address) or the address's OWN key (the holder
+	// retiring it themselves). Suppression is the half of a tombstone that is safe to delegate —
+	// see RemovalIsOwnerSigned for the half that is not.
+	if removal != nil && RemovalSuppresses(rec, dar, removal) {
 		if _, removed := removal.Removed(rec.Ed25519Public); removed {
-			return TierUnverified, errors.New("identity: binding removed by domain")
+			return TierUnverified, errors.New("identity: binding removed")
 		}
 	}
 	return TierDomainDNS, nil
@@ -107,6 +110,44 @@ func RemovalIsRootSigned(dar *DomainAuthorityRecord, rm *AddressRemovalRecord) b
 		}
 	}
 	return false
+}
+
+// RemovalIsOwnerSigned reports whether an AddressRemovalRecord is signed by the key the record
+// itself is bound to — the address retiring ITSELF. The holder of an address can always stop
+// being reachable at it, and needs no operator to do so: the browser already holds the key.
+//
+// An owner-signed removal SUPPRESSES and NOTHING ELSE. It must never reach AuthorizeRebind,
+// because a tombstone does two jobs and only the first is safe to delegate:
+//
+//  1. suppress the binding — the address stops resolving, stops being served, stops FETCHing;
+//  2. authorise a DIFFERENT key to take the address over (RebindRootTombstone).
+//
+// Root-only on (2) is what makes a stolen key survivable: an attacker who holds the key can read
+// mail, but cannot take the address permanently, because rebinding needs the offline root. If a
+// key could authorise its own replacement, key compromise would stop being recoverable and become
+// a permanent takeover. So the rebind gate keeps asking RemovalIsRootSigned, and only the
+// suppression paths ask this.
+//
+// The two are told apart by WHICH key verifies the existing signature, so no field distinguishes
+// them on the wire and the signed bytes are unchanged.
+func RemovalIsOwnerSigned(rec *IdentityRecord, rm *AddressRemovalRecord) bool {
+	if rec == nil || rm == nil || len(rec.Ed25519Public) == 0 {
+		return false
+	}
+	// Bind the tombstone to THIS address, exactly as AuthorizeRebind does: Removed() matches on
+	// the key alone, so without this a self-retirement at one address would suppress every other
+	// address the same key holds.
+	if !strings.EqualFold(rm.Address, rec.Address) {
+		return false
+	}
+	return rm.Verify(rec.Ed25519Public) == nil
+}
+
+// RemovalSuppresses reports whether a removal record may invalidate this record's binding —
+// signed either by a domain root key or by the address's own key. This is the read-side rule;
+// the rebind gate deliberately asks the narrower RemovalIsRootSigned instead.
+func RemovalSuppresses(rec *IdentityRecord, dar *DomainAuthorityRecord, rm *AddressRemovalRecord) bool {
+	return RemovalIsRootSigned(dar, rm) || RemovalIsOwnerSigned(rec, rm)
 }
 
 // BlocklistIsRootSigned reports whether a CredentialBlockList is signed by a root key the DAR
@@ -199,6 +240,10 @@ func AuthorizeRebind(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *
 	if !strings.EqualFold(rm.Domain, dar.Domain) {
 		return "", fmt.Errorf("%w: removal record domain %q is outside the authority for %q", ErrRebindTombstoneRequired, rm.Domain, dar.Domain)
 	}
+	// ROOT ONLY, deliberately — not RemovalSuppresses. An owner-signed retirement suppresses the
+	// binding but must never authorise a different key to take the address, or a stolen key could
+	// authorise its own replacement and key compromise would stop being recoverable. See
+	// RemovalIsOwnerSigned.
 	if !RemovalIsRootSigned(dar, rm) {
 		return "", fmt.Errorf("%w: removal record is not signed by a domain root key", ErrRebindTombstoneRequired)
 	}

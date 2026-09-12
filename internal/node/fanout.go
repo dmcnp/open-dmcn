@@ -247,7 +247,17 @@ func (n *Node) FetchRemovalUnion(ctx context.Context, dar *identity.DomainAuthor
 			candidates = append(candidates, rm)
 		}
 	}
-	union, ok := mergeRemovalCandidates(dar, domain, address, candidates, n.log)
+	// The address's own record, so an OWNER-signed self-retirement can be verified and carried
+	// into the union. It has to be: when the operator later root-tombstones an address its holder
+	// already retired, the rebuilt record must still cover that binding or acceptRemoval refuses
+	// it as dropping one.
+	var owner *identity.IdentityRecord
+	if n.records != nil {
+		if rec, gerr := n.records.GetIdentity(ctx, address); gerr == nil {
+			owner = rec
+		}
+	}
+	union, ok := mergeRemovalCandidates(dar, owner, domain, address, candidates, n.log)
 	if !ok {
 		return nil, registry.ErrNotFound
 	}
@@ -255,13 +265,16 @@ func (n *Node) FetchRemovalUnion(ctx context.Context, dar *identity.DomainAuthor
 }
 
 // mergeRemovalCandidates unions the tombstones from every candidate removal record that is a
-// root-signed record FOR THIS ADDRESS, and rebuilds a fresh record from the result. Pure, so the
+// verified record FOR THIS ADDRESS, and rebuilds a fresh record from the result. Pure, so the
 // filtering rules that close the root-signature oracle are directly testable.
 //
-// Every candidate is verified before merging: a record naming a different address, or one not
-// signed by a domain root key, contributes nothing. Without that, a single hostile peer's reply
-// would be laundered into a root signature by the caller.
-func mergeRemovalCandidates(dar *identity.DomainAuthorityRecord, domain, address string, candidates []*identity.AddressRemovalRecord, log logr.Logger) (*identity.AddressRemovalRecord, bool) {
+// Every candidate is verified before merging: a record naming a different address, or one signed
+// by neither a domain root key nor the address's own key, contributes nothing. Without that, a
+// single hostile peer's reply would be laundered into a root signature by the caller.
+//
+// owner may be nil (the address's record is not held locally), in which case only root-signed
+// candidates merge.
+func mergeRemovalCandidates(dar *identity.DomainAuthorityRecord, owner *identity.IdentityRecord, domain, address string, candidates []*identity.AddressRemovalRecord, log logr.Logger) (*identity.AddressRemovalRecord, bool) {
 	merged := map[string]identity.RemovedBinding{}
 	var maxRevision uint64
 	found := false
@@ -273,8 +286,8 @@ func mergeRemovalCandidates(dar *identity.DomainAuthorityRecord, domain, address
 			log.Warnf("removal union: discarding a record naming %q while resolving %q", rm.Address, address)
 			continue
 		}
-		if !identity.RemovalIsRootSigned(dar, rm) {
-			log.Warnf("removal union: discarding a non-root-signed record for %s", address)
+		if !identity.RemovalIsRootSigned(dar, rm) && !identity.RemovalIsOwnerSigned(owner, rm) {
+			log.Warnf("removal union: discarding a record for %s signed by neither a domain root key nor the address's own key", address)
 			continue
 		}
 		found = true

@@ -24,6 +24,10 @@ export interface AccountIdentity {
   address: string;
   keys: WorkingKeys;
   kind: 'shared' | 'isolated';
+  // Set once the address has retired itself. Its key stays in the ring — that is what keeps mail
+  // it already delivered readable — but it is no longer an address anything may write from, so
+  // the composer's From row leaves it out.
+  retiredAt?: number;
 }
 
 export interface Deployment {

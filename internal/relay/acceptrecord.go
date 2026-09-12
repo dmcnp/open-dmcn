@@ -211,10 +211,17 @@ func darAcknowledges(dar *identity.DomainAuthorityRecord, key []byte) bool {
 	return false
 }
 
-// acceptRemoval authenticates the tombstone the rebind gate treats as authoritative: it must be
-// root-signed under a DAR this node already holds, and the binding set may only GROW. Revision
-// alone would let a partitioned fleet silently lose tombstones; the superset rule alone would let a
-// stale-but-larger record win. Both together make it a monotone set with a total order.
+// acceptRemoval authenticates a removal tombstone: it is signed either by a domain root key under
+// a DAR this node already holds, or by the address's OWN key (the holder retiring itself), and the
+// binding set may only GROW. Revision alone would let a partitioned fleet silently lose tombstones;
+// the superset rule alone would let a stale-but-larger record win. Both together make it a monotone
+// set with a total order.
+//
+// PRECEDENCE: a root-signed record may displace an owner-signed one — that is the operator
+// override, and it is how an address self-retired by its holder can still be rotated or reissued
+// by the domain. An owner-signed record may NEVER displace a root-signed one, or a stolen key
+// could overwrite the operator's tombstone, shut the rebind gate and block the very recovery the
+// root-only rule exists to preserve.
 func (r *Relay) acceptRemoval(ctx context.Context, data []byte) (bool, string) {
 	rm, err := identity.AddressRemovalRecordFromProtoBytes(data)
 	if err != nil {
@@ -230,10 +237,23 @@ func (r *Relay) acceptRemoval(ctx context.Context, data []byte) (bool, string) {
 	if dar == nil {
 		return false, fmt.Sprintf("no domain authority held for %s — cannot verify the removal record", rm.Domain)
 	}
-	if !identity.RemovalIsRootSigned(dar, rm) {
-		return false, fmt.Sprintf("removal record for %s is not signed by a domain root key", rm.Address)
+	// Who signed it. Owner-signed needs the address's own record to check against, so a node that
+	// does not hold it cannot verify one — the same posture as a missing DAR, and for the same
+	// reason: "cannot verify" must never read as "verified".
+	rootSigned := identity.RemovalIsRootSigned(dar, rm)
+	ownerSigned := false
+	if !rootSigned {
+		if rec, gerr := r.records.GetIdentity(ctx, rm.Address); gerr == nil && rec != nil {
+			ownerSigned = identity.RemovalIsOwnerSigned(rec, rm)
+		}
 	}
-	if existing := r.storedRemoval(ctx, dar, rm.Address); existing != nil {
+	if !rootSigned && !ownerSigned {
+		return false, fmt.Sprintf("removal record for %s is signed by neither a domain root key nor the address's own key", rm.Address)
+	}
+	if existing := r.storedRemovalAny(ctx, rm.Address); existing != nil {
+		if !rootSigned && identity.RemovalIsRootSigned(dar, existing) {
+			return false, fmt.Sprintf("removal record for %s is owner-signed and would displace a root-signed one", rm.Address)
+		}
 		if rm.Revision < existing.Revision {
 			return false, fmt.Sprintf("stale removal revision %d < %d", rm.Revision, existing.Revision)
 		}
@@ -245,6 +265,21 @@ func (r *Relay) acceptRemoval(ctx context.Context, data []byte) (bool, string) {
 		return false, storageFailedPrefix + "store removal"
 	}
 	return true, ""
+}
+
+// storedRemovalAny returns this node's current removal record for address whatever signed it.
+// The append-only and precedence rules in acceptRemoval must see every stored record, including an
+// owner-signed one; only the rebind gate narrows to root-signed, which is what storedRemoval is for.
+func (r *Relay) storedRemovalAny(ctx context.Context, address string) *identity.AddressRemovalRecord {
+	b, err := r.records.GetRemovalBytes(ctx, address)
+	if err != nil || len(b) == 0 {
+		return nil
+	}
+	rm, err := identity.AddressRemovalRecordFromProtoBytes(b)
+	if err != nil {
+		return nil
+	}
+	return rm
 }
 
 // storedRemoval returns this node's current removal record for address, but only if it still

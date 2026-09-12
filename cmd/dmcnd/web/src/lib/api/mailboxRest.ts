@@ -66,10 +66,17 @@ interface CachedEntry {
 
 // keyringFor lays out the keys a mailbox may hold copies sealed to: the account's own first,
 // then each isolated identity's, by the hex of the X25519 key a recipient record names.
-async function keyringFor(keys: WorkingKeys, identities?: () => Promise<AccountIdentity[]>): Promise<Map<string, { keys: WorkingKeys; address?: string }>> {
+// Returns the decrypt ring AND, from the same single identities() call, when each retired address
+// was retired. A retired address keeps its key in the ring — that is what keeps the mail it
+// already received readable — so the two have to travel together.
+async function keyringFor(keys: WorkingKeys, identities?: () => Promise<AccountIdentity[]>): Promise<{
+  ring: Map<string, { keys: WorkingKeys; address?: string }>;
+  retired: Map<string, number>;
+}> {
   const ring = new Map<string, { keys: WorkingKeys; address?: string }>();
+  const retired = new Map<string, number>();
   ring.set(toHex(keys.x25519Public), { keys });
-  if (!identities) return ring;
+  if (!identities) return { ring, retired };
   let list: AccountIdentity[] = [];
   try {
     list = await identities();
@@ -80,8 +87,26 @@ async function keyringFor(keys: WorkingKeys, identities?: () => Promise<AccountI
   for (const id of list) {
     const hex = toHex(id.keys.x25519Public);
     if (!ring.has(hex)) ring.set(hex, { keys: id.keys, address: id.address });
+    if (id.retiredAt) retired.set(id.address.toLowerCase(), id.retiredAt);
   }
-  return ring;
+  return { ring, retired };
+}
+
+// arrivedAfterRetirement decides whether one message is a post-retirement arrival at a retired
+// address — the only thing the backstop in previews() discards.
+//
+// Pure and exported because the boundary is the whole point and is easy to get backwards: mail
+// that arrived BEFORE the address was retired is ordinary history and must survive, which is also
+// why the sealed alias list is MARKED rather than emptied. Only what a sender holding a cached
+// record managed to deliver afterwards is dropped.
+export function arrivedAfterRetirement(
+  address: string | undefined,
+  sentAt: number,
+  retired: Map<string, number>,
+): boolean {
+  if (retired.size === 0 || !address) return false;
+  const at = retired.get(address.toLowerCase());
+  return at !== undefined && sentAt > at;
 }
 
 // sealedToOurs finds which of our keys a copy was sealed to.
@@ -113,6 +138,8 @@ export class MailboxSync {
   // The account's other identities (deployment.identities), consulted once per list so a copy
   // sealed to a derived key opens with that key. Absent ⇒ the account key alone.
   private identities?: () => Promise<AccountIdentity[]>;
+  // When each retired address was retired, refreshed on every list. Empty until the first poll.
+  private retired = new Map<string, number>();
 
   // Errors surface via the returned promises (list/fetchFull/deleteMessage reject),
   // so callers handle them at the call site — no separate error channel needed.
@@ -147,7 +174,8 @@ export class MailboxSync {
   // anything no longer present), and emits the sorted previews.
   async list(): Promise<Preview[]> {
     const seen = new Set<string>();
-    const ring = await keyringFor(this.keys, this.identities);
+    const { ring, retired } = await keyringFor(this.keys, this.identities);
+    this.retired = retired;
     let cursor = '';
     do {
       const ch = await this.challenge({ op: 'list', cursor });
@@ -215,7 +243,19 @@ export class MailboxSync {
 
   private previews(): Preview[] {
     const previews: Preview[] = [];
+    // The backstop for a retired address. Retirement stops the record resolving, so no sender who
+    // looks it up can reach it — but one holding a CACHED record still can, because STORE keys on
+    // the recipient key and never resolves. Those arrivals are suppressed here and deleted
+    // best-effort, so "stopped" means stopped from the owner's side too. Strictly bounded by
+    // retiredAt: without that clause this would eat the mail the address legitimately received
+    // before it was retired, which is exactly what the sealed list is marked (not emptied) to keep.
+    const retired = this.retired;
     for (const [hash, c] of this.cache) {
+      if (arrivedAfterRetirement(c.deliveredTo ?? c.header.recipientAddress, Number(c.header.sentAt), retired)) {
+        this.cache.delete(hash);
+        void this.deleteMessage(hash).catch(() => { /* it stays on the relay; it is still hidden here */ });
+        continue;
+      }
       previews.push({
         hash,
         messageId: hexOrEmpty(c.header.messageId),

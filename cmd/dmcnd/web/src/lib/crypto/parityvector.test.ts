@@ -11,13 +11,14 @@
 // expires 1800000000 (full record only); body nonce 12x0x04, ciphertext 26x0x09, tag 16x0x0a.
 
 import { describe, it, expect } from 'vitest';
-import { encodeIdentitySignableBytes } from './protobuf';
+import { encodeIdentitySignableBytes, encodeRemovalSignableBytes } from './protobuf';
 import { bodyContentAddress, snippetOf } from './split';
 
 const VEC = {
   identityFull: '08011215766563746f72407061726974792e6578616d706c651a200707070707070707070707070707070707070707070707070707070707070707222008080808080808080808080808080808080808080808080808080808080808082880e2cfaa063080a4a7da064002b80101d00103',
   identityMinimal: '08011215766563746f72407061726974792e6578616d706c651a200707070707070707070707070707070707070707070707070707070707070707222008080808080808080808080808080808080808080808080808080808080808082880e2cfaa06',
   bodyCID: '015512203946fa8f9480c933c7f5efb0a06254d612940e924ecdebd2e041e2425802d306',
+  removalSignable: '0801120e7061726974792e6578616d706c651a15766563746f72407061726974792e6578616d706c6522280a2007070707070707070707070707070707070707070707070707070707070707071080e2cfaa0628033081e2cfaa06',
 };
 
 const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
@@ -64,5 +65,22 @@ describe('snippet (Go message.snippetOf)', () => {
     expect(snippetOf('text/html', utf8('<b>x</b>'))).toBe('');
     // Multibyte text under the cap is intact.
     expect(snippetOf('text/plain', utf8('héllo wörld ✓'))).toBe('héllo wörld ✓');
+  });
+});
+
+// An address retiring ITSELF signs these bytes. Go's half is
+// internal/core/identity/selfretire_vector_test.go. If the two encoders drift, the fleet rejects
+// every self-retirement with nothing more useful than "signature invalid" — so pin the bytes.
+describe('address removal signable bytes (Go AddressRemovalRecord.signableBytes)', () => {
+  it('matches the Go vector, with the signature excluded', async () => {
+    const b = await encodeRemovalSignableBytes({
+      version: 1,
+      domain: 'parity.example',
+      address: 'vector@parity.example',
+      removedBindings: [{ ed25519PublicKey: fill(32, 0x07), removedAt: 1_700_000_000 }],
+      revision: 3,
+      createdAt: 1_700_000_001,
+    });
+    expect(hex(b)).toBe(VEC.removalSignable);
   });
 });

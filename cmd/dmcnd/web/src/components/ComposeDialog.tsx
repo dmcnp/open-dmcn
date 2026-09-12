@@ -106,7 +106,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     let cancelled = false;
     deployment.identities(keys).then(list => {
       if (cancelled) return;
-      setSenders(list);
+      // A retired address cannot send: its record no longer resolves, so the relay would refuse
+      // the STORE anyway. Leaving it in the row would offer a choice that always fails.
+      setSenders(list.filter(a => !a.retiredAt));
       const ours = new Set(list.map(a => a.address.toLowerCase()));
       const reached = (replyTo?.sentTo ?? []).map(a => a.toLowerCase()).find(a => ours.has(a));
       if (reached) {

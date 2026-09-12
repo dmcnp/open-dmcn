@@ -197,11 +197,14 @@ func (r *Registry) VerifyManagedIdentity(ctx context.Context, rec *identity.Iden
 	if err := r.VerifyCredential(ctx, cred); err != nil {
 		return identity.TierUnverified, fmt.Errorf("registry: address credential: %w", err)
 	}
-	// A root-signed removal tombstone still invalidates the binding.
+	// A removal tombstone still invalidates the binding — signed by the domain root, or by the
+	// address's own key when the holder retired it themselves. Suppression is the half of a
+	// tombstone that is safe to delegate; see identity.RemovalIsOwnerSigned.
 	if rm, rerr := r.LookupAddressRemoval(ctx, rec.Address); rerr == nil {
-		if dar := r.cachedLookupDAR(ctx, domain); dar != nil && removalIsRootSigned(dar, rm) {
+		dar := r.cachedLookupDAR(ctx, domain)
+		if (dar != nil && removalIsRootSigned(dar, rm)) || identity.RemovalIsOwnerSigned(rec, rm) {
 			if _, removed := rm.Removed(rec.Ed25519Public); removed {
-				return identity.TierUnverified, errors.New("registry: binding removed by domain")
+				return identity.TierUnverified, errors.New("registry: binding removed")
 			}
 		}
 	}

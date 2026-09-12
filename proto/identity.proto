@@ -285,9 +285,13 @@ message RemovedBinding {
   int64 removed_at = 2;          // Unix seconds
 }
 
-// AddressRemovalRecord is the root-signed, append-only list of removed bindings
-// for one address, served by the domain's fleet. Only the domain root can
-// publish one, so only root can free an address for re-binding.
+// AddressRemovalRecord is the append-only list of removed bindings for one
+// address, served by the domain's fleet. It is signed either by the domain root
+// or by the address's OWN key — a holder may always retire their own address.
+// The two differ in what they authorize: either SUPPRESSES the binding, but only
+// a root-signed record may free the address for RE-BINDING to a different key.
+// That asymmetry is what keeps a stolen key recoverable rather than permanent.
+// See SPEC.md section 1.
 message AddressRemovalRecord {
   uint32 version = 1;
   string domain = 2;
