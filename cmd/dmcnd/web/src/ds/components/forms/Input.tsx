@@ -11,8 +11,12 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   error?: string;
   /** Show required asterisk. @default false */
   required?: boolean;
-  /** Icon element shown inside the field, leading edge. */
+  /** Icon element shown inside the field, leading edge. Decorative: no pointer events. */
   leadingIcon?: React.ReactNode;
+  /** Interactive control shown INSIDE the field on the trailing edge — a generate, clear or
+   * reveal button. Unlike leadingIcon it stays clickable, and the field reserves room for it so
+   * the value never runs underneath. */
+  trailingAction?: React.ReactNode;
 }
 
 /**
@@ -24,6 +28,7 @@ export function Input({
   error,
   required = false,
   leadingIcon = null,
+  trailingAction = null,
   id,
   className = '',
   ...rest
@@ -32,6 +37,7 @@ export function Input({
   const inputCls = [
     'dmcn-input',
     leadingIcon ? 'dmcn-input--with-icon' : '',
+    trailingAction ? 'dmcn-input--with-action' : '',
     error ? 'dmcn-input--invalid' : '',
     className,
   ].filter(Boolean).join(' ');
@@ -46,6 +52,7 @@ export function Input({
       <div className="dmcn-input-wrap">
         {leadingIcon && <span className="dmcn-input-wrap__icon">{leadingIcon}</span>}
         <input id={inputId} className={inputCls} aria-invalid={!!error} {...rest} />
+        {trailingAction && <span className="dmcn-input-wrap__action">{trailingAction}</span>}
       </div>
       {(hint || error) && (
         <span className={'dmcn-field__hint' + (error ? ' dmcn-field__hint--error' : '')}>

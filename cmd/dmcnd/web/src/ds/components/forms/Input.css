@@ -6,6 +6,10 @@
 .dmcn-input-wrap{position:relative;display:flex;align-items:center;}
 .dmcn-input-wrap__icon{position:absolute;left:var(--space-3);display:flex;color:var(--text-subtle);pointer-events:none;}
 .dmcn-input-wrap__icon svg{width:16px;height:16px;}
+/* Trailing action: the leading icon's twin, but interactive — so it KEEPS pointer events and sits
+   just inside the border. The input reserves room for it with --with-action, or the text would
+   run underneath. */
+.dmcn-input-wrap__action{position:absolute;right:4px;display:flex;align-items:center;}
 .dmcn-input{
   width:100%;font-family:var(--font-sans);font-size:var(--text-md);color:var(--text-strong);
   background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-md);
@@ -13,6 +17,7 @@
   transition:border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
 .dmcn-input--with-icon{padding-left:34px;}
+.dmcn-input--with-action{padding-right:38px;}
 .dmcn-input::placeholder{color:var(--text-subtle);}
 .dmcn-input:hover{border-color:var(--border-strong);}
 .dmcn-input:focus{outline:none;border-color:var(--border-focus);box-shadow:0 0 0 3px var(--brand-subtle-2);}
