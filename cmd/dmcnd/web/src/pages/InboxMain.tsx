@@ -103,6 +103,16 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
   // mail the header's signing key is compared against the directory, so a bridged
   // message claiming a DMCN address can't wear the shield.
   const kind = useCounterpartyKind(whoAddress, sent ? '' : msg.senderPublicKey);
+  // Which of our addresses it was sent to, when that is not the account's own: an isolated
+  // alias's mail sits in this one list, and the row is where you notice which throwaway a
+  // sender has. Muted and truncating from the left so the local part, the distinctive half,
+  // stays visible.
+  const deliveredTo = !sent && msg.deliveredTo ? (
+    <span aria-label={`Delivered to ${msg.deliveredTo}`} title={`Delivered to ${msg.deliveredTo}`}
+      style={{ flex: '0 1 auto', minWidth: 0, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      to {msg.deliveredTo}
+    </span>
+  ) : null;
   const [dx, setDx] = useState(0);
   const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false });
 
@@ -154,6 +164,7 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
               <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {sent ? sentLabel : who}
               </span>
+              {deliveredTo}
               {newSenderTag}
               {starred && <Icon name="star-fill" size={14} style={{ color: 'var(--warning)', flex: 'none' }} />}
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flex: 'none' }}>{formatWhen(msg.sentAt)}</span>
@@ -195,11 +206,12 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
       {/* The kind icon describes the PERSON, so it sits with their name; the star
           describes the message but lives in the left rail with it (where mail clients
           put it) rather than floating in the middle of the subject text. */}
-      <div style={{ minWidth: 180, width: 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ minWidth: 180, width: deliveredTo ? 300 : 180, flex: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
         <KindIcon kind={kind} trusted={trustedSender} size={14} />
         <span title={sent ? recipientList.join(', ') : who === whoAddress ? whoAddress : `${who} <${whoAddress}>`} style={{ minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', fontWeight: nameWeight, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {sent ? `To: ${who}` : who}
         </span>
+        {deliveredTo}
         {newSenderTag}
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
@@ -276,7 +288,7 @@ export function InboxMain() {
 
   const q = filter.trim().toLowerCase();
   const matchesQ = (m: Preview) =>
-    !q || `${m.senderAddress} ${m.recipientAddress} ${[...m.to, ...m.cc].join(' ')} ${m.subject} ${m.snippet}`.toLowerCase().includes(q);
+    !q || `${m.senderAddress} ${m.recipientAddress} ${m.deliveredTo ?? ''} ${[...m.to, ...m.cc].join(' ')} ${m.subject} ${m.snippet}`.toLowerCase().includes(q);
 
   let rows: Row[];
   if (folder === 'sent') {
