@@ -17,6 +17,7 @@ import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, ty
 import { APP_VERSION } from '../lib/config';
 import { PageShell } from '../components/PageShell';
 import { BlockedSenders } from '../components/BlockedSenders';
+import { CopyButton } from '../components/CopyButton';
 import type { MailOutletContext } from '../components/AppLayout';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useStorageUsage } from '../lib/hooks/useStorageUsage';
@@ -572,7 +573,12 @@ export function Settings() {
               <SectionHeading title="Mailbox" />
               <RowGroup>
                 <Row grouped title="Signed in as" desc="This identity signs and decrypts your mail.">
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)', whiteSpace: 'nowrap' }}>{address}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)', whiteSpace: 'nowrap' }}>{address}</span>
+                    {/* The address people are asked to hand out, so it is worth copying from the
+                        one place that always shows it in full. */}
+                    {address && <CopyButton value={address} what="your address" />}
+                  </div>
                 </Row>
                 {managedDomain ? (
                   <Row grouped title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing).">
