@@ -43,10 +43,7 @@ function StorageCard() {
       {/* A deployment with no billing has no plan to speak of — dmcnd self-host is the whole
           product for its owner. Name the section for what it actually contains. */}
       <SectionHeading title={Upgrade ? 'Plan & storage' : 'Storage'} />
-      <div style={{
-        background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
-        padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)',
-      }}>
+      <Card>
         <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-strong)' }}>Personal storage</span>
         {localOnly ? (
           /* Where the state lives matters more than how much of it there is. A relay that
@@ -81,8 +78,19 @@ function StorageCard() {
         )}
         {/* Whether more storage can be bought, and how, belongs to whoever runs the service. */}
         {!localOnly && Upgrade && <Upgrade usage={usage} onChanged={refresh} />}
-      </div>
+      </Card>
     </section>
+  );
+}
+
+// The bordered surface an Account section's contents sit on. One definition, so the storage
+// card and the alias card are the same card rather than two near-misses that drift apart.
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+      padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)',
+    }}>{children}</div>
   );
 }
 
@@ -549,7 +557,16 @@ export function Settings() {
             </p>
 
             <StorageCard />
-            {Aliases && keys && address && <Aliases address={address} keys={keys} />}
+            {/* Aliases are a deployment's concept to have — dmcnd has none — so the section and
+                its chrome appear only when one supplies the component. The heading and the card
+                live here rather than inside it, exactly as StorageCard frames the upgrade panel,
+                so every section on this tab is framed once and the same way. */}
+            {Aliases && keys && address && (
+              <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                <SectionHeading title="Aliases" />
+                <Card><Aliases address={address} keys={keys} /></Card>
+              </section>
+            )}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />

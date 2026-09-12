@@ -652,6 +652,14 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // recipientAddress for pre-feature messages). Bcc only appears on the sender's own
   // Sent copy — recipient copies never carry it.
   const toList = msg.to.length ? msg.to : msg.recipientAddress ? [msg.recipientAddress] : [];
+  // Mail addressed to nobody but us: the "to me"/"to me at <alias>" line below already says so,
+  // and says it better, so a "To <that same address>" row above it is the same fact twice. It
+  // read worst on an alias, where the address is long and the repetition exact. Any other
+  // audience (a second recipient, a Cc) keeps the row — then it is carrying real information.
+  const soleRecipientIsMe = toList.length === 1 && (
+    toList[0].toLowerCase() === me
+    || (msg.deliveredTo != null && toList[0].toLowerCase() === msg.deliveredTo.toLowerCase())
+  );
   const counterparty = sentView ? toList[0] ?? '' : msg.senderAddress;
   // The header labels people by the name the owner gave them in Contacts first, then by
   // the display name the message itself carried (legacy mail's From name), then by the
@@ -703,7 +711,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                   ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span></>
                   : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterpartyAddress}</span>}</>}
               </div>
-              {!sentView && toList.length > 0 && (
+              {!sentView && toList.length > 0 && !soleRecipientIsMe && (
                 <div title={toList.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   To {toList.map(nameFor).join(', ')}
                 </div>
