@@ -105,6 +105,13 @@ export interface Deployment {
   // root and has no alias concept). Receives the working keys because the alias record is
   // self-signed by the account's own key — that signature is what makes the alias the owner's.
   aliases?: ComponentType<{ address: string; keys: WorkingKeys }>;
+  // Using an address at a domain the account holder owns. Product-only, and for the same reason
+  // aliases are: the reference daemon serves one domain that its operator already controls, so
+  // there is nothing to bring. Absent ⇒ no card, exactly as with aliases.
+  //
+  // Receives the working keys because the customer's mailbox key IS the domain root — the browser
+  // signs the domain record with it, and that signature is the whole of the customer's consent.
+  customDomain?: ComponentType<{ address: string; keys: WorkingKeys }>;
   // The account's other addresses, with the keys that read and send as each: a shared alias
   // is the account's own keypair under another name; an isolated one carries keys the
   // deployment derives from the account (see WorkingKeys.aliasRoot). The composer offers a From

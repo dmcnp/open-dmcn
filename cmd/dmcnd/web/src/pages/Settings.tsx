@@ -18,6 +18,7 @@ import { APP_VERSION } from '../lib/config';
 import { PageShell } from '../components/PageShell';
 import { BlockedSenders } from '../components/BlockedSenders';
 import { CopyButton } from '../components/CopyButton';
+import { SectionHeading, SettingsCard as Card } from '../components/SettingsSection';
 import type { MailOutletContext } from '../components/AppLayout';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useStorageUsage } from '../lib/hooks/useStorageUsage';
@@ -84,27 +85,6 @@ function StorageCard() {
   );
 }
 
-// The bordered surface an Account section's contents sit on. One definition, so the storage
-// card and the alias card are the same card rather than two near-misses that drift apart.
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
-      padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)',
-    }}>{children}</div>
-  );
-}
-
-// Uppercase section eyebrow, with optional right-aligned meta (a renewal date, a status).
-function SectionHeading({ title, meta }: { title: string; meta?: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-4)' }}>
-      <h2 style={{ margin: 0, fontSize: 'var(--text-sm)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{title}</h2>
-      {meta && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-subtle)' }}>{meta}</span>}
-    </div>
-  );
-}
-
 // Groups related rows behind one border, hairline-separated. The divider is drawn BETWEEN
 // rows rather than under each, so the last row never trails a border into the card edge —
 // and a conditional row that renders null takes its divider with it.
@@ -158,6 +138,7 @@ export function Settings() {
   const { address, clearSession } = useAuth();
   const { keys, clearKeys } = useKeys();
   const Aliases = deployment.aliases;
+  const CustomDomain = deployment.customDomain;
   const navigate = useNavigate();
   const embedded = !useIsMobile();
   // The shell hands down onAppearanceChange so toggling theme/density here re-themes
@@ -568,6 +549,12 @@ export function Settings() {
                 <Card><Aliases address={address} keys={keys} /></Card>
               </section>
             )}
+
+            {/* Next to Aliases on purpose: both are about which addresses reach this mailbox.
+                It frames ITSELF — whether the deployment takes customer domains is a question only
+                the account service can answer, so a heading and card drawn here would leave an
+                empty box wherever the answer is no. */}
+            {CustomDomain && keys && address && <CustomDomain address={address} keys={keys} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />
