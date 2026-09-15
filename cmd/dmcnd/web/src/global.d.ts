@@ -26,3 +26,15 @@ declare const env: Env;
 // Side-effect stylesheet imports (`import './styles/tokens.css'`) resolve to nothing at the type
 // level; vite handles them at build time.
 declare module '*.css';
+
+// Vite's build-time flags. Declared here rather than by pulling in vite/client, which would bring a
+// great deal more than the two booleans anything in this tree uses.
+interface ImportMetaEnv {
+  /** True when served by the Vite dev server (unbundled modules, HMR). */
+  readonly DEV: boolean;
+  /** True in a built bundle. */
+  readonly PROD: boolean;
+}
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

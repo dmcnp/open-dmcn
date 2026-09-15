@@ -5,6 +5,8 @@ import { useMessages } from '../lib/hooks/useMessages';
 import { useSent } from '../lib/hooks/useSent';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
+import { PushRegistrar } from './PushRegistrar';
+import { withdrawPushOnSignOut } from '../lib/push/signOut';
 import { useIsMobile } from '../lib/useIsMobile';
 import { readThemePref, resolveTheme, readDensity, writeThemePref, writeDensity, type ThemePref } from '../lib/theme';
 import { logout as apiLogout } from '../lib/api/client';
@@ -71,7 +73,7 @@ export function AppLayout() {
   const { filter: mailFilter } = useMailFilter();
   const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const { address, clearSession } = useAuth();
-  const { clearKeys, clearAllKeys } = useKeys();
+  const { keys, clearKeys, clearAllKeys } = useKeys();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -120,6 +122,8 @@ export function AppLayout() {
   const unreadCount = countUnread(messages, address, flags, mailFilter);
 
   const handleSignOut = async () => {
+    // Before the keys go: withdrawing this mailbox's notifications is a signed mailbox op.
+    if (address) await withdrawPushOnSignOut(address, keys);
     try { await apiLogout(); } catch { /* ignore */ }
     await clearKeys(); // drop the working handle (locks the account; removes a temp handle)
     clearSession();
@@ -192,6 +196,10 @@ export function AppLayout() {
         fontFamily: 'var(--font-sans)', WebkitFontSmoothing: 'antialiased',
       }}
     >
+      {/* Renders nothing: it keeps this device's push registration in step with the browser's
+          subscription, and refreshes the inbox when a wake-up arrives while a window is open. */}
+      {address && keys && <PushRegistrar address={address} keys={keys} onNewMail={refresh} />}
+
       {/* ---- Sidebar / drawer ---- */}
       {isMobile && (
         <div onClick={() => setDrawerOpen(false)} aria-hidden="true" style={{

@@ -112,6 +112,20 @@ export interface Deployment {
   // Receives the working keys because the customer's mailbox key IS the domain root — the browser
   // signs the domain record with it, and that signature is the whole of the customer's consent.
   customDomain?: ComponentType<{ address: string; keys: WorkingKeys }>;
+  // Where a device's push endpoint is registered, for contentless new-mail notifications.
+  //
+  // Only this step is deployment-specific: the permission prompt, the subscribe call, the settings
+  // card and the open-time reconcile are all shared. The product hands the endpoint to a mailbox
+  // relay over a signed mailbox op (its web backend and its relays are separate processes); a
+  // single-binary self-host writes it locally, with no protocol involved at all.
+  //
+  // Absent ⇒ no notifications card, exactly as with aliases. Registration carries the working keys
+  // because the relay authorises it the way it authorises every mailbox op: by the owner's
+  // signature over a nonce.
+  push?: {
+    register(address: string, endpoint: string, keys: WorkingKeys): Promise<void>;
+    unregister(address: string, endpoint: string, keys: WorkingKeys): Promise<void>;
+  };
   // The account's other addresses, with the keys that read and send as each: a shared alias
   // is the account's own keypair under another name; an isolated one carries keys the
   // deployment derives from the account (see WorkingKeys.aliasRoot). The composer offers a From

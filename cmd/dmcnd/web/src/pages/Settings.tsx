@@ -1,6 +1,8 @@
 import { Children, Fragment, useEffect, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
+import { NotificationSettings } from '../components/NotificationSettings';
+import { withdrawPushOnSignOut } from '../lib/push/signOut';
 import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
 import { logout as apiLogout, lookupIdentity } from '../lib/api/client';
@@ -338,6 +340,8 @@ export function Settings() {
   // account re-locks) and ends the session. The encrypted keystore stays, so the
   // account still appears on the unlock screen. Other tabs/accounts are untouched.
   const handleSignOut = async () => {
+    // Before the keys go: withdrawing this mailbox's notifications is a signed mailbox op.
+    if (address) await withdrawPushOnSignOut(address, keys);
     try { await apiLogout(); } catch { /* ignore */ }
     await clearKeys();
     clearSession();
@@ -555,6 +559,11 @@ export function Settings() {
                 the account service can answer, so a heading and card drawn here would leave an
                 empty box wherever the answer is no. */}
             {CustomDomain && keys && address && <CustomDomain address={address} keys={keys} />}
+
+            {/* Frames itself for the same reason: whether this deployment can send notifications
+                depends on a fleet key it may not have, and a heading over an empty box would
+                promise one it cannot deliver. */}
+            {keys && address && <NotificationSettings address={address} keys={keys} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />

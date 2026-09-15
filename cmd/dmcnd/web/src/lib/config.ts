@@ -45,6 +45,10 @@ export const DOMAINS: string[] = (() => {
 })();
 /** True when the backend reports dev mode. */
 export const IS_DEV = envVal('DEV_MODE', '') === 'true';
+
+// The fleet's application server key for new-mail push (base64url), served by deployments that
+// offer notifications. Empty ⇒ no notifications card at all, rather than a toggle that cannot work.
+export const PUSH_VAPID_PUBLIC_KEY = envVal('PUSH_VAPID_PUBLIC_KEY', '');
 /** Mailbox (inbox) poll cadence (ms). Defaults to 10s when unset/unrendered. New
  *  mail arrives externally, so the inbox is the one thing that needs frequent polling. */
 export const POLL_INTERVAL_MS = Number(envVal('POLL_INTERVAL_MS', '10000')) || 10000;
