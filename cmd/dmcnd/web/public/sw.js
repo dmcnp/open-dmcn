@@ -4,7 +4,7 @@
    the static shell (index.html, hashed JS/CSS, icons, manifest) is.
    Bump CACHE on any shell-caching logic change. */
 
-const CACHE = 'dmcn-mail-v3';
+const CACHE = 'dmcn-mail-v4';
 /* The shell itself is deliberately NOT precached. It is served no-store because it carries a
    per-request CSP nonce and points at content-hashed assets, so a copy taken at install time is a
    copy nobody asked for. The network-first handler below caches it on the first real navigation,
@@ -24,7 +24,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys
+        /* Only OUR caches. A bare "everything that is not CACHE" would delete the
+           per-account notification worker's cache on the next bump, silently. */
+        .filter((k) => k.startsWith('dmcn-mail-') && k !== CACHE)
+        .map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

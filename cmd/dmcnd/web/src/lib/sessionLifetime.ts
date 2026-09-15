@@ -14,26 +14,17 @@
 // it still can't steal them (they stay non-extractable, and the raw-bytes paths in
 // crypto/reauth.ts re-derive from the encrypted keystore instead of reading these).
 //
-// "Stay signed in" (opt-in) instead keys the handle by account address alone, so it
-// persists across browser restarts for one-click access.
+// Turning "lock when I leave" OFF instead keys the handle by account address alone, so it
+// persists across browser restarts for one-click access. That choice lives in devicePosture.ts,
+// in IndexedDB beside the handles rather than in localStorage — see the note there.
 
-import { storageKey } from './appContext';
 import { randomHex } from './crypto/bytes';
+import { isLockOnLeave } from './devicePosture';
+import { storageKey } from './appContext';
 
-// Namespaced per context (see appContext.storageKey): an installed app and a browser
-// tab are separate devices to their user, so turning on "stay signed in" in one must
-// not extend key lifetime in the other. TAB_KEY needs no namespacing — sessionStorage
-// is per-window already, so the two never shared it.
-const STAY_KEY = storageKey('dmcn_stay_signed_in');
+// TAB_KEY needs no namespacing — sessionStorage is per-window already, so an installed app and a
+// browser tab never shared it.
 const TAB_KEY = 'dmcn_tab_id';
-
-export function isStaySignedIn(): boolean {
-  try { return localStorage.getItem(STAY_KEY) === 'true'; } catch { return false; }
-}
-
-export function setStaySignedIn(on: boolean): void {
-  try { localStorage.setItem(STAY_KEY, on ? 'true' : 'false'); } catch { /* ignore */ }
-}
 
 function randomId(): string {
   return randomHex(16);
@@ -52,16 +43,23 @@ export function getTabId(): string {
 }
 
 // workingKeyRef is the IndexedDB key under which this tab's working handle for
-// `address` is stored. Default (lock-on-close): per-tab AND per-account, so a tab
+// `address` is stored. Default (lock when I leave): per-tab AND per-account, so a tab
 // can hold several unlocked accounts and closing it orphans all of them at once.
-// "Stay signed in": per-account only, persisting across browser restarts.
+// With locking off: per-account only, persisting across browser restarts.
 // Addresses are local@domain and carry no colon, so `tab:<id>:<address>` splits
 // unambiguously back into its two parts (see parseTabWorkingRef).
 export function workingKeyRef(address: string): string {
-  return isStaySignedIn() ? `acct:${address}` : `tab:${getTabId()}:${address}`;
+  return isLockOnLeave() ? `tab:${getTabId()}:${address}` : `acct:${address}`;
 }
 
-// tabWorkingPrefix is the key prefix owned by this tab in the lock-on-close posture.
+// accountWorkingRef is the persistent form, named rather than spelled inline wherever a handle has
+// to be addressed in the OTHER posture — re-keying across a change of posture, and removing an
+// account, which must clear both.
+export function accountWorkingRef(address: string): string {
+  return `acct:${address}`;
+}
+
+// tabWorkingPrefix is the key prefix owned by this tab when it locks on leaving.
 export function tabWorkingPrefix(): string {
   return `tab:${getTabId()}:`;
 }

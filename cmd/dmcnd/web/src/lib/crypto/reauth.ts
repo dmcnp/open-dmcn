@@ -5,8 +5,8 @@
 // discards the bytes — they are never kept resident and never come from a server.
 
 import { type IdentityKeyPair, keyPairFromPayloadJSON } from './keys';
-import { decryptKeys, decryptKeysWithKey } from './keystore';
-import { unlockPasskeyPRF } from './passkey';
+import { bundleKeyBytes, decryptKeys, decryptKeysWithKey } from './keystore';
+import { unlockPasskeyPRF, unlockPasskeyPRFBytes } from './passkey';
 import { loadLocalKeystore, type AuthMethod, type LocalKeystore } from './localKeystore';
 
 // Thrown when the local keystore is password-gated and the caller did not supply a
@@ -58,4 +58,29 @@ export async function unlockKeystore(ks: LocalKeystore, opts?: { password?: stri
   if (!opts?.password) throw new PasswordRequiredError();
   const keyBytes = await decryptKeys(ks.bundle, opts.password);
   return { kp: keyPairFromPayloadJSON(keyBytes) };
+}
+
+/**
+ * The raw key that opens this account's keystore bundle.
+ *
+ * One caller: attaching an account to this device's shared unlock, which stores this key
+ * (re-encrypted under the device secret) so that one unlock can reach the bundle without the
+ * secret that made it. Same ceremony as an ordinary unlock — a passkey assertion, or the password —
+ * and the same PasswordRequiredError contract.
+ *
+ * Deliberately narrower than unlockKeystore: it returns the key to the door, never what is behind
+ * it. Attaching has no business holding a private key, and this way it never does.
+ */
+export async function bundleKeyFor(ks: LocalKeystore, opts?: { password?: string }): Promise<Uint8Array> {
+  if (ks.authMethod === 'passkey') {
+    if (!ks.credentialId || !ks.prfSalt) throw new Error('local keystore is missing passkey metadata');
+    return unlockPasskeyPRFBytes(ks.credentialId, ks.prfSalt);
+  }
+  if (!opts?.password) throw new PasswordRequiredError();
+  const key = bundleKeyBytes(ks.bundle, opts.password);
+  // Argon2id cannot tell a wrong password from a right one — only the AEAD tag can. Prove it opens
+  // the bundle here, so a typo fails at the prompt rather than silently storing a key that will
+  // never work and surfacing as "that account stopped unlocking" days later.
+  await decryptKeys(ks.bundle, opts.password);
+  return key;
 }

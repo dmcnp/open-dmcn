@@ -79,6 +79,17 @@ async function aesKeyFromPRF(secret: Uint8Array): Promise<CryptoKey> {
   );
 }
 
+// The same key as aesKeyFromPRF, as raw bytes — deriveBits over the identical HKDF inputs, so the
+// two cannot drift. For the shared device unlock only; see the note on keystore.bundleKeyBytes.
+async function prfKeyBytes(secret: Uint8Array): Promise<Uint8Array> {
+  const base = await crypto.subtle.importKey('raw', bufferSource(secret), 'HKDF', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: PRF_INFO },
+    base,
+    256,
+  ));
+}
+
 function isNotAllowed(e: unknown): boolean {
   return e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError');
 }
@@ -244,4 +255,21 @@ export async function unlockPasskeyPRF(credentialIdB64: string, prfSaltB64: stri
     throw new Error(prfUnsupportedAtUnlockMessage());
   }
   return aesKeyFromPRF(new Uint8Array(secret));
+}
+
+// unlockPasskeyPRFBytes is unlockPasskeyPRF's raw-key twin, for the shared device unlock. Same
+// ceremony, same failure messages; it returns the bytes so they can be re-wrapped under the device
+// secret rather than a handle that could only be used here.
+export async function unlockPasskeyPRFBytes(credentialIdB64: string, prfSaltB64: string): Promise<Uint8Array> {
+  let secret: ArrayBuffer | undefined;
+  try {
+    secret = await evalPRF(fromBase64(credentialIdB64), fromBase64(prfSaltB64));
+  } catch (e) {
+    if (isNotAllowed(e)) {
+      throw new Error(isInstalledApp() ? PASSKEY_UNAVAILABLE_APP_MSG : PASSKEY_UNAVAILABLE_MSG, { cause: e });
+    }
+    throw e;
+  }
+  if (!secret) throw new Error(prfUnsupportedAtUnlockMessage());
+  return prfKeyBytes(new Uint8Array(secret));
 }

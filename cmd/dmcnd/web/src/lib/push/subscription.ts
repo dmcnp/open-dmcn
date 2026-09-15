@@ -1,19 +1,28 @@
 // The browser half of new-mail notifications: asking permission, subscribing, and keeping the
 // stored endpoint in step with the live one.
 //
+// Everything here is keyed on an ACCOUNT, not on the browser. A browser gives one push subscription
+// per service worker registration, so each account gets a registration of its own under its own
+// scope (see push/scopes.ts) and therefore an endpoint of its own. That is what lets a wake-up be
+// attributed to a mailbox instead of to a device with several signed in.
+//
 // Deployment-agnostic on purpose. WHERE an endpoint gets registered differs — the product hands it
 // to a mailbox relay over a signed mailbox op, a single-binary self-host stores it in the same
 // process — so that one step goes through deployment.push and everything here is shared.
 //
-// Nothing in this file touches key material. A contentless push needs none, which is what keeps
-// the per-tab lock model untouched by the feature.
+// Nothing in this file touches key material. A contentless push needs none, which is what keeps the
+// lock model untouched by the feature.
 
 import { PUSH_VAPID_PUBLIC_KEY } from '../config';
+import { ensureRegistration, registrationFor } from './scopes';
 
 /** Where the endpoint we last registered is remembered, per account. */
 function storedKey(address: string): string {
   return `dmcn_push_endpoint:${address.toLowerCase()}`;
 }
+
+/** The push workers' shared cache. Origin-scoped, so every entry in it is named per account. */
+export const PUSH_CACHE = 'dmcn-push-v1';
 
 /** Whether this browser can receive background notifications at all. */
 export function pushSupported(): boolean {
@@ -61,34 +70,30 @@ export function decodeVapidKey(base64url: string): ArrayBuffer {
 }
 
 /**
- * The subscription this browser already holds, if any.
+ * The subscription this account already holds, if any.
  *
- * `navigator.serviceWorker.ready` never rejects — if registration failed, it simply waits for ever.
- * Awaiting it bare would leave the settings card stuck on "loading" with nothing to read, so it is
- * raced against a deadline and a browser with no worker is reported as having no subscription,
- * which is the truth.
+ * Reads the account's own registration rather than `navigator.serviceWorker.ready`, which resolves
+ * the registration controlling the PAGE — that is the shell worker, which holds no subscription and
+ * would answer "off" for every account.
  */
-export async function currentSubscription(): Promise<PushSubscription | null> {
+export async function currentSubscription(id: string): Promise<PushSubscription | null> {
   if (!pushSupported()) return null;
-  const reg = await Promise.race([
-    navigator.serviceWorker.ready,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), READY_TIMEOUT_MS)),
-  ]);
+  const reg = await registrationFor(id);
   if (!reg) return null;
-  return reg.pushManager.getSubscription();
+  try {
+    return await reg.pushManager.getSubscription();
+  } catch {
+    return null;
+  }
 }
 
-// Long enough for a worker to install on a slow first load, short enough that a browser which will
-// never register one does not leave the card spinning.
-const READY_TIMEOUT_MS = 10_000;
-
 /**
- * Subscribe this browser, asking permission first.
+ * Subscribe this account, asking permission first.
  *
  * Must be called from a click: Safari requires a user gesture for the permission prompt, and every
  * browser penalises a site that asks on load.
  */
-export async function subscribeThisBrowser(): Promise<PushSubscription> {
+export async function subscribeAccount(id: string, workerUrl: string): Promise<PushSubscription> {
   if (!pushConfigured()) throw new Error('This deployment does not offer notifications.');
   if (!pushSupported()) throw new Error('This browser cannot receive notifications.');
 
@@ -98,11 +103,7 @@ export async function subscribeThisBrowser(): Promise<PushSubscription> {
       ? 'Notifications are blocked for this site. You can re-enable them in your browser settings.'
       : 'Notifications were not allowed.');
   }
-  const reg = await Promise.race([
-    navigator.serviceWorker.ready,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), READY_TIMEOUT_MS)),
-  ]);
-  if (!reg) throw new Error('This browser has not finished setting up notifications. Reload and try again.');
+  const reg = await ensureRegistration(id, workerUrl);
   const existing = await reg.pushManager.getSubscription();
   if (existing) return existing;
   // userVisibleOnly is required by Chrome, and honest here: every push shows a notification.
@@ -135,21 +136,39 @@ export function rememberedEndpoint(address: string): string | null {
 }
 
 /**
- * The endpoint the service worker parked after the browser rotated a subscription.
+ * The endpoint this account's worker parked after the browser rotated a subscription.
  *
  * The worker cannot register it itself — that needs the account's signing key, which it never
  * touches — so it leaves it here and the next app open hands it over.
  */
-export async function takeParkedEndpoint(): Promise<string | null> {
+export async function takeParkedEndpoint(id: string): Promise<string | null> {
   if (!('caches' in window)) return null;
   try {
-    const cache = await caches.open('dmcn-mail-v3');
-    const res = await cache.match('/__dmcn_pending_push_endpoint');
+    const cache = await caches.open(PUSH_CACHE);
+    const key = `/__dmcn_pending_push_endpoint/${id}`;
+    const res = await cache.match(key);
     if (!res) return null;
     const endpoint = (await res.text()).trim();
-    await cache.delete('/__dmcn_pending_push_endpoint');
+    await cache.delete(key);
     return endpoint || null;
   } catch {
     return null;
   }
+}
+
+/** Whether this account was woken since it was last looked at, and clearing that mark. */
+export async function wasWoken(id: string): Promise<boolean> {
+  if (!('caches' in window)) return false;
+  try {
+    return !!(await (await caches.open(PUSH_CACHE)).match(`/__dmcn_woken/${id}`));
+  } catch {
+    return false;
+  }
+}
+
+export async function clearWoken(id: string): Promise<void> {
+  if (!('caches' in window)) return;
+  try {
+    await (await caches.open(PUSH_CACHE)).delete(`/__dmcn_woken/${id}`);
+  } catch { /* the dot outstays its welcome; nothing worse */ }
 }

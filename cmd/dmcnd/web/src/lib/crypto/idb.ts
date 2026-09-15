@@ -4,6 +4,9 @@
 //   - 'personal' — the account's mail state (Sent, flags/labels, contacts, settings) when the
 //                  home relay hosts no personal storage; see api/personalStore.ts
 //   - 'pins'     — the device-local counterparty key pins (persistent, see trust/pinStore.ts)
+//   - 'device'   — what this CONTEXT does with unlocked keys: the lock posture, and the optional
+//                  device secret that opens several accounts at once (see lib/devicePosture.ts,
+//                  crypto/deviceKeystore.ts)
 //
 // We store structured-cloneable values directly (CryptoKey objects survive the
 // clone with their bytes never serialized into JS reach). Keys are simple strings.
@@ -30,14 +33,20 @@ import { usesOwnStore } from '../appContext';
 // pinning stops a display-mode change from re-pointing the database under an open
 // transaction.
 const DB_NAME = usesOwnStore() ? 'dmcn-app' : 'dmcn';
-// v2 added PINS_STORE; v3 added PERSONAL_STORE. onupgradeneeded creates only the stores
-// that are missing, so an existing database keeps its working handles, keystore and pins
-// across either bump.
-const DB_VERSION = 3;
+// v2 added PINS_STORE; v3 added PERSONAL_STORE; v4 added DEVICE_STORE. onupgradeneeded creates
+// only the stores that are missing, so an existing database keeps its working handles, keystore
+// and pins across any of those bumps.
+const DB_VERSION = 4;
 export const WORKING_STORE = 'working';
 export const KEYSTORE_STORE = 'keystore';
 export const PERSONAL_STORE = 'personal';
 export const PINS_STORE = 'pins';
+// The lock posture belongs HERE rather than in localStorage, beside the handles it governs
+// instead of in a different durability domain. A preference that can evaporate on its own is
+// worse than no preference at all when what it controls is "delete the unlocked keys": Safari and
+// mobile Chrome clear localStorage far more readily than IndexedDB, and the old arrangement read
+// the resulting absence as "nobody asked to stay signed in" and dropped every handle.
+export const DEVICE_STORE = 'device';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -51,6 +60,7 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(KEYSTORE_STORE)) db.createObjectStore(KEYSTORE_STORE);
       if (!db.objectStoreNames.contains(PERSONAL_STORE)) db.createObjectStore(PERSONAL_STORE);
       if (!db.objectStoreNames.contains(PINS_STORE)) db.createObjectStore(PINS_STORE);
+      if (!db.objectStoreNames.contains(DEVICE_STORE)) db.createObjectStore(DEVICE_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

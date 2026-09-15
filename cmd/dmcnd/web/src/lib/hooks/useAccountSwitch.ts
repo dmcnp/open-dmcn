@@ -4,7 +4,9 @@ import { useAuth } from './useAuth';
 import { useKeys } from './useKeys';
 import { loginWithKeys, logoutToken } from '../api/client';
 import { unlockKeystore, PasswordRequiredError } from '../crypto/reauth';
-import { importWorkingKeys } from '../crypto/workingKeys';
+import { DevicePasswordRequiredError, loadDeviceKeystore, unlockDevice } from '../crypto/deviceKeystore';
+import type { AuthMethod } from '../crypto/localKeystore';
+import { importWorkingKeys, type WorkingKeys } from '../crypto/workingKeys';
 import {
   listDeviceAccounts,
   loadUnlockedKeys,
@@ -36,6 +38,14 @@ export interface AccountSwitch {
   cancelUnlock: () => void;
   switchTo: (account: DeviceAccount, opts?: { password?: string }) => Promise<boolean>;
   forget: (account: DeviceAccount) => Promise<void>;
+  // Whether this device has a shared unlock set up, and which accounts it opens. Readable without
+  // unlocking anything — it comes from the clear half of the device record.
+  deviceUnlock: { authMethod: AuthMethod; addresses: string[] } | null;
+  // True once a shared unlock has been attempted and the device's secret is a password.
+  needsDevicePassword: boolean;
+  // Open every attached account at once. `prefer` picks which of them the app then acts as —
+  // the account a tapped notification named, when there was one.
+  unlockAll: (opts?: { password?: string; prefer?: string }) => Promise<boolean>;
 }
 
 function unlockErrorMessage(e: unknown): string {
@@ -51,6 +61,8 @@ function unlockErrorMessage(e: unknown): string {
 export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void }): AccountSwitch {
   const [accounts, setAccounts] = useState<DeviceAccount[] | null>(null);
   const [needsPassword, setNeedsPassword] = useState<string | null>(null);
+  const [needsDevicePassword, setNeedsDevicePassword] = useState(false);
+  const [deviceUnlock, setDeviceUnlock] = useState<{ authMethod: AuthMethod; addresses: string[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { address, sessionToken, setSession } = useAuth();
@@ -68,6 +80,12 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    void loadDeviceKeystore().then(ks => {
+      setDeviceUnlock(ks ? { authMethod: ks.authMethod, addresses: Object.keys(ks.entries).sort() } : null);
+    });
+  }, []);
 
   const switchTo = useCallback(async (account: DeviceAccount, o?: { password?: string }): Promise<boolean> => {
     if (busyRef.current) return false;
@@ -138,6 +156,59 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
     }
   }, [address, sessionToken, keys, adoptKeys, setSession, navigate, refresh]);
 
+  /**
+   * One unlock, every attached account.
+   *
+   * The same handover switchTo performs, done once for the account the app will act as — the
+   * others are imported and persisted so the switcher finds them already unlocked, which is the
+   * entire point: three accounts, one passkey prompt.
+   */
+  const unlockAll = useCallback(async (o?: { password?: string; prefer?: string }): Promise<boolean> => {
+    if (busyRef.current) return false;
+    busyRef.current = true; setBusy(true); setError('');
+    const prevToken = sessionToken;
+    const prevAddress = address;
+    try {
+      const pairs = await unlockDevice({ password: o?.password });
+      const unlocked: WorkingKeys[] = [];
+      for (const [addr, kp] of Object.entries(pairs)) {
+        const wk = await importWorkingKeys(addr, kp);
+        try {
+          await persistWorkingKeys(wk);
+        } catch {
+          // Private mode / quota: this page's lifetime still has them.
+        }
+        unlocked.push(wk);
+      }
+      const target = unlocked.find(w => w.address === o?.prefer) ?? unlocked[0];
+      // Mint the incoming session before adopting anything, for the same reason switchTo does.
+      const token = await loginWithKeys(target.address, target.ed25519Sign);
+      adoptKeys(target);
+      setSession(target.address, token);
+      setNeedsDevicePassword(false);
+      setNeedsPassword(null);
+      navigate('/inbox');
+      onSwitchedRef.current?.(target.address);
+      if (prevToken && prevAddress && prevAddress !== target.address) {
+        void logoutToken(prevToken).catch(() => { /* best effort; it expires anyway */ });
+      }
+      void refresh();
+      return true;
+    } catch (e) {
+      if (e instanceof DevicePasswordRequiredError) {
+        // A blank submission on a device that already asked is an empty password, not a first ask.
+        if (needsDevicePassword) setError('Password required.');
+        setNeedsDevicePassword(true);
+        return false;
+      }
+      setError(unlockErrorMessage(e));
+      return false;
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [address, sessionToken, adoptKeys, setSession, navigate, refresh, needsDevicePassword]);
+
   const beginUnlock = useCallback((account: DeviceAccount) => {
     setError('');
     setNeedsPassword(account.address);
@@ -146,7 +217,11 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
     if (account.ks?.authMethod === 'passkey') void switchTo(account);
   }, [switchTo]);
 
-  const cancelUnlock = useCallback(() => { setNeedsPassword(null); setError(''); }, []);
+  const cancelUnlock = useCallback(() => {
+    setNeedsPassword(null);
+    setNeedsDevicePassword(false);
+    setError('');
+  }, []);
 
   const forget = useCallback(async (account: DeviceAccount) => {
     await forgetAccount(account.address);
@@ -154,5 +229,8 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
     await refresh();
   }, [refresh]);
 
-  return { accounts, refresh, busy, error, needsPassword, beginUnlock, cancelUnlock, switchTo, forget };
+  return {
+    accounts, refresh, busy, error, needsPassword, beginUnlock, cancelUnlock, switchTo, forget,
+    deviceUnlock, needsDevicePassword, unlockAll,
+  };
 }

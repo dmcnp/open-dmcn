@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useAccountSwitch } from '../lib/hooks/useAccountSwitch';
+import { useWokenAccounts } from '../lib/push/useWokenAccounts';
 import { useBackgroundUnread } from '../lib/hooks/useBackgroundUnread';
 import type { DeviceAccount } from '../lib/accounts';
 import { AccountMonogram } from './AccountMonogram';
@@ -73,6 +74,10 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
   const { accounts, refresh, busy, error, needsPassword, beginUnlock, cancelUnlock, switchTo } = useAccountSwitch({
     onSwitched: () => { closeRef.current(); onSwitched?.(); },
   });
+  // Which accounts a notification has woken since they were last looked at. This is the only
+  // "something happened" a LOCKED account can show — its mail is unreadable from here, so there is
+  // no unread count to render in its place.
+  const woken = useWokenAccounts(accounts, open);
 
   const closeMenu = () => {
     onOpenChange(false);
@@ -353,8 +358,11 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
                               </Badge>
                             )
                           // A locked account's mail is unreadable from here — no key, so no
-                          // count. Unlocking it is what makes one appear.
-                          : <span style={{ flex: 'none', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Unlock</span>}
+                          // count. Unlocking it is what makes one appear; a dot says only that
+                          // something arrived, which is all a contentless push ever knew.
+                          : woken.has(account.address)
+                            ? <span title="New mail" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-text)' }} />
+                            : <span style={{ flex: 'none', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Unlock</span>}
                       </button>
                     ))}
                   </div>

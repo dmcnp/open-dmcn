@@ -123,6 +123,10 @@ export interface Deployment {
   // because the relay authorises it the way it authorises every mailbox op: by the owner's
   // signature over a nonce.
   push?: {
+    // The notification worker's URL. Registered once per account under a scope of its own, so
+    // each account holds its own push subscription — shared code must not assume a product asset
+    // path, and a deployment that serves its worker from elsewhere says so here.
+    workerUrl: string;
     register(address: string, endpoint: string, keys: WorkingKeys): Promise<void>;
     unregister(address: string, endpoint: string, keys: WorkingKeys): Promise<void>;
   };

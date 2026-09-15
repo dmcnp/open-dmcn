@@ -9,7 +9,7 @@
 // no keystore on purpose, so it exists only as a handle — listing both is what keeps
 // it reachable in the account switcher instead of stranding it.
 
-import { toBase64 } from './crypto/keys';
+import { fromBase64, toBase64 } from './crypto/keys';
 import {
   listLocalKeystores,
   loadLocalKeystore,
@@ -22,8 +22,12 @@ import {
   saveWorkingKeys,
   clearWorkingKeys,
   listUnlockedRefs,
+  bothWorkingRefs,
 } from './crypto/workingKeys';
 import { requestPersistentStorage } from './crypto/storage';
+import { scopeIdFor, tearDownScope } from './push/scopes';
+import { forgetEndpoint } from './push/subscription';
+import { detachAccount } from './crypto/deviceKeystore';
 import { workingKeyRef } from './sessionLifetime';
 
 export interface DeviceAccount {
@@ -104,8 +108,26 @@ export async function persistWorkingKeys(wk: WorkingKeys): Promise<void> {
 
 // forgetAccount removes an identity from this browser: the encrypted keystore plus
 // any handle it may hold under either posture's ref.
+//
+// It also turns this account's notifications off, and it is the ONE act besides the settings card
+// that does. Signing out deliberately leaves them running, but removal is different: the card lives
+// behind an unlocked session, so once the keystore is gone there would be no way left to stop the
+// device buzzing for mail nobody here can read. No keys are needed for it either — dropping the
+// subscription kills the endpoint, and the relay deletes its row the first time a wake-up to a dead
+// endpoint is refused.
 export async function forgetAccount(address: string): Promise<void> {
-  await clearWorkingKeys(workingKeyRef(address));
-  await clearWorkingKeys(`acct:${address}`);
+  const ks = await loadLocalKeystore(address);
+  if (ks) {
+    try {
+      await tearDownScope(await scopeIdFor(fromBase64(ks.x25519Public)));
+    } catch {
+      // Never block removal on it. The subscription lapses on its own once the relay's rows expire.
+    }
+  }
+  forgetEndpoint(address);
+  // And out of this device's shared unlock, if it was attached: leaving it there would keep a copy
+  // of the keys the rest of this function is removing.
+  await detachAccount(address);
+  for (const ref of bothWorkingRefs(address)) await clearWorkingKeys(ref);
   await clearLocalKeystore(address);
 }

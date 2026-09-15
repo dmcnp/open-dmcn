@@ -29,19 +29,40 @@ export interface KdfParams {
 // unlock on current hardware while staying above the OWASP floor (m=19456, t=2, p=1).
 const ARGON2_PARAMS: KdfParams = { m: 19456, t: 2, p: 1 };
 
+function passphraseKeyBytes(passphrase: string, salt: Uint8Array, params: KdfParams): Uint8Array {
+  return argon2id(new TextEncoder().encode(passphrase), salt, {
+    t: params.t,
+    m: params.m,
+    p: params.p,
+    dkLen: 32,
+  });
+}
+
 async function derivePassphraseKey(
   passphrase: string,
   salt: Uint8Array,
   params: KdfParams,
   usage: KeyUsage[]
 ): Promise<CryptoKey> {
-  const raw = argon2id(new TextEncoder().encode(passphrase), salt, {
-    t: params.t,
-    m: params.m,
-    p: params.p,
-    dkLen: 32,
-  });
-  return crypto.subtle.importKey('raw', bufferSource(raw), 'AES-GCM', false, usage);
+  return crypto.subtle.importKey('raw', bufferSource(passphraseKeyBytes(passphrase, salt, params)), 'AES-GCM', false, usage);
+}
+
+// The raw key that opens a bundle, and the way to put it back to work.
+//
+// These exist for ONE caller: the shared device unlock (crypto/deviceKeystore.ts), which stores a
+// bundle's key — re-encrypted under the device secret — so that one unlock can open the bundle
+// without the passphrase or passkey that made it. Storing the KEY rather than another copy of the
+// identity is what keeps exactly one encrypted copy of a private key on the device.
+//
+// Everything else must go through decryptKeys / decryptKeysWithKey, which never let a raw key into
+// a variable. Treat these 32 bytes exactly as you would the private key they open: derive, use,
+// drop.
+export function bundleKeyBytes(bundle: EncryptedBundle, passphrase: string): Uint8Array {
+  return passphraseKeyBytes(passphrase, fromBase64(bundle.salt), bundle.kdfParams ?? ARGON2_PARAMS);
+}
+
+export function importBundleKey(raw: Uint8Array): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', bufferSource(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
 // encryptKeysWithKey/decryptKeysWithKey use a pre-derived AES-GCM key instead of

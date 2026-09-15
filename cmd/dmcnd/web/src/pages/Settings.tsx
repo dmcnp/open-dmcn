@@ -2,7 +2,6 @@ import { Children, Fragment, useEffect, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { NotificationSettings } from '../components/NotificationSettings';
-import { withdrawPushOnSignOut } from '../lib/push/signOut';
 import { useKeys } from '../lib/hooks/useKeys';
 import { useIsMobile } from '../lib/useIsMobile';
 import { logout as apiLogout, lookupIdentity } from '../lib/api/client';
@@ -14,7 +13,11 @@ import { keyPairToPayloadJSON } from '../lib/crypto/keys';
 import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
 import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, type LocalKeystore } from '../lib/crypto/localKeystore';
 import { isStoragePersisted, requestPersistentStorage } from '../lib/crypto/storage';
-import { isStaySignedIn, setStaySignedIn } from '../lib/sessionLifetime';
+import { isInstalledApp } from '../lib/appContext';
+import { detachAccount, isAttached } from '../lib/crypto/deviceKeystore';
+import { isLockOnLeave, setLockOnLeave } from '../lib/devicePosture';
+import { applyLockPosture } from '../lib/crypto/workingKeys';
+import { DeviceUnlockSettings } from '../components/DeviceUnlockSettings';
 import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, type ThemePref, type Density } from '../lib/theme';
 import { APP_VERSION } from '../lib/config';
 import { PageShell } from '../components/PageShell';
@@ -180,7 +183,7 @@ export function Settings() {
   // Whether the browser has exempted this origin from storage eviction. Since the
   // keystore is the only at-rest copy, a non-persisted origin risks losing it.
   const [persisted, setPersisted] = useState<boolean | null>(null);
-  const [staySignedIn, setStay] = useState(isStaySignedIn());
+  const [lockOnLeave, setLockState] = useState(isLockOnLeave());
   // Managed-account disclosure (whitepaper §13.8): true when the domain's DAR
   // declares admin key custody — the org admin holds this account's keys.
   const [managedDomain, setManagedDomain] = useState(false);
@@ -261,7 +264,14 @@ export function Settings() {
       const bundle = await encryptKeys(payload, newPw);
       await saveLocalKeystore(makeLocalKeystore({ address, kp: rawKp, bundle, authMethod: 'password' }));
       setKeystore(await loadLocalKeystore(address));
-      setMsg('Password changed for this device.');
+      // The shared device unlock holds the key to the bundle this just replaced, so that key now
+      // opens nothing. Detach rather than leave an entry that claims to work and does not — and
+      // say so, because re-attaching is a deliberate act and nobody would think to repeat it.
+      const wasAttached = await isAttached(address);
+      if (wasAttached) await detachAccount(address);
+      setMsg(wasAttached
+        ? 'Password changed for this device. This account was detached from the shared unlock — attach it again under Account to include it.'
+        : 'Password changed for this device.');
       setShowChangePw(false); setCurPw(''); setNewPw('');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'password change failed');
@@ -338,10 +348,9 @@ export function Settings() {
 
   // Sign out locks this account on this device: it drops the working handles (so the
   // account re-locks) and ends the session. The encrypted keystore stays, so the
-  // account still appears on the unlock screen. Other tabs/accounts are untouched.
+  // account still appears on the unlock screen. Other tabs/accounts are untouched, and
+  // so are notifications — only the card above turns those off.
   const handleSignOut = async () => {
-    // Before the keys go: withdrawing this mailbox's notifications is a signed mailbox op.
-    if (address) await withdrawPushOnSignOut(address, keys);
     try { await apiLogout(); } catch { /* ignore */ }
     await clearKeys();
     clearSession();
@@ -486,14 +495,20 @@ export function Settings() {
 
             <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Stay signed in after closing the browser</div>
+                <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Lock when I leave</div>
                 <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2, lineHeight: 'var(--leading-normal)' }}>
-                  Off (recommended): each tab unlocks on its own and locks when closed, so reopening needs your passkey or
-                  password — a page refresh never re-prompts. On: accounts stay unlocked across browser restarts for
-                  one-click access.
+                  On (recommended): accounts lock when you close this {isInstalledApp() ? 'app' : 'tab'}, and a couple of
+                  minutes after you leave it for something else — a page refresh never re-prompts, and a quick glance
+                  elsewhere does not lock you out. Off: accounts stay unlocked across restarts for one-click access.
                 </div>
               </div>
-              <Switch checked={staySignedIn} onChange={v => { setStaySignedIn(v); setStay(v); }} />
+              <Switch id="lock-on-leave" checked={lockOnLeave}
+                onChange={v => {
+                  setLockState(v);
+                  // Record the posture, then move existing handles to the ref it reads from —
+                  // without that second step every open account would instantly read as locked.
+                  void (async () => { await setLockOnLeave(v); await applyLockPosture(); })();
+                }} />
             </div>
 
             <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
@@ -564,6 +579,7 @@ export function Settings() {
                 depends on a fleet key it may not have, and a heading over an empty box would
                 promise one it cannot deliver. */}
             {keys && address && <NotificationSettings address={address} keys={keys} />}
+        {address && <DeviceUnlockSettings address={address} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />

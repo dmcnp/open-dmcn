@@ -9,7 +9,7 @@ import {
 } from '../crypto/workingKeys';
 import { migrateLegacyKeystore } from '../crypto/localKeystore';
 import { loadUnlockedKeys, persistWorkingKeys } from '../accounts';
-import { isStaySignedIn, workingKeyRef, getTabId, startPresence, liveTabIds } from '../sessionLifetime';
+import { workingKeyRef, getTabId, startPresence, liveTabIds } from '../sessionLifetime';
 import { useAuth } from './useAuth';
 
 interface KeysContextValue {
@@ -39,8 +39,8 @@ const KeysContext = createContext<KeysContextValue | null>(null);
 // Working handles are scoped to the tab's session via sessionLifetime.workingKeyRef:
 // by default a per-tab id (sessionStorage) plus the address keys the handle, so
 // closing the tab/browser orphans every account it held and re-unlock is required —
-// a refresh keeps the same id and re-loads the handle with no prompt. "Stay signed
-// in" instead keys by account alone, for persistence across restarts.
+// a refresh keeps the same id and re-loads the handle with no prompt. Turning "lock
+// when I leave" off instead keys by account alone, for persistence across restarts.
 // Handles are non-extractable CryptoKeys — never raw bytes in web storage.
 //
 // This context tracks the ONE account the tab is currently acting as. Several may be
@@ -66,14 +66,14 @@ export function KeysProvider({ children }: { children: ReactNode }) {
     if (!address || keysRef.current?.address !== address) setLoading(true);
     (async () => {
       await migrateLegacyKeystore();
-      // One sweep per app load: drop closed-tab orphan handles (their tab id isn't in
-      // the live set) and any persistent handles left over when stay-signed-in is off.
+      // One sweep per app load: drop closed-tab orphan handles — their tab id isn't in
+      // the live set, which is an observed fact rather than an inferred preference.
       // Include this tab's id so its own handle is never swept.
       if (!gcDone.current) {
         gcDone.current = true;
         const live = liveTabIds();
         live.add(getTabId());
-        await gcWorkingHandles(isStaySignedIn(), live);
+        await gcWorkingHandles(live);
       }
       if (!address) {
         if (!cancelled) { setBoth(null); setLoading(false); }

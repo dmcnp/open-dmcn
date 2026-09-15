@@ -6,7 +6,8 @@ import { useSent } from '../lib/hooks/useSent';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { PushRegistrar } from './PushRegistrar';
-import { withdrawPushOnSignOut } from '../lib/push/signOut';
+import { setDraftOpen } from '../lib/draftOpen';
+import { useAppLock } from '../lib/hooks/useAppLock';
 import { useIsMobile } from '../lib/useIsMobile';
 import { readThemePref, resolveTheme, readDensity, writeThemePref, writeDensity, type ThemePref } from '../lib/theme';
 import { logout as apiLogout } from '../lib/api/client';
@@ -87,6 +88,15 @@ export function AppLayout() {
   const [compact, setCompact] = useState(() => readDensity() === 'compact');
   const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
   const [compose, setCompose] = useState<{ replyTo: ComposeReplyTo | null } | null>(null);
+  // Lock the whole context if this app is left in the background long enough.
+  useAppLock();
+  // Published outside the shell so a tapped notification for another account does not switch out
+  // from under an unsent message — the switch discards it (see handleSwitched below), which is the
+  // same reason the account switcher confirms first.
+  useEffect(() => {
+    setDraftOpen(compose !== null);
+    return () => setDraftOpen(false);
+  }, [compose]);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   // Whether this relay hosts personal storage at all. False until the first storage call
   // comes back UNSUPPORTED, so the banner appears as soon as we actually know.
@@ -121,9 +131,10 @@ export function AppLayout() {
   // lib/unread so the account switcher's per-account counts mean the same thing.
   const unreadCount = countUnread(messages, address, flags, mailFilter);
 
+  // Notifications deliberately survive this. Signing out locks the account, it does not tell
+  // the world to stop reaching you — mail still arrives, and being told so is still useful. The
+  // only off switch is the one in Settings that turned them on.
   const handleSignOut = async () => {
-    // Before the keys go: withdrawing this mailbox's notifications is a signed mailbox op.
-    if (address) await withdrawPushOnSignOut(address, keys);
     try { await apiLogout(); } catch { /* ignore */ }
     await clearKeys(); // drop the working handle (locks the account; removes a temp handle)
     clearSession();

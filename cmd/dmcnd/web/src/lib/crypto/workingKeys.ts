@@ -13,7 +13,8 @@ import type { IdentityKeyPair } from './keys';
 import { importEd25519PrivateKey, importX25519PrivateKey } from './keys';
 import { bufferSource } from './bytes';
 import { WORKING_STORE, idbGet, idbGetAllKeys, idbPut, idbDelete } from './idb';
-import { isStaySignedIn, tabWorkingPrefix, parseTabWorkingRef } from '../sessionLifetime';
+import { accountWorkingRef, tabWorkingPrefix, parseTabWorkingRef, workingKeyRef } from '../sessionLifetime';
+import { isLockOnLeave } from '../devicePosture';
 
 export interface WorkingKeys {
   ed25519Sign: CryptoKey;     // non-extractable, ['sign']
@@ -82,8 +83,8 @@ export async function clearWorkingKeys(ref: string): Promise<void> {
 }
 
 // gcWorkingHandles removes handles no longer referenceable: per-tab handles whose tab
-// is no longer open (its id isn't in the live set — a closed-tab orphan), per-account
-// handles when stay-signed-in is off, and any legacy/unknown keys. Orphans are
+// is no longer open (its id isn't in the live set — a closed-tab orphan), and any
+// legacy/unknown keys. Orphans are
 // non-extractable and unreferenceable, but removing them promptly (the moment any tab
 // opens after a browser close) shrinks the XSS-reachable residual to near zero.
 //
@@ -91,7 +92,14 @@ export async function clearWorkingKeys(ref: string): Promise<void> {
 // hold several accounts) to 'tab:<id>:<address>' when its tab is still open, so
 // upgrading the app doesn't sign the open tab out. CryptoKey handles are
 // structured-cloneable, so this is a plain copy — no key material is exposed.
-export async function gcWorkingHandles(staySignedIn: boolean, liveTabIds: Set<string>): Promise<void> {
+//
+// What it deliberately no longer does is delete PERSISTENT handles because a preference says to.
+// It used to drop every 'acct:' row whenever stay-signed-in read false — and that flag lived in
+// localStorage while the handles lived here, so on a browser that clears the first and keeps the
+// second (Safari, mobile Chrome) an evaporated preference destroyed working keys and left every
+// account but one locked. A deletion has to follow from an ACT: signing out, removing the account,
+// the app locking, or the posture being changed. Never from a preference that is merely missing.
+export async function gcWorkingHandles(liveTabIds: Set<string>): Promise<void> {
   try {
     const keys = await idbGetAllKeys(WORKING_STORE);
     await Promise.all(keys.map(async k => {
@@ -104,7 +112,7 @@ export async function gcWorkingHandles(staySignedIn: boolean, liveTabIds: Set<st
           await idbDelete(WORKING_STORE, k);
         }
       } else if (k.startsWith('acct:')) {
-        if (!staySignedIn) await idbDelete(WORKING_STORE, k);
+        // Persistent by request. Left alone here on purpose — see the note above.
       } else {
         await idbDelete(WORKING_STORE, k); // legacy 'identity' / unknown
       }
@@ -116,12 +124,12 @@ export async function gcWorkingHandles(staySignedIn: boolean, liveTabIds: Set<st
 
 // listUnlockedRefs returns the handles this tab can currently reach, one per account:
 // its own 'tab:<id>:<addr>' rows in the default posture, or every 'acct:<addr>' row
-// when stay-signed-in is on. The account switcher uses it to tell unlocked accounts
+// when locking on leave is off. The account switcher uses it to tell unlocked accounts
 // from locked ones — including an account with no encrypted keystore (a temporary
 // pairing session), which exists only as a working handle.
 export async function listUnlockedRefs(): Promise<Array<{ ref: string; address: string }>> {
   try {
-    const prefix = isStaySignedIn() ? 'acct:' : tabWorkingPrefix();
+    const prefix = isLockOnLeave() ? tabWorkingPrefix() : 'acct:';
     const keys = await idbGetAllKeys(WORKING_STORE);
     return keys
       .filter(k => k.startsWith(prefix))
@@ -136,4 +144,37 @@ export async function listUnlockedRefs(): Promise<Array<{ ref: string; address: 
 export async function clearUnlockedHandles(): Promise<void> {
   const refs = await listUnlockedRefs();
   await Promise.all(refs.map(r => clearWorkingKeys(r.ref)));
+}
+
+/**
+ * Move every handle this tab holds to the ref the CURRENT posture reads from.
+ *
+ * Without this, changing the posture silently locks every open account: the switch only changes
+ * which key workingKeyRef() returns, so live handles stay where they were while the next read
+ * looks in the other place and finds nothing. That was true in both directions — turning
+ * persistence on stranded the tab's handles, and turning it off left them for the collector.
+ *
+ * Call it AFTER devicePosture.setLockOnLeave, so workingKeyRef already answers the new way.
+ */
+export async function applyLockPosture(): Promise<void> {
+  const from = isLockOnLeave() ? 'acct:' : tabWorkingPrefix();
+  try {
+    for (const key of await idbGetAllKeys(WORKING_STORE)) {
+      if (!key.startsWith(from)) continue;
+      const address = key.slice(from.length);
+      if (!address) continue;
+      const wk = await loadWorkingKeys(key);
+      // A handle that cannot be read, or that names another account, is not one to carry over.
+      if (!wk || wk.address !== address) continue;
+      await idbPut(WORKING_STORE, workingKeyRef(address), wk);
+      await idbDelete(WORKING_STORE, key);
+    }
+  } catch {
+    // The posture still changed; at worst an account reads as locked and is unlocked again.
+  }
+}
+
+/** Both refs an account could hold a handle under. Removing an account has to clear each. */
+export function bothWorkingRefs(address: string): string[] {
+  return [workingKeyRef(address), accountWorkingRef(address)];
 }

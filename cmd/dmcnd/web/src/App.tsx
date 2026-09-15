@@ -14,6 +14,7 @@ import { Contacts } from './pages/Contacts';
 import { Settings } from './pages/Settings';
 import { AppLayout } from './components/AppLayout';
 import { SessionRenewer } from './components/SessionRenewer';
+import { PushIntentRouter } from './components/PushIntentRouter';
 import { deployment } from '@deployment';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,9 @@ export function App() {
         <MailFilterProvider>
         <BrowserRouter>
           <SessionRenewer />
+          {/* Above the routes on purpose: a tapped notification for a LOCKED account has to be
+              able to steer the unlock screen, which lives outside the authenticated shell. */}
+          <PushIntentRouter />
           <Routes>
             <Route path="/login" element={<Login />} />
             {/* Registration and any extra pre-auth screens are the deployment's (see

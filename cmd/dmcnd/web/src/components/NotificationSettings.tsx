@@ -1,23 +1,29 @@
-// Turning new-mail notifications on for this device.
+// Turning new-mail notifications on for this account.
 //
 // What a notification can say is fixed and worth stating on the screen rather than in a doc: the
 // relay that sends it cannot read the mail, so it says only that mail arrived. That is a property
 // of how it is built, not a setting anyone could change later.
+//
+// Per ACCOUNT, not per browser. Each account holds its own push subscription under its own service
+// worker scope, so turning this on here says nothing about any other account signed into the same
+// browser, and turning it off leaves theirs alone.
 
 import { useCallback, useEffect, useState } from 'react';
 import { deployment } from '@deployment';
 import { Button } from '../ds';
 import { SettingsSection } from './SettingsSection';
 import type { WorkingKeys } from '../lib/crypto/workingKeys';
+import { scopeIdFor, tearDownScope } from '../lib/push/scopes';
 import {
   currentSubscription, forgetEndpoint, pushConfigured, pushNeedsInstall, pushSupported,
-  rememberEndpoint, subscribeThisBrowser,
+  rememberEndpoint, subscribeAccount,
 } from '../lib/push/subscription';
 
 type State = 'loading' | 'off' | 'on' | 'unsupported' | 'needs-install' | 'blocked';
 
 export function NotificationSettings({ address, keys }: { address: string; keys: WorkingKeys }) {
   const [state, setState] = useState<State>('loading');
+  const [scopeId, setScopeId] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -25,21 +31,29 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
     if (pushNeedsInstall()) return setState('needs-install');
     if (!pushSupported()) return setState('unsupported');
     if (typeof Notification !== 'undefined' && Notification.permission === 'denied') return setState('blocked');
-    setState((await currentSubscription()) ? 'on' : 'off');
-  }, []);
+    const id = await scopeIdFor(keys.x25519Public);
+    setScopeId(id);
+    setState((await currentSubscription(id)) ? 'on' : 'off');
+  }, [keys]);
 
   useEffect(() => { void refresh(); }, [address, refresh]);
 
   async function enable() {
     setBusy(true);
     setErr('');
+    let id = scopeId;
     try {
-      const sub = await subscribeThisBrowser();
+      if (!id) id = await scopeIdFor(keys.x25519Public);
+      const sub = await subscribeAccount(id, deployment.push!.workerUrl);
       await deployment.push!.register(address, sub.endpoint, keys);
       rememberEndpoint(address, sub.endpoint);
+      setScopeId(id);
       setState('on');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not turn notifications on.');
+      // A registration that was created but never got as far as a usable subscription would
+      // otherwise sit there for ever, since nothing else sweeps it.
+      if (id) await tearDownScope(id).catch(() => { /* best effort */ });
       void refresh();
     } finally {
       setBusy(false);
@@ -50,14 +64,11 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
     setBusy(true);
     setErr('');
     try {
-      const sub = await currentSubscription();
-      if (sub) {
-        // Withdraw this mailbox first, while the session and keys are still here. Only then drop
-        // the browser's subscription — and only if no other account is using it, which
-        // unsubscribing at the browser cannot know. Erring toward keeping it means at worst a
-        // wake-up that says "New mail" for an account this browser no longer notifies.
-        await deployment.push!.unregister(address, sub.endpoint, keys);
-      }
+      const sub = await currentSubscription(scopeId);
+      // Withdraw at the relay first, while the keys are still here to sign it, and only then drop
+      // the subscription. The reverse order would leave a row the relay keeps trying to wake.
+      if (sub) await deployment.push!.unregister(address, sub.endpoint, keys);
+      await tearDownScope(scopeId);
       forgetEndpoint(address);
       setState('off');
     } catch (e) {
@@ -72,9 +83,9 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
   return (
     <SettingsSection title="Notifications">
       <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-        Be told when mail arrives, even with the app closed. A notification says only that mail
-        arrived — never who wrote or what about, because the relay that sends it cannot read your
-        mail. Opening it unlocks as usual.
+        Be told when mail arrives at this account, even with the app closed. A notification says only
+        that mail arrived — never who wrote or what about, because the relay that sends it cannot
+        read your mail. Opening it unlocks as usual.
       </div>
 
       {state === 'needs-install' && (
@@ -102,15 +113,16 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
             {busy ? 'Working…' : state === 'on' ? 'Turn off on this device' : 'Turn on for this device'}
           </Button>
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            {state === 'on' ? 'On for this device.' : 'Off for this device.'}
+            {state === 'on' ? 'On for this account, on this device.' : 'Off for this account.'}
           </span>
         </div>
       )}
 
       {state === 'on' && (
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-          Notifications are per browser, not per account. If someone else signs in here too, a
-          notification may be for their mail — it names neither of you either way.
+          This is the only way to turn them off — signing out leaves them on, so mail arriving here
+          still reaches you. Browsers occasionally reissue a notification subscription; repairing
+          one is signed with your key, so it happens the next time you unlock this account.
         </div>
       )}
 
