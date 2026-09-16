@@ -11,6 +11,7 @@ import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
 import { isReceivedForMe, previewText, recipientsOf } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
+import { usePullToRefresh, PULL_THRESHOLD, type PullState } from '../lib/hooks/usePullToRefresh';
 import { IconButton } from '../ds';
 import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
@@ -129,6 +130,12 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
     };
     const onUp = () => {
       const d = drag.current; d.active = false;
+      // A vertical drag belongs to the LIST — scrolling it, or pulling it down to refresh —
+      // so the row does nothing with it: it is neither a tap nor a sideways swipe. Without
+      // this, releasing a pull that began on a row would open that message: the browser only
+      // cancels these pointers once it takes the gesture over to scroll, and at the top of
+      // the list there is nothing left for it to scroll.
+      if (d.decided === 'v') return;
       if (d.decided !== 'h' && !d.moved) { if (dx < 0) setDx(0); else onOpen(); return; }
       if (d.decided === 'h') setDx(dx <= -SWIPE_W / 2 ? -SWIPE_W : 0);
     };
@@ -244,6 +251,43 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
   );
 }
 
+// Visually hidden, still announced: the spinner is the sighted cue, this is the same news
+// for a screen reader.
+const srOnly: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap',
+};
+
+/**
+ * The pull-to-refresh indicator: a strip across the top of the list, exactly as tall as the
+ * list has been dragged down, so the glyph is UNCOVERED by the pull rather than flown in over
+ * it. The arrow turns with the pull and goes brand-coloured once releasing would refresh —
+ * the gesture says what it will do before you commit to it — then spins until the sync ends.
+ */
+function PullIndicator({ distance, armed, refreshing, dragging }: PullState) {
+  const progress = Math.min(1, distance / PULL_THRESHOLD);
+  return (
+    <div role="status" style={{
+      position: 'absolute', top: 0, left: 0, right: 0, height: Math.round(distance), overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+      transition: dragging ? 'none' : 'height var(--dur-normal) var(--ease-out)',
+    }}>
+      <span
+        className={refreshing ? 'dmcn-spin' : undefined}
+        style={{
+          display: 'flex', opacity: progress,
+          color: armed || refreshing ? 'var(--brand)' : 'var(--text-muted)',
+          // While it spins the class owns the transform; an inline one would freeze it.
+          transform: refreshing ? undefined : `rotate(${Math.round(progress * 270)}deg)`,
+          transition: dragging ? 'none' : 'color var(--dur-fast) var(--ease-standard)',
+        }}
+      >
+        <Icon name="refresh" size={20} />
+      </span>
+      {refreshing && <span style={srOnly}>Refreshing</span>}
+    </div>
+  );
+}
+
 /** The mail content (list + reader) that fills the app shell's main column. */
 export function InboxMain() {
   const { messages, error, refresh, deleteMessage } = useMessages();
@@ -256,6 +300,7 @@ export function InboxMain() {
   const isMobile = useIsMobile();
   const { folder, filter, openCompose } = useOutletContext<MailOutletContext>();
 
+  const listRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [openHash, setOpenHash] = useState<string | null>(null);
 
@@ -356,7 +401,10 @@ export function InboxMain() {
 
   const pending = !!error && error.includes('POLICY_PENDING');
   const listError = folder === 'sent' ? sentError : error;
-  const doRefresh = () => { refresh(); refreshSent(); };
+  const doRefresh = () => Promise.all([refresh(), refreshSent()]);
+  // Pull-to-refresh, on the phone list only: the reader is not a list, and a pointer has the
+  // header's Refresh button.
+  const pull = usePullToRefresh(listRef, doRefresh, isMobile && !openMsg);
   const showFab = isMobile && !openMsg;
 
   const folderTitle = folder.startsWith('label:') ? (labelById(folder.slice(6))?.name ?? 'Label')
@@ -404,47 +452,59 @@ export function InboxMain() {
             <IconButton size="sm" aria-label="Refresh" onClick={doRefresh}><Icon name="refresh" size={16} /></IconButton>
           </div>
 
-          {/* List body */}
-          <div style={{ overflowY: 'auto', flex: 1, background: 'var(--surface-page)' }}>
-            {pending && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', margin: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>
-                <Icon name="alert-triangle" size={16} style={{ color: 'var(--warning)', marginTop: 1 }} />
-                <span>Your address is awaiting approval by the domain administrator. Your mailbox will be available once it's countersigned.</span>
-              </div>
-            )}
-            {!pending && listError && (
-              <div style={{ margin: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>{listError}</div>
-            )}
+          {/* List body. The frame stays put and the list slides inside it: what the pull
+              uncovers at the top is the indicator, and what it pushes past the bottom the
+              frame clips. */}
+          <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--surface-page)' }}>
+            <PullIndicator {...pull} />
+            <div
+              ref={listRef}
+              style={{
+                position: 'absolute', inset: 0, overflowY: 'auto', overscrollBehaviorY: 'contain',
+                transform: pull.distance ? `translateY(${Math.round(pull.distance)}px)` : undefined,
+                transition: pull.dragging ? 'none' : 'transform var(--dur-normal) var(--ease-out)',
+              }}
+            >
+              {pending && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', margin: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>
+                  <Icon name="alert-triangle" size={16} style={{ color: 'var(--warning)', marginTop: 1 }} />
+                  <span>Your address is awaiting approval by the domain administrator. Your mailbox will be available once it's countersigned.</span>
+                </div>
+              )}
+              {!pending && listError && (
+                <div style={{ margin: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>{listError}</div>
+              )}
 
-            {rows.length === 0 ? (
-              <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
-                <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
-                  {q ? 'No messages match your filter.' : emptyText}
-                </p>
-              </div>
-            ) : (
-              rows.map(({ msg, hashes }) => (
-                <MailRow
-                  key={msg.hash}
-                  msg={msg}
-                  sent={folder === 'sent'}
-                  unknownSender={folder !== 'sent' && catOf(msg) === 'pending'}
-                  trustedSender={trustedOf(msg)}
-                  mobile={isMobile}
-                  hovered={hovered === msg.hash}
-                  read={isRead(msg.hash)}
-                  starred={isStarred(msg.hash)}
-                  inArchive={folder === 'archive'}
-                  nameFor={nameFor}
-                  onOpen={() => openRow(msg)}
-                  onDelete={() => doDelete(hashes)}
-                  onArchive={() => toggleArchive(msg)}
-                  onToggleStar={() => toggleStar(msg)}
-                  onHover={h => setHovered(h ? msg.hash : null)}
-                />
-              ))
-            )}
+              {rows.length === 0 ? (
+                <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
+                  <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
+                    {q ? 'No messages match your filter.' : emptyText}
+                  </p>
+                </div>
+              ) : (
+                rows.map(({ msg, hashes }) => (
+                  <MailRow
+                    key={msg.hash}
+                    msg={msg}
+                    sent={folder === 'sent'}
+                    unknownSender={folder !== 'sent' && catOf(msg) === 'pending'}
+                    trustedSender={trustedOf(msg)}
+                    mobile={isMobile}
+                    hovered={hovered === msg.hash}
+                    read={isRead(msg.hash)}
+                    starred={isStarred(msg.hash)}
+                    inArchive={folder === 'archive'}
+                    nameFor={nameFor}
+                    onOpen={() => openRow(msg)}
+                    onDelete={() => doDelete(hashes)}
+                    onArchive={() => toggleArchive(msg)}
+                    onToggleStar={() => toggleStar(msg)}
+                    onHover={h => setHovered(h ? msg.hash : null)}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </>
       )}

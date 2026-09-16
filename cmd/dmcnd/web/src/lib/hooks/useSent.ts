@@ -17,7 +17,7 @@ export { SENT_HASH_PREFIX, isSentStoreHash } from '../api/sentStore';
 interface SentContextValue {
   sent: Preview[];
   error: string | null;
-  refreshSent: () => void;
+  refreshSent: () => Promise<void>;
   // Decrypt a Sent message's full body (attachments + HTML) on open.
   fetchSentFull: (hash: string) => Promise<FullBody>;
   deleteSent: (hash: string) => Promise<void>;
@@ -34,7 +34,7 @@ export function SentProvider({ children }: { children: ReactNode }) {
   const [sent, setSent] = useState<Preview[]>([]);
   const [error, setError] = useState<string | null>(null);
   const storeRef = useRef<SentStore | null>(null);
-  const syncRef = useRef<() => void>(() => {});
+  const syncRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
     if (!keys || !sessionToken || !isAuthenticated || !address) return;
@@ -43,7 +43,7 @@ export function SentProvider({ children }: { children: ReactNode }) {
     storeRef.current = store;
 
     let cancelled = false;
-    const doSync = () => {
+    const doSync = () =>
       store.listPreviews()
         .then(previews => {
           if (cancelled) return;
@@ -51,7 +51,6 @@ export function SentProvider({ children }: { children: ReactNode }) {
           setError(null);
         })
         .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
-    };
     syncRef.current = doSync;
     doSync();
 
@@ -59,7 +58,7 @@ export function SentProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       storeRef.current = null;
-      syncRef.current = () => {};
+      syncRef.current = () => Promise.resolve();
       setSent([]);
     };
   }, [keys, sessionToken, isAuthenticated, address]);

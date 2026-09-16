@@ -18,7 +18,9 @@ interface MessagesContextValue {
   messages: Preview[];
   error: string | null;
   accessState: AccessState;
-  refresh: () => void;
+  // Resolves when the sync it started has settled, so a caller that shows progress
+  // (the pull-to-refresh indicator) can keep it up for exactly that long.
+  refresh: () => Promise<void>;
   openMessage: (hash: string) => Promise<string>;
   openMessageFull: (hash: string) => Promise<FullBody>;
   deleteMessage: (hash: string) => Promise<void>;
@@ -38,7 +40,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [accessState, setAccessState] = useState<AccessState>('ok');
   const clientRef = useRef<MailboxSync | null>(null);
-  const syncRef = useRef<() => void>(() => {});
+  const syncRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
     if (!keys || !sessionToken || !isAuthenticated) return;
@@ -47,7 +49,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
     clientRef.current = client;
 
     let cancelled = false;
-    const doSync = () => {
+    const doSync = () =>
       client.list()
         .then(() => { if (cancelled) return; setError(null); setAccessState('ok'); })
         .catch(err => {
@@ -66,7 +68,6 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
           }
           setError(err instanceof Error ? err.message : String(err));
         });
-    };
     syncRef.current = doSync;
 
     doSync(); // initial sync
@@ -76,7 +77,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       client.close();
       clientRef.current = null;
-      syncRef.current = () => {};
+      syncRef.current = () => Promise.resolve();
       setMessages([]);
       setAccessState('ok');
     };
