@@ -6,6 +6,7 @@ import { useSent } from '../lib/hooks/useSent';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { PushRegistrar } from './PushRegistrar';
+import { NotificationOffer } from './NotificationOffer';
 import { setDraftOpen } from '../lib/draftOpen';
 import { useAppLock } from '../lib/hooks/useAppLock';
 import { useIsMobile } from '../lib/useIsMobile';
@@ -210,6 +211,13 @@ export function AppLayout() {
       {/* Renders nothing: it keeps this device's push registration in step with the browser's
           subscription, and refreshes the inbox when a wake-up arrives while a window is open. */}
       {address && keys && <PushRegistrar address={address} keys={keys} onNewMail={refresh} />}
+
+      {/* And the one prompt in the app: an account that has never answered whether it wants
+          notifications is asked, once, on the mail section it just unlocked into. Not over the
+          account screens, where someone is already busy with a decision of their own, and not in a
+          temporary session — those keys are gone at sign-out, but a subscription is not, so a
+          borrowed computer would be left buzzing about a stranger's mail. */}
+      {address && keys && section === 'mail' && !ephemeral && <NotificationOffer address={address} keys={keys} />}
 
       {/* ---- Sidebar / drawer ---- */}
       {isMobile && (

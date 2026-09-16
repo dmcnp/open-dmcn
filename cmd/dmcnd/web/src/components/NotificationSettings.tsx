@@ -13,10 +13,11 @@ import { deployment } from '@deployment';
 import { Button } from '../ds';
 import { SettingsSection } from './SettingsSection';
 import type { WorkingKeys } from '../lib/crypto/workingKeys';
+import { enableNotifications } from '../lib/push/enable';
+import { rememberOfferAnswered } from '../lib/push/offer';
 import { scopeIdFor, tearDownScope } from '../lib/push/scopes';
 import {
   currentSubscription, forgetEndpoint, pushConfigured, pushNeedsInstall, pushSupported,
-  rememberEndpoint, subscribeAccount,
 } from '../lib/push/subscription';
 
 type State = 'loading' | 'off' | 'on' | 'unsupported' | 'needs-install' | 'blocked';
@@ -41,19 +42,16 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
   async function enable() {
     setBusy(true);
     setErr('');
-    let id = scopeId;
     try {
-      if (!id) id = await scopeIdFor(keys.x25519Public);
-      const sub = await subscribeAccount(id, deployment.push!.workerUrl);
-      await deployment.push!.register(address, sub.endpoint, keys);
-      rememberEndpoint(address, sub.endpoint);
+      const id = await enableNotifications(address, keys);
       setScopeId(id);
+      // Someone who found this card has answered the question the inbox would otherwise put to
+      // them (see push/offer.ts). Recorded here as well as there, so the offer never arrives after
+      // a decision has already been made on this screen.
+      rememberOfferAnswered(id);
       setState('on');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not turn notifications on.');
-      // A registration that was created but never got as far as a usable subscription would
-      // otherwise sit there for ever, since nothing else sweeps it.
-      if (id) await tearDownScope(id).catch(() => { /* best effort */ });
       void refresh();
     } finally {
       setBusy(false);
@@ -70,6 +68,7 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
       if (sub) await deployment.push!.unregister(address, sub.endpoint, keys);
       await tearDownScope(scopeId);
       forgetEndpoint(address);
+      rememberOfferAnswered(scopeId);
       setState('off');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not turn notifications off.');
@@ -83,9 +82,9 @@ export function NotificationSettings({ address, keys }: { address: string; keys:
   return (
     <SettingsSection title="Notifications">
       <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-        Be told when mail arrives at this account, even with the app closed. A notification says only
-        that mail arrived — never who wrote or what about, because the relay that sends it cannot
-        read your mail. Opening it unlocks as usual.
+        Get a notification when a new email arrives, even with the app closed. We can’t tell you
+        who sent it or what’s in it, because we can’t see that. But we can tell you that a new
+        email arrived and let you handle it from there.
       </div>
 
       {state === 'needs-install' && (
