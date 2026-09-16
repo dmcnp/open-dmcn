@@ -20,10 +20,10 @@
 // unreadable entry costs one account rather than the whole unlock.
 
 import type { IdentityKeyPair } from './keys';
-import { keyPairFromPayloadJSON } from './keys';
+import { fromBase64, keyPairFromPayloadJSON, toBase64 } from './keys';
 import {
-  type EncryptedBundle, decryptKeys, decryptKeysWithKey, encryptKeys, encryptKeysWithKey,
-  importBundleKey,
+  type EncryptedBundle, type KdfParams, ARGON2_PARAMS, decryptKeys, decryptKeysWithKey,
+  deriveDeviceKey, encryptKeysWithKey, importBundleKey,
 } from './keystore';
 import { createPasskeyPRF, unlockPasskeyPRF } from './passkey';
 import { type AuthMethod, type LocalKeystore, loadLocalKeystore } from './localKeystore';
@@ -36,6 +36,14 @@ export interface DeviceKeystore {
   authMethod: AuthMethod;
   credentialId?: string; // base64 (passkey path)
   prfSalt?: string;      // base64 (passkey path)
+  // Password path: ONE salt for the whole store, so unlocking runs Argon2id once however many
+  // accounts are attached. It used to wrap each entry with its own salt, which meant N runs of a
+  // deliberately memory-hard KDF back to back — slow everywhere and a genuine hazard on a phone,
+  // where a WKWebView under memory pressure can fail one of them and (before this) drop that
+  // account in silence. Entries written the old way carry their own kdf tag and still open; they
+  // convert as they are re-attached.
+  salt?: string;         // base64
+  kdfParams?: KdfParams;
   // Per attached account: that account's bundle key, encrypted under the device secret. NOT its
   // identity — the identity stays in its own keystore, wrapped once. Addresses are already in the
   // clear on this device (the account list shows them while locked), so naming them here reveals
@@ -95,7 +103,7 @@ export class DevicePasswordRequiredError extends Error {
   }
 }
 
-// The device secret, as the two operations anything here needs from it.
+// The device secret, as the two operations anything here needs from it. Derived ONCE per unlock.
 interface DeviceKey {
   wrap: (bytes: Uint8Array) => Promise<EncryptedBundle>;
   unwrap: (bundle: EncryptedBundle) => Promise<Uint8Array>;
@@ -111,9 +119,18 @@ async function keyFor(ks: DeviceKeystore, password?: string): Promise<DeviceKey>
     };
   }
   if (!password) throw new DevicePasswordRequiredError();
+  const salt = ks.salt ? fromBase64(ks.salt) : null;
+  const shared = salt ? await deriveDeviceKey(password, salt, ks.kdfParams ?? ARGON2_PARAMS) : null;
   return {
-    wrap: bytes => encryptKeys(bytes, password),
-    unwrap: bundle => decryptKeys(bundle, password),
+    wrap: async bytes => {
+      if (!shared) throw new Error('this device’s secret has no salt to wrap with');
+      return encryptKeysWithKey(bytes, shared);
+    },
+    // An entry carrying its own kdf was written before the shared salt existed, and opens the way
+    // it was written. Self-describing, so the two shapes coexist without a version check.
+    unwrap: bundle => (bundle.kdf === 'argon2id'
+      ? decryptKeys(bundle, password)
+      : shared ? decryptKeysWithKey(bundle, shared) : Promise.reject(new Error('no device key'))),
   };
 }
 
@@ -124,25 +141,55 @@ async function keyFor(ks: DeviceKeystore, password?: string): Promise<DeviceKey>
  * actually lives. The device secret yields a bundle key; that key opens the bundle; the bundle
  * holds the key pair. The caller imports each into non-extractable handles and drops the rest.
  */
-export async function unlockDevice(opts?: { password?: string }): Promise<Record<string, IdentityKeyPair>> {
+export interface DeviceUnlockResult {
+  opened: Record<string, IdentityKeyPair>;
+  // Every account this unlock could NOT open, and why. Reported rather than skipped in silence:
+  // an account quietly missing from the result is indistinguishable from one that was never
+  // attached, which is how "it only unlocks one mailbox" could happen with nothing to go on.
+  skipped: Array<{ address: string; reason: string }>;
+}
+
+export async function unlockDevice(opts?: { password?: string }): Promise<DeviceUnlockResult> {
   const ks = await loadDeviceKeystore();
   if (!ks) throw new Error('this device has no shared unlock set up');
   const key = await keyFor(ks, opts?.password);
-  const out: Record<string, IdentityKeyPair> = {};
+  const opened: Record<string, IdentityKeyPair> = {};
+  const skipped: DeviceUnlockResult['skipped'] = [];
   for (const [address, entry] of Object.entries(ks.entries)) {
+    const account = await loadLocalKeystore(address);
+    if (!account?.bundle) {
+      skipped.push({ address, reason: 'it is no longer set up on this device' });
+      continue;
+    }
+    if (account.bundle.nonce !== entry.opens) {
+      skipped.push({ address, reason: 'its keystore was replaced after it was attached' });
+      continue;
+    }
+    let bundleKey: Uint8Array;
     try {
-      const account = await loadLocalKeystore(address);
-      // Gone, or re-wrapped since this key was stored — either way it opens nothing now.
-      if (!account?.bundle || account.bundle.nonce !== entry.opens) continue;
-      const bundleKey = await importBundleKey(await key.unwrap(entry.key));
-      out[address] = keyPairFromPayloadJSON(await decryptKeysWithKey(account.bundle, bundleKey));
-    } catch {
-      // One entry that cannot be opened must not cost the others their unlock. Left on file, and
-      // reported as unattached by attachedAddresses, so the UI never claims it works.
+      bundleKey = await key.unwrap(entry.key);
+    } catch (e) {
+      skipped.push({ address, reason: `this device's secret did not open its entry (${short(e)})` });
+      continue;
+    }
+    try {
+      opened[address] = keyPairFromPayloadJSON(
+        await decryptKeysWithKey(account.bundle, await importBundleKey(bundleKey)));
+    } catch (e) {
+      skipped.push({ address, reason: `its own keystore did not open (${short(e)})` });
     }
   }
-  if (Object.keys(out).length === 0) throw new Error('that did not unlock anything on this device');
-  return out;
+  if (Object.keys(opened).length === 0) {
+    throw new Error(skipped.length
+      ? `that opened nothing on this device — ${skipped.map(s => `${s.address}: ${s.reason}`).join('; ')}`
+      : 'that did not unlock anything on this device');
+  }
+  return { opened, skipped };
+}
+
+function short(e: unknown): string {
+  const m = e instanceof Error ? e.message : String(e);
+  return m.length > 80 ? `${m.slice(0, 80)}…` : m;
 }
 
 /**
@@ -167,6 +214,13 @@ export async function attachAccount(params: {
   const existing = await loadDeviceKeystore();
 
   if (existing) {
+    // A store written before the shared salt has none; mint one now so this entry and everything
+    // after it takes the one-derivation path. Entries already there keep their own and still open.
+    if (existing.authMethod === 'password' && !existing.salt) {
+      if (!params.password) throw new DevicePasswordRequiredError();
+      existing.salt = toBase64(crypto.getRandomValues(new Uint8Array(32)));
+      existing.kdfParams = ARGON2_PARAMS;
+    }
     const key = await keyFor(existing, params.password);
     existing.entries = { ...existing.entries, [address]: { key: await key.wrap(bundleKey), opens } };
     await idbPut(DEVICE_STORE, KEY, existing);
@@ -188,10 +242,14 @@ export async function attachAccount(params: {
   }
   const password = params.create?.password;
   if (!password) throw new DevicePasswordRequiredError();
+  const salt = crypto.getRandomValues(new Uint8Array(32));
+  const shared = await deriveDeviceKey(password, salt, ARGON2_PARAMS);
   await idbPut(DEVICE_STORE, KEY, {
     v: 1,
     authMethod: 'password',
-    entries: { [address]: { key: await encryptKeys(bundleKey, password), opens } },
+    salt: toBase64(salt),
+    kdfParams: ARGON2_PARAMS,
+    entries: { [address]: { key: await encryptKeysWithKey(bundleKey, shared), opens } },
     createdAt: Math.floor(Date.now() / 1000),
   } satisfies DeviceKeystore);
 }

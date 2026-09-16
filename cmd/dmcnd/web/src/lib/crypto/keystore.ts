@@ -27,7 +27,7 @@ export interface KdfParams {
 
 // Interactive-unlock parameters. ~19 MiB keeps pure-JS Argon2id to a sub-second
 // unlock on current hardware while staying above the OWASP floor (m=19456, t=2, p=1).
-const ARGON2_PARAMS: KdfParams = { m: 19456, t: 2, p: 1 };
+export const ARGON2_PARAMS: KdfParams = { m: 19456, t: 2, p: 1 };
 
 function passphraseKeyBytes(passphrase: string, salt: Uint8Array, params: KdfParams): Uint8Array {
   return argon2id(new TextEncoder().encode(passphrase), salt, {
@@ -59,6 +59,12 @@ async function derivePassphraseKey(
 // drop.
 export function bundleKeyBytes(bundle: EncryptedBundle, passphrase: string): Uint8Array {
   return passphraseKeyBytes(passphrase, fromBase64(bundle.salt), bundle.kdfParams ?? ARGON2_PARAMS);
+}
+
+// The shared device-unlock key: one Argon2id run for a whole store of attached accounts, instead
+// of one per account. Same derivation as a bundle's, just used for a different thing.
+export function deriveDeviceKey(passphrase: string, salt: Uint8Array, params: KdfParams): Promise<CryptoKey> {
+  return derivePassphraseKey(passphrase, salt, params, ['encrypt', 'decrypt']);
 }
 
 export function importBundleKey(raw: Uint8Array): Promise<CryptoKey> {

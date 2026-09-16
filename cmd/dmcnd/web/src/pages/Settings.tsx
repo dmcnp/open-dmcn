@@ -16,6 +16,7 @@ import { isStoragePersisted, requestPersistentStorage } from '../lib/crypto/stor
 import { isInstalledApp } from '../lib/appContext';
 import { detachAccount, isAttached } from '../lib/crypto/deviceKeystore';
 import { isLockOnLeave, setLockOnLeave } from '../lib/devicePosture';
+import { canKeepUnlocked } from '../lib/accounts';
 import { applyLockPosture } from '../lib/crypto/workingKeys';
 import { DeviceUnlockSettings } from '../components/DeviceUnlockSettings';
 import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, type ThemePref, type Density } from '../lib/theme';
@@ -184,6 +185,11 @@ export function Settings() {
   // keystore is the only at-rest copy, a non-persisted origin risks losing it.
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [lockOnLeave, setLockState] = useState(isLockOnLeave());
+  // Whether this browser can keep an unlocked account across a reload at all. WebKit cannot: it
+  // stores a working handle and then cannot revive the X25519 key inside it, so the row is dead on
+  // arrival. Worth saying beside the switch, because the "off" half of it promises exactly that.
+  const [keepsUnlocked, setKeepsUnlocked] = useState(true);
+  useEffect(() => { void canKeepUnlocked().then(setKeepsUnlocked); }, []);
   // Managed-account disclosure (whitepaper §13.8): true when the domain's DAR
   // declares admin key custody — the org admin holds this account's keys.
   const [managedDomain, setManagedDomain] = useState(false);
@@ -501,6 +507,14 @@ export function Settings() {
                   minutes after you leave it for something else — a page refresh never re-prompts, and a quick glance
                   elsewhere does not lock you out. Off: accounts stay unlocked across restarts for one-click access.
                 </div>
+                {!keepsUnlocked && (
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--warning)', marginTop: 'var(--space-2)', lineHeight: 'var(--leading-normal)' }}>
+                    This {isInstalledApp() ? 'app' : 'browser'} cannot keep an account unlocked once it is
+                    closed — it stores the keys and then cannot read them back — so accounts lock on
+                    reload whichever way this is set. Within a session it makes no difference:
+                    unlocking once still opens every account attached to this device.
+                  </div>
+                )}
               </div>
               <Switch id="lock-on-leave" checked={lockOnLeave}
                 onChange={v => {

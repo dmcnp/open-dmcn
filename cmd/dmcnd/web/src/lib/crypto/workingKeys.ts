@@ -12,7 +12,7 @@
 import type { IdentityKeyPair } from './keys';
 import { importEd25519PrivateKey, importX25519PrivateKey } from './keys';
 import { bufferSource } from './bytes';
-import { WORKING_STORE, idbGet, idbGetAllKeys, idbPut, idbDelete } from './idb';
+import { DEVICE_STORE, WORKING_STORE, idbGet, idbGetAllKeys, idbPut, idbDelete } from './idb';
 import { accountWorkingRef, tabWorkingPrefix, parseTabWorkingRef, workingKeyRef } from '../sessionLifetime';
 import { isLockOnLeave } from '../devicePosture';
 
@@ -38,6 +38,120 @@ export interface WorkingKeys {
 // per-account ('acct:<addr>') for stay-signed-in. Either way a tab may hold several
 // accounts unlocked at once; the address field lets a reader reject a handle that
 // belongs to a different account than the one it asked for.
+
+/**
+ * Whether this browser can store a working handle and read it back.
+ *
+ * Not a theoretical question. WebKit serialises a record holding these keys, persists its key, and
+ * then answers a read with `undefined` — IndexedDB's way of reporting a value it cannot revive. So
+ * the write reports success, the row exists, and the handle is gone. Everything above reads that as
+ * "nothing stored", which is exactly as misleading as it sounds.
+ *
+ * Measured the way the app actually builds a handle: the same importEd25519PrivateKey /
+ * importX25519PrivateKey / HKDF calls over random bytes, stored as one record like a real one.
+ * Testing them individually as well says WHICH type a browser chokes on, which is the difference
+ * between "persist a reduced handle" and "this browser cannot keep an unlock at all".
+ *
+ * Throwaway keys under their own prefix, deleted afterwards. Nothing of any account's goes near it.
+ */
+export interface HandleStorageVerdict {
+  /** Whether a COMPLETE handle survives a round trip. Only that is worth persisting. */
+  ok: boolean;
+  /** Per key type, for a report worth reading: `ed25519=ok x25519=unreadable …`. */
+  detail: string;
+}
+
+async function roundTrips(ref: string, value: Record<string, unknown>): Promise<string> {
+  try {
+    await idbPut(WORKING_STORE, ref, value);
+    const back = await idbGet<Record<string, unknown>>(WORKING_STORE, ref);
+    if (back === undefined) return 'unreadable';
+    for (const k of Object.keys(value)) if (!back[k]) return `dropped ${k}`;
+    return 'ok';
+  } catch (e) {
+    return e instanceof Error ? e.name : 'threw';
+  } finally {
+    try { await idbDelete(WORKING_STORE, ref); } catch { /* best effort */ }
+  }
+}
+
+export async function probeHandleStorage(): Promise<HandleStorageVerdict> {
+  const raw = () => crypto.getRandomValues(new Uint8Array(32));
+  let ed: CryptoKey, x: CryptoKey, hkdf: CryptoKey;
+  try {
+    ed = await importEd25519PrivateKey(raw());
+    x = await importX25519PrivateKey(raw());
+    hkdf = await crypto.subtle.importKey('raw', bufferSource(raw()), 'HKDF', false, ['deriveBits']);
+  } catch (e) {
+    // The keys cannot even be made here, which is a different and much larger problem.
+    return { ok: false, detail: `could not import test keys (${e instanceof Error ? e.name : 'unknown'})` };
+  }
+  const parts = [
+    `ed25519=${await roundTrips('probe:ed25519', { key: ed })}`,
+    `x25519=${await roundTrips('probe:x25519', { key: x })}`,
+    `hkdf=${await roundTrips('probe:hkdf', { key: hkdf })}`,
+  ];
+  // The one that decides it: a handle is only useful whole.
+  const whole = await roundTrips('probe:whole', { ed25519Sign: ed, x25519Derive: x, aliasRoot: hkdf });
+  parts.push(`whole-handle=${whole}`);
+  return { ok: whole === 'ok', detail: parts.join(' ') };
+}
+
+// The verdict, taken once per context and remembered. Probing costs four transactions, and the
+// answer is a property of the browser rather than of any account.
+let verdict: HandleStorageVerdict | null = null;
+
+export async function handleStorageVerdict(): Promise<HandleStorageVerdict> {
+  if (verdict) return verdict;
+  try {
+    const stored = await idbGet<HandleStorageVerdict>(DEVICE_STORE, HANDLE_STORAGE_KEY);
+    if (stored && typeof stored.ok === 'boolean') return (verdict = stored);
+  } catch { /* fall through and measure */ }
+  const measured = await probeHandleStorage();
+  verdict = measured;
+  try { await idbPut(DEVICE_STORE, HANDLE_STORAGE_KEY, measured); } catch { /* it will be remeasured */ }
+  return measured;
+}
+
+const HANDLE_STORAGE_KEY = 'handle-storage';
+
+// The accounts unlocked in THIS page, held in memory.
+//
+// IndexedDB is how an unlocked account survives a reload; it is not how the app knows which
+// accounts are open right now. Those are two different questions, and conflating them meant a
+// write that did not stick cost the user an account they had just unlocked — silently, because
+// nothing reads back what it stores. On a platform where persisting several handles in quick
+// succession proved unreliable, that turned "one unlock opens all your mailboxes" into "one
+// unlock opens one mailbox".
+//
+// So the page keeps its own answer. Persistence is still attempted and still preferred on restore
+// — it is what makes a refresh free — but losing it now costs a reload, not a mailbox.
+//
+// These are the same non-extractable CryptoKey handles that would otherwise sit in IndexedDB, for
+// the lifetime of one page rather than indefinitely. Nothing raw, and nothing new is reachable:
+// holding several unlocked accounts at once is what the account switcher has always done.
+const livePage = new Map<string, WorkingKeys>();
+
+export function rememberLiveHandles(wk: WorkingKeys): void {
+  if (wk.address) livePage.set(wk.address, wk);
+}
+
+export function liveHandles(address: string): WorkingKeys | null {
+  const wk = livePage.get(address);
+  return wk && wk.address === address ? wk : null;
+}
+
+export function liveAddresses(): string[] {
+  return [...livePage.keys()];
+}
+
+export function forgetLiveHandles(address: string): void {
+  livePage.delete(address);
+}
+
+export function forgetAllLiveHandles(): void {
+  livePage.clear();
+}
 
 // importWorkingKeys turns a freshly-decrypted raw key pair into non-extractable
 // handles for `address`. The caller discards the raw IdentityKeyPair afterwards.
@@ -140,8 +254,10 @@ export async function listUnlockedRefs(): Promise<Array<{ ref: string; address: 
   }
 }
 
-// clearUnlockedHandles locks every account this tab holds (sign out of all).
+// clearUnlockedHandles locks every account this tab holds (sign out of all, and the app lock).
+// Both halves: the stored handles and the ones this page is holding.
 export async function clearUnlockedHandles(): Promise<void> {
+  forgetAllLiveHandles();
   const refs = await listUnlockedRefs();
   await Promise.all(refs.map(r => clearWorkingKeys(r.ref)));
 }

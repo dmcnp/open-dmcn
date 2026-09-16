@@ -68,14 +68,33 @@ function openDB(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+// A write is finished when its TRANSACTION commits, not when its request succeeds.
+//
+// This used to resolve on `req.onsuccess`, which fires as soon as the request is processed and
+// says nothing about durability: a readwrite transaction that aborts afterwards — storage pressure,
+// a serialization failure surfacing at commit, the browser reclaiming it — rolls the write back
+// silently, and the caller has already been told it worked. That is not theoretical. It is what
+// left several accounts' working handles missing right after they were "stored", on a platform
+// tighter with memory than the one this was written on, with nothing raised anywhere.
+//
+// So a readwrite resolves on `oncomplete`, and an abort at any point rejects. A readonly can still
+// resolve on the request, since there is nothing to commit and the value is already in hand.
 function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return openDB().then(
     db =>
       new Promise<T>((resolve, reject) => {
         const t = db.transaction(store, mode);
         const req = fn(t.objectStore(store));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        let value: T;
+        req.onsuccess = () => {
+          value = req.result;
+          if (mode === 'readonly') resolve(value);
+        };
+        req.onerror = () => reject(req.error ?? new Error(`indexeddb: ${store} request failed`));
+        // Rejecting after a readonly has resolved is a no-op, so these are safe to attach always.
+        t.oncomplete = () => resolve(value);
+        t.onabort = () => reject(t.error ?? new Error(`indexeddb: ${store} transaction aborted`));
+        t.onerror = () => reject(t.error ?? new Error(`indexeddb: ${store} transaction failed`));
       })
   );
 }

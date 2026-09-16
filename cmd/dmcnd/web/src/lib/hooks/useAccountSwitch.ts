@@ -4,10 +4,12 @@ import { useAuth } from './useAuth';
 import { useKeys } from './useKeys';
 import { loginWithKeys, logoutToken } from '../api/client';
 import { unlockKeystore, PasswordRequiredError } from '../crypto/reauth';
-import { DevicePasswordRequiredError, loadDeviceKeystore, unlockDevice } from '../crypto/deviceKeystore';
+import { DevicePasswordRequiredError, attachedAddresses, loadDeviceKeystore, unlockDevice } from '../crypto/deviceKeystore';
 import type { AuthMethod } from '../crypto/localKeystore';
 import { importWorkingKeys, type WorkingKeys } from '../crypto/workingKeys';
 import {
+  canKeepUnlocked,
+  describeHandle,
   listDeviceAccounts,
   loadUnlockedKeys,
   persistWorkingKeys,
@@ -82,9 +84,16 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
-    void loadDeviceKeystore().then(ks => {
-      setDeviceUnlock(ks ? { authMethod: ks.authMethod, addresses: Object.keys(ks.entries).sort() } : null);
-    });
+    void (async () => {
+      const ks = await loadDeviceKeystore();
+      if (!ks) { setDeviceUnlock(null); return; }
+      // attachedAddresses, NOT Object.keys(ks.entries): an entry whose account has been re-wrapped
+      // since (or has gone) opens nothing, and unlockDevice skips it. Counting the raw entries here
+      // made this screen promise "open all N" and then deliver fewer — with the survivor being
+      // whichever was attached most recently, since it is the one whose keystore has not moved.
+      const addresses = await attachedAddresses();
+      setDeviceUnlock(addresses.length ? { authMethod: ks.authMethod, addresses } : null);
+    })();
   }, []);
 
   const switchTo = useCallback(async (account: DeviceAccount, o?: { password?: string }): Promise<boolean> => {
@@ -169,14 +178,28 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
     const prevToken = sessionToken;
     const prevAddress = address;
     try {
-      const pairs = await unlockDevice({ password: o?.password });
+      const { opened, skipped } = await unlockDevice({ password: o?.password });
       const unlocked: WorkingKeys[] = [];
-      for (const [addr, kp] of Object.entries(pairs)) {
+      // Accounts this unlock opened but the browser would not keep. They are only usable while this
+      // page lives, so the one adopted below works and the rest read as locked the moment anything
+      // asks — which is the whole failure, and it used to happen in silence.
+      const notKept: Array<{ address: string; why: string }> = [];
+      for (const [addr, kp] of Object.entries(opened)) {
         const wk = await importWorkingKeys(addr, kp);
         try {
           await persistWorkingKeys(wk);
-        } catch {
-          // Private mode / quota: this page's lifetime still has them.
+          // Read it back rather than trusting the write. A resolved put is not the same as a
+          // readable handle: these are non-extractable CryptoKeys going through structured clone,
+          // and that is exactly where a browser quietly declines. describeHandle says WHICH part
+          // came back wrong, because the four causes need four different fixes.
+          // On a browser known not to keep handles, persistWorkingKeys does not even try, and
+          // describing the absence would be reporting a decision as a fault.
+          if (await canKeepUnlocked()) {
+            const why = await describeHandle(addr);
+            if (why) notKept.push({ address: addr, why });
+          }
+        } catch (e) {
+          notKept.push({ address: addr, why: `storing it failed (${e instanceof Error ? e.name : 'unknown'})` });
         }
         unlocked.push(wk);
       }
@@ -187,6 +210,34 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
       setSession(target.address, token);
       setNeedsDevicePassword(false);
       setNeedsPassword(null);
+      // Two quite different outcomes, and they used to read as one. `skipped` really did not open —
+      // the device secret could not reach them, and they are not available. `notKept` opened and
+      // are usable right now; the browser just would not store them, so they lock again on reload
+      // rather than being lost. Saying "did not open" for the second was simply wrong.
+      const fleeting = notKept.filter(k => k.address !== target.address);
+      const parts: string[] = [];
+      if (skipped.length) {
+        parts.push(`${skipped.length === 1 ? 'One account did' : `${skipped.length} accounts did`} `
+          + `not open: ${skipped.map(sk => `${sk.address} — ${sk.reason}`).join('; ')}`);
+      }
+      if (fleeting.length) {
+        parts.push(`this browser would not store ${fleeting.map(k => k.address).join(', ')}, so `
+          + `${fleeting.length === 1 ? 'it is' : 'they are'} open now but will need unlocking again `
+          + `after a reload (${fleeting.map(k => k.why).join('; ')})`);
+      }
+      // Said once, as a fact about this browser, rather than as a per-account failure every time.
+      if (!(await canKeepUnlocked())) {
+        parts.push('this browser cannot keep accounts unlocked across a reload, so they will need '
+          + 'unlocking again next time it is opened');
+      }
+      if (parts.length) {
+        // Deliberately no navigate: this screen is the only place either message will be read, and
+        // going straight to the inbox leaves the person to discover the shortfall on their own.
+        // Everything that opened is open; Continue is one click away.
+        setError(`Unlocked ${target.address}, but ${parts.join('; and ')}.`);
+        void refresh();
+        return true;
+      }
       navigate('/inbox');
       onSwitchedRef.current?.(target.address);
       if (prevToken && prevAddress && prevAddress !== target.address) {

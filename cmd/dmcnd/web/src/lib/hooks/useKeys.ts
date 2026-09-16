@@ -5,6 +5,7 @@ import {
   importWorkingKeys,
   clearWorkingKeys,
   clearUnlockedHandles,
+  forgetLiveHandles,
   gcWorkingHandles,
 } from '../crypto/workingKeys';
 import { migrateLegacyKeystore } from '../crypto/localKeystore';
@@ -110,7 +111,11 @@ export function KeysProvider({ children }: { children: ReactNode }) {
   }, [adoptKeys]);
 
   const clearKeys = useCallback(async () => {
-    if (address) await clearWorkingKeys(workingKeyRef(address));
+    if (address) {
+      // Both halves, or signing out would leave the account open in this page.
+      forgetLiveHandles(address);
+      await clearWorkingKeys(workingKeyRef(address));
+    }
     setBoth(null);
   }, [address, setBoth]);
 

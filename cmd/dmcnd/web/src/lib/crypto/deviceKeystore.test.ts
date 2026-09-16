@@ -59,8 +59,9 @@ describe('deviceKeystore', () => {
     await m.attachAccount({ address: 'b@x.test', bundleKey: await bundleKeyOf('b@x.test'), password: DEVICE_PW });
 
     expect(await m.attachedAddresses()).toEqual(['a@x.test', 'b@x.test']);
-    const opened = await m.unlockDevice({ password: DEVICE_PW });
+    const { opened, skipped } = await m.unlockDevice({ password: DEVICE_PW });
     expect(Object.keys(opened).sort()).toEqual(['a@x.test', 'b@x.test']);
+    expect(skipped).toEqual([]);
     expect(toBase64(opened['a@x.test'].ed25519Private)).toBe(toBase64(alice.ed25519Private));
     expect(toBase64(opened['b@x.test'].x25519Private)).toBe(toBase64(bob.x25519Private));
   }, 60_000);
@@ -76,9 +77,13 @@ describe('deviceKeystore', () => {
 
     // Whatever the device secret holds, it decrypts to 32 bytes — a key — and not to anything
     // containing the private key it ultimately reaches.
-    const { decryptKeys } = await import('./keystore');
-    const stored = (await m.loadDeviceKeystore())!.entries['a@x.test'];
-    const plain = await decryptKeys(stored.key, DEVICE_PW);
+    const { ARGON2_PARAMS, decryptKeysWithKey, deriveDeviceKey } = await import('./keystore');
+    const { fromBase64 } = await import('./keys');
+    const store = (await m.loadDeviceKeystore())!;
+    // One salt for the whole store: the unlock derives once however many accounts are attached.
+    expect(store.salt).toBeTruthy();
+    const shared = await deriveDeviceKey(DEVICE_PW, fromBase64(store.salt!), store.kdfParams ?? ARGON2_PARAMS);
+    const plain = await decryptKeysWithKey(store.entries['a@x.test'].key, shared);
     expect(plain).toHaveLength(32);
     expect(toBase64(plain)).not.toContain(toBase64(kp.ed25519Private).slice(0, 16));
   }, 60_000);
@@ -120,7 +125,10 @@ describe('deviceKeystore', () => {
 
     expect(await m.isAttached('a@x.test')).toBe(false);
     expect(await m.attachedAddresses()).toEqual(['b@x.test']);
-    expect(Object.keys(await m.unlockDevice({ password: DEVICE_PW }))).toEqual(['b@x.test']);
+    const { opened, skipped } = await m.unlockDevice({ password: DEVICE_PW });
+    expect(Object.keys(opened)).toEqual(['b@x.test']);
+    // And says WHY, rather than leaving the account to vanish from the result unexplained.
+    expect(skipped).toEqual([{ address: 'a@x.test', reason: 'its keystore was replaced after it was attached' }]);
   }, 60_000);
 
   it('reports an account as unattached once it is gone from this device', async () => {
