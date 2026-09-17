@@ -17,6 +17,7 @@ import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
 import { senderLabel } from '../lib/trust/displayName';
+import { InboxNotices } from '../components/InboxNotices';
 import { MessageReader } from '../components/MessageReader';
 import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
@@ -474,6 +475,11 @@ export function InboxMain() {
               {!pending && listError && (
                 <div style={{ margin: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>{listError}</div>
               )}
+
+              {/* Pending requests announce themselves above the mail, in the Inbox only: they
+                  are things asking to happen to this account, not things to find in Archive,
+                  and a filter result is a search for mail, not for them. */}
+              {folder === 'inbox' && !q && <InboxNotices />}
 
               {rows.length === 0 ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>

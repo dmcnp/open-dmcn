@@ -17,6 +17,30 @@ import type { MailFilterFactory } from './api/filterList';
 import type { StorageUsage } from './api/personalStore';
 import type { WorkingKeys } from './crypto/workingKeys';
 
+// InboxNotice is one kind of request-shaped control message, surfaced as a row at the top of
+// the inbox. The shell owns the row and the dialog it opens; the deployment owns which kinds
+// exist and what opening one shows.
+//
+// The row's words are the SHELL's, never the requester's. A request of this shape is
+// unauthenticated inbound mail — anyone who knows an address can put one in its mailbox — and
+// text pinned above someone's mail, in the app's own chrome, reads as the app speaking. So a
+// notice contributes a subject to count and a sentence about how many; whatever the requester
+// called itself belongs inside the dialog, framed as a claim.
+export interface InboxNotice {
+  // The control subject whose presence in the mailbox raises this notice. Must also appear in
+  // controlSubjects, or the requests show up as mail as well.
+  subject: string;
+  // Row and dialog icon (Icon name).
+  icon: string;
+  // Dialog title.
+  title: string;
+  // The row's sentence, given how many are pending.
+  summary: (count: number) => string;
+  // What opening the row shows. Rendered inside the dialog body, and kept mounted while the
+  // dialog is open even after the last request is gone, so a result stays readable.
+  view: ComponentType<{ onClose: () => void }>;
+}
+
 // AccountIdentity is one address of an account together with the keys that act as it. For a
 // shared alias `keys` is the account's own working set; for an isolated alias it is a derived
 // set that the deployment holds only as non-extractable handles.
@@ -192,6 +216,9 @@ export interface Deployment {
 
   // Attachment content types consumed elsewhere and hidden from a message's attachment list.
   internalAttachmentTypes: string[];
-  // Subjects that mark a control message, surfaced in its own panel rather than a folder.
+  // Subjects that mark a control message, kept out of every folder.
   controlSubjects: string[];
+  // Which of those subjects announce themselves at the top of the inbox, and what each one
+  // opens. Absent ⇒ control messages have no surface of their own.
+  inboxNotices?: InboxNotice[];
 }
