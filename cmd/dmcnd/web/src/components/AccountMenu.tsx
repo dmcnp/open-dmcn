@@ -3,7 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useAccountSwitch } from '../lib/hooks/useAccountSwitch';
-import { useWokenAccounts } from '../lib/push/useWokenAccounts';
+import { useWokenAccounts } from '../lib/push/woken';
 import { useBackgroundUnread } from '../lib/hooks/useBackgroundUnread';
 import type { DeviceAccount } from '../lib/accounts';
 import { AccountMonogram } from './AccountMonogram';

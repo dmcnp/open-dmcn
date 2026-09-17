@@ -35,6 +35,7 @@ import { scopeIdFor, tearDownScope } from './push/scopes';
 import { forgetEndpoint } from './push/subscription';
 import { detachAccount } from './crypto/deviceKeystore';
 import { workingKeyRef } from './sessionLifetime';
+import { storageKey } from './appContext';
 
 export interface DeviceAccount {
   address: string;
@@ -43,6 +44,24 @@ export interface DeviceAccount {
   // but can never be re-unlocked, so it is never offered an "Unlock" affordance.
   ks: LocalKeystore | null;
   unlocked: boolean;
+}
+
+// The account this context was last acting as.
+//
+// Device-local and not a secret: every address here is already listed in the clear while the
+// accounts are locked, which is what the picker shows. It exists so an unlock that opens SEVERAL
+// mailboxes at once can land on the one the person actually uses, instead of alphabetically.
+//
+// localStorage rather than IndexedDB beside the handles: losing it costs one wrong landing, so the
+// durability the keys need would be spent on nothing.
+const LAST_ACCOUNT_KEY = 'dmcn_last_account';
+
+export function rememberLastAccount(address: string): void {
+  try { localStorage.setItem(storageKey(LAST_ACCOUNT_KEY), address); } catch { /* ignore */ }
+}
+
+export function lastAccount(): string | null {
+  try { return localStorage.getItem(storageKey(LAST_ACCOUNT_KEY)); } catch { return null; }
 }
 
 export function initialsOf(address: string): string {
@@ -207,6 +226,10 @@ export async function forgetAccount(address: string): Promise<void> {
   forgetLiveHandles(address);
   for (const ref of bothWorkingRefs(address)) await clearWorkingKeys(ref);
   await clearLocalKeystore(address);
+  // An account that is gone cannot be the one to land in.
+  if (lastAccount() === address) {
+    try { localStorage.removeItem(storageKey(LAST_ACCOUNT_KEY)); } catch { /* ignore */ }
+  }
 }
 
 /**

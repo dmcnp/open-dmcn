@@ -10,12 +10,14 @@ import { importWorkingKeys, type WorkingKeys } from '../crypto/workingKeys';
 import {
   canKeepUnlocked,
   describeHandle,
+  lastAccount,
   listDeviceAccounts,
   loadUnlockedKeys,
   persistWorkingKeys,
   forgetAccount,
   type DeviceAccount,
 } from '../accounts';
+import { wokenAddresses } from '../push/woken';
 
 // Signing in as one of this device's identities — shared by the login picker and the
 // header's account switcher, which are the same act from different starting points.
@@ -45,9 +47,33 @@ export interface AccountSwitch {
   deviceUnlock: { authMethod: AuthMethod; addresses: string[] } | null;
   // True once a shared unlock has been attempted and the device's secret is a password.
   needsDevicePassword: boolean;
-  // Open every attached account at once. `prefer` picks which of them the app then acts as —
-  // the account a tapped notification named, when there was one.
+  // Open every attached account at once. `prefer` names the account the app should then act as —
+  // the one a tapped notification was for. Without it, see chooseTarget: mail waiting, then
+  // whichever account this device was last using.
   unlockAll: (opts?: { password?: string; prefer?: string }) => Promise<boolean>;
+}
+
+/**
+ * Which of the just-opened accounts the app then acts as.
+ *
+ * One unlock opens every attached mailbox, so this only decides where the person LANDS — the rest
+ * are one click away in the switcher either way. In order: the account a tapped notification named;
+ * one the worker has marked as having mail waiting; the account this device was last using.
+ *
+ * Only the first is certain. The second is what is knowable before any mailbox has been read — the
+ * worker's mark, which is also what the picker calls "new mail" — and deliberately not a live
+ * unread count for each account, which would mean a login and a mailbox read per account standing
+ * between the unlock and the inbox. The third is the ordinary case, and it beats the alphabetical
+ * first account, which is what this used to do.
+ */
+async function chooseTarget(unlocked: WorkingKeys[], prefer?: string): Promise<WorkingKeys> {
+  const asked = unlocked.find(w => w.address === prefer);
+  if (asked) return asked;
+  const woken = await wokenAddresses(unlocked);
+  const withMail = unlocked.find(w => woken.has(w.address));
+  if (withMail) return withMail;
+  const last = lastAccount();
+  return unlocked.find(w => w.address === last) ?? unlocked[0];
 }
 
 function unlockErrorMessage(e: unknown): string {
@@ -203,7 +229,7 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
         }
         unlocked.push(wk);
       }
-      const target = unlocked.find(w => w.address === o?.prefer) ?? unlocked[0];
+      const target = await chooseTarget(unlocked, o?.prefer);
       // Mint the incoming session before adopting anything, for the same reason switchTo does.
       const token = await loginWithKeys(target.address, target.ed25519Sign);
       adoptKeys(target);
@@ -225,11 +251,12 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
           + `${fleeting.length === 1 ? 'it is' : 'they are'} open now but will need unlocking again `
           + `after a reload (${fleeting.map(k => k.why).join('; ')})`);
       }
-      // Said once, as a fact about this browser, rather than as a per-account failure every time.
-      if (!(await canKeepUnlocked())) {
-        parts.push('this browser cannot keep accounts unlocked across a reload, so they will need '
-          + 'unlocking again next time it is opened');
-      }
+      // Nothing here about a browser that cannot keep handles across a reload. It used to say so,
+      // and it stopped the one browser that behaves this way (WebKit, so every iOS device) on this
+      // screen after a completely successful unlock — every mailbox open and ready — to report a
+      // property of the browser. It is a standing fact rather than an outcome of this unlock, the
+      // settings page states it beside the switch it actually qualifies, and the cost of repeating
+      // it here was the inbox, every single time.
       if (parts.length) {
         // Deliberately no navigate: this screen is the only place either message will be read, and
         // going straight to the inbox leaves the person to discover the shortfall on their own.

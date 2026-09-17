@@ -13,6 +13,27 @@ import { fromBase64 } from '../crypto/keys';
 import { scopeIdFor } from './scopes';
 import { wasWoken } from './subscription';
 
+// What an account has to offer to be asked about: its address, and the public half the scope id is
+// derived from. Two fields rather than a DeviceAccount, because the other caller is an unlock
+// holding freshly imported handles and has no reason to go back to IndexedDB for records it is
+// already looking at.
+export interface WokenCandidate {
+  address: string;
+  x25519Public: Uint8Array;
+}
+
+// wokenAddresses answers for a set of candidates at once. This is the whole mechanism; the hook
+// below is only the shell that re-asks it when a menu opens.
+export async function wokenAddresses(candidates: WokenCandidate[]): Promise<Set<string>> {
+  const marked = new Set<string>();
+  for (const c of candidates) {
+    try {
+      if (await wasWoken(await scopeIdFor(c.x25519Public))) marked.add(c.address);
+    } catch { /* a record we cannot read is not one we can mark */ }
+  }
+  return marked;
+}
+
 export function useWokenAccounts(accounts: DeviceAccount[] | null, enabled: boolean): Set<string> {
   const [woken, setWoken] = useState<Set<string>>(new Set());
 
@@ -20,13 +41,14 @@ export function useWokenAccounts(accounts: DeviceAccount[] | null, enabled: bool
     if (!enabled || !accounts) return;
     let cancelled = false;
     void (async () => {
-      const marked = new Set<string>();
+      const candidates: WokenCandidate[] = [];
       for (const account of accounts) {
         if (!account.ks) continue; // a temporary session has no at-rest key to derive an id from
         try {
-          if (await wasWoken(await scopeIdFor(fromBase64(account.ks.x25519Public)))) marked.add(account.address);
-        } catch { /* a record we cannot read is not one we can mark */ }
+          candidates.push({ address: account.address, x25519Public: fromBase64(account.ks.x25519Public) });
+        } catch { /* a malformed record is not the account we are looking for */ }
       }
+      const marked = await wokenAddresses(candidates);
       if (!cancelled) setWoken(marked);
     })();
     return () => { cancelled = true; };

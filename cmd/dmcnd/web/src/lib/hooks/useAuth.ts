@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode, createElement } from 'react';
 import { setSessionToken } from '../api/client';
+import { rememberLastAccount } from '../accounts';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -32,6 +33,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setSession = useCallback((address: string, token: string) => {
     setSessionToken(token);
     sessionStorage.setItem('dmcn_session', JSON.stringify({ address, sessionToken: token }));
+    // Every road into acting as an account ends here, so this is the one place that can record
+    // WHICH account without a caller having to remember to. The session itself is per-tab and
+    // gone when the browser closes; this outlives it, and is the only thing left to say where a
+    // device unlock should land next time.
+    rememberLastAccount(address);
     setState({ isAuthenticated: true, address, sessionToken: token });
   }, []);
 
