@@ -375,10 +375,10 @@ export function Settings() {
             { value: 'privacy', label: 'Privacy & security', icon: <Icon name="shield" size={16} /> },
             { value: 'appearance', label: 'Appearance', icon: <Icon name="sun" size={16} /> },
             { value: 'organise', label: 'Labels & folders', icon: <Icon name="tag" size={16} /> },
-            // `key`, not a second `user`: Profile is who you are to other people, Account is the
-            // identity, keys, plan and session behind it. Two tabs drawing the same glyph made
-            // the strip read as one thing split in half.
-            { value: 'account', label: 'Account', icon: <Icon name="key" size={16} /> },
+            // Not a second `user` (Profile is who you are to other people) and not `key` either,
+            // which already means "the secret that unlocks this" on the Unlock buttons and "Your
+            // encryption key" one tab to the left. The address is the account here.
+            { value: 'account', label: 'Account', icon: <Icon name="at-sign" size={16} /> },
           ]}
         />
 

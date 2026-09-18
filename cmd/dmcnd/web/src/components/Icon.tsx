@@ -37,6 +37,12 @@ const P: Record<string, ReactNode> = {
   search: <><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></>,
   settings: <><path d="M20 7h-9" /><path d="M14 17H5" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></>,
   user: <><circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 0 0-16 0" /></>,
+  // at-sign: the account you hold with the provider — your address, its aliases, the domain and the
+  // plan behind them. Not `key`, which this set already spends twice on the secret that unlocks a
+  // mailbox (the Unlock buttons) and once on "Your encryption key" — one tab away from this in the
+  // same strip. At 16px it is also the only candidate that survives: an id-card silhouette turns to
+  // mush and a user-with-a-cog fights the plain `user` next to it.
+  'at-sign': <><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94" /></>,
   users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4" /></>,
   moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
