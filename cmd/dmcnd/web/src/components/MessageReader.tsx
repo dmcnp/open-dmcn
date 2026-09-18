@@ -4,11 +4,12 @@ import type { Preview, FullBody } from '../lib/api/mailboxRest';
 import type { ComposeReplyTo } from '../lib/compose';
 import { useMessages } from '../lib/hooks/useMessages';
 import { useFlags } from '../lib/hooks/useFlags';
-import { useLabels } from '../lib/hooks/useLabels';
+import { useLabels, LABEL_COLORS } from '../lib/hooks/useLabels';
 import type { LabelDef } from '../lib/api/labelStore';
 import { useAuth } from '../lib/hooks/useAuth';
-import { Badge, Button, IconButton, Tag } from '../ds';
+import { Badge, Button, IconButton, Input, Tag } from '../ds';
 import { Icon } from './Icon';
+import { ColorSwatches } from './ColorSwatches';
 import { lookupIdentity } from '../lib/api/client';
 import { verifyBridgeAttestation, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
 import { verifyDeliveryReceipt, RECEIPT_CONTENT_TYPE, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
@@ -190,6 +191,10 @@ function receiptView(r: DeliveryReceiptView): {
   return { variant: 'danger', icon: 'alert-triangle', label: 'Delivery failed', detail: `The bridge could not deliver your message to ${who}${r.errorDetail ? `: ${r.errorDetail}` : ''}.` };
 }
 
+// The option that means "none of these — make one". A label id is 16 hex characters, so this
+// cannot collide with one.
+const NEW_OPTION = '__new__';
+
 // Minimal themed style for the native label/folder assignment selects.
 const assignSelectStyle: CSSProperties = {
   font: 'inherit', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
@@ -274,7 +279,7 @@ export interface MessageReaderProps {
 export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, openFull, onDeleteOverride, starred, archived, onToggleStar, onArchive }: MessageReaderProps) {
   const { openMessageFull, deleteMessage } = useMessages();
   const { labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } = useFlags();
-  const { labels, folders, labelById } = useLabels();
+  const { labels, folders, labelById, createLabel, createFolder } = useLabels();
   const { address } = useAuth();
   const { contactByAddress, nameFor, allowlist, pinKey, ready: contactsReady } = useContacts();
   const { filter: mailFilter, blockSender, ready: filterReady } = useMailFilter();
@@ -285,6 +290,34 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const appliedLabels = appliedLabelIds.map(id => labelById(id)).filter((l): l is LabelDef => !!l);
   const availableLabels = labels.filter(l => !appliedLabelIds.includes(l.id));
   const currentFolder = folderOf(msg.hash);
+
+  // Making a label or folder from here, on the message that prompted it. The rail lists them and
+  // Settings names them; neither is any use mid-read, and leaving for Settings costs the place in
+  // the mail. Creating and applying are ONE act — that is what the creators' returned id is for.
+  const [creating, setCreating] = useState<'label' | 'folder' | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState(LABEL_COLORS[0]);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createErr, setCreateErr] = useState('');
+
+  const beginCreate = (kind: 'label' | 'folder') => {
+    setCreating(kind); setNewName(''); setNewColor(LABEL_COLORS[0]); setCreateErr('');
+  };
+  const cancelCreate = () => { setCreating(null); setNewName(''); setCreateErr(''); };
+  const confirmCreate = async () => {
+    const n = newName.trim();
+    if (!n || !creating) return;
+    setCreateBusy(true); setCreateErr('');
+    try {
+      if (creating === 'label') await addLabel(msg.hash, await createLabel(n, newColor));
+      else await setFolder(msg.hash, await createFolder(n));
+      setCreating(null); setNewName('');
+    } catch (e) {
+      setCreateErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
 
   // A message I authored (my own address). True for Sent copies and for a message I
   // mailed to myself now shown as received — either way it's inherently trusted, so
@@ -561,8 +594,15 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const downloadAttachments = attachments.filter(a => a.disposition !== 'inline');
 
   // Reset per-message UI (accept-once reveal + prior trust verdict) when the open
-  // message changes, so nothing from the previous message lingers.
-  useEffect(() => { setRevealed(false); setMessageTrusted(false); setNativeTrust(null); setNativeTrustReady(false); setAckedDownloads(new Set()); setShowHtml(true); }, [msg.hash]);
+  // message changes, so nothing from the previous message lingers. The half-written label belongs
+  // here for the same reason: this component is reused rather than remounted between messages
+  // (InboxMain renders it without a key), so a create left open would follow the reader to the
+  // next message and land on that one instead.
+  useEffect(() => {
+    setRevealed(false); setMessageTrusted(false); setNativeTrust(null); setNativeTrustReady(false);
+    setAckedDownloads(new Set()); setShowHtml(true);
+    setCreating(null); setNewName(''); setCreateErr('');
+  }, [msg.hash]);
 
   // Lazy key-pin (§14.1.2): once a message from an unpinned CONTACT verifies with the header key
   // matching the directory key, record the keys so a later unsigned change is detectable. Runs at
@@ -736,34 +776,69 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             )}
           </div>
 
-          {(labels.length > 0 || folders.length > 0 || appliedLabels.length > 0 || currentFolder) && (
-            <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
-              {appliedLabels.map(l => (
-                <Tag key={l.id} color={l.color} onRemove={() => void removeLabel(msg.hash, l.id)}>{l.name}</Tag>
-              ))}
-              {availableLabels.length > 0 && (
+          {/* Organising this message. Offered unconditionally now, including on an account that
+              has defined nothing yet: the rail lists labels and folders but no longer makes them,
+              so without a door here the first one could only be made by leaving the mail. */}
+          <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
+            {appliedLabels.map(l => (
+              <Tag key={l.id} color={l.color} onRemove={() => void removeLabel(msg.hash, l.id)}>{l.name}</Tag>
+            ))}
+            {creating === null ? (
+              <>
                 <select
                   value=""
                   aria-label="Add label"
-                  onChange={e => { const id = e.target.value; e.currentTarget.value = ''; if (id) void addLabel(msg.hash, id); }}
+                  onChange={e => {
+                    const id = e.target.value;
+                    e.currentTarget.value = '';
+                    if (id === NEW_OPTION) beginCreate('label');
+                    else if (id) void addLabel(msg.hash, id);
+                  }}
                   style={assignSelectStyle}
                 >
                   <option value="">+ Label</option>
                   {availableLabels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  <option value={NEW_OPTION}>+ New label…</option>
                 </select>
-              )}
-              {folders.length > 0 && (
                 <select
                   value={currentFolder ?? ''}
                   aria-label="Move to folder"
-                  onChange={e => void setFolder(msg.hash, e.target.value || undefined)}
+                  onChange={e => {
+                    const id = e.target.value;
+                    if (id === NEW_OPTION) { e.currentTarget.value = currentFolder ?? ''; beginCreate('folder'); }
+                    else void setFolder(msg.hash, id || undefined);
+                  }}
                   style={assignSelectStyle}
                 >
                   <option value="">No folder</option>
                   {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  <option value={NEW_OPTION}>+ New folder…</option>
                 </select>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                <Input
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder={creating === 'label' ? 'New label name' : 'New folder name'}
+                  aria-label={creating === 'label' ? 'New label name' : 'New folder name'}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') void confirmCreate(); if (e.key === 'Escape') cancelCreate(); }}
+                  style={{ width: 180 }}
+                />
+                {creating === 'label' && <ColorSwatches selected={newColor} onPick={setNewColor} />}
+                <IconButton size="sm" aria-label={creating === 'label' ? 'Create label' : 'Create folder'}
+                  disabled={createBusy || !newName.trim()} onClick={() => void confirmCreate()}>
+                  <Icon name="check" size={15} />
+                </IconButton>
+                <IconButton size="sm" aria-label="Cancel" disabled={createBusy} onClick={cancelCreate}>
+                  <Icon name="x" size={15} />
+                </IconButton>
+              </>
+            )}
+          </div>
+          {createErr && (
+            <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--danger)' }}>{createErr}</div>
           )}
 
           {/* Pending-queue gate (§14.2): a non-allowlisted sender's body stays hidden

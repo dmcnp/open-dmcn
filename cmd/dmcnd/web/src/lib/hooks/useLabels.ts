@@ -27,10 +27,13 @@ interface LabelsContextValue {
   labelById: (id: string) => LabelDef | undefined;
   folderById: (id: string) => FolderDef | undefined;
   refreshLabels: () => void;
-  createLabel: (name: string, color: string) => Promise<void>;
+  // Both creators answer with the new id. The caller usually ignores it, but the one that does
+  // not — the reader, creating a label in order to put it on the message in front of it — has no
+  // other way to name what it just made: the list it would search arrives on a later render.
+  createLabel: (name: string, color: string) => Promise<string>;
   renameLabel: (id: string, name: string, color?: string) => Promise<void>;
   deleteLabel: (id: string) => Promise<void>;
-  createFolder: (name: string) => Promise<void>;
+  createFolder: (name: string) => Promise<string>;
   renameFolder: (id: string, name: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
 }
@@ -100,15 +103,21 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
 
   const refreshLabels = useCallback(() => syncRef.current(), []);
 
-  const createLabel = useCallback((name: string, color: string) =>
-    mutate(d => ({ ...d, labels: [...d.labels, { id: newId(), name: name.trim(), color }] })), [mutate]);
+  const createLabel = useCallback(async (name: string, color: string) => {
+    const id = newId();
+    await mutate(d => ({ ...d, labels: [...d.labels, { id, name: name.trim(), color }] }));
+    return id;
+  }, [mutate]);
   const renameLabel = useCallback((id: string, name: string, color?: string) =>
     mutate(d => ({ ...d, labels: d.labels.map(l => l.id === id ? { ...l, name: name.trim(), color: color ?? l.color } : l) })), [mutate]);
   const deleteLabel = useCallback((id: string) =>
     mutate(d => ({ ...d, labels: d.labels.filter(l => l.id !== id) })), [mutate]);
 
-  const createFolder = useCallback((name: string) =>
-    mutate(d => ({ ...d, folders: [...d.folders, { id: newId(), name: name.trim() }] })), [mutate]);
+  const createFolder = useCallback(async (name: string) => {
+    const id = newId();
+    await mutate(d => ({ ...d, folders: [...d.folders, { id, name: name.trim() }] }));
+    return id;
+  }, [mutate]);
   const renameFolder = useCallback((id: string, name: string) =>
     mutate(d => ({ ...d, folders: d.folders.map(f => f.id === id ? { ...f, name: name.trim() } : f) })), [mutate]);
   const deleteFolder = useCallback((id: string) =>

@@ -17,6 +17,7 @@ import { isInstalledApp } from '../lib/appContext';
 import { detachAccount, isAttached } from '../lib/crypto/deviceKeystore';
 import { isLockOnLeave, setLockOnLeave } from '../lib/devicePosture';
 import { canKeepUnlocked } from '../lib/accounts';
+import { LabelSettings } from '../components/LabelSettings';
 import { applyLockPosture } from '../lib/crypto/workingKeys';
 import { DeviceUnlockSettings } from '../components/DeviceUnlockSettings';
 import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, type ThemePref, type Density } from '../lib/theme';
@@ -34,7 +35,7 @@ import { deployment } from '@deployment';
 import { Icon } from '../components/Icon';
 import { formatBytes } from '../lib/format';
 
-type Section = 'profile' | 'privacy' | 'appearance' | 'account';
+type Section = 'profile' | 'privacy' | 'appearance' | 'organise' | 'account';
 
 // StorageCard surfaces the owner's personal-storage usage (Sent, contacts,
 // settings, flags) against their effective quota. An unbounded quota (0) shows the
@@ -373,7 +374,11 @@ export function Settings() {
             { value: 'profile', label: 'Profile', icon: <Icon name="user" size={16} /> },
             { value: 'privacy', label: 'Privacy & security', icon: <Icon name="shield" size={16} /> },
             { value: 'appearance', label: 'Appearance', icon: <Icon name="sun" size={16} /> },
-            { value: 'account', label: 'Account', icon: <Icon name="user" size={16} /> },
+            { value: 'organise', label: 'Labels & folders', icon: <Icon name="tag" size={16} /> },
+            // `key`, not a second `user`: Profile is who you are to other people, Account is the
+            // identity, keys, plan and session behind it. Two tabs drawing the same glyph made
+            // the strip read as one thing split in half.
+            { value: 'account', label: 'Account', icon: <Icon name="key" size={16} /> },
           ]}
         />
 
@@ -564,6 +569,8 @@ export function Settings() {
             </Row>
           </div>
         )}
+
+        {section === 'organise' && <LabelSettings />}
 
         {section === 'account' && (
           <div style={{ marginTop: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>

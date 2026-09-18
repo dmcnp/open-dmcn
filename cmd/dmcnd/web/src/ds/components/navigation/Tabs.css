@@ -1,17 +1,45 @@
 /* Tabs: interaction-state CSS (hover/active/focus/disabled cannot be expressed inline).
    All visuals reference DMCN tokens. */
-.dmcn-tabs{display:flex;gap:var(--space-1);border-bottom:1px solid var(--border-default);font-family:var(--font-sans);}
+/* The strip scrolls sideways; it never wraps. Five tabs with two-word labels do not fit a phone,
+   and as a plain flex row each item shrank to its longest WORD — a flex item floors at its
+   min-content width — so "Privacy & security" stood three lines high and the last tab was pushed
+   past the edge and clipped away entirely. That one was unreachable, not merely ugly. */
+.dmcn-tabs{
+  display:flex;gap:var(--space-1);border-bottom:1px solid var(--border-default);
+  font-family:var(--font-sans);
+  overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scroll-snap-type:x proximity;
+  /* No scrollbar: it would sit on the 1px rule the active tab's underline has to meet, and the
+     half-cut tab at the edge already says there is more. Tabs.tsx keeps the active one in view. */
+  scrollbar-width:none;
+}
+.dmcn-tabs::-webkit-scrollbar{display:none;}
 .dmcn-tab{
   position:relative;appearance:none;border:none;background:transparent;cursor:pointer;
   font-family:inherit;font-size:var(--text-md);font-weight:var(--weight-medium);
   color:var(--text-muted);padding:var(--space-3) var(--space-3);margin-bottom:-1px;
   border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:var(--space-2);
   transition:color var(--dur-fast) var(--ease-standard);
+  flex:0 0 auto;white-space:nowrap;scroll-snap-align:start;
 }
 .dmcn-tab:hover{color:var(--text-strong);}
 .dmcn-tab--active{color:var(--brand-text);border-bottom-color:var(--brand);}
-.dmcn-tab:focus-visible{outline:none;box-shadow:var(--focus-ring);border-radius:var(--radius-sm);}
+/* An INSET ring, unlike the rest of the set, which uses the outer --focus-ring. A scroll container
+   clips anything leaving its box, and that ring reaches 4px beyond the button — it would come back
+   shaved flat along the top and bottom. */
+.dmcn-tab:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--brand);border-radius:var(--radius-sm);}
 .dmcn-tab svg{width:16px;height:16px;}
+/* On a phone an inactive tab is its icon alone. Five two-word labels do not fit across a phone at
+   any spelling, and the one worth spelling out is the one you are on — the rest are a row of
+   destinations you can recognise and tap. The label is display:none rather than visually hidden on
+   purpose: a 1px clipped label still reports as visible (it has a box), so a test could not tell
+   the two states apart, and the words would still be "on screen" in the only sense a layout cares
+   about. Taking it out of the tree is also what costs the accessible name, which is why
+   Tabs.tsx puts that name on the button before this rule can apply. */
+@media (max-width:720px){
+  .dmcn-tab--compact:not(.dmcn-tab--active) .dmcn-tab__label{display:none;}
+}
 .dmcn-tab__count{
   font-size:var(--text-2xs);font-weight:var(--weight-semibold);color:var(--text-muted);
   background:var(--surface-sunken);padding:1px 6px;border-radius:var(--radius-sm);

@@ -8,6 +8,12 @@ const P: Record<string, ReactNode> = {
   star: <path d="M12 2.5l2.9 6.27 6.85.62-5.17 4.53 1.54 6.71L12 17.6l-6.12 3.43 1.54-6.71L2.25 9.79l6.85-.62z" />,
   'star-fill': <path d="M12 2.5l2.9 6.27 6.85.62-5.17 4.53 1.54 6.71L12 17.6l-6.12 3.43 1.54-6.71L2.25 9.79l6.85-.62z" fill="currentColor" stroke="none" />,
   archive: <><path d="M3 4h18v4H3z" /><path d="M4 8v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8" /><path d="M10 12h4" /></>,
+  // folder / tag: the two things a mailbox is organised BY, and they must not borrow another
+  // glyph. A user folder used to draw `archive`, which is also the system Archive one row above
+  // it — two different destinations, one picture. Labels draw their own colour swatch in the
+  // rail, so `tag` is for the places that talk ABOUT labels rather than list one.
+  folder: <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />,
+  tag: <><path d="M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.41l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z" /><path d="M7.5 7.5h.01" /></>,
   trash: <><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6M14 11v6" /></>,
   shield: <path d="M12 2 4 5v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V5z" />,
   'shield-check': <><path d="M12 2 4 5v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V5z" /><path d="m9 12 2 2 4-4" /></>,

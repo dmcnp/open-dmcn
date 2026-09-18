@@ -17,7 +17,6 @@ import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { loadLocalKeystore } from '../lib/crypto/localKeystore';
-import { LabelManager } from './LabelManager';
 import { AccountMenu } from './AccountMenu';
 import { NavRow } from './NavRow';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
@@ -73,7 +72,6 @@ export function AppLayout() {
   const { flags } = useFlags();
   const { labels, folders } = useLabels();
   const { filter: mailFilter } = useMailFilter();
-  const [labelManagerOpen, setLabelManagerOpen] = useState(false);
   const { address, clearSession } = useAuth();
   const { keys, clearKeys, clearAllKeys } = useKeys();
   const navigate = useNavigate();
@@ -155,7 +153,6 @@ export function AppLayout() {
   // what's left is shell state that belonged to the account we just left.
   const handleSwitched = () => {
     setCompose(null);
-    setLabelManagerOpen(false);
     setFolder('inbox');
     setFilter('');
     setSearchOpen(false);
@@ -253,41 +250,51 @@ export function AppLayout() {
             <>
               <GroupLabel collapsed={railCollapsed}>Folders</GroupLabel>
               {folders.map(f => (
-                <NavRow key={f.id} icon="archive" label={f.name} active={section === 'mail' && folder === `folder:${f.id}`} collapsed={railCollapsed} onClick={() => selectFolder(`folder:${f.id}`)} />
+                <NavRow key={f.id} icon="folder" label={f.name} active={section === 'mail' && folder === `folder:${f.id}`} collapsed={railCollapsed} onClick={() => selectFolder(`folder:${f.id}`)} />
               ))}
             </>
           )}
 
-          <GroupLabel collapsed={railCollapsed}>Labels</GroupLabel>
-          {labels.map(l => (
-            <NavRow key={l.id} swatch={l.color} label={l.name} active={section === 'mail' && folder === `label:${l.id}`} collapsed={railCollapsed} onClick={() => selectFolder(`label:${l.id}`)} />
-          ))}
-          <NavRow icon="settings" label="Manage labels" collapsed={railCollapsed} onClick={() => setLabelManagerOpen(true)} />
+          {/* Both groups appear only once there is something in them, and neither carries a
+              "manage" row any more: naming a label is configuration and lives in Settings, while
+              making one in the moment it is wanted lives in the reader, on the message that wanted
+              it. What is left here is what the rail is for — the places you can go. */}
+          {labels.length > 0 && (
+            <>
+              <GroupLabel collapsed={railCollapsed}>Labels</GroupLabel>
+              {labels.map(l => (
+                <NavRow key={l.id} swatch={l.color} label={l.name} active={section === 'mail' && folder === `label:${l.id}`} collapsed={railCollapsed} onClick={() => selectFolder(`label:${l.id}`)} />
+              ))}
+            </>
+          )}
+        </div>
 
-          <GroupLabel collapsed={railCollapsed}>Account</GroupLabel>
+        {/* Pinned, and the division is the point: everything ABOVE grows as the mailbox is used
+            — another folder, another label, and the column scrolls. What is down here is a fixed,
+            small set that never grows, so it should never be the thing that scrolls out of reach.
+            Pin what is fixed, scroll what grows.
+
+            It is also why Settings is no longer in the top bar as well. That second gear existed
+            because this one could scroll away; pinned, it cannot, and one entry will do. The top
+            bar keeps only what acts on the view in front of you — search, density, theme — plus
+            who you are. Settings replaces the whole pane, which makes it a destination, and
+            destinations live in the rail. */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
           {/* On mobile the header trigger is a bare monogram; this is the labelled
               way in, and it opens the same sheet. */}
           {isMobile && (
             <NavRow icon="user" label="Switch account" collapsed={railCollapsed} onClick={() => { setDrawerOpen(false); setSearchOpen(false); setAccountMenuOpen(true); }} />
           )}
           <NavRow icon="users" label="Contacts" active={section === 'contacts'} collapsed={railCollapsed} onClick={() => goto('/contacts')} />
+          {/* A deployment's own sections are app-level too, so they pin with the rest rather
+              than riding above the fold with the mail. */}
           {AppNav && <AppNav collapsed={railCollapsed} pathname={location.pathname} goto={goto} />}
           <NavRow icon="settings" label="Settings" active={section === 'settings'} collapsed={railCollapsed} onClick={() => goto('/settings')} />
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
-          <button onClick={handleSignOut} title={railCollapsed ? 'Sign out' : undefined} style={{
-            display: 'flex', alignItems: 'center', gap: 'var(--space-3)', width: '100%',
-            padding: railCollapsed ? 0 : '0 var(--space-3)', justifyContent: railCollapsed ? 'center' : 'flex-start',
-            height: 40, border: 'none', background: 'transparent', cursor: 'pointer', font: 'inherit',
-            fontSize: 'var(--text-md)', fontWeight: 'var(--weight-medium)', color: 'var(--text-body)', textAlign: 'left',
-          }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <Icon name="log-out" size={17} style={{ color: 'var(--text-muted)' }} />
-            {!railCollapsed && <span>Sign out</span>}
-          </button>
+          {/* Leaving is not going somewhere, so it is kept off the end of the destinations by a
+              rule of its own rather than sitting flush against Settings. */}
+          <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <NavRow icon="log-out" label="Sign out" collapsed={railCollapsed} onClick={() => void handleSignOut()} />
+          </div>
           {/* A standing fact about THIS CLIENT, which is the only kind of claim that
               belongs in permanent chrome. It deliberately does not say "end-to-end
               encrypted", which this slot used to: that is a per-message property the row
@@ -366,11 +373,6 @@ export function AppLayout() {
             <IconButton aria-label="Toggle theme" onClick={() => setThemePref(theme === 'dark' ? 'light' : 'dark')}>
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
             </IconButton>
-            {!isMobile && (
-              <IconButton aria-label="Settings" active={section === 'settings'} onClick={() => navigate('/settings')}>
-                <Icon name="settings" />
-              </IconButton>
-            )}
             {/* The signed-in account is identified by its ADDRESS: that's what the
                 mesh routes to, what recipients see, and the only way to tell two
                 accounts apart. It doubles as the switcher between the identities
@@ -426,8 +428,6 @@ export function AppLayout() {
             mobile={isMobile}
           />
         )}
-
-        <LabelManager open={labelManagerOpen} onClose={() => setLabelManagerOpen(false)} />
       </div>
     </div>
   );
