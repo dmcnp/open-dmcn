@@ -4,6 +4,8 @@
 
 import type { TrustProvenance } from '../api/contactStore';
 import type { SenderTrust } from '../crypto/senderTrust';
+import type { KeyChange } from './lineage';
+import { pinnedKeyWarning } from './pinnedKey';
 
 export type BadgeVariant = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'trust-contact' | 'trust-dmcn';
 export type TrustIcon = 'shield-check' | 'alert-triangle';
@@ -37,9 +39,14 @@ export function provenanceView(p: TrustProvenance): { variant: BadgeVariant; lab
   }
 }
 
-// senderTrustView maps a received-message trust verdict to its reader badge +
-// detail callout. Danger kinds are active warnings, not merely "unknown".
-export function senderTrustView(t: SenderTrust): TrustView {
+// senderTrustView maps a received-message trust verdict to its reader badge + detail callout.
+// Danger kinds are active warnings, not merely "unknown".
+//
+// `change` and `address` are supplied only where the caller has resolved what the directory can
+// prove about a changed key (trust/lineage.ts). They never change a verdict — a signed rotation
+// is still danger, because a stolen key produces one — they change what the reader is told while
+// they decide.
+export function senderTrustView(t: SenderTrust, change?: KeyChange, address?: string): TrustView {
   switch (t.kind) {
     case 'allowlisted': {
       // Trusted contact → blue (matches the compose recipient shields).
@@ -54,12 +61,23 @@ export function senderTrustView(t: SenderTrust): TrustView {
     case 'key_mismatch':
       return { variant: 'danger', icon: 'alert-triangle', label: 'Key does not match directory', detail: 'The key that signed this message is not the one published for this address in the directory. This may be an impersonation attempt — do not trust it.' };
     case 'key_changed':
-      return { variant: 'danger', icon: 'alert-triangle', label: 'Sender’s key changed', detail: 'This contact’s signing key has changed since you allowlisted them. Re-verify their identity out of band before trusting this message.' };
+      // `change` is what the directory can PROVE about the change (trust/lineage.ts). It moves
+      // the sentence, never the verdict: this stays danger even for a perfectly signed rotation,
+      // because a stolen key produces one of those too. What it buys the reader is the
+      // difference between "they re-keyed" and "they say that key was stolen" — which is the
+      // difference between re-verifying at leisure and distrusting mail already in the inbox.
+      return {
+        variant: 'danger', icon: 'alert-triangle',
+        label: change?.kind === 'reported-stolen' ? 'Sender reported this key stolen' : 'Sender’s key changed',
+        detail: change ? pinnedKeyWarning(address ?? 'This sender', change)
+          : 'The key for this contact has changed since you verified them. Check with them another way before you '
+            + 'trust this message: a phone call, a text message, or something only the two of you would know.',
+      };
     case 'record_changed':
       // Deliberately WARNING, not danger: the keys still hold, so nothing is mis-sealed
       // and no impersonation is implied. What changed is a property nobody signed —
       // most importantly a domain asserting admin key custody over the account.
-      return { variant: 'warning', icon: 'alert-triangle', label: 'Sender’s record changed', detail: t.reason ? `${t.reason[0].toUpperCase()}${t.reason.slice(1)}. Their keys are unchanged, so this message is genuinely from them — but the change was not something they signed, so confirm it is expected.` : 'Something this contact’s identity record declares has changed since you verified them, without any change to their keys.' };
+      return { variant: 'warning', icon: 'alert-triangle', label: 'Sender’s record changed', detail: t.reason ? `${t.reason[0].toUpperCase()}${t.reason.slice(1)}. Their keys are the same, so this message really is from them. This was not a change they made, so check that it is expected.` : 'Something this contact’s identity record declares has changed since you verified them, without any change to their keys.' };
     case 'identity_unverifiable':
       return { variant: 'danger', icon: 'alert-triangle', label: 'Unverifiable identity', detail: 'The directory reports this identity claimed a domain countersignature that failed to verify (revoked or unauthorized). Do not trust it.' };
     case 'directory_missing':

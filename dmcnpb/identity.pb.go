@@ -274,8 +274,19 @@ type IdentityRecord struct {
 	// fields 24/25: issued and re-issued without the owner's key. Same-revision anti-rollback
 	// tiebreak: the newest issued_at across routing_credential AND operator_credentials wins.
 	OperatorCredentials []*Credential `protobuf:"bytes,28,rep,name=operator_credentials,json=operatorCredentials,proto3" json:"operator_credentials,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// rotation_chain: this record's OWN transparency log — one RotationEntry per owner-authorized
+	// key transition, oldest first. Covered by the owner self-signature, so the current key commits
+	// to exactly the history it presents. Capped and truncated from the front; the complete history
+	// lives in the address's AddressHistoryRecord, which a reader resolves when its pinned key falls
+	// outside the retained window. Empty on a record that has never rotated. See SPEC.md §1.
+	RotationChain []*RotationEntry `protobuf:"bytes,29,rep,name=rotation_chain,json=rotationChain,proto3" json:"rotation_chain,omitempty"`
+	// recovery_ed25519_public_key: an owner-held key, kept structurally apart from the active one,
+	// that may sign the NEXT rotation entry in place of the key being retired — so losing the active
+	// key stops being terminal. Covered by the owner self-signature. 32 bytes, or empty when the
+	// owner has enrolled none.
+	RecoveryEd25519PublicKey []byte `protobuf:"bytes,30,opt,name=recovery_ed25519_public_key,json=recoveryEd25519PublicKey,proto3" json:"recovery_ed25519_public_key,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *IdentityRecord) Reset() {
@@ -413,6 +424,20 @@ func (x *IdentityRecord) GetOperatorCredentials() []*Credential {
 	return nil
 }
 
+func (x *IdentityRecord) GetRotationChain() []*RotationEntry {
+	if x != nil {
+		return x.RotationChain
+	}
+	return nil
+}
+
+func (x *IdentityRecord) GetRecoveryEd25519PublicKey() []byte {
+	if x != nil {
+		return x.RecoveryEd25519PublicKey
+	}
+	return nil
+}
+
 // AuthorityKey is one entry in a domain root authority's key timeline.
 // effective_from-only: a key is effective from effective_from until the next
 // key's effective_from; the latest key is open-ended (SPEC.md §2).
@@ -525,9 +550,29 @@ type DomainAuthorityRecord struct {
 	// DNS "fleet=" pointer (deferral hardening): a resolver enforces DNS fleet== this value,
 	// fail-closed on mismatch, so the authorized fleet is cryptographically confirmed by the
 	// domain's own root key, not merely DNS-asserted. Covered by the DAR self-signature.
-	FleetDomain   string `protobuf:"bytes,14,opt,name=fleet_domain,json=fleetDomain,proto3" json:"fleet_domain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	FleetDomain string `protobuf:"bytes,14,opt,name=fleet_domain,json=fleetDomain,proto3" json:"fleet_domain,omitempty"`
+	// rotation_min_device_age_days: how long a device credential must have been enrolled before it
+	// may authorize a self-serve key rotation on this domain. 0 means "use the protocol default", so
+	// a domain that enables rotation and leaves this alone still gets a minimum. Domain-level rather
+	// than per-node on purpose: nodes that disagreed about admissibility would split-brain record
+	// admission. Read only when policy_flags sets POLICY_ALLOW_KEY_ROTATION. Covered by the DAR
+	// self-signature.
+	RotationMinDeviceAgeDays uint32 `protobuf:"varint,15,opt,name=rotation_min_device_age_days,json=rotationMinDeviceAgeDays,proto3" json:"rotation_min_device_age_days,omitempty"`
+	// device_recovery_delay_hours: how long an unapproved device must wait before it can act on a
+	// mailbox it joined through recovery — the path an owner takes when every device they had is
+	// gone and nobody is left to approve a new one.
+	//
+	// Zero means the protocol default. A domain that wants NO recovery path sets
+	// DEVICE_RECOVERY_DISABLED, which is an explicit choice with an explicit cost: on that domain,
+	// losing every enrolled device is permanent short of an operator ceremony.
+	//
+	// The tradeoff is worth stating in both directions. A recovery path means a stolen account key
+	// can eventually take the mailbox, after the delay and if nobody vetoes. No recovery path means
+	// an ordinary user who loses a phone loses their mail. The delay and the visibility of a
+	// pending device are what make the first survivable; nothing makes the second.
+	DeviceRecoveryDelayHours uint32 `protobuf:"varint,16,opt,name=device_recovery_delay_hours,json=deviceRecoveryDelayHours,proto3" json:"device_recovery_delay_hours,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DomainAuthorityRecord) Reset() {
@@ -649,6 +694,20 @@ func (x *DomainAuthorityRecord) GetFleetDomain() string {
 		return x.FleetDomain
 	}
 	return ""
+}
+
+func (x *DomainAuthorityRecord) GetRotationMinDeviceAgeDays() uint32 {
+	if x != nil {
+		return x.RotationMinDeviceAgeDays
+	}
+	return 0
+}
+
+func (x *DomainAuthorityRecord) GetDeviceRecoveryDelayHours() uint32 {
+	if x != nil {
+		return x.DeviceRecoveryDelayHours
+	}
+	return 0
 }
 
 // FleetNode is one node/relay in a fleet roster: its peer ID, where to dial it, and
@@ -1357,9 +1416,13 @@ func (x *RemovedBinding) GetRemovedAt() int64 {
 	return 0
 }
 
-// AddressRemovalRecord is the root-signed, append-only list of removed bindings
-// for one address, served by the domain's fleet. Only the domain root can
-// publish one, so only root can free an address for re-binding.
+// AddressRemovalRecord is the append-only list of removed bindings for one
+// address, served by the domain's fleet. It is signed either by the domain root
+// or by the address's OWN key — a holder may always retire their own address.
+// The two differ in what they authorize: either SUPPRESSES the binding, but only
+// a root-signed record may free the address for RE-BINDING to a different key.
+// That asymmetry is what keeps a stolen key recoverable rather than permanent.
+// See SPEC.md section 1.
 type AddressRemovalRecord struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Version         uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -1452,6 +1515,272 @@ func (x *AddressRemovalRecord) GetSelfSignature() []byte {
 	return nil
 }
 
+// RotationEntry is one link in an address's rotation chain: a single owner-authorized transition
+// from one account keypair to the next.
+//
+// It carries TWO signatures, and needs both:
+//   - signature      is by the key being RETIRED (or by that record's recovery key) and proves the
+//     outgoing holder consented to hand the address over;
+//   - next_signature is by the key TAKING OVER and proves the incoming key accepted it.
+//
+// With only the first, an entry could be minted pointing a lineage at a key that never agreed.
+// Inside an IdentityRecord the owner self-signature would close that, but entries are also read
+// DETACHED — from AddressHistoryRecord and over the directory API — so both travel with the entry.
+//
+// prev_signature_hash chains each entry to its predecessor, which makes front-truncation VISIBLE:
+// the first retained entry names a predecessor that is absent, and a reader tells that apart from
+// a genuine genesis. See SPEC.md §1.
+type RotationEntry struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Version                 uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`                                                                   // 1
+	Address                 string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`                                                                    // binds this transition to ONE address
+	RetiredEd25519PublicKey []byte                 `protobuf:"bytes,3,opt,name=retired_ed25519_public_key,json=retiredEd25519PublicKey,proto3" json:"retired_ed25519_public_key,omitempty"` // 32 bytes — the outgoing signing key
+	RetiredX25519PublicKey  []byte                 `protobuf:"bytes,4,opt,name=retired_x25519_public_key,json=retiredX25519PublicKey,proto3" json:"retired_x25519_public_key,omitempty"`    // 32 bytes — the mailbox key being vacated
+	NextEd25519PublicKey    []byte                 `protobuf:"bytes,5,opt,name=next_ed25519_public_key,json=nextEd25519PublicKey,proto3" json:"next_ed25519_public_key,omitempty"`          // 32 bytes — the incoming signing key
+	NextX25519PublicKey     []byte                 `protobuf:"bytes,6,opt,name=next_x25519_public_key,json=nextX25519PublicKey,proto3" json:"next_x25519_public_key,omitempty"`             // 32 bytes — the incoming mailbox key
+	RotatedAt               int64                  `protobuf:"varint,7,opt,name=rotated_at,json=rotatedAt,proto3" json:"rotated_at,omitempty"`                                              // Unix seconds
+	NextRevision            uint64                 `protobuf:"varint,8,opt,name=next_revision,json=nextRevision,proto3" json:"next_revision,omitempty"`                                     // the IdentityRecord revision this transition mints
+	// prev_signature_hash: SHA-256 of the preceding entry's `signature`. 32 bytes, or empty when
+	// this entry IS the genesis transition (the address's first rotation).
+	PrevSignatureHash []byte `protobuf:"bytes,9,opt,name=prev_signature_hash,json=prevSignatureHash,proto3" json:"prev_signature_hash,omitempty"`
+	// authorizing_ed25519_public_key: the key that produced `signature` — normally equal to
+	// retired_ed25519_public_key, or the owner's recovery key when the active key was unavailable.
+	// Named explicitly so an entry read DETACHED stays verifiable: a reader walking history holds no
+	// prior record and could not otherwise learn which recovery key was enrolled at the time. That a
+	// recovery key was genuinely the enrolled one is settled at admission, where the relay does hold
+	// the record being displaced. 32 bytes.
+	AuthorizingEd25519PublicKey []byte `protobuf:"bytes,10,opt,name=authorizing_ed25519_public_key,json=authorizingEd25519PublicKey,proto3" json:"authorizing_ed25519_public_key,omitempty"`
+	// device_credential: the leaf Credential (role "device") of the enrolled device that authorized
+	// this rotation. Its issued_at fixes the device's enrollment time, so any node can weigh it
+	// against the domain's rotation_min_device_age_days while holding no mailbox state of its own.
+	DeviceCredential *Credential `protobuf:"bytes,11,opt,name=device_credential,json=deviceCredential,proto3" json:"device_credential,omitempty"`
+	// device_signature: 64 bytes by device_credential.subject over fields 1-11.
+	//
+	// The credential alone would prove nothing here. It is public once any entry carrying it is
+	// published, so an attacker holding the ACCOUNT key could lift one from an earlier transition
+	// and attach it to their own. Requiring the device's own signature over THIS transition is
+	// what makes a stolen account key insufficient: device keys are generated on their device and
+	// held nowhere else, so they are absent from the backup export and the pairing payload a
+	// thief would have.
+	DeviceSignature []byte `protobuf:"bytes,12,opt,name=device_signature,json=deviceSignature,proto3" json:"device_signature,omitempty"`
+	// The three signatures NEST, each covering the ones before it, so none can be lifted from one
+	// transition and pasted onto another: the device binds itself to the transition, the outgoing
+	// key consents to a transition already carrying that device attestation, and the incoming key
+	// accepts the whole thing.
+	Signature     []byte `protobuf:"bytes,13,opt,name=signature,proto3" json:"signature,omitempty"`                              // 64 bytes by authorizing_ed25519_public_key over fields 1-12
+	NextSignature []byte `protobuf:"bytes,14,opt,name=next_signature,json=nextSignature,proto3" json:"next_signature,omitempty"` // 64 bytes by next_ed25519_public_key over fields 1-13
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotationEntry) Reset() {
+	*x = RotationEntry{}
+	mi := &file_identity_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotationEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotationEntry) ProtoMessage() {}
+
+func (x *RotationEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotationEntry.ProtoReflect.Descriptor instead.
+func (*RotationEntry) Descriptor() ([]byte, []int) {
+	return file_identity_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RotationEntry) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *RotationEntry) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *RotationEntry) GetRetiredEd25519PublicKey() []byte {
+	if x != nil {
+		return x.RetiredEd25519PublicKey
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetRetiredX25519PublicKey() []byte {
+	if x != nil {
+		return x.RetiredX25519PublicKey
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetNextEd25519PublicKey() []byte {
+	if x != nil {
+		return x.NextEd25519PublicKey
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetNextX25519PublicKey() []byte {
+	if x != nil {
+		return x.NextX25519PublicKey
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetRotatedAt() int64 {
+	if x != nil {
+		return x.RotatedAt
+	}
+	return 0
+}
+
+func (x *RotationEntry) GetNextRevision() uint64 {
+	if x != nil {
+		return x.NextRevision
+	}
+	return 0
+}
+
+func (x *RotationEntry) GetPrevSignatureHash() []byte {
+	if x != nil {
+		return x.PrevSignatureHash
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetAuthorizingEd25519PublicKey() []byte {
+	if x != nil {
+		return x.AuthorizingEd25519PublicKey
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetDeviceCredential() *Credential {
+	if x != nil {
+		return x.DeviceCredential
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetDeviceSignature() []byte {
+	if x != nil {
+		return x.DeviceSignature
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *RotationEntry) GetNextSignature() []byte {
+	if x != nil {
+		return x.NextSignature
+	}
+	return nil
+}
+
+// AddressHistoryRecord is the complete, append-only rotation history for one address — the
+// per-account transparency log, served by the domain's fleet like any other record here. The
+// IdentityRecord carries a capped window of this same chain for the hot path; this record holds
+// all of it, so a key change stays publicly auditable however many rotations follow it.
+//
+// It carries NO signature of its own, and needs none: every entry is already dual-signed by the
+// account keys it names, so integrity comes from the entries and admission is the chain walk —
+// extending the history takes keys the extender must genuinely hold. Address-keying bounds
+// storage, exactly as it does for AddressRemovalRecord.
+//
+// A stored record may be replaced only by one whose chain is a strict EXTENSION of it, and whose
+// terminal entry agrees with the address's current IdentityRecord. See SPEC.md §1.
+type AddressHistoryRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
+	Address       string                 `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	Chain         []*RotationEntry       `protobuf:"bytes,4,rep,name=chain,proto3" json:"chain,omitempty"` // oldest first, complete from the address's first rotation
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddressHistoryRecord) Reset() {
+	*x = AddressHistoryRecord{}
+	mi := &file_identity_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddressHistoryRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddressHistoryRecord) ProtoMessage() {}
+
+func (x *AddressHistoryRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddressHistoryRecord.ProtoReflect.Descriptor instead.
+func (*AddressHistoryRecord) Descriptor() ([]byte, []int) {
+	return file_identity_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AddressHistoryRecord) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *AddressHistoryRecord) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *AddressHistoryRecord) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *AddressHistoryRecord) GetChain() []*RotationEntry {
+	if x != nil {
+		return x.Chain
+	}
+	return nil
+}
+
 // CompromisedKey marks a domain countersigning key (root or sub-authority) as
 // compromised. Countersignatures by this key dated at/after compromised_at are
 // rejected outright; those dated before are honored only until retention_until
@@ -1469,7 +1798,7 @@ type CompromisedKey struct {
 
 func (x *CompromisedKey) Reset() {
 	*x = CompromisedKey{}
-	mi := &file_identity_proto_msgTypes[14]
+	mi := &file_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1481,7 +1810,7 @@ func (x *CompromisedKey) String() string {
 func (*CompromisedKey) ProtoMessage() {}
 
 func (x *CompromisedKey) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[14]
+	mi := &file_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1494,7 +1823,7 @@ func (x *CompromisedKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompromisedKey.ProtoReflect.Descriptor instead.
 func (*CompromisedKey) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{14}
+	return file_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CompromisedKey) GetEd25519PublicKey() []byte {
@@ -1545,7 +1874,7 @@ type RelayDescriptor struct {
 
 func (x *RelayDescriptor) Reset() {
 	*x = RelayDescriptor{}
-	mi := &file_identity_proto_msgTypes[15]
+	mi := &file_identity_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1557,7 +1886,7 @@ func (x *RelayDescriptor) String() string {
 func (*RelayDescriptor) ProtoMessage() {}
 
 func (x *RelayDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[15]
+	mi := &file_identity_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1570,7 +1899,7 @@ func (x *RelayDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelayDescriptor.ProtoReflect.Descriptor instead.
 func (*RelayDescriptor) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{15}
+	return file_identity_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RelayDescriptor) GetPeerId() string {
@@ -1646,7 +1975,7 @@ type KeyCompromiseRecord struct {
 
 func (x *KeyCompromiseRecord) Reset() {
 	*x = KeyCompromiseRecord{}
-	mi := &file_identity_proto_msgTypes[16]
+	mi := &file_identity_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1658,7 +1987,7 @@ func (x *KeyCompromiseRecord) String() string {
 func (*KeyCompromiseRecord) ProtoMessage() {}
 
 func (x *KeyCompromiseRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_identity_proto_msgTypes[16]
+	mi := &file_identity_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1671,7 +2000,7 @@ func (x *KeyCompromiseRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyCompromiseRecord.ProtoReflect.Descriptor instead.
 func (*KeyCompromiseRecord) Descriptor() ([]byte, []int) {
-	return file_identity_proto_rawDescGZIP(), []int{16}
+	return file_identity_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *KeyCompromiseRecord) GetVersion() uint32 {
@@ -1731,7 +2060,7 @@ const file_identity_proto_rawDesc = "" +
 	"attestedAt\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\a \x01(\x03R\texpiresAt\x12\x1c\n" +
-	"\tsignature\x18\b \x01(\fR\tsignature\"\xda\a\n" +
+	"\tsignature\x18\b \x01(\fR\tsignature\"\xde\b\n" +
 	"\x0eIdentityRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12,\n" +
@@ -1751,12 +2080,14 @@ const file_identity_proto_rawDesc = "" +
 	"\x12address_credential\x18\x18 \x01(\v2\x19.dmcn.identity.CredentialR\x11addressCredential\x12H\n" +
 	"\x12routing_credential\x18\x19 \x01(\v2\x19.dmcn.identity.CredentialR\x11routingCredential\x12\x1a\n" +
 	"\brevision\x18\x1a \x01(\x04R\brevision\x12L\n" +
-	"\x14operator_credentials\x18\x1c \x03(\v2\x19.dmcn.identity.CredentialR\x13operatorCredentialsJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17J\x04\b\x1b\x10\x1cR\x06claimsR\rclaim_recordsR\x06policyR\fpolicy_flagsR\x0fguardian_policyR\x11bridge_capabilityR\x17domain_countersignatureR\x17domain_countersigned_atR\x1bdomain_countersigner_pubkeyR\x0frate_credential\"\xb8\x01\n" +
+	"\x14operator_credentials\x18\x1c \x03(\v2\x19.dmcn.identity.CredentialR\x13operatorCredentials\x12C\n" +
+	"\x0erotation_chain\x18\x1d \x03(\v2\x1c.dmcn.identity.RotationEntryR\rrotationChain\x12=\n" +
+	"\x1brecovery_ed25519_public_key\x18\x1e \x01(\fR\x18recoveryEd25519PublicKeyJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17J\x04\b\x1b\x10\x1cR\x06claimsR\rclaim_recordsR\x06policyR\fpolicy_flagsR\x0fguardian_policyR\x11bridge_capabilityR\x17domain_countersignatureR\x17domain_countersigned_atR\x1bdomain_countersigner_pubkeyR\x0frate_credential\"\xb8\x01\n" +
 	"\fAuthorityKey\x12,\n" +
 	"\x12ed25519_public_key\x18\x01 \x01(\fR\x10ed25519PublicKey\x12*\n" +
 	"\x11x25519_public_key\x18\x02 \x01(\fR\x0fx25519PublicKey\x12%\n" +
 	"\x0eeffective_from\x18\x03 \x01(\x03R\reffectiveFrom\x12'\n" +
-	"\x0frotation_reason\x18\x04 \x01(\rR\x0erotationReason\"\x8a\x05\n" +
+	"\x0frotation_reason\x18\x04 \x01(\rR\x0erotationReason\"\x89\x06\n" +
 	"\x15DomainAuthorityRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12?\n" +
@@ -1772,7 +2103,9 @@ const file_identity_proto_rawDesc = "" +
 	"\x0eself_signature\x18\v \x01(\fR\rselfSignature\x12N\n" +
 	"\x15authority_credentials\x18\f \x03(\v2\x19.dmcn.identity.CredentialR\x14authorityCredentials\x120\n" +
 	"\x14reserved_local_parts\x18\r \x03(\tR\x12reservedLocalParts\x12!\n" +
-	"\ffleet_domain\x18\x0e \x01(\tR\vfleetDomainJ\x04\b\a\x10\bR\x0fsub_authorities\"Z\n" +
+	"\ffleet_domain\x18\x0e \x01(\tR\vfleetDomain\x12>\n" +
+	"\x1crotation_min_device_age_days\x18\x0f \x01(\rR\x18rotationMinDeviceAgeDays\x12=\n" +
+	"\x1bdevice_recovery_delay_hours\x18\x10 \x01(\rR\x18deviceRecoveryDelayHoursJ\x04\b\a\x10\bR\x0fsub_authorities\"Z\n" +
 	"\tFleetNode\x12\x17\n" +
 	"\apeer_id\x18\x01 \x01(\tR\x06peerId\x12\x1e\n" +
 	"\n" +
@@ -1855,7 +2188,29 @@ const file_identity_proto_rawDesc = "" +
 	"\brevision\x18\x05 \x01(\x04R\brevision\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\x03R\tcreatedAt\x12%\n" +
-	"\x0eself_signature\x18\a \x01(\fR\rselfSignature\"\x8e\x01\n" +
+	"\x0eself_signature\x18\a \x01(\fR\rselfSignature\"\x98\x05\n" +
+	"\rRotationEntry\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\x12;\n" +
+	"\x1aretired_ed25519_public_key\x18\x03 \x01(\fR\x17retiredEd25519PublicKey\x129\n" +
+	"\x19retired_x25519_public_key\x18\x04 \x01(\fR\x16retiredX25519PublicKey\x125\n" +
+	"\x17next_ed25519_public_key\x18\x05 \x01(\fR\x14nextEd25519PublicKey\x123\n" +
+	"\x16next_x25519_public_key\x18\x06 \x01(\fR\x13nextX25519PublicKey\x12\x1d\n" +
+	"\n" +
+	"rotated_at\x18\a \x01(\x03R\trotatedAt\x12#\n" +
+	"\rnext_revision\x18\b \x01(\x04R\fnextRevision\x12.\n" +
+	"\x13prev_signature_hash\x18\t \x01(\fR\x11prevSignatureHash\x12C\n" +
+	"\x1eauthorizing_ed25519_public_key\x18\n" +
+	" \x01(\fR\x1bauthorizingEd25519PublicKey\x12F\n" +
+	"\x11device_credential\x18\v \x01(\v2\x19.dmcn.identity.CredentialR\x10deviceCredential\x12)\n" +
+	"\x10device_signature\x18\f \x01(\fR\x0fdeviceSignature\x12\x1c\n" +
+	"\tsignature\x18\r \x01(\fR\tsignature\x12%\n" +
+	"\x0enext_signature\x18\x0e \x01(\fR\rnextSignature\"\x96\x01\n" +
+	"\x14AddressHistoryRecord\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12\x16\n" +
+	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x18\n" +
+	"\aaddress\x18\x03 \x01(\tR\aaddress\x122\n" +
+	"\x05chain\x18\x04 \x03(\v2\x1c.dmcn.identity.RotationEntryR\x05chain\"\x8e\x01\n" +
 	"\x0eCompromisedKey\x12,\n" +
 	"\x12ed25519_public_key\x18\x01 \x01(\fR\x10ed25519PublicKey\x12%\n" +
 	"\x0ecompromised_at\x18\x02 \x01(\x03R\rcompromisedAt\x12'\n" +
@@ -1908,7 +2263,7 @@ func file_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_identity_proto_goTypes = []any{
 	(VerificationTier)(0),         // 0: dmcn.identity.VerificationTier
 	(AttestationType)(0),          // 1: dmcn.identity.AttestationType
@@ -1926,10 +2281,12 @@ var file_identity_proto_goTypes = []any{
 	(*JoinResponse)(nil),          // 13: dmcn.identity.JoinResponse
 	(*RemovedBinding)(nil),        // 14: dmcn.identity.RemovedBinding
 	(*AddressRemovalRecord)(nil),  // 15: dmcn.identity.AddressRemovalRecord
-	(*CompromisedKey)(nil),        // 16: dmcn.identity.CompromisedKey
-	(*RelayDescriptor)(nil),       // 17: dmcn.identity.RelayDescriptor
-	(*KeyCompromiseRecord)(nil),   // 18: dmcn.identity.KeyCompromiseRecord
-	nil,                           // 19: dmcn.identity.Credential.AttributesEntry
+	(*RotationEntry)(nil),         // 16: dmcn.identity.RotationEntry
+	(*AddressHistoryRecord)(nil),  // 17: dmcn.identity.AddressHistoryRecord
+	(*CompromisedKey)(nil),        // 18: dmcn.identity.CompromisedKey
+	(*RelayDescriptor)(nil),       // 19: dmcn.identity.RelayDescriptor
+	(*KeyCompromiseRecord)(nil),   // 20: dmcn.identity.KeyCompromiseRecord
+	nil,                           // 21: dmcn.identity.Credential.AttributesEntry
 }
 var file_identity_proto_depIdxs = []int32{
 	1,  // 0: dmcn.identity.AttestationRecord.attestation_type:type_name -> dmcn.identity.AttestationType
@@ -1938,27 +2295,30 @@ var file_identity_proto_depIdxs = []int32{
 	8,  // 3: dmcn.identity.IdentityRecord.address_credential:type_name -> dmcn.identity.Credential
 	8,  // 4: dmcn.identity.IdentityRecord.routing_credential:type_name -> dmcn.identity.Credential
 	8,  // 5: dmcn.identity.IdentityRecord.operator_credentials:type_name -> dmcn.identity.Credential
-	4,  // 6: dmcn.identity.DomainAuthorityRecord.superseded_keys:type_name -> dmcn.identity.AuthorityKey
-	8,  // 7: dmcn.identity.DomainAuthorityRecord.authority_credentials:type_name -> dmcn.identity.Credential
-	6,  // 8: dmcn.identity.FleetRoster.nodes:type_name -> dmcn.identity.FleetNode
-	19, // 9: dmcn.identity.Credential.attributes:type_name -> dmcn.identity.Credential.AttributesEntry
-	9,  // 10: dmcn.identity.CredentialBlockList.blocks:type_name -> dmcn.identity.CredentialBlock
-	8,  // 11: dmcn.identity.CredentialBundle.credential:type_name -> dmcn.identity.Credential
-	5,  // 12: dmcn.identity.CredentialBundle.dar:type_name -> dmcn.identity.DomainAuthorityRecord
-	8,  // 13: dmcn.identity.JoinRequest.credential:type_name -> dmcn.identity.Credential
-	5,  // 14: dmcn.identity.JoinRequest.dar:type_name -> dmcn.identity.DomainAuthorityRecord
-	11, // 15: dmcn.identity.JoinRequest.bundles:type_name -> dmcn.identity.CredentialBundle
-	8,  // 16: dmcn.identity.JoinResponse.credential:type_name -> dmcn.identity.Credential
-	5,  // 17: dmcn.identity.JoinResponse.dar:type_name -> dmcn.identity.DomainAuthorityRecord
-	11, // 18: dmcn.identity.JoinResponse.bundles:type_name -> dmcn.identity.CredentialBundle
-	14, // 19: dmcn.identity.AddressRemovalRecord.removed_bindings:type_name -> dmcn.identity.RemovedBinding
-	8,  // 20: dmcn.identity.RelayDescriptor.credential:type_name -> dmcn.identity.Credential
-	16, // 21: dmcn.identity.KeyCompromiseRecord.compromised_keys:type_name -> dmcn.identity.CompromisedKey
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	16, // 6: dmcn.identity.IdentityRecord.rotation_chain:type_name -> dmcn.identity.RotationEntry
+	4,  // 7: dmcn.identity.DomainAuthorityRecord.superseded_keys:type_name -> dmcn.identity.AuthorityKey
+	8,  // 8: dmcn.identity.DomainAuthorityRecord.authority_credentials:type_name -> dmcn.identity.Credential
+	6,  // 9: dmcn.identity.FleetRoster.nodes:type_name -> dmcn.identity.FleetNode
+	21, // 10: dmcn.identity.Credential.attributes:type_name -> dmcn.identity.Credential.AttributesEntry
+	9,  // 11: dmcn.identity.CredentialBlockList.blocks:type_name -> dmcn.identity.CredentialBlock
+	8,  // 12: dmcn.identity.CredentialBundle.credential:type_name -> dmcn.identity.Credential
+	5,  // 13: dmcn.identity.CredentialBundle.dar:type_name -> dmcn.identity.DomainAuthorityRecord
+	8,  // 14: dmcn.identity.JoinRequest.credential:type_name -> dmcn.identity.Credential
+	5,  // 15: dmcn.identity.JoinRequest.dar:type_name -> dmcn.identity.DomainAuthorityRecord
+	11, // 16: dmcn.identity.JoinRequest.bundles:type_name -> dmcn.identity.CredentialBundle
+	8,  // 17: dmcn.identity.JoinResponse.credential:type_name -> dmcn.identity.Credential
+	5,  // 18: dmcn.identity.JoinResponse.dar:type_name -> dmcn.identity.DomainAuthorityRecord
+	11, // 19: dmcn.identity.JoinResponse.bundles:type_name -> dmcn.identity.CredentialBundle
+	14, // 20: dmcn.identity.AddressRemovalRecord.removed_bindings:type_name -> dmcn.identity.RemovedBinding
+	8,  // 21: dmcn.identity.RotationEntry.device_credential:type_name -> dmcn.identity.Credential
+	16, // 22: dmcn.identity.AddressHistoryRecord.chain:type_name -> dmcn.identity.RotationEntry
+	8,  // 23: dmcn.identity.RelayDescriptor.credential:type_name -> dmcn.identity.Credential
+	18, // 24: dmcn.identity.KeyCompromiseRecord.compromised_keys:type_name -> dmcn.identity.CompromisedKey
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_identity_proto_init() }
@@ -1972,7 +2332,7 @@ func file_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_proto_rawDesc), len(file_identity_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

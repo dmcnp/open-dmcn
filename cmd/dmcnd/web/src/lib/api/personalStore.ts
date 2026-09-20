@@ -19,9 +19,10 @@
 // on more than one device.
 
 import { idbGet, idbGetAllKeys, idbPut, idbDelete, PERSONAL_STORE } from '../crypto/idb';
+import { retiredKeys } from '../crypto/retiredKeys';
+import { mailboxProof } from './mailboxProof';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { sealToRecipients, openSealed, type SealedBlobJSON } from '../crypto/sealedBlob';
-import { signWithKey } from '../crypto/sign';
 import { toBase64, fromBase64 } from '../crypto/keys';
 import { postJSONAs, ApiError } from './client';
 
@@ -134,10 +135,9 @@ export class PersonalStore {
 
   private async op<T>(req: Record<string, unknown>): Promise<T> {
     const ch = await postJSONAs<ChallengeResp>(this.explicitToken, '/api/v1/mailbox/challenge', req);
-    const signature = toBase64(await signWithKey(this.keys.ed25519Sign, fromBase64(ch.nonce)));
     return postJSONAs<T>(this.explicitToken, '/api/v1/mailbox/complete', {
       correlation_id: ch.correlation_id,
-      signature,
+      ...(await mailboxProof(this.keys, ch.nonce)),
     });
   }
 
@@ -163,9 +163,40 @@ export class PersonalStore {
   }
 
   private async unseal<T>(sealedB64: string): Promise<T> {
+    return (await this.unsealWithSource<T>(sealedB64)).value;
+  }
+
+  /** Unseal, and say whether a RETIRED generation is what opened it. */
+  private async unsealWithSource<T>(sealedB64: string): Promise<{ value: T; retired: boolean }> {
     const blob = JSON.parse(new TextDecoder().decode(fromBase64(sealedB64))) as SealedBlobJSON;
-    const plain = await openSealed(blob, this.keys.x25519Derive, this.keys.x25519Public);
-    return JSON.parse(new TextDecoder().decode(plain)) as T;
+    const { plain, retired } = await this.open(blob);
+    return { value: JSON.parse(new TextDecoder().decode(plain)) as T, retired };
+  }
+
+  /**
+   * Open a blob with the current key, falling back to the generations this account used to hold.
+   *
+   * A rotation re-keys the mailbox without re-sealing what is stored in it — the relay holds
+   * ciphertext and cannot — so contacts, labels, folders and settings written before the change
+   * open only with the key they were written under. Without this fallback, rotating would look
+   * to the owner like their address book and settings had been wiped.
+   *
+   * Re-sealing to the current key happens lazily, as each blob is next WRITTEN, and in one sweep
+   * after a rotation (resealRetired). Doing it HERE, on every read, would turn opening the inbox
+   * into a storm of writes — and would do it on every device, repeatedly, for entries nobody is
+   * editing.
+   */
+  private async open(blob: SealedBlobJSON): Promise<{ plain: Uint8Array; retired: boolean }> {
+    try {
+      return { plain: await openSealed(blob, this.keys.x25519Derive, this.keys.x25519Public), retired: false };
+    } catch (err) {
+      for (const r of await retiredKeys(this.keys.address)) {
+        try {
+          return { plain: await openSealed(blob, r.x25519Derive, r.x25519Public), retired: true };
+        } catch { /* try the next generation */ }
+      }
+      throw err;
+    }
   }
 
   // --- public interface (unchanged for callers) ---------------------------------------------
@@ -263,6 +294,61 @@ export class PersonalStore {
       });
     }
     return out;
+  }
+
+  /**
+   * Namespaces the post-rotation sweep leaves alone, and why each is the exception.
+   *
+   * Both are per-MESSAGE and grow with the mailbox, so re-sealing them is not a sweep but a
+   * rewrite of the archive — minutes of writes on a busy account, to move data the device that
+   * just rotated can already read through the retired ring. `sent/` is mail, and mail re-seal is
+   * deferred for its own reasons (the envelope digest is the message's identity, so re-sealing
+   * orphans every flag and label that refers to it). `flags/` re-seals itself the next time a
+   * message is read, starred or labelled, which is the traffic it exists to record.
+   *
+   * What that costs, stated plainly: a device paired AFTER a rotation cannot read the Sent
+   * history or the flags written before it. See TODO.md, Phase G.
+   */
+  private static readonly RESEAL_SKIP = ['sent/', 'sent-body/', 'flags/'];
+
+  /**
+   * Re-seal everything a RETIRED key still holds to the key that holds the mailbox now.
+   *
+   * A rotation re-keys the mailbox without re-sealing what is in it — the relay holds ciphertext
+   * and cannot read it — so the device that rotated is the only party that can do this, and only
+   * while it still holds both generations. Left undone, contacts, labels, folders and settings
+   * stay readable HERE and are lost to every device paired afterwards.
+   *
+   * Safe to repeat and safe to interrupt: each entry is re-put under its own compare-and-swap, so
+   * a concurrent write from another device wins and is skipped (that write re-sealed it anyway).
+   */
+  async resealRetired(): Promise<{ resealed: number; failed: number }> {
+    if (this.localOnly) return { resealed: 0, failed: 0 };
+    if ((await retiredKeys(this.keys.address)).length === 0) return { resealed: 0, failed: 0 };
+
+    let resealed = 0;
+    let failed = 0;
+    let cursor = '';
+    for (;;) {
+      const res = await this.op<KvListResp>({ op: 'kv_list', prefix: '', values: true, cursor });
+      for (const it of res.items) {
+        if (!it.sealed || PersonalStore.RESEAL_SKIP.some(p => it.key.startsWith(p))) continue;
+        try {
+          const opened = await this.unsealWithSource<unknown>(it.sealed);
+          if (!opened.retired) continue;
+          await this.put(it.key, opened.value, it.version);
+          resealed++;
+        } catch {
+          // An entry that cannot be opened, or that another device wrote first. Neither is worth
+          // stopping for: the rest of the sweep is independent, and an unreadable blob is not
+          // made worse by being left alone.
+          failed++;
+        }
+      }
+      if (!res.next_cursor) break;
+      cursor = res.next_cursor;
+    }
+    return { resealed, failed };
   }
 
   async delete(key: string): Promise<void> {

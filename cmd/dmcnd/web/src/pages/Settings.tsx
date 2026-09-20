@@ -146,6 +146,7 @@ export function Settings() {
   const { keys, clearKeys } = useKeys();
   const Aliases = deployment.aliases;
   const CustomDomain = deployment.customDomain;
+  const RotateKey = deployment.rotateKey;
   const navigate = useNavigate();
   const embedded = !useIsMobile();
   // The shell hands down onAppearanceChange so toggling theme/density here re-themes
@@ -600,6 +601,10 @@ export function Settings() {
                 depends on a fleet key it may not have, and a heading over an empty box would
                 promise one it cannot deliver. */}
             {keys && address && <NotificationSettings address={address} keys={keys} />}
+
+            {/* And for the same reason again: whether an account can be re-keyed depends on the
+                domain's policy, on the fleet, and on this device's own standing. */}
+            {RotateKey && keys && address && <RotateKey address={address} keys={keys} />}
         {address && <DeviceUnlockSettings address={address} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>

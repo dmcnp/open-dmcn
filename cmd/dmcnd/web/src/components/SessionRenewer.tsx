@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
-import { setReauthHandler, loginWithKeys } from '../lib/api/client';
+import { setReauthHandler, loginWithKeys, AccountRekeyedError } from '../lib/api/client';
 import { deployment } from '@deployment';
 
 // SessionRenewer wires up transparent session renewal. When an authenticated
@@ -23,13 +23,18 @@ export function SessionRenewer() {
     setReauthHandler(async () => {
       if (!address || !keys) return null;
       try {
-        const token = await loginWithKeys(address, keys.ed25519Sign);
+        const token = await loginWithKeys(address, keys.ed25519Sign, keys.ed25519Public);
         if (stale) return null;
         setSession(address, token);
         return token;
-      } catch {
+      } catch (err) {
         clearSession();
-        navigate('/login', { state: { reason: 'expired' } });
+        // Why the sign-in failed decides what to tell them. An expired session comes back after
+        // an unlock; an account re-keyed on another device never will, because the key stored
+        // here is no longer the account's — and sending someone round the unlock loop for that is
+        // how a rotation looks like a broken app. The keystore stays either way: the old key is
+        // what opens the mail that arrived under it.
+        navigate('/login', { state: { reason: err instanceof AccountRekeyedError ? 'rekeyed' : 'expired' } });
         return null;
       }
     });

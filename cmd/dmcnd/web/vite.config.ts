@@ -2,27 +2,41 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createHash } from 'node:crypto';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 // Subresource Integrity: inject integrity="sha384-…" on the hashed <script>/<link>
 // the build emits, so the browser refuses a tampered bundle (defence-in-depth behind
 // the strict CSP). The inline nonce'd runtime-config <script> has no src and is left
 // alone. Vite already adds crossorigin to these tags; the integrity attribute we add
 // is static text that survives the Go html/template render of index.html.
+//
+// It runs at writeBundle, over the files on DISK, and that is the whole correctness argument.
+// A digest taken from `chunk.code` in generateBundle is a digest of what the chunk looked like at
+// that moment, and vite may still change a chunk afterwards — when it does, the build succeeds,
+// the page ships, and the browser refuses to execute the script with nothing said at build time.
+// Hashing what is actually written cannot drift from what is actually served.
 function sriPlugin(): Plugin {
   return {
     name: 'dmcn-sri',
     apply: 'build',
     enforce: 'post',
-    generateBundle(_options, bundle) {
+    async writeBundle(options, bundle) {
+      const dir = options.dir ?? 'dist';
       const integrity: Record<string, string> = {};
-      for (const [fileName, chunk] of Object.entries(bundle)) {
-        const source = chunk.type === 'chunk' ? chunk.code : chunk.source;
-        const buf = Buffer.from(source as string | Uint8Array);
+      const pages: string[] = [];
+      for (const fileName of Object.keys(bundle)) {
+        if (fileName.endsWith('.html')) {
+          pages.push(fileName);
+          continue;
+        }
+        const buf = await readFile(path.join(dir, fileName));
         integrity['/' + fileName] = 'sha384-' + createHash('sha384').update(buf).digest('base64');
       }
-      const index = bundle['index.html'];
-      if (index && index.type === 'asset' && typeof index.source === 'string') {
-        index.source = index.source.replace(
+      for (const page of pages) {
+        const file = path.join(dir, page);
+        const html = await readFile(file, 'utf8');
+        const withSri = html.replace(
           /<(script|link)\b([^>]*?)\b(src|href)="([^"]+)"([^>]*)>/g,
           (m, tag, pre, attr, url, post) => {
             const key = url.startsWith('/') ? url : '/' + url;
@@ -31,6 +45,7 @@ function sriPlugin(): Plugin {
             return `<${tag}${pre}${attr}="${url}"${post} integrity="${intg}">`;
           },
         );
+        if (withSri !== html) await writeFile(file, withSri);
       }
     },
   };

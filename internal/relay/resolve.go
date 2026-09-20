@@ -77,6 +77,21 @@ func (r *Relay) handleGetFleetRoster(req *dmcnpb.GetFleetRosterRequest) *dmcnpb.
 	}}
 }
 
+// handleGetHistory serves an address's complete rotation history.
+//
+// Public and unauthenticated like the other resolve ops, and for the same reason: the record is
+// self-authenticating through the signatures on its own entries, so serving it discloses nothing
+// a caller could not verify — and a key change that only its holder could read would not be
+// evidence of anything.
+func (r *Relay) handleGetHistory(req *dmcnpb.GetHistoryRequest) *dmcnpb.RelayResponse {
+	data := r.lookupRecordBytes(func(ctx context.Context) ([]byte, error) {
+		return r.records.GetHistoryBytes(ctx, req.GetAddress())
+	})
+	return &dmcnpb.RelayResponse{Response: &dmcnpb.RelayResponse_GetHistory{
+		GetHistory: &dmcnpb.GetHistoryResponse{Found: data != nil, Record: data},
+	}}
+}
+
 func (r *Relay) handleGetRemoval(req *dmcnpb.GetRemovalRequest) *dmcnpb.RelayResponse {
 	data := r.lookupRecordBytes(func(ctx context.Context) ([]byte, error) {
 		return r.records.GetRemovalBytes(ctx, req.GetAddress())
@@ -198,6 +213,28 @@ func (r *Relay) ClientGetRemoval(ctx context.Context, peerID peer.ID, address st
 		return nil, nil
 	}
 	return gr.GetRecord(), nil
+}
+
+// ClientGetHistory fetches an address's complete rotation history from a fleet node.
+//
+// (nil, nil) means the node holds none — ordinary for an address that has never rotated, and also
+// what a node that simply missed the publish returns. The caller unions across peers for exactly
+// that reason: one node holding nothing must not read as "this address has no past".
+func (r *Relay) ClientGetHistory(ctx context.Context, peerID peer.ID, address string) ([]byte, error) {
+	resp, err := r.clientResolve(ctx, peerID, &dmcnpb.RelayRequest{
+		Request: &dmcnpb.RelayRequest_GetHistory{GetHistory: &dmcnpb.GetHistoryRequest{Address: address}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	gh := resp.GetGetHistory()
+	if gh == nil {
+		return nil, errors.New("relay: resolve history: unexpected response type")
+	}
+	if !gh.GetFound() {
+		return nil, nil
+	}
+	return gh.GetRecord(), nil
 }
 
 // ClientGetBlocklist fetches the signed CredentialBlockList bytes for a domain from a fleet node.

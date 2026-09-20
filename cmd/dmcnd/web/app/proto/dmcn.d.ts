@@ -208,6 +208,12 @@ export namespace dmcn {
 
             /** IdentityRecord operatorCredentials */
             operatorCredentials?: (dmcn.identity.ICredential[]|null);
+
+            /** IdentityRecord rotationChain */
+            rotationChain?: (dmcn.identity.IRotationEntry[]|null);
+
+            /** IdentityRecord recoveryEd25519PublicKey */
+            recoveryEd25519PublicKey?: (Uint8Array|null);
         }
 
         /** Represents an IdentityRecord. */
@@ -263,6 +269,12 @@ export namespace dmcn {
 
             /** IdentityRecord operatorCredentials. */
             public operatorCredentials: dmcn.identity.ICredential[];
+
+            /** IdentityRecord rotationChain. */
+            public rotationChain: dmcn.identity.IRotationEntry[];
+
+            /** IdentityRecord recoveryEd25519PublicKey. */
+            public recoveryEd25519PublicKey: Uint8Array;
 
             /**
              * Creates a new IdentityRecord instance using the specified properties.
@@ -498,6 +510,12 @@ export namespace dmcn {
 
             /** DomainAuthorityRecord fleetDomain */
             fleetDomain?: (string|null);
+
+            /** DomainAuthorityRecord rotationMinDeviceAgeDays */
+            rotationMinDeviceAgeDays?: (number|null);
+
+            /** DomainAuthorityRecord deviceRecoveryDelayHours */
+            deviceRecoveryDelayHours?: (number|null);
         }
 
         /** Represents a DomainAuthorityRecord. */
@@ -547,6 +565,12 @@ export namespace dmcn {
 
             /** DomainAuthorityRecord fleetDomain. */
             public fleetDomain: string;
+
+            /** DomainAuthorityRecord rotationMinDeviceAgeDays. */
+            public rotationMinDeviceAgeDays: number;
+
+            /** DomainAuthorityRecord deviceRecoveryDelayHours. */
+            public deviceRecoveryDelayHours: number;
 
             /**
              * Creates a new DomainAuthorityRecord instance using the specified properties.
@@ -1836,6 +1860,296 @@ export namespace dmcn {
 
             /**
              * Gets the default type url for AddressRemovalRecord
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a RotationEntry. */
+        interface IRotationEntry {
+
+            /** RotationEntry version */
+            version?: (number|null);
+
+            /** RotationEntry address */
+            address?: (string|null);
+
+            /** RotationEntry retiredEd25519PublicKey */
+            retiredEd25519PublicKey?: (Uint8Array|null);
+
+            /** RotationEntry retiredX25519PublicKey */
+            retiredX25519PublicKey?: (Uint8Array|null);
+
+            /** RotationEntry nextEd25519PublicKey */
+            nextEd25519PublicKey?: (Uint8Array|null);
+
+            /** RotationEntry nextX25519PublicKey */
+            nextX25519PublicKey?: (Uint8Array|null);
+
+            /** RotationEntry rotatedAt */
+            rotatedAt?: (number|Long|null);
+
+            /** RotationEntry nextRevision */
+            nextRevision?: (number|Long|null);
+
+            /** RotationEntry prevSignatureHash */
+            prevSignatureHash?: (Uint8Array|null);
+
+            /** RotationEntry authorizingEd25519PublicKey */
+            authorizingEd25519PublicKey?: (Uint8Array|null);
+
+            /** RotationEntry deviceCredential */
+            deviceCredential?: (dmcn.identity.ICredential|null);
+
+            /** RotationEntry deviceSignature */
+            deviceSignature?: (Uint8Array|null);
+
+            /** RotationEntry signature */
+            signature?: (Uint8Array|null);
+
+            /** RotationEntry nextSignature */
+            nextSignature?: (Uint8Array|null);
+        }
+
+        /** Represents a RotationEntry. */
+        class RotationEntry implements IRotationEntry {
+
+            /**
+             * Constructs a new RotationEntry.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.identity.IRotationEntry);
+
+            /** RotationEntry version. */
+            public version: number;
+
+            /** RotationEntry address. */
+            public address: string;
+
+            /** RotationEntry retiredEd25519PublicKey. */
+            public retiredEd25519PublicKey: Uint8Array;
+
+            /** RotationEntry retiredX25519PublicKey. */
+            public retiredX25519PublicKey: Uint8Array;
+
+            /** RotationEntry nextEd25519PublicKey. */
+            public nextEd25519PublicKey: Uint8Array;
+
+            /** RotationEntry nextX25519PublicKey. */
+            public nextX25519PublicKey: Uint8Array;
+
+            /** RotationEntry rotatedAt. */
+            public rotatedAt: (number|Long);
+
+            /** RotationEntry nextRevision. */
+            public nextRevision: (number|Long);
+
+            /** RotationEntry prevSignatureHash. */
+            public prevSignatureHash: Uint8Array;
+
+            /** RotationEntry authorizingEd25519PublicKey. */
+            public authorizingEd25519PublicKey: Uint8Array;
+
+            /** RotationEntry deviceCredential. */
+            public deviceCredential?: (dmcn.identity.ICredential|null);
+
+            /** RotationEntry deviceSignature. */
+            public deviceSignature: Uint8Array;
+
+            /** RotationEntry signature. */
+            public signature: Uint8Array;
+
+            /** RotationEntry nextSignature. */
+            public nextSignature: Uint8Array;
+
+            /**
+             * Creates a new RotationEntry instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns RotationEntry instance
+             */
+            public static create(properties?: dmcn.identity.IRotationEntry): dmcn.identity.RotationEntry;
+
+            /**
+             * Encodes the specified RotationEntry message. Does not implicitly {@link dmcn.identity.RotationEntry.verify|verify} messages.
+             * @param message RotationEntry message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.identity.IRotationEntry, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified RotationEntry message, length delimited. Does not implicitly {@link dmcn.identity.RotationEntry.verify|verify} messages.
+             * @param message RotationEntry message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.identity.IRotationEntry, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a RotationEntry message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns RotationEntry
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.identity.RotationEntry;
+
+            /**
+             * Decodes a RotationEntry message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns RotationEntry
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.identity.RotationEntry;
+
+            /**
+             * Verifies a RotationEntry message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a RotationEntry message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns RotationEntry
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.identity.RotationEntry;
+
+            /**
+             * Creates a plain object from a RotationEntry message. Also converts values to other types if specified.
+             * @param message RotationEntry
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.identity.RotationEntry, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this RotationEntry to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for RotationEntry
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of an AddressHistoryRecord. */
+        interface IAddressHistoryRecord {
+
+            /** AddressHistoryRecord version */
+            version?: (number|null);
+
+            /** AddressHistoryRecord domain */
+            domain?: (string|null);
+
+            /** AddressHistoryRecord address */
+            address?: (string|null);
+
+            /** AddressHistoryRecord chain */
+            chain?: (dmcn.identity.IRotationEntry[]|null);
+        }
+
+        /** Represents an AddressHistoryRecord. */
+        class AddressHistoryRecord implements IAddressHistoryRecord {
+
+            /**
+             * Constructs a new AddressHistoryRecord.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.identity.IAddressHistoryRecord);
+
+            /** AddressHistoryRecord version. */
+            public version: number;
+
+            /** AddressHistoryRecord domain. */
+            public domain: string;
+
+            /** AddressHistoryRecord address. */
+            public address: string;
+
+            /** AddressHistoryRecord chain. */
+            public chain: dmcn.identity.IRotationEntry[];
+
+            /**
+             * Creates a new AddressHistoryRecord instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns AddressHistoryRecord instance
+             */
+            public static create(properties?: dmcn.identity.IAddressHistoryRecord): dmcn.identity.AddressHistoryRecord;
+
+            /**
+             * Encodes the specified AddressHistoryRecord message. Does not implicitly {@link dmcn.identity.AddressHistoryRecord.verify|verify} messages.
+             * @param message AddressHistoryRecord message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.identity.IAddressHistoryRecord, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified AddressHistoryRecord message, length delimited. Does not implicitly {@link dmcn.identity.AddressHistoryRecord.verify|verify} messages.
+             * @param message AddressHistoryRecord message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.identity.IAddressHistoryRecord, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes an AddressHistoryRecord message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns AddressHistoryRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.identity.AddressHistoryRecord;
+
+            /**
+             * Decodes an AddressHistoryRecord message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns AddressHistoryRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.identity.AddressHistoryRecord;
+
+            /**
+             * Verifies an AddressHistoryRecord message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates an AddressHistoryRecord message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns AddressHistoryRecord
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.identity.AddressHistoryRecord;
+
+            /**
+             * Creates a plain object from an AddressHistoryRecord message. Also converts values to other types if specified.
+             * @param message AddressHistoryRecord
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.identity.AddressHistoryRecord, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this AddressHistoryRecord to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for AddressHistoryRecord
              * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns The default type url
              */
@@ -3529,6 +3843,9 @@ export namespace dmcn {
 
             /** RelayRequest getRelayDescriptor */
             getRelayDescriptor?: (dmcn.relay.IGetRelayDescriptorRequest|null);
+
+            /** RelayRequest getHistory */
+            getHistory?: (dmcn.relay.IGetHistoryRequest|null);
         }
 
         /** Represents a RelayRequest. */
@@ -3585,8 +3902,11 @@ export namespace dmcn {
             /** RelayRequest getRelayDescriptor. */
             public getRelayDescriptor?: (dmcn.relay.IGetRelayDescriptorRequest|null);
 
+            /** RelayRequest getHistory. */
+            public getHistory?: (dmcn.relay.IGetHistoryRequest|null);
+
             /** RelayRequest request. */
-            public request?: ("store"|"fetchInit"|"fetchProof"|"ack"|"ping"|"mailboxOp"|"storeInit"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor");
+            public request?: ("store"|"fetchInit"|"fetchProof"|"ack"|"ping"|"mailboxOp"|"storeInit"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory");
 
             /**
              * Creates a new RelayRequest instance using the specified properties.
@@ -3720,6 +4040,9 @@ export namespace dmcn {
             /** RelayResponse getRelayDescriptor */
             getRelayDescriptor?: (dmcn.relay.IGetRelayDescriptorResponse|null);
 
+            /** RelayResponse getHistory */
+            getHistory?: (dmcn.relay.IGetHistoryResponse|null);
+
             /** RelayResponse mailboxKvPut */
             mailboxKvPut?: (dmcn.relay.IMailboxKvPutResponse|null);
 
@@ -3796,6 +4119,9 @@ export namespace dmcn {
             /** RelayResponse getRelayDescriptor. */
             public getRelayDescriptor?: (dmcn.relay.IGetRelayDescriptorResponse|null);
 
+            /** RelayResponse getHistory. */
+            public getHistory?: (dmcn.relay.IGetHistoryResponse|null);
+
             /** RelayResponse mailboxKvPut. */
             public mailboxKvPut?: (dmcn.relay.IMailboxKvPutResponse|null);
 
@@ -3812,7 +4138,7 @@ export namespace dmcn {
             public mailboxKvStat?: (dmcn.relay.IMailboxKvStatResponse|null);
 
             /** RelayResponse response. */
-            public response?: ("store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat");
+            public response?: ("store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat");
 
             /**
              * Creates a new RelayResponse instance using the specified properties.
@@ -4733,6 +5059,12 @@ export namespace dmcn {
 
             /** FetchProof signature */
             signature?: (Uint8Array|null);
+
+            /** FetchProof deviceEd25519PublicKey */
+            deviceEd25519PublicKey?: (Uint8Array|null);
+
+            /** FetchProof deviceSignature */
+            deviceSignature?: (Uint8Array|null);
         }
 
         /** Represents a FetchProof. */
@@ -4752,6 +5084,12 @@ export namespace dmcn {
 
             /** FetchProof signature. */
             public signature: Uint8Array;
+
+            /** FetchProof deviceEd25519PublicKey. */
+            public deviceEd25519PublicKey: Uint8Array;
+
+            /** FetchProof deviceSignature. */
+            public deviceSignature: Uint8Array;
 
             /**
              * Creates a new FetchProof instance using the specified properties.
@@ -5230,6 +5568,9 @@ export namespace dmcn {
 
             /** PingResponse storedEnvelopes */
             storedEnvelopes?: (number|null);
+
+            /** PingResponse capabilities */
+            capabilities?: (string[]|null);
         }
 
         /** Represents a PingResponse. */
@@ -5249,6 +5590,9 @@ export namespace dmcn {
 
             /** PingResponse storedEnvelopes. */
             public storedEnvelopes: number;
+
+            /** PingResponse capabilities. */
+            public capabilities: string[];
 
             /**
              * Creates a new PingResponse instance using the specified properties.
@@ -6328,6 +6672,206 @@ export namespace dmcn {
             public static getTypeUrl(typeUrlPrefix?: string): string;
         }
 
+        /** Properties of a GetHistoryRequest. */
+        interface IGetHistoryRequest {
+
+            /** GetHistoryRequest address */
+            address?: (string|null);
+        }
+
+        /** Represents a GetHistoryRequest. */
+        class GetHistoryRequest implements IGetHistoryRequest {
+
+            /**
+             * Constructs a new GetHistoryRequest.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IGetHistoryRequest);
+
+            /** GetHistoryRequest address. */
+            public address: string;
+
+            /**
+             * Creates a new GetHistoryRequest instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns GetHistoryRequest instance
+             */
+            public static create(properties?: dmcn.relay.IGetHistoryRequest): dmcn.relay.GetHistoryRequest;
+
+            /**
+             * Encodes the specified GetHistoryRequest message. Does not implicitly {@link dmcn.relay.GetHistoryRequest.verify|verify} messages.
+             * @param message GetHistoryRequest message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IGetHistoryRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified GetHistoryRequest message, length delimited. Does not implicitly {@link dmcn.relay.GetHistoryRequest.verify|verify} messages.
+             * @param message GetHistoryRequest message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IGetHistoryRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a GetHistoryRequest message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns GetHistoryRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.GetHistoryRequest;
+
+            /**
+             * Decodes a GetHistoryRequest message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns GetHistoryRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.GetHistoryRequest;
+
+            /**
+             * Verifies a GetHistoryRequest message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a GetHistoryRequest message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns GetHistoryRequest
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.GetHistoryRequest;
+
+            /**
+             * Creates a plain object from a GetHistoryRequest message. Also converts values to other types if specified.
+             * @param message GetHistoryRequest
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.GetHistoryRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this GetHistoryRequest to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for GetHistoryRequest
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a GetHistoryResponse. */
+        interface IGetHistoryResponse {
+
+            /** GetHistoryResponse found */
+            found?: (boolean|null);
+
+            /** GetHistoryResponse record */
+            record?: (Uint8Array|null);
+        }
+
+        /** Represents a GetHistoryResponse. */
+        class GetHistoryResponse implements IGetHistoryResponse {
+
+            /**
+             * Constructs a new GetHistoryResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IGetHistoryResponse);
+
+            /** GetHistoryResponse found. */
+            public found: boolean;
+
+            /** GetHistoryResponse record. */
+            public record: Uint8Array;
+
+            /**
+             * Creates a new GetHistoryResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns GetHistoryResponse instance
+             */
+            public static create(properties?: dmcn.relay.IGetHistoryResponse): dmcn.relay.GetHistoryResponse;
+
+            /**
+             * Encodes the specified GetHistoryResponse message. Does not implicitly {@link dmcn.relay.GetHistoryResponse.verify|verify} messages.
+             * @param message GetHistoryResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IGetHistoryResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified GetHistoryResponse message, length delimited. Does not implicitly {@link dmcn.relay.GetHistoryResponse.verify|verify} messages.
+             * @param message GetHistoryResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IGetHistoryResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a GetHistoryResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns GetHistoryResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.GetHistoryResponse;
+
+            /**
+             * Decodes a GetHistoryResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns GetHistoryResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.GetHistoryResponse;
+
+            /**
+             * Verifies a GetHistoryResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a GetHistoryResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns GetHistoryResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.GetHistoryResponse;
+
+            /**
+             * Creates a plain object from a GetHistoryResponse message. Also converts values to other types if specified.
+             * @param message GetHistoryResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.GetHistoryResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this GetHistoryResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for GetHistoryResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
         /** RecordKind enum. */
         enum RecordKind {
             RECORD_KIND_UNSPECIFIED = 0,
@@ -6335,7 +6879,8 @@ export namespace dmcn {
             RECORD_KIND_DAR = 2,
             RECORD_KIND_ROSTER = 3,
             RECORD_KIND_REMOVAL = 4,
-            RECORD_KIND_BLOCKLIST = 5
+            RECORD_KIND_BLOCKLIST = 5,
+            RECORD_KIND_HISTORY = 6
         }
 
         /** Properties of a PutRecordRequest. */
@@ -7310,6 +7855,12 @@ export namespace dmcn {
             /** MailboxOp signature */
             signature?: (Uint8Array|null);
 
+            /** MailboxOp deviceEd25519PublicKey */
+            deviceEd25519PublicKey?: (Uint8Array|null);
+
+            /** MailboxOp deviceSignature */
+            deviceSignature?: (Uint8Array|null);
+
             /** MailboxOp list */
             list?: (dmcn.relay.IMailboxListOp|null);
 
@@ -7349,6 +7900,12 @@ export namespace dmcn {
 
             /** MailboxOp signature. */
             public signature: Uint8Array;
+
+            /** MailboxOp deviceEd25519PublicKey. */
+            public deviceEd25519PublicKey: Uint8Array;
+
+            /** MailboxOp deviceSignature. */
+            public deviceSignature: Uint8Array;
 
             /** MailboxOp list. */
             public list?: (dmcn.relay.IMailboxListOp|null);

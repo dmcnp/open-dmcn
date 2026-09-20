@@ -165,8 +165,8 @@ export function Contacts() {
                   {alert && (
                     <span
                       title={alert.anomaly === 'kv_missing'
-                        ? 'The synced copy of your address book no longer carries the key you pinned for this contact. This device is still using the key it pinned, and has pushed it back. If you did not expect this, verify their key out of band.'
-                        : 'The synced copy of your address book carries a different key for this contact than the one this device pinned. This device is still using the key it pinned. If they legitimately rotated, remove and re-add them to accept the new key.'}
+                        ? 'The synced copy of your address book no longer has the key you saved for this contact. This device is still using the one it saved, and has put it back. If you were not expecting that, check their key with them another way: a phone call, a text message, or something only the two of you would know.'
+                        : 'The synced copy of your address book has a different key for this contact than the one this device saved. This device is still using the one it saved. If they did change their key, remove and re-add them to accept the new one.'}
                       style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', color: 'var(--warning)' }}
                     >
                       <Icon name="alert-triangle" size={14} />

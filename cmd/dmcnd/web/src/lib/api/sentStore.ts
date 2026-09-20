@@ -10,6 +10,7 @@ import { PersonalStore } from './personalStore';
 import type { Preview, FullBody } from './mailboxRest';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type SplitEnvelope } from '../crypto/split';
+import { asDecryptOnly, retiredKeys } from '../crypto/retiredKeys';
 import { KDF_V1, KDF_V2 } from '../crypto/sealVersion';
 import type { MessageHeaderFields } from '../crypto/protobuf';
 import { toBase64, fromBase64, toHex } from '../crypto/keys';
@@ -165,6 +166,47 @@ export class SentStore {
     this.keys = keys;
   }
 
+  /**
+   * The keys this account's own copies may be sealed to, current generation first.
+   *
+   * A Sent entry is sealed to the key that SENT it, and a rotation re-keys the account without
+   * re-sealing the mail — so every message sent before a re-key opens only with the generation it
+   * was sent under. Without this the Sent folder empties itself the day someone rotates, which is
+   * a strange way to find out that the retired key was kept for exactly this.
+   *
+   * The sweep that re-seals personal storage deliberately skips `sent/`: those entries are mail,
+   * one per message, and rewriting the archive is not a sweep. This is what makes that skip safe.
+   */
+  private async generations(): Promise<Array<Pick<WorkingKeys, 'x25519Derive' | 'x25519Public'>>> {
+    return [this.keys, ...(await retiredKeys(this.keys.address)).map(r => asDecryptOnly(this.keys.address, r))];
+  }
+
+  /** Open a stored header with whichever generation sealed it. */
+  private async openHeader(h: StoredHeader): Promise<{ entry: MailboxEntryLike; header: MessageHeaderFields }> {
+    let lastErr: unknown;
+    for (const g of await this.generations()) {
+      try {
+        return await openStoredHeader(h, g.x25519Derive, g.x25519Public);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
+  /** Open a stored body with whichever generation sealed it. */
+  private async openBody(entry: MailboxEntryLike, body: MailboxBodyLike, header: MessageHeaderFields) {
+    let lastErr: unknown;
+    for (const g of await this.generations()) {
+      try {
+        return await decryptBody(entry, body, header, g.x25519Derive, g.x25519Public);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
   // putEnvelope stores a self-sealed split envelope as a listed header entry plus a lazy
   // body entry.
   async putEnvelope(messageIdHex: string, env: SplitEnvelope): Promise<void> {
@@ -188,7 +230,7 @@ export class SentStore {
     const next = new Map<string, { entry: MailboxEntryLike; header: MessageHeaderFields }>();
     for (const e of entries) {
       try {
-        const { entry, header } = await openStoredHeader(e.value, this.keys.x25519Derive, this.keys.x25519Public);
+        const { entry, header } = await this.openHeader(e.value);
         const hash = SENT_HASH_PREFIX + midFromKey(e.key);
         next.set(hash, { entry, header });
         previews.push(previewFromHeader(hash, header));
@@ -211,7 +253,7 @@ export class SentStore {
     const mid = hash.startsWith(SENT_HASH_PREFIX) ? hash.slice(SENT_HASH_PREFIX.length) : hash;
     const b = await this.store.get<StoredBody>(sentBodyKey(mid));
     if (!b) throw new Error('sent body not found');
-    const content = await decryptBody(cached.entry, toBody(b.value), cached.header, this.keys.x25519Derive, this.keys.x25519Public);
+    const content = await this.openBody(cached.entry, toBody(b.value), cached.header);
     return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
   }
 

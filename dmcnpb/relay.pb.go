@@ -31,6 +31,7 @@ const (
 	RecordKind_RECORD_KIND_ROSTER      RecordKind = 3 // dmcn.identity.FleetRoster
 	RecordKind_RECORD_KIND_REMOVAL     RecordKind = 4 // dmcn.identity.AddressRemovalRecord
 	RecordKind_RECORD_KIND_BLOCKLIST   RecordKind = 5 // dmcn.identity.CredentialBlockList
+	RecordKind_RECORD_KIND_HISTORY     RecordKind = 6 // dmcn.identity.AddressHistoryRecord
 )
 
 // Enum value maps for RecordKind.
@@ -42,6 +43,7 @@ var (
 		3: "RECORD_KIND_ROSTER",
 		4: "RECORD_KIND_REMOVAL",
 		5: "RECORD_KIND_BLOCKLIST",
+		6: "RECORD_KIND_HISTORY",
 	}
 	RecordKind_value = map[string]int32{
 		"RECORD_KIND_UNSPECIFIED": 0,
@@ -50,6 +52,7 @@ var (
 		"RECORD_KIND_ROSTER":      3,
 		"RECORD_KIND_REMOVAL":     4,
 		"RECORD_KIND_BLOCKLIST":   5,
+		"RECORD_KIND_HISTORY":     6,
 	}
 )
 
@@ -101,6 +104,7 @@ type RelayRequest struct {
 	//	*RelayRequest_GetBlocklist
 	//	*RelayRequest_PutRecord
 	//	*RelayRequest_GetRelayDescriptor
+	//	*RelayRequest_GetHistory
 	Request       isRelayRequest_Request `protobuf_oneof:"request"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -278,6 +282,15 @@ func (x *RelayRequest) GetGetRelayDescriptor() *GetRelayDescriptorRequest {
 	return nil
 }
 
+func (x *RelayRequest) GetGetHistory() *GetHistoryRequest {
+	if x != nil {
+		if x, ok := x.Request.(*RelayRequest_GetHistory); ok {
+			return x.GetHistory
+		}
+	}
+	return nil
+}
+
 type isRelayRequest_Request interface {
 	isRelayRequest_Request()
 }
@@ -349,6 +362,10 @@ type RelayRequest_GetRelayDescriptor struct {
 	GetRelayDescriptor *GetRelayDescriptorRequest `protobuf:"bytes,25,opt,name=get_relay_descriptor,json=getRelayDescriptor,proto3,oneof"` // resolve a relay's onion descriptor (peer-ID self-anchored)
 }
 
+type RelayRequest_GetHistory struct {
+	GetHistory *GetHistoryRequest `protobuf:"bytes,27,opt,name=get_history,json=getHistory,proto3,oneof"` // resolve an address's AddressHistoryRecord (rotation history)
+}
+
 func (*RelayRequest_Store) isRelayRequest_Request() {}
 
 func (*RelayRequest_FetchInit) isRelayRequest_Request() {}
@@ -379,6 +396,8 @@ func (*RelayRequest_PutRecord) isRelayRequest_Request() {}
 
 func (*RelayRequest_GetRelayDescriptor) isRelayRequest_Request() {}
 
+func (*RelayRequest_GetHistory) isRelayRequest_Request() {}
+
 // RelayResponse is the top-level response wrapper for relay protocol operations.
 type RelayResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -401,6 +420,7 @@ type RelayResponse struct {
 	//	*RelayResponse_GetBlocklist
 	//	*RelayResponse_PutRecord
 	//	*RelayResponse_GetRelayDescriptor
+	//	*RelayResponse_GetHistory
 	//	*RelayResponse_MailboxKvPut
 	//	*RelayResponse_MailboxKvGet
 	//	*RelayResponse_MailboxKvList
@@ -601,6 +621,15 @@ func (x *RelayResponse) GetGetRelayDescriptor() *GetRelayDescriptorResponse {
 	return nil
 }
 
+func (x *RelayResponse) GetGetHistory() *GetHistoryResponse {
+	if x != nil {
+		if x, ok := x.Response.(*RelayResponse_GetHistory); ok {
+			return x.GetHistory
+		}
+	}
+	return nil
+}
+
 func (x *RelayResponse) GetMailboxKvPut() *MailboxKvPutResponse {
 	if x != nil {
 		if x, ok := x.Response.(*RelayResponse_MailboxKvPut); ok {
@@ -722,6 +751,10 @@ type RelayResponse_GetRelayDescriptor struct {
 	GetRelayDescriptor *GetRelayDescriptorResponse `protobuf:"bytes,34,opt,name=get_relay_descriptor,json=getRelayDescriptor,proto3,oneof"`
 }
 
+type RelayResponse_GetHistory struct {
+	GetHistory *GetHistoryResponse `protobuf:"bytes,37,opt,name=get_history,json=getHistory,proto3,oneof"`
+}
+
 type RelayResponse_MailboxKvPut struct {
 	// --- Personal storage responses. ---
 	MailboxKvPut *MailboxKvPutResponse `protobuf:"bytes,18,opt,name=mailbox_kv_put,json=mailboxKvPut,proto3,oneof"`
@@ -776,6 +809,8 @@ func (*RelayResponse_GetBlocklist) isRelayResponse_Response() {}
 func (*RelayResponse_PutRecord) isRelayResponse_Response() {}
 
 func (*RelayResponse_GetRelayDescriptor) isRelayResponse_Response() {}
+
+func (*RelayResponse_GetHistory) isRelayResponse_Response() {}
 
 func (*RelayResponse_MailboxKvPut) isRelayResponse_Response() {}
 
@@ -1225,13 +1260,29 @@ func (x *FetchChallenge) GetNonce() []byte {
 }
 
 // FetchProof provides the signed challenge nonce to authenticate the recipient.
+//
+// `signature` proves possession of the ACCOUNT key — who the mailbox belongs to. Where the
+// mailbox has enrolled devices, that alone is deliberately no longer enough: the proof must ALSO
+// carry a signature from one of those devices. The two answer different questions and neither
+// substitutes for the other. The account key says this is the owner's mailbox; the device key
+// says the request comes from somewhere the owner has approved. Requiring both is what makes a
+// key copied out of a backup export useless on its own, since device keys are generated on their
+// device and never travel in one.
+//
+// A mailbox that has enrolled NO devices is answered on the account signature alone, which is
+// how an account that predates the registry keeps working until it enrols for the first time.
 type FetchProof struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	Nonce         []byte                 `protobuf:"bytes,2,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"` // Ed25519 signature over nonce
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Address   string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Nonce     []byte                 `protobuf:"bytes,2,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature []byte                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"` // Ed25519 by the ACCOUNT key over nonce
+	// device_ed25519_public_key names the enrolled device making this request, and
+	// device_signature is that device's own Ed25519 over the same nonce. Both empty is valid only
+	// while the mailbox has no enrolled devices.
+	DeviceEd25519PublicKey []byte `protobuf:"bytes,4,opt,name=device_ed25519_public_key,json=deviceEd25519PublicKey,proto3" json:"device_ed25519_public_key,omitempty"`
+	DeviceSignature        []byte `protobuf:"bytes,5,opt,name=device_signature,json=deviceSignature,proto3" json:"device_signature,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *FetchProof) Reset() {
@@ -1281,6 +1332,20 @@ func (x *FetchProof) GetNonce() []byte {
 func (x *FetchProof) GetSignature() []byte {
 	if x != nil {
 		return x.Signature
+	}
+	return nil
+}
+
+func (x *FetchProof) GetDeviceEd25519PublicKey() []byte {
+	if x != nil {
+		return x.DeviceEd25519PublicKey
+	}
+	return nil
+}
+
+func (x *FetchProof) GetDeviceSignature() []byte {
+	if x != nil {
+		return x.DeviceSignature
 	}
 	return nil
 }
@@ -1471,8 +1536,21 @@ type PingResponse struct {
 	Version         string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	UptimeSeconds   int64                  `protobuf:"varint,2,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
 	StoredEnvelopes uint32                 `protobuf:"varint,3,opt,name=stored_envelopes,json=storedEnvelopes,proto3" json:"stored_envelopes,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// capabilities names the optional protocol features this build actually implements, so a
+	// caller can learn what a fleet will accept BEFORE doing something it cannot undo.
+	//
+	// It exists because the schema and the code that honours it deploy separately. Adding a field
+	// covered by a signature is safe only in a fixed order — ship the readers, then the producers
+	// — and `version` cannot answer "have the readers landed": it is a build string whose meaning
+	// a caller would have to parse and guess at. A capability token is the build telling you what
+	// it does.
+	//
+	// Tokens are lowercase, hyphenated and additive; an unknown token is ignored, and an absent
+	// one means "assume unsupported". Ping is unsigned diagnostic metadata that nothing verifies
+	// by re-marshaling, so this field carries no ordering hazard of its own.
+	Capabilities  []string `protobuf:"bytes,4,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PingResponse) Reset() {
@@ -1524,6 +1602,13 @@ func (x *PingResponse) GetStoredEnvelopes() uint32 {
 		return x.StoredEnvelopes
 	}
 	return 0
+}
+
+func (x *PingResponse) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 // GetIdentityRequest resolves the signed IdentityRecord for an address.
@@ -2011,6 +2096,105 @@ func (x *GetBlocklistResponse) GetRecord() []byte {
 	return nil
 }
 
+// GetHistoryRequest resolves the AddressHistoryRecord (complete rotation history) for an address.
+// Public and unauthenticated like the other resolve ops: the record is self-authenticating through
+// the signatures on its own entries, so serving it discloses nothing a resolver could not verify.
+type GetHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHistoryRequest) Reset() {
+	*x = GetHistoryRequest{}
+	mi := &file_relay_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHistoryRequest) ProtoMessage() {}
+
+func (x *GetHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHistoryRequest.ProtoReflect.Descriptor instead.
+func (*GetHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GetHistoryRequest) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+type GetHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	Record        []byte                 `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"` // marshaled dmcn.identity.AddressHistoryRecord
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHistoryResponse) Reset() {
+	*x = GetHistoryResponse{}
+	mi := &file_relay_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHistoryResponse) ProtoMessage() {}
+
+func (x *GetHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHistoryResponse.ProtoReflect.Descriptor instead.
+func (*GetHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetHistoryResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *GetHistoryResponse) GetRecord() []byte {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
 // PutRecordRequest pushes one self-authenticating record into the recipient node's RecordStore —
 // the fleet-replication path. The receiving relay RE-VERIFIES the record
 // (self-signature; DNS fingerprint anchor for a DAR; monotonic-revision anti-rollback) before
@@ -2027,7 +2211,7 @@ type PutRecordRequest struct {
 
 func (x *PutRecordRequest) Reset() {
 	*x = PutRecordRequest{}
-	mi := &file_relay_proto_msgTypes[26]
+	mi := &file_relay_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2039,7 +2223,7 @@ func (x *PutRecordRequest) String() string {
 func (*PutRecordRequest) ProtoMessage() {}
 
 func (x *PutRecordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[26]
+	mi := &file_relay_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2052,7 +2236,7 @@ func (x *PutRecordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutRecordRequest.ProtoReflect.Descriptor instead.
 func (*PutRecordRequest) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{26}
+	return file_relay_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *PutRecordRequest) GetKind() RecordKind {
@@ -2079,7 +2263,7 @@ type PutRecordResponse struct {
 
 func (x *PutRecordResponse) Reset() {
 	*x = PutRecordResponse{}
-	mi := &file_relay_proto_msgTypes[27]
+	mi := &file_relay_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2091,7 +2275,7 @@ func (x *PutRecordResponse) String() string {
 func (*PutRecordResponse) ProtoMessage() {}
 
 func (x *PutRecordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[27]
+	mi := &file_relay_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2104,7 +2288,7 @@ func (x *PutRecordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutRecordResponse.ProtoReflect.Descriptor instead.
 func (*PutRecordResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{27}
+	return file_relay_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PutRecordResponse) GetAccepted() bool {
@@ -2134,7 +2318,7 @@ type GetRelayDescriptorRequest struct {
 
 func (x *GetRelayDescriptorRequest) Reset() {
 	*x = GetRelayDescriptorRequest{}
-	mi := &file_relay_proto_msgTypes[28]
+	mi := &file_relay_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2146,7 +2330,7 @@ func (x *GetRelayDescriptorRequest) String() string {
 func (*GetRelayDescriptorRequest) ProtoMessage() {}
 
 func (x *GetRelayDescriptorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[28]
+	mi := &file_relay_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2159,7 +2343,7 @@ func (x *GetRelayDescriptorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRelayDescriptorRequest.ProtoReflect.Descriptor instead.
 func (*GetRelayDescriptorRequest) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{28}
+	return file_relay_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetRelayDescriptorRequest) GetPeerId() string {
@@ -2179,7 +2363,7 @@ type GetRelayDescriptorResponse struct {
 
 func (x *GetRelayDescriptorResponse) Reset() {
 	*x = GetRelayDescriptorResponse{}
-	mi := &file_relay_proto_msgTypes[29]
+	mi := &file_relay_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2191,7 +2375,7 @@ func (x *GetRelayDescriptorResponse) String() string {
 func (*GetRelayDescriptorResponse) ProtoMessage() {}
 
 func (x *GetRelayDescriptorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[29]
+	mi := &file_relay_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2204,7 +2388,7 @@ func (x *GetRelayDescriptorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRelayDescriptorResponse.ProtoReflect.Descriptor instead.
 func (*GetRelayDescriptorResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{29}
+	return file_relay_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetRelayDescriptorResponse) GetFound() bool {
@@ -2232,7 +2416,7 @@ type ErrorResponse struct {
 
 func (x *ErrorResponse) Reset() {
 	*x = ErrorResponse{}
-	mi := &file_relay_proto_msgTypes[30]
+	mi := &file_relay_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2244,7 +2428,7 @@ func (x *ErrorResponse) String() string {
 func (*ErrorResponse) ProtoMessage() {}
 
 func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[30]
+	mi := &file_relay_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2257,7 +2441,7 @@ func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
 func (*ErrorResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{30}
+	return file_relay_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ErrorResponse) GetCode() string {
@@ -2283,7 +2467,7 @@ type PeersRequest struct {
 
 func (x *PeersRequest) Reset() {
 	*x = PeersRequest{}
-	mi := &file_relay_proto_msgTypes[31]
+	mi := &file_relay_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2295,7 +2479,7 @@ func (x *PeersRequest) String() string {
 func (*PeersRequest) ProtoMessage() {}
 
 func (x *PeersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[31]
+	mi := &file_relay_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2308,7 +2492,7 @@ func (x *PeersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeersRequest.ProtoReflect.Descriptor instead.
 func (*PeersRequest) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{31}
+	return file_relay_proto_rawDescGZIP(), []int{33}
 }
 
 // PeersResponse returns the list of peer multiaddrs in the cluster.
@@ -2321,7 +2505,7 @@ type PeersResponse struct {
 
 func (x *PeersResponse) Reset() {
 	*x = PeersResponse{}
-	mi := &file_relay_proto_msgTypes[32]
+	mi := &file_relay_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2333,7 +2517,7 @@ func (x *PeersResponse) String() string {
 func (*PeersResponse) ProtoMessage() {}
 
 func (x *PeersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[32]
+	mi := &file_relay_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2346,7 +2530,7 @@ func (x *PeersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeersResponse.ProtoReflect.Descriptor instead.
 func (*PeersResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{32}
+	return file_relay_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PeersResponse) GetPeers() []string {
@@ -2377,7 +2561,7 @@ type MailboxEntry struct {
 
 func (x *MailboxEntry) Reset() {
 	*x = MailboxEntry{}
-	mi := &file_relay_proto_msgTypes[33]
+	mi := &file_relay_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2389,7 +2573,7 @@ func (x *MailboxEntry) String() string {
 func (*MailboxEntry) ProtoMessage() {}
 
 func (x *MailboxEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[33]
+	mi := &file_relay_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2402,7 +2586,7 @@ func (x *MailboxEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxEntry.ProtoReflect.Descriptor instead.
 func (*MailboxEntry) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{33}
+	return file_relay_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *MailboxEntry) GetHash() []byte {
@@ -2484,7 +2668,7 @@ type MailboxBody struct {
 
 func (x *MailboxBody) Reset() {
 	*x = MailboxBody{}
-	mi := &file_relay_proto_msgTypes[34]
+	mi := &file_relay_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2496,7 +2680,7 @@ func (x *MailboxBody) String() string {
 func (*MailboxBody) ProtoMessage() {}
 
 func (x *MailboxBody) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[34]
+	mi := &file_relay_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2509,7 +2693,7 @@ func (x *MailboxBody) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxBody.ProtoReflect.Descriptor instead.
 func (*MailboxBody) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{34}
+	return file_relay_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *MailboxBody) GetEncryptedBody() []byte {
@@ -2553,7 +2737,15 @@ func (x *MailboxBody) GetBodyContentAddress() []byte {
 type MailboxOp struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Nonce     []byte                 `protobuf:"bytes,1,opt,name=nonce,proto3" json:"nonce,omitempty"`         // echoed challenge nonce
-	Signature []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"` // Ed25519 over nonce
+	Signature []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"` // Ed25519 by the ACCOUNT key over nonce
+	// device_ed25519_public_key / device_signature carry the enrolled DEVICE's proof over the same
+	// nonce. Where the mailbox has enrolled devices, both are required alongside the account
+	// signature: the account key says whose mailbox this is, the device key says the request comes
+	// from somewhere the owner approved, and a key copied out of a backup export can only answer
+	// the first. Both empty is valid only while the mailbox has no enrolled devices. See
+	// FetchProof, which carries the same pair for the transient path.
+	DeviceEd25519PublicKey []byte `protobuf:"bytes,14,opt,name=device_ed25519_public_key,json=deviceEd25519PublicKey,proto3" json:"device_ed25519_public_key,omitempty"`
+	DeviceSignature        []byte `protobuf:"bytes,15,opt,name=device_signature,json=deviceSignature,proto3" json:"device_signature,omitempty"`
 	// Types that are valid to be assigned to Op:
 	//
 	//	*MailboxOp_List
@@ -2571,7 +2763,7 @@ type MailboxOp struct {
 
 func (x *MailboxOp) Reset() {
 	*x = MailboxOp{}
-	mi := &file_relay_proto_msgTypes[35]
+	mi := &file_relay_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2583,7 +2775,7 @@ func (x *MailboxOp) String() string {
 func (*MailboxOp) ProtoMessage() {}
 
 func (x *MailboxOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[35]
+	mi := &file_relay_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2596,7 +2788,7 @@ func (x *MailboxOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxOp.ProtoReflect.Descriptor instead.
 func (*MailboxOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{35}
+	return file_relay_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *MailboxOp) GetNonce() []byte {
@@ -2609,6 +2801,20 @@ func (x *MailboxOp) GetNonce() []byte {
 func (x *MailboxOp) GetSignature() []byte {
 	if x != nil {
 		return x.Signature
+	}
+	return nil
+}
+
+func (x *MailboxOp) GetDeviceEd25519PublicKey() []byte {
+	if x != nil {
+		return x.DeviceEd25519PublicKey
+	}
+	return nil
+}
+
+func (x *MailboxOp) GetDeviceSignature() []byte {
+	if x != nil {
+		return x.DeviceSignature
 	}
 	return nil
 }
@@ -2759,7 +2965,7 @@ type MailboxListOp struct {
 
 func (x *MailboxListOp) Reset() {
 	*x = MailboxListOp{}
-	mi := &file_relay_proto_msgTypes[36]
+	mi := &file_relay_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2771,7 +2977,7 @@ func (x *MailboxListOp) String() string {
 func (*MailboxListOp) ProtoMessage() {}
 
 func (x *MailboxListOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[36]
+	mi := &file_relay_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2784,7 +2990,7 @@ func (x *MailboxListOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxListOp.ProtoReflect.Descriptor instead.
 func (*MailboxListOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{36}
+	return file_relay_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *MailboxListOp) GetLimit() uint32 {
@@ -2811,7 +3017,7 @@ type MailboxBodyOp struct {
 
 func (x *MailboxBodyOp) Reset() {
 	*x = MailboxBodyOp{}
-	mi := &file_relay_proto_msgTypes[37]
+	mi := &file_relay_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2823,7 +3029,7 @@ func (x *MailboxBodyOp) String() string {
 func (*MailboxBodyOp) ProtoMessage() {}
 
 func (x *MailboxBodyOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[37]
+	mi := &file_relay_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2836,7 +3042,7 @@ func (x *MailboxBodyOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxBodyOp.ProtoReflect.Descriptor instead.
 func (*MailboxBodyOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{37}
+	return file_relay_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *MailboxBodyOp) GetHash() []byte {
@@ -2856,7 +3062,7 @@ type MailboxDeleteOp struct {
 
 func (x *MailboxDeleteOp) Reset() {
 	*x = MailboxDeleteOp{}
-	mi := &file_relay_proto_msgTypes[38]
+	mi := &file_relay_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2868,7 +3074,7 @@ func (x *MailboxDeleteOp) String() string {
 func (*MailboxDeleteOp) ProtoMessage() {}
 
 func (x *MailboxDeleteOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[38]
+	mi := &file_relay_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2881,7 +3087,7 @@ func (x *MailboxDeleteOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxDeleteOp.ProtoReflect.Descriptor instead.
 func (*MailboxDeleteOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{38}
+	return file_relay_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *MailboxDeleteOp) GetHash() []byte {
@@ -2903,7 +3109,7 @@ type MailboxListResponse struct {
 
 func (x *MailboxListResponse) Reset() {
 	*x = MailboxListResponse{}
-	mi := &file_relay_proto_msgTypes[39]
+	mi := &file_relay_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2915,7 +3121,7 @@ func (x *MailboxListResponse) String() string {
 func (*MailboxListResponse) ProtoMessage() {}
 
 func (x *MailboxListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[39]
+	mi := &file_relay_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2928,7 +3134,7 @@ func (x *MailboxListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxListResponse.ProtoReflect.Descriptor instead.
 func (*MailboxListResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{39}
+	return file_relay_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MailboxListResponse) GetEntries() []*MailboxEntry {
@@ -2960,7 +3166,7 @@ type MailboxBodyHeader struct {
 
 func (x *MailboxBodyHeader) Reset() {
 	*x = MailboxBodyHeader{}
-	mi := &file_relay_proto_msgTypes[40]
+	mi := &file_relay_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2972,7 +3178,7 @@ func (x *MailboxBodyHeader) String() string {
 func (*MailboxBodyHeader) ProtoMessage() {}
 
 func (x *MailboxBodyHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[40]
+	mi := &file_relay_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2985,7 +3191,7 @@ func (x *MailboxBodyHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxBodyHeader.ProtoReflect.Descriptor instead.
 func (*MailboxBodyHeader) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{40}
+	return file_relay_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *MailboxBodyHeader) GetBodyNonce() []byte {
@@ -3026,7 +3232,7 @@ type MailboxDeleteResponse struct {
 
 func (x *MailboxDeleteResponse) Reset() {
 	*x = MailboxDeleteResponse{}
-	mi := &file_relay_proto_msgTypes[41]
+	mi := &file_relay_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3038,7 +3244,7 @@ func (x *MailboxDeleteResponse) String() string {
 func (*MailboxDeleteResponse) ProtoMessage() {}
 
 func (x *MailboxDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[41]
+	mi := &file_relay_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3051,7 +3257,7 @@ func (x *MailboxDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxDeleteResponse.ProtoReflect.Descriptor instead.
 func (*MailboxDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{41}
+	return file_relay_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *MailboxDeleteResponse) GetSuccess() bool {
@@ -3087,7 +3293,7 @@ type StoreInit struct {
 
 func (x *StoreInit) Reset() {
 	*x = StoreInit{}
-	mi := &file_relay_proto_msgTypes[42]
+	mi := &file_relay_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3099,7 +3305,7 @@ func (x *StoreInit) String() string {
 func (*StoreInit) ProtoMessage() {}
 
 func (x *StoreInit) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[42]
+	mi := &file_relay_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3112,7 +3318,7 @@ func (x *StoreInit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreInit.ProtoReflect.Descriptor instead.
 func (*StoreInit) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{42}
+	return file_relay_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *StoreInit) GetSenderAddress() string {
@@ -3234,7 +3440,7 @@ type MailboxKvPutOp struct {
 
 func (x *MailboxKvPutOp) Reset() {
 	*x = MailboxKvPutOp{}
-	mi := &file_relay_proto_msgTypes[43]
+	mi := &file_relay_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3246,7 +3452,7 @@ func (x *MailboxKvPutOp) String() string {
 func (*MailboxKvPutOp) ProtoMessage() {}
 
 func (x *MailboxKvPutOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[43]
+	mi := &file_relay_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3259,7 +3465,7 @@ func (x *MailboxKvPutOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvPutOp.ProtoReflect.Descriptor instead.
 func (*MailboxKvPutOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{43}
+	return file_relay_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *MailboxKvPutOp) GetKey() string {
@@ -3293,7 +3499,7 @@ type MailboxKvGetOp struct {
 
 func (x *MailboxKvGetOp) Reset() {
 	*x = MailboxKvGetOp{}
-	mi := &file_relay_proto_msgTypes[44]
+	mi := &file_relay_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3305,7 +3511,7 @@ func (x *MailboxKvGetOp) String() string {
 func (*MailboxKvGetOp) ProtoMessage() {}
 
 func (x *MailboxKvGetOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[44]
+	mi := &file_relay_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3318,7 +3524,7 @@ func (x *MailboxKvGetOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvGetOp.ProtoReflect.Descriptor instead.
 func (*MailboxKvGetOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{44}
+	return file_relay_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *MailboxKvGetOp) GetKey() string {
@@ -3342,7 +3548,7 @@ type MailboxKvListOp struct {
 
 func (x *MailboxKvListOp) Reset() {
 	*x = MailboxKvListOp{}
-	mi := &file_relay_proto_msgTypes[45]
+	mi := &file_relay_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3354,7 +3560,7 @@ func (x *MailboxKvListOp) String() string {
 func (*MailboxKvListOp) ProtoMessage() {}
 
 func (x *MailboxKvListOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[45]
+	mi := &file_relay_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3367,7 +3573,7 @@ func (x *MailboxKvListOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvListOp.ProtoReflect.Descriptor instead.
 func (*MailboxKvListOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{45}
+	return file_relay_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *MailboxKvListOp) GetPrefix() string {
@@ -3408,7 +3614,7 @@ type MailboxKvDeleteOp struct {
 
 func (x *MailboxKvDeleteOp) Reset() {
 	*x = MailboxKvDeleteOp{}
-	mi := &file_relay_proto_msgTypes[46]
+	mi := &file_relay_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3420,7 +3626,7 @@ func (x *MailboxKvDeleteOp) String() string {
 func (*MailboxKvDeleteOp) ProtoMessage() {}
 
 func (x *MailboxKvDeleteOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[46]
+	mi := &file_relay_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3433,7 +3639,7 @@ func (x *MailboxKvDeleteOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvDeleteOp.ProtoReflect.Descriptor instead.
 func (*MailboxKvDeleteOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{46}
+	return file_relay_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *MailboxKvDeleteOp) GetKey() string {
@@ -3454,7 +3660,7 @@ type MailboxKvStatOp struct {
 
 func (x *MailboxKvStatOp) Reset() {
 	*x = MailboxKvStatOp{}
-	mi := &file_relay_proto_msgTypes[47]
+	mi := &file_relay_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3466,7 +3672,7 @@ func (x *MailboxKvStatOp) String() string {
 func (*MailboxKvStatOp) ProtoMessage() {}
 
 func (x *MailboxKvStatOp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[47]
+	mi := &file_relay_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3479,7 +3685,7 @@ func (x *MailboxKvStatOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvStatOp.ProtoReflect.Descriptor instead.
 func (*MailboxKvStatOp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{47}
+	return file_relay_proto_rawDescGZIP(), []int{49}
 }
 
 // MailboxKvPutResponse confirms a write and returns the new version.
@@ -3493,7 +3699,7 @@ type MailboxKvPutResponse struct {
 
 func (x *MailboxKvPutResponse) Reset() {
 	*x = MailboxKvPutResponse{}
-	mi := &file_relay_proto_msgTypes[48]
+	mi := &file_relay_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3505,7 +3711,7 @@ func (x *MailboxKvPutResponse) String() string {
 func (*MailboxKvPutResponse) ProtoMessage() {}
 
 func (x *MailboxKvPutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[48]
+	mi := &file_relay_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3518,7 +3724,7 @@ func (x *MailboxKvPutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvPutResponse.ProtoReflect.Descriptor instead.
 func (*MailboxKvPutResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{48}
+	return file_relay_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *MailboxKvPutResponse) GetSuccess() bool {
@@ -3547,7 +3753,7 @@ type MailboxKvGetResponse struct {
 
 func (x *MailboxKvGetResponse) Reset() {
 	*x = MailboxKvGetResponse{}
-	mi := &file_relay_proto_msgTypes[49]
+	mi := &file_relay_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3559,7 +3765,7 @@ func (x *MailboxKvGetResponse) String() string {
 func (*MailboxKvGetResponse) ProtoMessage() {}
 
 func (x *MailboxKvGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[49]
+	mi := &file_relay_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3572,7 +3778,7 @@ func (x *MailboxKvGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvGetResponse.ProtoReflect.Descriptor instead.
 func (*MailboxKvGetResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{49}
+	return file_relay_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *MailboxKvGetResponse) GetFound() bool {
@@ -3608,7 +3814,7 @@ type MailboxKvItem struct {
 
 func (x *MailboxKvItem) Reset() {
 	*x = MailboxKvItem{}
-	mi := &file_relay_proto_msgTypes[50]
+	mi := &file_relay_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3620,7 +3826,7 @@ func (x *MailboxKvItem) String() string {
 func (*MailboxKvItem) ProtoMessage() {}
 
 func (x *MailboxKvItem) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[50]
+	mi := &file_relay_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3633,7 +3839,7 @@ func (x *MailboxKvItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvItem.ProtoReflect.Descriptor instead.
 func (*MailboxKvItem) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{50}
+	return file_relay_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *MailboxKvItem) GetKey() string {
@@ -3669,7 +3875,7 @@ type MailboxKvListResponse struct {
 
 func (x *MailboxKvListResponse) Reset() {
 	*x = MailboxKvListResponse{}
-	mi := &file_relay_proto_msgTypes[51]
+	mi := &file_relay_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3681,7 +3887,7 @@ func (x *MailboxKvListResponse) String() string {
 func (*MailboxKvListResponse) ProtoMessage() {}
 
 func (x *MailboxKvListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[51]
+	mi := &file_relay_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3694,7 +3900,7 @@ func (x *MailboxKvListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvListResponse.ProtoReflect.Descriptor instead.
 func (*MailboxKvListResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{51}
+	return file_relay_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *MailboxKvListResponse) GetItems() []*MailboxKvItem {
@@ -3721,7 +3927,7 @@ type MailboxKvDeleteResponse struct {
 
 func (x *MailboxKvDeleteResponse) Reset() {
 	*x = MailboxKvDeleteResponse{}
-	mi := &file_relay_proto_msgTypes[52]
+	mi := &file_relay_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3733,7 +3939,7 @@ func (x *MailboxKvDeleteResponse) String() string {
 func (*MailboxKvDeleteResponse) ProtoMessage() {}
 
 func (x *MailboxKvDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[52]
+	mi := &file_relay_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3746,7 +3952,7 @@ func (x *MailboxKvDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvDeleteResponse.ProtoReflect.Descriptor instead.
 func (*MailboxKvDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{52}
+	return file_relay_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *MailboxKvDeleteResponse) GetSuccess() bool {
@@ -3771,7 +3977,7 @@ type MailboxKvStatResponse struct {
 
 func (x *MailboxKvStatResponse) Reset() {
 	*x = MailboxKvStatResponse{}
-	mi := &file_relay_proto_msgTypes[53]
+	mi := &file_relay_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3783,7 +3989,7 @@ func (x *MailboxKvStatResponse) String() string {
 func (*MailboxKvStatResponse) ProtoMessage() {}
 
 func (x *MailboxKvStatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[53]
+	mi := &file_relay_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3796,7 +4002,7 @@ func (x *MailboxKvStatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailboxKvStatResponse.ProtoReflect.Descriptor instead.
 func (*MailboxKvStatResponse) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{53}
+	return file_relay_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *MailboxKvStatResponse) GetUsedBytes() uint64 {
@@ -3825,7 +4031,7 @@ var File_relay_proto protoreflect.FileDescriptor
 const file_relay_proto_rawDesc = "" +
 	"\n" +
 	"\vrelay.proto\x12\n" +
-	"dmcn.relay\x1a\rmessage.proto\"\xe1\b\n" +
+	"dmcn.relay\x1a\rmessage.proto\"\xa3\t\n" +
 	"\fRelayRequest\x120\n" +
 	"\x05store\x18\x01 \x01(\v2\x18.dmcn.relay.StoreRequestH\x00R\x05store\x126\n" +
 	"\n" +
@@ -3847,10 +4053,12 @@ const file_relay_proto_rawDesc = "" +
 	"\rget_blocklist\x18\x17 \x01(\v2\x1f.dmcn.relay.GetBlocklistRequestH\x00R\fgetBlocklist\x12=\n" +
 	"\n" +
 	"put_record\x18\x18 \x01(\v2\x1c.dmcn.relay.PutRecordRequestH\x00R\tputRecord\x12Y\n" +
-	"\x14get_relay_descriptor\x18\x19 \x01(\v2%.dmcn.relay.GetRelayDescriptorRequestH\x00R\x12getRelayDescriptorB\t\n" +
+	"\x14get_relay_descriptor\x18\x19 \x01(\v2%.dmcn.relay.GetRelayDescriptorRequestH\x00R\x12getRelayDescriptor\x12@\n" +
+	"\vget_history\x18\x1b \x01(\v2\x1d.dmcn.relay.GetHistoryRequestH\x00R\n" +
+	"getHistoryB\t\n" +
 	"\arequestJ\x04\b\t\x10\x13J\x04\b\x1a\x10\x1bR\x04statR\tset_drainR\x0frequest_mailboxR\x0fmailbox_handoffR\baccountsR\x11mailbox_kv_injectR\tset_quotaR\n" +
 	"set_accessR\n" +
-	"get_accessR\fclear_accessR\x13consume_send_inject\"\xd0\r\n" +
+	"get_accessR\fclear_accessR\x13consume_send_inject\"\x93\x0e\n" +
 	"\rRelayResponse\x121\n" +
 	"\x05store\x18\x01 \x01(\v2\x19.dmcn.relay.StoreResponseH\x00R\x05store\x12E\n" +
 	"\x0ffetch_challenge\x18\x02 \x01(\v2\x1a.dmcn.relay.FetchChallengeH\x00R\x0efetchChallenge\x121\n" +
@@ -3871,7 +4079,9 @@ const file_relay_proto_rawDesc = "" +
 	"\rget_blocklist\x18  \x01(\v2 .dmcn.relay.GetBlocklistResponseH\x00R\fgetBlocklist\x12>\n" +
 	"\n" +
 	"put_record\x18! \x01(\v2\x1d.dmcn.relay.PutRecordResponseH\x00R\tputRecord\x12Z\n" +
-	"\x14get_relay_descriptor\x18\" \x01(\v2&.dmcn.relay.GetRelayDescriptorResponseH\x00R\x12getRelayDescriptor\x12H\n" +
+	"\x14get_relay_descriptor\x18\" \x01(\v2&.dmcn.relay.GetRelayDescriptorResponseH\x00R\x12getRelayDescriptor\x12A\n" +
+	"\vget_history\x18% \x01(\v2\x1e.dmcn.relay.GetHistoryResponseH\x00R\n" +
+	"getHistory\x12H\n" +
 	"\x0emailbox_kv_put\x18\x12 \x01(\v2 .dmcn.relay.MailboxKvPutResponseH\x00R\fmailboxKvPut\x12H\n" +
 	"\x0emailbox_kv_get\x18\x13 \x01(\v2 .dmcn.relay.MailboxKvGetResponseH\x00R\fmailboxKvGet\x12K\n" +
 	"\x0fmailbox_kv_list\x18\x14 \x01(\v2!.dmcn.relay.MailboxKvListResponseH\x00R\rmailboxKvList\x12Q\n" +
@@ -3906,12 +4116,14 @@ const file_relay_proto_rawDesc = "" +
 	"\tFetchInit\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\"&\n" +
 	"\x0eFetchChallenge\x12\x14\n" +
-	"\x05nonce\x18\x01 \x01(\fR\x05nonce\"Z\n" +
+	"\x05nonce\x18\x01 \x01(\fR\x05nonce\"\xc0\x01\n" +
 	"\n" +
 	"FetchProof\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x14\n" +
 	"\x05nonce\x18\x02 \x01(\fR\x05nonce\x12\x1c\n" +
-	"\tsignature\x18\x03 \x01(\fR\tsignature\"w\n" +
+	"\tsignature\x18\x03 \x01(\fR\tsignature\x129\n" +
+	"\x19device_ed25519_public_key\x18\x04 \x01(\fR\x16deviceEd25519PublicKey\x12)\n" +
+	"\x10device_signature\x18\x05 \x01(\fR\x0fdeviceSignature\"w\n" +
 	"\rFetchResponse\x12=\n" +
 	"\tenvelopes\x18\x01 \x03(\v2\x1f.dmcn.message.EncryptedEnvelopeR\tenvelopes\x12'\n" +
 	"\x0fenvelope_hashes\x18\x02 \x03(\fR\x0eenvelopeHashes\"1\n" +
@@ -3920,11 +4132,12 @@ const file_relay_proto_rawDesc = "" +
 	"\renvelope_hash\x18\x01 \x01(\fR\fenvelopeHash\"'\n" +
 	"\vAckResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\r\n" +
-	"\vPingRequest\"z\n" +
+	"\vPingRequest\"\x9e\x01\n" +
 	"\fPingResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12%\n" +
 	"\x0euptime_seconds\x18\x02 \x01(\x03R\ruptimeSeconds\x12)\n" +
-	"\x10stored_envelopes\x18\x03 \x01(\rR\x0fstoredEnvelopes\".\n" +
+	"\x10stored_envelopes\x18\x03 \x01(\rR\x0fstoredEnvelopes\x12\"\n" +
+	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\".\n" +
 	"\x12GetIdentityRequest\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\"C\n" +
 	"\x13GetIdentityResponse\x12\x14\n" +
@@ -3948,6 +4161,11 @@ const file_relay_proto_rawDesc = "" +
 	"\x13GetBlocklistRequest\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\"D\n" +
 	"\x14GetBlocklistResponse\x12\x14\n" +
+	"\x05found\x18\x01 \x01(\bR\x05found\x12\x16\n" +
+	"\x06record\x18\x02 \x01(\fR\x06record\"-\n" +
+	"\x11GetHistoryRequest\x12\x18\n" +
+	"\aaddress\x18\x01 \x01(\tR\aaddress\"B\n" +
+	"\x12GetHistoryResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12\x16\n" +
 	"\x06record\x18\x02 \x01(\fR\x06record\"V\n" +
 	"\x10PutRecordRequest\x12*\n" +
@@ -3986,10 +4204,12 @@ const file_relay_proto_rawDesc = "" +
 	"body_nonce\x18\x02 \x01(\fR\tbodyNonce\x12\x19\n" +
 	"\bbody_tag\x18\x03 \x01(\fR\abodyTag\x12&\n" +
 	"\x0fbody_size_class\x18\x04 \x01(\rR\rbodySizeClass\x120\n" +
-	"\x14body_content_address\x18\x05 \x01(\fR\x12bodyContentAddress\"\xa0\x04\n" +
+	"\x14body_content_address\x18\x05 \x01(\fR\x12bodyContentAddress\"\x86\x05\n" +
 	"\tMailboxOp\x12\x14\n" +
 	"\x05nonce\x18\x01 \x01(\fR\x05nonce\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\fR\tsignature\x12/\n" +
+	"\tsignature\x18\x02 \x01(\fR\tsignature\x129\n" +
+	"\x19device_ed25519_public_key\x18\x0e \x01(\fR\x16deviceEd25519PublicKey\x12)\n" +
+	"\x10device_signature\x18\x0f \x01(\fR\x0fdeviceSignature\x12/\n" +
 	"\x04list\x18\x03 \x01(\v2\x19.dmcn.relay.MailboxListOpH\x00R\x04list\x12/\n" +
 	"\x04body\x18\x04 \x01(\v2\x19.dmcn.relay.MailboxBodyOpH\x00R\x04body\x125\n" +
 	"\x06delete\x18\x05 \x01(\v2\x1b.dmcn.relay.MailboxDeleteOpH\x00R\x06delete\x123\n" +
@@ -4080,7 +4300,7 @@ const file_relay_proto_rawDesc = "" +
 	"used_bytes\x18\x01 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vquota_bytes\x18\x02 \x01(\x04R\n" +
 	"quotaBytes\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x04R\x05count*\xa4\x01\n" +
+	"\x05count\x18\x03 \x01(\x04R\x05count*\xbd\x01\n" +
 	"\n" +
 	"RecordKind\x12\x1b\n" +
 	"\x17RECORD_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
@@ -4088,7 +4308,8 @@ const file_relay_proto_rawDesc = "" +
 	"\x0fRECORD_KIND_DAR\x10\x02\x12\x16\n" +
 	"\x12RECORD_KIND_ROSTER\x10\x03\x12\x17\n" +
 	"\x13RECORD_KIND_REMOVAL\x10\x04\x12\x19\n" +
-	"\x15RECORD_KIND_BLOCKLIST\x10\x05B\"Z dmcn.dev/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
+	"\x15RECORD_KIND_BLOCKLIST\x10\x05\x12\x17\n" +
+	"\x13RECORD_KIND_HISTORY\x10\x06B\"Z dmcn.dev/open-dmcn/dmcnpb;dmcnpbb\x06proto3"
 
 var (
 	file_relay_proto_rawDescOnce sync.Once
@@ -4103,7 +4324,7 @@ func file_relay_proto_rawDescGZIP() []byte {
 }
 
 var file_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
 var file_relay_proto_goTypes = []any{
 	(RecordKind)(0),                    // 0: dmcn.relay.RecordKind
 	(*RelayRequest)(nil),               // 1: dmcn.relay.RelayRequest
@@ -4132,36 +4353,38 @@ var file_relay_proto_goTypes = []any{
 	(*GetRemovalResponse)(nil),         // 24: dmcn.relay.GetRemovalResponse
 	(*GetBlocklistRequest)(nil),        // 25: dmcn.relay.GetBlocklistRequest
 	(*GetBlocklistResponse)(nil),       // 26: dmcn.relay.GetBlocklistResponse
-	(*PutRecordRequest)(nil),           // 27: dmcn.relay.PutRecordRequest
-	(*PutRecordResponse)(nil),          // 28: dmcn.relay.PutRecordResponse
-	(*GetRelayDescriptorRequest)(nil),  // 29: dmcn.relay.GetRelayDescriptorRequest
-	(*GetRelayDescriptorResponse)(nil), // 30: dmcn.relay.GetRelayDescriptorResponse
-	(*ErrorResponse)(nil),              // 31: dmcn.relay.ErrorResponse
-	(*PeersRequest)(nil),               // 32: dmcn.relay.PeersRequest
-	(*PeersResponse)(nil),              // 33: dmcn.relay.PeersResponse
-	(*MailboxEntry)(nil),               // 34: dmcn.relay.MailboxEntry
-	(*MailboxBody)(nil),                // 35: dmcn.relay.MailboxBody
-	(*MailboxOp)(nil),                  // 36: dmcn.relay.MailboxOp
-	(*MailboxListOp)(nil),              // 37: dmcn.relay.MailboxListOp
-	(*MailboxBodyOp)(nil),              // 38: dmcn.relay.MailboxBodyOp
-	(*MailboxDeleteOp)(nil),            // 39: dmcn.relay.MailboxDeleteOp
-	(*MailboxListResponse)(nil),        // 40: dmcn.relay.MailboxListResponse
-	(*MailboxBodyHeader)(nil),          // 41: dmcn.relay.MailboxBodyHeader
-	(*MailboxDeleteResponse)(nil),      // 42: dmcn.relay.MailboxDeleteResponse
-	(*StoreInit)(nil),                  // 43: dmcn.relay.StoreInit
-	(*MailboxKvPutOp)(nil),             // 44: dmcn.relay.MailboxKvPutOp
-	(*MailboxKvGetOp)(nil),             // 45: dmcn.relay.MailboxKvGetOp
-	(*MailboxKvListOp)(nil),            // 46: dmcn.relay.MailboxKvListOp
-	(*MailboxKvDeleteOp)(nil),          // 47: dmcn.relay.MailboxKvDeleteOp
-	(*MailboxKvStatOp)(nil),            // 48: dmcn.relay.MailboxKvStatOp
-	(*MailboxKvPutResponse)(nil),       // 49: dmcn.relay.MailboxKvPutResponse
-	(*MailboxKvGetResponse)(nil),       // 50: dmcn.relay.MailboxKvGetResponse
-	(*MailboxKvItem)(nil),              // 51: dmcn.relay.MailboxKvItem
-	(*MailboxKvListResponse)(nil),      // 52: dmcn.relay.MailboxKvListResponse
-	(*MailboxKvDeleteResponse)(nil),    // 53: dmcn.relay.MailboxKvDeleteResponse
-	(*MailboxKvStatResponse)(nil),      // 54: dmcn.relay.MailboxKvStatResponse
-	(*EncryptedEnvelope)(nil),          // 55: dmcn.message.EncryptedEnvelope
-	(*RecipientRecord)(nil),            // 56: dmcn.message.RecipientRecord
+	(*GetHistoryRequest)(nil),          // 27: dmcn.relay.GetHistoryRequest
+	(*GetHistoryResponse)(nil),         // 28: dmcn.relay.GetHistoryResponse
+	(*PutRecordRequest)(nil),           // 29: dmcn.relay.PutRecordRequest
+	(*PutRecordResponse)(nil),          // 30: dmcn.relay.PutRecordResponse
+	(*GetRelayDescriptorRequest)(nil),  // 31: dmcn.relay.GetRelayDescriptorRequest
+	(*GetRelayDescriptorResponse)(nil), // 32: dmcn.relay.GetRelayDescriptorResponse
+	(*ErrorResponse)(nil),              // 33: dmcn.relay.ErrorResponse
+	(*PeersRequest)(nil),               // 34: dmcn.relay.PeersRequest
+	(*PeersResponse)(nil),              // 35: dmcn.relay.PeersResponse
+	(*MailboxEntry)(nil),               // 36: dmcn.relay.MailboxEntry
+	(*MailboxBody)(nil),                // 37: dmcn.relay.MailboxBody
+	(*MailboxOp)(nil),                  // 38: dmcn.relay.MailboxOp
+	(*MailboxListOp)(nil),              // 39: dmcn.relay.MailboxListOp
+	(*MailboxBodyOp)(nil),              // 40: dmcn.relay.MailboxBodyOp
+	(*MailboxDeleteOp)(nil),            // 41: dmcn.relay.MailboxDeleteOp
+	(*MailboxListResponse)(nil),        // 42: dmcn.relay.MailboxListResponse
+	(*MailboxBodyHeader)(nil),          // 43: dmcn.relay.MailboxBodyHeader
+	(*MailboxDeleteResponse)(nil),      // 44: dmcn.relay.MailboxDeleteResponse
+	(*StoreInit)(nil),                  // 45: dmcn.relay.StoreInit
+	(*MailboxKvPutOp)(nil),             // 46: dmcn.relay.MailboxKvPutOp
+	(*MailboxKvGetOp)(nil),             // 47: dmcn.relay.MailboxKvGetOp
+	(*MailboxKvListOp)(nil),            // 48: dmcn.relay.MailboxKvListOp
+	(*MailboxKvDeleteOp)(nil),          // 49: dmcn.relay.MailboxKvDeleteOp
+	(*MailboxKvStatOp)(nil),            // 50: dmcn.relay.MailboxKvStatOp
+	(*MailboxKvPutResponse)(nil),       // 51: dmcn.relay.MailboxKvPutResponse
+	(*MailboxKvGetResponse)(nil),       // 52: dmcn.relay.MailboxKvGetResponse
+	(*MailboxKvItem)(nil),              // 53: dmcn.relay.MailboxKvItem
+	(*MailboxKvListResponse)(nil),      // 54: dmcn.relay.MailboxKvListResponse
+	(*MailboxKvDeleteResponse)(nil),    // 55: dmcn.relay.MailboxKvDeleteResponse
+	(*MailboxKvStatResponse)(nil),      // 56: dmcn.relay.MailboxKvStatResponse
+	(*EncryptedEnvelope)(nil),          // 57: dmcn.message.EncryptedEnvelope
+	(*RecipientRecord)(nil),            // 58: dmcn.message.RecipientRecord
 }
 var file_relay_proto_depIdxs = []int32{
 	7,  // 0: dmcn.relay.RelayRequest.store:type_name -> dmcn.relay.StoreRequest
@@ -4169,60 +4392,62 @@ var file_relay_proto_depIdxs = []int32{
 	11, // 2: dmcn.relay.RelayRequest.fetch_proof:type_name -> dmcn.relay.FetchProof
 	13, // 3: dmcn.relay.RelayRequest.ack:type_name -> dmcn.relay.AckRequest
 	15, // 4: dmcn.relay.RelayRequest.ping:type_name -> dmcn.relay.PingRequest
-	36, // 5: dmcn.relay.RelayRequest.mailbox_op:type_name -> dmcn.relay.MailboxOp
-	43, // 6: dmcn.relay.RelayRequest.store_init:type_name -> dmcn.relay.StoreInit
+	38, // 5: dmcn.relay.RelayRequest.mailbox_op:type_name -> dmcn.relay.MailboxOp
+	45, // 6: dmcn.relay.RelayRequest.store_init:type_name -> dmcn.relay.StoreInit
 	5,  // 7: dmcn.relay.RelayRequest.onion_forward:type_name -> dmcn.relay.OnionForwardRequest
 	17, // 8: dmcn.relay.RelayRequest.get_identity:type_name -> dmcn.relay.GetIdentityRequest
 	19, // 9: dmcn.relay.RelayRequest.get_dar:type_name -> dmcn.relay.GetDARRequest
 	21, // 10: dmcn.relay.RelayRequest.get_fleet_roster:type_name -> dmcn.relay.GetFleetRosterRequest
 	23, // 11: dmcn.relay.RelayRequest.get_removal:type_name -> dmcn.relay.GetRemovalRequest
 	25, // 12: dmcn.relay.RelayRequest.get_blocklist:type_name -> dmcn.relay.GetBlocklistRequest
-	27, // 13: dmcn.relay.RelayRequest.put_record:type_name -> dmcn.relay.PutRecordRequest
-	29, // 14: dmcn.relay.RelayRequest.get_relay_descriptor:type_name -> dmcn.relay.GetRelayDescriptorRequest
-	8,  // 15: dmcn.relay.RelayResponse.store:type_name -> dmcn.relay.StoreResponse
-	10, // 16: dmcn.relay.RelayResponse.fetch_challenge:type_name -> dmcn.relay.FetchChallenge
-	12, // 17: dmcn.relay.RelayResponse.fetch:type_name -> dmcn.relay.FetchResponse
-	14, // 18: dmcn.relay.RelayResponse.ack:type_name -> dmcn.relay.AckResponse
-	16, // 19: dmcn.relay.RelayResponse.ping:type_name -> dmcn.relay.PingResponse
-	31, // 20: dmcn.relay.RelayResponse.error:type_name -> dmcn.relay.ErrorResponse
-	40, // 21: dmcn.relay.RelayResponse.mailbox_list:type_name -> dmcn.relay.MailboxListResponse
-	41, // 22: dmcn.relay.RelayResponse.mailbox_body_header:type_name -> dmcn.relay.MailboxBodyHeader
-	42, // 23: dmcn.relay.RelayResponse.mailbox_delete:type_name -> dmcn.relay.MailboxDeleteResponse
-	6,  // 24: dmcn.relay.RelayResponse.onion_forward:type_name -> dmcn.relay.OnionForwardResponse
-	18, // 25: dmcn.relay.RelayResponse.get_identity:type_name -> dmcn.relay.GetIdentityResponse
-	20, // 26: dmcn.relay.RelayResponse.get_dar:type_name -> dmcn.relay.GetDARResponse
-	22, // 27: dmcn.relay.RelayResponse.get_fleet_roster:type_name -> dmcn.relay.GetFleetRosterResponse
-	24, // 28: dmcn.relay.RelayResponse.get_removal:type_name -> dmcn.relay.GetRemovalResponse
-	26, // 29: dmcn.relay.RelayResponse.get_blocklist:type_name -> dmcn.relay.GetBlocklistResponse
-	28, // 30: dmcn.relay.RelayResponse.put_record:type_name -> dmcn.relay.PutRecordResponse
-	30, // 31: dmcn.relay.RelayResponse.get_relay_descriptor:type_name -> dmcn.relay.GetRelayDescriptorResponse
-	49, // 32: dmcn.relay.RelayResponse.mailbox_kv_put:type_name -> dmcn.relay.MailboxKvPutResponse
-	50, // 33: dmcn.relay.RelayResponse.mailbox_kv_get:type_name -> dmcn.relay.MailboxKvGetResponse
-	52, // 34: dmcn.relay.RelayResponse.mailbox_kv_list:type_name -> dmcn.relay.MailboxKvListResponse
-	53, // 35: dmcn.relay.RelayResponse.mailbox_kv_delete:type_name -> dmcn.relay.MailboxKvDeleteResponse
-	54, // 36: dmcn.relay.RelayResponse.mailbox_kv_stat:type_name -> dmcn.relay.MailboxKvStatResponse
-	3,  // 37: dmcn.relay.OnionLayer.inner:type_name -> dmcn.relay.OnionPacket
-	3,  // 38: dmcn.relay.OnionForwardRequest.packet:type_name -> dmcn.relay.OnionPacket
-	55, // 39: dmcn.relay.StoreRequest.envelope:type_name -> dmcn.message.EncryptedEnvelope
-	55, // 40: dmcn.relay.FetchResponse.envelopes:type_name -> dmcn.message.EncryptedEnvelope
-	0,  // 41: dmcn.relay.PutRecordRequest.kind:type_name -> dmcn.relay.RecordKind
-	56, // 42: dmcn.relay.MailboxEntry.recipients:type_name -> dmcn.message.RecipientRecord
-	37, // 43: dmcn.relay.MailboxOp.list:type_name -> dmcn.relay.MailboxListOp
-	38, // 44: dmcn.relay.MailboxOp.body:type_name -> dmcn.relay.MailboxBodyOp
-	39, // 45: dmcn.relay.MailboxOp.delete:type_name -> dmcn.relay.MailboxDeleteOp
-	44, // 46: dmcn.relay.MailboxOp.kv_put:type_name -> dmcn.relay.MailboxKvPutOp
-	45, // 47: dmcn.relay.MailboxOp.kv_get:type_name -> dmcn.relay.MailboxKvGetOp
-	46, // 48: dmcn.relay.MailboxOp.kv_list:type_name -> dmcn.relay.MailboxKvListOp
-	47, // 49: dmcn.relay.MailboxOp.kv_delete:type_name -> dmcn.relay.MailboxKvDeleteOp
-	48, // 50: dmcn.relay.MailboxOp.kv_stat:type_name -> dmcn.relay.MailboxKvStatOp
-	34, // 51: dmcn.relay.MailboxListResponse.entries:type_name -> dmcn.relay.MailboxEntry
-	56, // 52: dmcn.relay.StoreInit.recipients:type_name -> dmcn.message.RecipientRecord
-	51, // 53: dmcn.relay.MailboxKvListResponse.items:type_name -> dmcn.relay.MailboxKvItem
-	54, // [54:54] is the sub-list for method output_type
-	54, // [54:54] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	29, // 13: dmcn.relay.RelayRequest.put_record:type_name -> dmcn.relay.PutRecordRequest
+	31, // 14: dmcn.relay.RelayRequest.get_relay_descriptor:type_name -> dmcn.relay.GetRelayDescriptorRequest
+	27, // 15: dmcn.relay.RelayRequest.get_history:type_name -> dmcn.relay.GetHistoryRequest
+	8,  // 16: dmcn.relay.RelayResponse.store:type_name -> dmcn.relay.StoreResponse
+	10, // 17: dmcn.relay.RelayResponse.fetch_challenge:type_name -> dmcn.relay.FetchChallenge
+	12, // 18: dmcn.relay.RelayResponse.fetch:type_name -> dmcn.relay.FetchResponse
+	14, // 19: dmcn.relay.RelayResponse.ack:type_name -> dmcn.relay.AckResponse
+	16, // 20: dmcn.relay.RelayResponse.ping:type_name -> dmcn.relay.PingResponse
+	33, // 21: dmcn.relay.RelayResponse.error:type_name -> dmcn.relay.ErrorResponse
+	42, // 22: dmcn.relay.RelayResponse.mailbox_list:type_name -> dmcn.relay.MailboxListResponse
+	43, // 23: dmcn.relay.RelayResponse.mailbox_body_header:type_name -> dmcn.relay.MailboxBodyHeader
+	44, // 24: dmcn.relay.RelayResponse.mailbox_delete:type_name -> dmcn.relay.MailboxDeleteResponse
+	6,  // 25: dmcn.relay.RelayResponse.onion_forward:type_name -> dmcn.relay.OnionForwardResponse
+	18, // 26: dmcn.relay.RelayResponse.get_identity:type_name -> dmcn.relay.GetIdentityResponse
+	20, // 27: dmcn.relay.RelayResponse.get_dar:type_name -> dmcn.relay.GetDARResponse
+	22, // 28: dmcn.relay.RelayResponse.get_fleet_roster:type_name -> dmcn.relay.GetFleetRosterResponse
+	24, // 29: dmcn.relay.RelayResponse.get_removal:type_name -> dmcn.relay.GetRemovalResponse
+	26, // 30: dmcn.relay.RelayResponse.get_blocklist:type_name -> dmcn.relay.GetBlocklistResponse
+	30, // 31: dmcn.relay.RelayResponse.put_record:type_name -> dmcn.relay.PutRecordResponse
+	32, // 32: dmcn.relay.RelayResponse.get_relay_descriptor:type_name -> dmcn.relay.GetRelayDescriptorResponse
+	28, // 33: dmcn.relay.RelayResponse.get_history:type_name -> dmcn.relay.GetHistoryResponse
+	51, // 34: dmcn.relay.RelayResponse.mailbox_kv_put:type_name -> dmcn.relay.MailboxKvPutResponse
+	52, // 35: dmcn.relay.RelayResponse.mailbox_kv_get:type_name -> dmcn.relay.MailboxKvGetResponse
+	54, // 36: dmcn.relay.RelayResponse.mailbox_kv_list:type_name -> dmcn.relay.MailboxKvListResponse
+	55, // 37: dmcn.relay.RelayResponse.mailbox_kv_delete:type_name -> dmcn.relay.MailboxKvDeleteResponse
+	56, // 38: dmcn.relay.RelayResponse.mailbox_kv_stat:type_name -> dmcn.relay.MailboxKvStatResponse
+	3,  // 39: dmcn.relay.OnionLayer.inner:type_name -> dmcn.relay.OnionPacket
+	3,  // 40: dmcn.relay.OnionForwardRequest.packet:type_name -> dmcn.relay.OnionPacket
+	57, // 41: dmcn.relay.StoreRequest.envelope:type_name -> dmcn.message.EncryptedEnvelope
+	57, // 42: dmcn.relay.FetchResponse.envelopes:type_name -> dmcn.message.EncryptedEnvelope
+	0,  // 43: dmcn.relay.PutRecordRequest.kind:type_name -> dmcn.relay.RecordKind
+	58, // 44: dmcn.relay.MailboxEntry.recipients:type_name -> dmcn.message.RecipientRecord
+	39, // 45: dmcn.relay.MailboxOp.list:type_name -> dmcn.relay.MailboxListOp
+	40, // 46: dmcn.relay.MailboxOp.body:type_name -> dmcn.relay.MailboxBodyOp
+	41, // 47: dmcn.relay.MailboxOp.delete:type_name -> dmcn.relay.MailboxDeleteOp
+	46, // 48: dmcn.relay.MailboxOp.kv_put:type_name -> dmcn.relay.MailboxKvPutOp
+	47, // 49: dmcn.relay.MailboxOp.kv_get:type_name -> dmcn.relay.MailboxKvGetOp
+	48, // 50: dmcn.relay.MailboxOp.kv_list:type_name -> dmcn.relay.MailboxKvListOp
+	49, // 51: dmcn.relay.MailboxOp.kv_delete:type_name -> dmcn.relay.MailboxKvDeleteOp
+	50, // 52: dmcn.relay.MailboxOp.kv_stat:type_name -> dmcn.relay.MailboxKvStatOp
+	36, // 53: dmcn.relay.MailboxListResponse.entries:type_name -> dmcn.relay.MailboxEntry
+	58, // 54: dmcn.relay.StoreInit.recipients:type_name -> dmcn.message.RecipientRecord
+	53, // 55: dmcn.relay.MailboxKvListResponse.items:type_name -> dmcn.relay.MailboxKvItem
+	56, // [56:56] is the sub-list for method output_type
+	56, // [56:56] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_relay_proto_init() }
@@ -4247,6 +4472,7 @@ func file_relay_proto_init() {
 		(*RelayRequest_GetBlocklist)(nil),
 		(*RelayRequest_PutRecord)(nil),
 		(*RelayRequest_GetRelayDescriptor)(nil),
+		(*RelayRequest_GetHistory)(nil),
 	}
 	file_relay_proto_msgTypes[1].OneofWrappers = []any{
 		(*RelayResponse_Store)(nil),
@@ -4266,13 +4492,14 @@ func file_relay_proto_init() {
 		(*RelayResponse_GetBlocklist)(nil),
 		(*RelayResponse_PutRecord)(nil),
 		(*RelayResponse_GetRelayDescriptor)(nil),
+		(*RelayResponse_GetHistory)(nil),
 		(*RelayResponse_MailboxKvPut)(nil),
 		(*RelayResponse_MailboxKvGet)(nil),
 		(*RelayResponse_MailboxKvList)(nil),
 		(*RelayResponse_MailboxKvDelete)(nil),
 		(*RelayResponse_MailboxKvStat)(nil),
 	}
-	file_relay_proto_msgTypes[35].OneofWrappers = []any{
+	file_relay_proto_msgTypes[37].OneofWrappers = []any{
 		(*MailboxOp_List)(nil),
 		(*MailboxOp_Body)(nil),
 		(*MailboxOp_Delete)(nil),
@@ -4288,7 +4515,7 @@ func file_relay_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_relay_proto_rawDesc), len(file_relay_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   54,
+			NumMessages:   56,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

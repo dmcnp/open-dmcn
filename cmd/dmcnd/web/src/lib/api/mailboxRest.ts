@@ -4,11 +4,12 @@
 // bodies on open. The private key never leaves the browser. Replaces the former
 // WebSocket MailboxClient; the decrypt/cache logic is unchanged.
 
-import { signWithKey } from '../crypto/sign';
 import { postJSONAs } from './client';
+import { asDecryptOnly, retiredKeys } from '../crypto/retiredKeys';
+import { mailboxProof } from './mailboxProof';
 import { decodeMailboxEntry, decodeMailboxBody, type MessageHeaderFields } from '../crypto/protobuf';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type DecryptedAttachment } from '../crypto/split';
-import { fromBase64, toBase64, toHex } from '../crypto/keys';
+import { fromBase64, toHex } from '../crypto/keys';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import type { AccountIdentity } from '../deployment';
 
@@ -76,6 +77,16 @@ async function keyringFor(keys: WorkingKeys, identities?: () => Promise<AccountI
   const ring = new Map<string, { keys: WorkingKeys; address?: string }>();
   const retired = new Map<string, number>();
   ring.set(toHex(keys.x25519Public), { keys });
+
+  // Generations this account used to hold. A rotation re-keys the mailbox without re-sealing what
+  // is in it — the relay cannot, since it cannot read it — so mail that arrived before the change
+  // opens only with the key it arrived under. Without these, rotating would look to the owner like
+  // their history had been deleted.
+  for (const r of await retiredKeys(keys.address)) {
+    const hex = toHex(r.x25519Public);
+    if (!ring.has(hex)) ring.set(hex, { keys: { ...keys, ...asDecryptOnly(keys.address, r) } });
+  }
+
   if (!identities) return { ring, retired };
   let list: AccountIdentity[] = [];
   try {
@@ -157,17 +168,17 @@ export class MailboxSync {
     return postJSONAs<T>(this.explicitToken, path, body);
   }
 
-  private async signNonce(nonceB64: string): Promise<string> {
-    return toBase64(await signWithKey(this.keys.ed25519Sign, fromBase64(nonceB64)));
-  }
+
 
   private async challenge(req: { op: 'list' | 'body' | 'delete'; cursor?: string; hash?: string }): Promise<ChallengeResp> {
     return this.post<ChallengeResp>('/api/v1/mailbox/challenge', req);
   }
 
   private async complete<T>(correlationId: string, nonceB64: string): Promise<T> {
-    const signature = await this.signNonce(nonceB64);
-    return this.post<T>('/api/v1/mailbox/complete', { correlation_id: correlationId, signature });
+    return this.post<T>('/api/v1/mailbox/complete', {
+      correlation_id: correlationId,
+      ...(await mailboxProof(this.keys, nonceB64)),
+    });
   }
 
   // list pulls every page of header previews, rebuilds the preview cache (pruning

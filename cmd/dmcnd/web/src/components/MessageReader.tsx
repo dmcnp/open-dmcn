@@ -19,11 +19,12 @@ import { sanitizeOutgoing } from '../lib/html/sanitize';
 import { fromPlainText, escapeHtml } from '../lib/html/fromPlainText';
 import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust';
 import { senderTrustView } from '../lib/trust/trustView';
+import { loadKeyChange, type KeyChange } from '../lib/trust/lineage';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { useSettings } from '../lib/hooks/useSettings';
 import { categorizeSender } from '../lib/trust/category';
-import { directoryFacts } from '../lib/trust/pinnedKey';
+import { contactFacts, directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
 import { deployment } from '@deployment';
@@ -137,7 +138,11 @@ function gateView(reason: GateReason, who: string, bridged: boolean, known: bool
         icon: 'alert-triangle',
         color: 'var(--danger)',
         title: 'Verify this sender before you read this',
-        detail: `The key that signed this message is not the one the directory publishes for ${who} (details below). If they really did rotate their key, trusting them again re-checks it against the directory and clears this.`,
+        // Same event as the key-change warning further down the page, so it is written the same
+        // way (trust/pinnedKey.ts): what happened, both things it could mean, and what to do.
+        // Naming the mechanism here — which key the directory publishes, what re-checking does —
+        // described the system to somebody who only needs to decide whether to read a message.
+        detail: `This message was not signed with the key you have on file for ${who} (details below). That is what it looks like when someone changes their key, and also what an impersonation looks like. Once you have checked with them another way, trusting them again clears this.`,
       };
     case 'unknown':
       // `known` is not redundant here: a sender ON the allowlist still reaches this gate when the
@@ -339,6 +344,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // Native-sender trust (§14): anchors the signature-verified header key to the
   // directory + the owner's allowlist. Independent of the body fetch.
   const [nativeTrust, setNativeTrust] = useState<SenderTrust | null>(null);
+  // What the directory can prove about a changed key: whether the key this reader pinned was
+  // handed over in a signed rotation, or reported STOLEN by its owner. Loaded only when the
+  // verdict is already key_changed, so an ordinary message costs nothing.
+  const [keyChange, setKeyChange] = useState<KeyChange | null>(null);
   // Whether the directory verdict has SETTLED for this message. Distinct from
   // `nativeTrust !== null`, which can't tell "still resolving" from "resolved to nothing" —
   // and the gate must fail closed on the former. Reset per message by the msg.hash effect.
@@ -491,7 +500,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // held back until contacts + filter + the bridge attestation have all settled so it resolves
   // straight to the correct verdict instead of flashing "unknown" (or a native verdict on a
   // legacy address) first.
-  const tv = contactsReady && filterReady && bridgeResolved && !av && !rv && nativeTrust ? senderTrustView(nativeTrust) : null;
+  const tv = contactsReady && filterReady && bridgeResolved && !av && !rv && nativeTrust
+    ? senderTrustView(nativeTrust, keyChange ?? undefined, msg.senderAddress)
+    : null;
   // The encryption statement appears twice — as the badge beside the subject and as the callout
   // under the body — and unlike av/rv/tv it has no view object to carry its glyph, so the two
   // sites were free to disagree, and did (a lock above, a shield or an envelope below). One const,
@@ -603,6 +614,18 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     setAckedDownloads(new Set()); setShowHtml(true);
     setCreating(null); setNewName(''); setCreateErr('');
   }, [msg.hash]);
+
+  // What the directory can prove about a key this reader had pinned and no longer matches. Asked
+  // only once the verdict is already key_changed: the answer cannot unblock anything, so it is
+  // worth a round trip exactly when there is something to explain.
+  useEffect(() => {
+    if (nativeTrust?.kind !== 'key_changed') { setKeyChange(null); return; }
+    const pinned = contactFacts(senderContact)?.ed25519Pub;
+    if (!pinned) return;
+    let cancelled = false;
+    void loadKeyChange(msg.senderAddress, pinned).then(c => { if (!cancelled) setKeyChange(c); });
+    return () => { cancelled = true; };
+  }, [nativeTrust?.kind, senderContact, msg.senderAddress]);
 
   // Lazy key-pin (§14.1.2): once a message from an unpinned CONTACT verifies with the header key
   // matching the directory key, record the keys so a later unsigned change is detectable. Runs at

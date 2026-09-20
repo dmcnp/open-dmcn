@@ -564,6 +564,8 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.identity.ICredential|null} [routingCredential] IdentityRecord routingCredential
              * @property {number|Long|null} [revision] IdentityRecord revision
              * @property {Array.<dmcn.identity.ICredential>|null} [operatorCredentials] IdentityRecord operatorCredentials
+             * @property {Array.<dmcn.identity.IRotationEntry>|null} [rotationChain] IdentityRecord rotationChain
+             * @property {Uint8Array|null} [recoveryEd25519PublicKey] IdentityRecord recoveryEd25519PublicKey
              */
 
             /**
@@ -578,6 +580,7 @@ export const dmcn = $root.dmcn = (() => {
                 this.relayHints = [];
                 this.attestations = [];
                 this.operatorCredentials = [];
+                this.rotationChain = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -705,6 +708,22 @@ export const dmcn = $root.dmcn = (() => {
             IdentityRecord.prototype.operatorCredentials = $util.emptyArray;
 
             /**
+             * IdentityRecord rotationChain.
+             * @member {Array.<dmcn.identity.IRotationEntry>} rotationChain
+             * @memberof dmcn.identity.IdentityRecord
+             * @instance
+             */
+            IdentityRecord.prototype.rotationChain = $util.emptyArray;
+
+            /**
+             * IdentityRecord recoveryEd25519PublicKey.
+             * @member {Uint8Array} recoveryEd25519PublicKey
+             * @memberof dmcn.identity.IdentityRecord
+             * @instance
+             */
+            IdentityRecord.prototype.recoveryEd25519PublicKey = $util.newBuffer([]);
+
+            /**
              * Creates a new IdentityRecord instance using the specified properties.
              * @function create
              * @memberof dmcn.identity.IdentityRecord
@@ -765,6 +784,11 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.operatorCredentials != null && message.operatorCredentials.length)
                     for (let i = 0; i < message.operatorCredentials.length; ++i)
                         $root.dmcn.identity.Credential.encode(message.operatorCredentials[i], writer.uint32(/* id 28, wireType 2 =*/226).fork(), q + 1).ldelim();
+                if (message.rotationChain != null && message.rotationChain.length)
+                    for (let i = 0; i < message.rotationChain.length; ++i)
+                        $root.dmcn.identity.RotationEntry.encode(message.rotationChain[i], writer.uint32(/* id 29, wireType 2 =*/234).fork(), q + 1).ldelim();
+                if (message.recoveryEd25519PublicKey != null && Object.hasOwnProperty.call(message, "recoveryEd25519PublicKey"))
+                    writer.uint32(/* id 30, wireType 2 =*/242).bytes(message.recoveryEd25519PublicKey);
                 return writer;
             };
 
@@ -869,6 +893,16 @@ export const dmcn = $root.dmcn = (() => {
                             if (!(message.operatorCredentials && message.operatorCredentials.length))
                                 message.operatorCredentials = [];
                             message.operatorCredentials.push($root.dmcn.identity.Credential.decode(reader, reader.uint32(), undefined, long + 1));
+                            break;
+                        }
+                    case 29: {
+                            if (!(message.rotationChain && message.rotationChain.length))
+                                message.rotationChain = [];
+                            message.rotationChain.push($root.dmcn.identity.RotationEntry.decode(reader, reader.uint32(), undefined, long + 1));
+                            break;
+                        }
+                    case 30: {
+                            message.recoveryEd25519PublicKey = reader.bytes();
                             break;
                         }
                     default:
@@ -981,6 +1015,18 @@ export const dmcn = $root.dmcn = (() => {
                             return "operatorCredentials." + error;
                     }
                 }
+                if (message.rotationChain != null && Object.hasOwnProperty.call(message, "rotationChain")) {
+                    if (!Array.isArray(message.rotationChain))
+                        return "rotationChain: array expected";
+                    for (let i = 0; i < message.rotationChain.length; ++i) {
+                        let error = $root.dmcn.identity.RotationEntry.verify(message.rotationChain[i], long + 1);
+                        if (error)
+                            return "rotationChain." + error;
+                    }
+                }
+                if (message.recoveryEd25519PublicKey != null && Object.hasOwnProperty.call(message, "recoveryEd25519PublicKey"))
+                    if (!(message.recoveryEd25519PublicKey && typeof message.recoveryEd25519PublicKey.length === "number" || $util.isString(message.recoveryEd25519PublicKey)))
+                        return "recoveryEd25519PublicKey: buffer expected";
                 return null;
             };
 
@@ -1107,6 +1153,21 @@ export const dmcn = $root.dmcn = (() => {
                         message.operatorCredentials[i] = $root.dmcn.identity.Credential.fromObject(object.operatorCredentials[i], long + 1);
                     }
                 }
+                if (object.rotationChain) {
+                    if (!Array.isArray(object.rotationChain))
+                        throw TypeError(".dmcn.identity.IdentityRecord.rotationChain: array expected");
+                    message.rotationChain = [];
+                    for (let i = 0; i < object.rotationChain.length; ++i) {
+                        if (!$util.isObject(object.rotationChain[i]))
+                            throw TypeError(".dmcn.identity.IdentityRecord.rotationChain: object expected");
+                        message.rotationChain[i] = $root.dmcn.identity.RotationEntry.fromObject(object.rotationChain[i], long + 1);
+                    }
+                }
+                if (object.recoveryEd25519PublicKey != null)
+                    if (typeof object.recoveryEd25519PublicKey === "string")
+                        $util.base64.decode(object.recoveryEd25519PublicKey, message.recoveryEd25519PublicKey = $util.newBuffer($util.base64.length(object.recoveryEd25519PublicKey)), 0);
+                    else if (object.recoveryEd25519PublicKey.length >= 0)
+                        message.recoveryEd25519PublicKey = object.recoveryEd25519PublicKey;
                 return message;
             };
 
@@ -1131,6 +1192,7 @@ export const dmcn = $root.dmcn = (() => {
                     object.relayHints = [];
                     object.attestations = [];
                     object.operatorCredentials = [];
+                    object.rotationChain = [];
                 }
                 if (options.defaults) {
                     object.version = 0;
@@ -1175,6 +1237,13 @@ export const dmcn = $root.dmcn = (() => {
                         object.revision = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
                     } else
                         object.revision = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.recoveryEd25519PublicKey = "";
+                    else {
+                        object.recoveryEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.recoveryEd25519PublicKey = $util.newBuffer(object.recoveryEd25519PublicKey);
+                    }
                 }
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     object.version = message.version;
@@ -1230,6 +1299,13 @@ export const dmcn = $root.dmcn = (() => {
                     for (let j = 0; j < message.operatorCredentials.length; ++j)
                         object.operatorCredentials[j] = $root.dmcn.identity.Credential.toObject(message.operatorCredentials[j], options, q + 1);
                 }
+                if (message.rotationChain && message.rotationChain.length) {
+                    object.rotationChain = [];
+                    for (let j = 0; j < message.rotationChain.length; ++j)
+                        object.rotationChain[j] = $root.dmcn.identity.RotationEntry.toObject(message.rotationChain[j], options, q + 1);
+                }
+                if (message.recoveryEd25519PublicKey != null && Object.hasOwnProperty.call(message, "recoveryEd25519PublicKey"))
+                    object.recoveryEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.recoveryEd25519PublicKey, 0, message.recoveryEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.recoveryEd25519PublicKey) : message.recoveryEd25519PublicKey;
                 return object;
             };
 
@@ -1612,6 +1688,8 @@ export const dmcn = $root.dmcn = (() => {
              * @property {Array.<dmcn.identity.ICredential>|null} [authorityCredentials] DomainAuthorityRecord authorityCredentials
              * @property {Array.<string>|null} [reservedLocalParts] DomainAuthorityRecord reservedLocalParts
              * @property {string|null} [fleetDomain] DomainAuthorityRecord fleetDomain
+             * @property {number|null} [rotationMinDeviceAgeDays] DomainAuthorityRecord rotationMinDeviceAgeDays
+             * @property {number|null} [deviceRecoveryDelayHours] DomainAuthorityRecord deviceRecoveryDelayHours
              */
 
             /**
@@ -1737,6 +1815,22 @@ export const dmcn = $root.dmcn = (() => {
             DomainAuthorityRecord.prototype.fleetDomain = "";
 
             /**
+             * DomainAuthorityRecord rotationMinDeviceAgeDays.
+             * @member {number} rotationMinDeviceAgeDays
+             * @memberof dmcn.identity.DomainAuthorityRecord
+             * @instance
+             */
+            DomainAuthorityRecord.prototype.rotationMinDeviceAgeDays = 0;
+
+            /**
+             * DomainAuthorityRecord deviceRecoveryDelayHours.
+             * @member {number} deviceRecoveryDelayHours
+             * @memberof dmcn.identity.DomainAuthorityRecord
+             * @instance
+             */
+            DomainAuthorityRecord.prototype.deviceRecoveryDelayHours = 0;
+
+            /**
              * Creates a new DomainAuthorityRecord instance using the specified properties.
              * @function create
              * @memberof dmcn.identity.DomainAuthorityRecord
@@ -1793,6 +1887,10 @@ export const dmcn = $root.dmcn = (() => {
                         writer.uint32(/* id 13, wireType 2 =*/106).string(message.reservedLocalParts[i]);
                 if (message.fleetDomain != null && Object.hasOwnProperty.call(message, "fleetDomain"))
                     writer.uint32(/* id 14, wireType 2 =*/114).string(message.fleetDomain);
+                if (message.rotationMinDeviceAgeDays != null && Object.hasOwnProperty.call(message, "rotationMinDeviceAgeDays"))
+                    writer.uint32(/* id 15, wireType 0 =*/120).uint32(message.rotationMinDeviceAgeDays);
+                if (message.deviceRecoveryDelayHours != null && Object.hasOwnProperty.call(message, "deviceRecoveryDelayHours"))
+                    writer.uint32(/* id 16, wireType 0 =*/128).uint32(message.deviceRecoveryDelayHours);
                 return writer;
             };
 
@@ -1891,6 +1989,14 @@ export const dmcn = $root.dmcn = (() => {
                             message.fleetDomain = reader.string();
                             break;
                         }
+                    case 15: {
+                            message.rotationMinDeviceAgeDays = reader.uint32();
+                            break;
+                        }
+                    case 16: {
+                            message.deviceRecoveryDelayHours = reader.uint32();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -1985,6 +2091,12 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.fleetDomain != null && Object.hasOwnProperty.call(message, "fleetDomain"))
                     if (!$util.isString(message.fleetDomain))
                         return "fleetDomain: string expected";
+                if (message.rotationMinDeviceAgeDays != null && Object.hasOwnProperty.call(message, "rotationMinDeviceAgeDays"))
+                    if (!$util.isInteger(message.rotationMinDeviceAgeDays))
+                        return "rotationMinDeviceAgeDays: integer expected";
+                if (message.deviceRecoveryDelayHours != null && Object.hasOwnProperty.call(message, "deviceRecoveryDelayHours"))
+                    if (!$util.isInteger(message.deviceRecoveryDelayHours))
+                        return "deviceRecoveryDelayHours: integer expected";
                 return null;
             };
 
@@ -2083,6 +2195,10 @@ export const dmcn = $root.dmcn = (() => {
                 }
                 if (object.fleetDomain != null)
                     message.fleetDomain = String(object.fleetDomain);
+                if (object.rotationMinDeviceAgeDays != null)
+                    message.rotationMinDeviceAgeDays = object.rotationMinDeviceAgeDays >>> 0;
+                if (object.deviceRecoveryDelayHours != null)
+                    message.deviceRecoveryDelayHours = object.deviceRecoveryDelayHours >>> 0;
                 return message;
             };
 
@@ -2149,6 +2265,8 @@ export const dmcn = $root.dmcn = (() => {
                             object.selfSignature = $util.newBuffer(object.selfSignature);
                     }
                     object.fleetDomain = "";
+                    object.rotationMinDeviceAgeDays = 0;
+                    object.deviceRecoveryDelayHours = 0;
                 }
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     object.version = message.version;
@@ -2200,6 +2318,10 @@ export const dmcn = $root.dmcn = (() => {
                 }
                 if (message.fleetDomain != null && Object.hasOwnProperty.call(message, "fleetDomain"))
                     object.fleetDomain = message.fleetDomain;
+                if (message.rotationMinDeviceAgeDays != null && Object.hasOwnProperty.call(message, "rotationMinDeviceAgeDays"))
+                    object.rotationMinDeviceAgeDays = message.rotationMinDeviceAgeDays;
+                if (message.deviceRecoveryDelayHours != null && Object.hasOwnProperty.call(message, "deviceRecoveryDelayHours"))
+                    object.deviceRecoveryDelayHours = message.deviceRecoveryDelayHours;
                 return object;
             };
 
@@ -5984,6 +6106,970 @@ export const dmcn = $root.dmcn = (() => {
             };
 
             return AddressRemovalRecord;
+        })();
+
+        identity.RotationEntry = (function() {
+
+            /**
+             * Properties of a RotationEntry.
+             * @memberof dmcn.identity
+             * @interface IRotationEntry
+             * @property {number|null} [version] RotationEntry version
+             * @property {string|null} [address] RotationEntry address
+             * @property {Uint8Array|null} [retiredEd25519PublicKey] RotationEntry retiredEd25519PublicKey
+             * @property {Uint8Array|null} [retiredX25519PublicKey] RotationEntry retiredX25519PublicKey
+             * @property {Uint8Array|null} [nextEd25519PublicKey] RotationEntry nextEd25519PublicKey
+             * @property {Uint8Array|null} [nextX25519PublicKey] RotationEntry nextX25519PublicKey
+             * @property {number|Long|null} [rotatedAt] RotationEntry rotatedAt
+             * @property {number|Long|null} [nextRevision] RotationEntry nextRevision
+             * @property {Uint8Array|null} [prevSignatureHash] RotationEntry prevSignatureHash
+             * @property {Uint8Array|null} [authorizingEd25519PublicKey] RotationEntry authorizingEd25519PublicKey
+             * @property {dmcn.identity.ICredential|null} [deviceCredential] RotationEntry deviceCredential
+             * @property {Uint8Array|null} [deviceSignature] RotationEntry deviceSignature
+             * @property {Uint8Array|null} [signature] RotationEntry signature
+             * @property {Uint8Array|null} [nextSignature] RotationEntry nextSignature
+             */
+
+            /**
+             * Constructs a new RotationEntry.
+             * @memberof dmcn.identity
+             * @classdesc Represents a RotationEntry.
+             * @implements IRotationEntry
+             * @constructor
+             * @param {dmcn.identity.IRotationEntry=} [properties] Properties to set
+             */
+            function RotationEntry(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * RotationEntry version.
+             * @member {number} version
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.version = 0;
+
+            /**
+             * RotationEntry address.
+             * @member {string} address
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.address = "";
+
+            /**
+             * RotationEntry retiredEd25519PublicKey.
+             * @member {Uint8Array} retiredEd25519PublicKey
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.retiredEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * RotationEntry retiredX25519PublicKey.
+             * @member {Uint8Array} retiredX25519PublicKey
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.retiredX25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * RotationEntry nextEd25519PublicKey.
+             * @member {Uint8Array} nextEd25519PublicKey
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.nextEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * RotationEntry nextX25519PublicKey.
+             * @member {Uint8Array} nextX25519PublicKey
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.nextX25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * RotationEntry rotatedAt.
+             * @member {number|Long} rotatedAt
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.rotatedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * RotationEntry nextRevision.
+             * @member {number|Long} nextRevision
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.nextRevision = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+            /**
+             * RotationEntry prevSignatureHash.
+             * @member {Uint8Array} prevSignatureHash
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.prevSignatureHash = $util.newBuffer([]);
+
+            /**
+             * RotationEntry authorizingEd25519PublicKey.
+             * @member {Uint8Array} authorizingEd25519PublicKey
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.authorizingEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * RotationEntry deviceCredential.
+             * @member {dmcn.identity.ICredential|null|undefined} deviceCredential
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.deviceCredential = null;
+
+            /**
+             * RotationEntry deviceSignature.
+             * @member {Uint8Array} deviceSignature
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.deviceSignature = $util.newBuffer([]);
+
+            /**
+             * RotationEntry signature.
+             * @member {Uint8Array} signature
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.signature = $util.newBuffer([]);
+
+            /**
+             * RotationEntry nextSignature.
+             * @member {Uint8Array} nextSignature
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             */
+            RotationEntry.prototype.nextSignature = $util.newBuffer([]);
+
+            /**
+             * Creates a new RotationEntry instance using the specified properties.
+             * @function create
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {dmcn.identity.IRotationEntry=} [properties] Properties to set
+             * @returns {dmcn.identity.RotationEntry} RotationEntry instance
+             */
+            RotationEntry.create = function create(properties) {
+                return new RotationEntry(properties);
+            };
+
+            /**
+             * Encodes the specified RotationEntry message. Does not implicitly {@link dmcn.identity.RotationEntry.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {dmcn.identity.IRotationEntry} message RotationEntry message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            RotationEntry.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.version);
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).string(message.address);
+                if (message.retiredEd25519PublicKey != null && Object.hasOwnProperty.call(message, "retiredEd25519PublicKey"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.retiredEd25519PublicKey);
+                if (message.retiredX25519PublicKey != null && Object.hasOwnProperty.call(message, "retiredX25519PublicKey"))
+                    writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.retiredX25519PublicKey);
+                if (message.nextEd25519PublicKey != null && Object.hasOwnProperty.call(message, "nextEd25519PublicKey"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.nextEd25519PublicKey);
+                if (message.nextX25519PublicKey != null && Object.hasOwnProperty.call(message, "nextX25519PublicKey"))
+                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.nextX25519PublicKey);
+                if (message.rotatedAt != null && Object.hasOwnProperty.call(message, "rotatedAt"))
+                    writer.uint32(/* id 7, wireType 0 =*/56).int64(message.rotatedAt);
+                if (message.nextRevision != null && Object.hasOwnProperty.call(message, "nextRevision"))
+                    writer.uint32(/* id 8, wireType 0 =*/64).uint64(message.nextRevision);
+                if (message.prevSignatureHash != null && Object.hasOwnProperty.call(message, "prevSignatureHash"))
+                    writer.uint32(/* id 9, wireType 2 =*/74).bytes(message.prevSignatureHash);
+                if (message.authorizingEd25519PublicKey != null && Object.hasOwnProperty.call(message, "authorizingEd25519PublicKey"))
+                    writer.uint32(/* id 10, wireType 2 =*/82).bytes(message.authorizingEd25519PublicKey);
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    $root.dmcn.identity.Credential.encode(message.deviceCredential, writer.uint32(/* id 11, wireType 2 =*/90).fork(), q + 1).ldelim();
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    writer.uint32(/* id 12, wireType 2 =*/98).bytes(message.deviceSignature);
+                if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
+                    writer.uint32(/* id 13, wireType 2 =*/106).bytes(message.signature);
+                if (message.nextSignature != null && Object.hasOwnProperty.call(message, "nextSignature"))
+                    writer.uint32(/* id 14, wireType 2 =*/114).bytes(message.nextSignature);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified RotationEntry message, length delimited. Does not implicitly {@link dmcn.identity.RotationEntry.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {dmcn.identity.IRotationEntry} message RotationEntry message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            RotationEntry.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a RotationEntry message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.identity.RotationEntry} RotationEntry
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            RotationEntry.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.identity.RotationEntry();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.version = reader.uint32();
+                            break;
+                        }
+                    case 2: {
+                            message.address = reader.string();
+                            break;
+                        }
+                    case 3: {
+                            message.retiredEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 4: {
+                            message.retiredX25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 5: {
+                            message.nextEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 6: {
+                            message.nextX25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 7: {
+                            message.rotatedAt = reader.int64();
+                            break;
+                        }
+                    case 8: {
+                            message.nextRevision = reader.uint64();
+                            break;
+                        }
+                    case 9: {
+                            message.prevSignatureHash = reader.bytes();
+                            break;
+                        }
+                    case 10: {
+                            message.authorizingEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 11: {
+                            message.deviceCredential = $root.dmcn.identity.Credential.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 12: {
+                            message.deviceSignature = reader.bytes();
+                            break;
+                        }
+                    case 13: {
+                            message.signature = reader.bytes();
+                            break;
+                        }
+                    case 14: {
+                            message.nextSignature = reader.bytes();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a RotationEntry message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.identity.RotationEntry} RotationEntry
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            RotationEntry.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a RotationEntry message.
+             * @function verify
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            RotationEntry.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (!$util.isInteger(message.version))
+                        return "version: integer expected";
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    if (!$util.isString(message.address))
+                        return "address: string expected";
+                if (message.retiredEd25519PublicKey != null && Object.hasOwnProperty.call(message, "retiredEd25519PublicKey"))
+                    if (!(message.retiredEd25519PublicKey && typeof message.retiredEd25519PublicKey.length === "number" || $util.isString(message.retiredEd25519PublicKey)))
+                        return "retiredEd25519PublicKey: buffer expected";
+                if (message.retiredX25519PublicKey != null && Object.hasOwnProperty.call(message, "retiredX25519PublicKey"))
+                    if (!(message.retiredX25519PublicKey && typeof message.retiredX25519PublicKey.length === "number" || $util.isString(message.retiredX25519PublicKey)))
+                        return "retiredX25519PublicKey: buffer expected";
+                if (message.nextEd25519PublicKey != null && Object.hasOwnProperty.call(message, "nextEd25519PublicKey"))
+                    if (!(message.nextEd25519PublicKey && typeof message.nextEd25519PublicKey.length === "number" || $util.isString(message.nextEd25519PublicKey)))
+                        return "nextEd25519PublicKey: buffer expected";
+                if (message.nextX25519PublicKey != null && Object.hasOwnProperty.call(message, "nextX25519PublicKey"))
+                    if (!(message.nextX25519PublicKey && typeof message.nextX25519PublicKey.length === "number" || $util.isString(message.nextX25519PublicKey)))
+                        return "nextX25519PublicKey: buffer expected";
+                if (message.rotatedAt != null && Object.hasOwnProperty.call(message, "rotatedAt"))
+                    if (!$util.isInteger(message.rotatedAt) && !(message.rotatedAt && $util.isInteger(message.rotatedAt.low) && $util.isInteger(message.rotatedAt.high)))
+                        return "rotatedAt: integer|Long expected";
+                if (message.nextRevision != null && Object.hasOwnProperty.call(message, "nextRevision"))
+                    if (!$util.isInteger(message.nextRevision) && !(message.nextRevision && $util.isInteger(message.nextRevision.low) && $util.isInteger(message.nextRevision.high)))
+                        return "nextRevision: integer|Long expected";
+                if (message.prevSignatureHash != null && Object.hasOwnProperty.call(message, "prevSignatureHash"))
+                    if (!(message.prevSignatureHash && typeof message.prevSignatureHash.length === "number" || $util.isString(message.prevSignatureHash)))
+                        return "prevSignatureHash: buffer expected";
+                if (message.authorizingEd25519PublicKey != null && Object.hasOwnProperty.call(message, "authorizingEd25519PublicKey"))
+                    if (!(message.authorizingEd25519PublicKey && typeof message.authorizingEd25519PublicKey.length === "number" || $util.isString(message.authorizingEd25519PublicKey)))
+                        return "authorizingEd25519PublicKey: buffer expected";
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential")) {
+                    let error = $root.dmcn.identity.Credential.verify(message.deviceCredential, long + 1);
+                    if (error)
+                        return "deviceCredential." + error;
+                }
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    if (!(message.deviceSignature && typeof message.deviceSignature.length === "number" || $util.isString(message.deviceSignature)))
+                        return "deviceSignature: buffer expected";
+                if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
+                    if (!(message.signature && typeof message.signature.length === "number" || $util.isString(message.signature)))
+                        return "signature: buffer expected";
+                if (message.nextSignature != null && Object.hasOwnProperty.call(message, "nextSignature"))
+                    if (!(message.nextSignature && typeof message.nextSignature.length === "number" || $util.isString(message.nextSignature)))
+                        return "nextSignature: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a RotationEntry message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.identity.RotationEntry} RotationEntry
+             */
+            RotationEntry.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.identity.RotationEntry)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.identity.RotationEntry: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.identity.RotationEntry();
+                if (object.version != null)
+                    message.version = object.version >>> 0;
+                if (object.address != null)
+                    message.address = String(object.address);
+                if (object.retiredEd25519PublicKey != null)
+                    if (typeof object.retiredEd25519PublicKey === "string")
+                        $util.base64.decode(object.retiredEd25519PublicKey, message.retiredEd25519PublicKey = $util.newBuffer($util.base64.length(object.retiredEd25519PublicKey)), 0);
+                    else if (object.retiredEd25519PublicKey.length >= 0)
+                        message.retiredEd25519PublicKey = object.retiredEd25519PublicKey;
+                if (object.retiredX25519PublicKey != null)
+                    if (typeof object.retiredX25519PublicKey === "string")
+                        $util.base64.decode(object.retiredX25519PublicKey, message.retiredX25519PublicKey = $util.newBuffer($util.base64.length(object.retiredX25519PublicKey)), 0);
+                    else if (object.retiredX25519PublicKey.length >= 0)
+                        message.retiredX25519PublicKey = object.retiredX25519PublicKey;
+                if (object.nextEd25519PublicKey != null)
+                    if (typeof object.nextEd25519PublicKey === "string")
+                        $util.base64.decode(object.nextEd25519PublicKey, message.nextEd25519PublicKey = $util.newBuffer($util.base64.length(object.nextEd25519PublicKey)), 0);
+                    else if (object.nextEd25519PublicKey.length >= 0)
+                        message.nextEd25519PublicKey = object.nextEd25519PublicKey;
+                if (object.nextX25519PublicKey != null)
+                    if (typeof object.nextX25519PublicKey === "string")
+                        $util.base64.decode(object.nextX25519PublicKey, message.nextX25519PublicKey = $util.newBuffer($util.base64.length(object.nextX25519PublicKey)), 0);
+                    else if (object.nextX25519PublicKey.length >= 0)
+                        message.nextX25519PublicKey = object.nextX25519PublicKey;
+                if (object.rotatedAt != null)
+                    if ($util.Long)
+                        message.rotatedAt = $util.Long.fromValue(object.rotatedAt, false);
+                    else if (typeof object.rotatedAt === "string")
+                        message.rotatedAt = parseInt(object.rotatedAt, 10);
+                    else if (typeof object.rotatedAt === "number")
+                        message.rotatedAt = object.rotatedAt;
+                    else if (typeof object.rotatedAt === "object")
+                        message.rotatedAt = new $util.LongBits(object.rotatedAt.low >>> 0, object.rotatedAt.high >>> 0).toNumber();
+                if (object.nextRevision != null)
+                    if ($util.Long)
+                        message.nextRevision = $util.Long.fromValue(object.nextRevision, true);
+                    else if (typeof object.nextRevision === "string")
+                        message.nextRevision = parseInt(object.nextRevision, 10);
+                    else if (typeof object.nextRevision === "number")
+                        message.nextRevision = object.nextRevision;
+                    else if (typeof object.nextRevision === "object")
+                        message.nextRevision = new $util.LongBits(object.nextRevision.low >>> 0, object.nextRevision.high >>> 0).toNumber(true);
+                if (object.prevSignatureHash != null)
+                    if (typeof object.prevSignatureHash === "string")
+                        $util.base64.decode(object.prevSignatureHash, message.prevSignatureHash = $util.newBuffer($util.base64.length(object.prevSignatureHash)), 0);
+                    else if (object.prevSignatureHash.length >= 0)
+                        message.prevSignatureHash = object.prevSignatureHash;
+                if (object.authorizingEd25519PublicKey != null)
+                    if (typeof object.authorizingEd25519PublicKey === "string")
+                        $util.base64.decode(object.authorizingEd25519PublicKey, message.authorizingEd25519PublicKey = $util.newBuffer($util.base64.length(object.authorizingEd25519PublicKey)), 0);
+                    else if (object.authorizingEd25519PublicKey.length >= 0)
+                        message.authorizingEd25519PublicKey = object.authorizingEd25519PublicKey;
+                if (object.deviceCredential != null) {
+                    if (!$util.isObject(object.deviceCredential))
+                        throw TypeError(".dmcn.identity.RotationEntry.deviceCredential: object expected");
+                    message.deviceCredential = $root.dmcn.identity.Credential.fromObject(object.deviceCredential, long + 1);
+                }
+                if (object.deviceSignature != null)
+                    if (typeof object.deviceSignature === "string")
+                        $util.base64.decode(object.deviceSignature, message.deviceSignature = $util.newBuffer($util.base64.length(object.deviceSignature)), 0);
+                    else if (object.deviceSignature.length >= 0)
+                        message.deviceSignature = object.deviceSignature;
+                if (object.signature != null)
+                    if (typeof object.signature === "string")
+                        $util.base64.decode(object.signature, message.signature = $util.newBuffer($util.base64.length(object.signature)), 0);
+                    else if (object.signature.length >= 0)
+                        message.signature = object.signature;
+                if (object.nextSignature != null)
+                    if (typeof object.nextSignature === "string")
+                        $util.base64.decode(object.nextSignature, message.nextSignature = $util.newBuffer($util.base64.length(object.nextSignature)), 0);
+                    else if (object.nextSignature.length >= 0)
+                        message.nextSignature = object.nextSignature;
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a RotationEntry message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {dmcn.identity.RotationEntry} message RotationEntry
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            RotationEntry.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.version = 0;
+                    object.address = "";
+                    if (options.bytes === String)
+                        object.retiredEd25519PublicKey = "";
+                    else {
+                        object.retiredEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.retiredEd25519PublicKey = $util.newBuffer(object.retiredEd25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.retiredX25519PublicKey = "";
+                    else {
+                        object.retiredX25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.retiredX25519PublicKey = $util.newBuffer(object.retiredX25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.nextEd25519PublicKey = "";
+                    else {
+                        object.nextEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.nextEd25519PublicKey = $util.newBuffer(object.nextEd25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.nextX25519PublicKey = "";
+                    else {
+                        object.nextX25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.nextX25519PublicKey = $util.newBuffer(object.nextX25519PublicKey);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.rotatedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.rotatedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, true);
+                        object.nextRevision = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.nextRevision = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.prevSignatureHash = "";
+                    else {
+                        object.prevSignatureHash = [];
+                        if (options.bytes !== Array)
+                            object.prevSignatureHash = $util.newBuffer(object.prevSignatureHash);
+                    }
+                    if (options.bytes === String)
+                        object.authorizingEd25519PublicKey = "";
+                    else {
+                        object.authorizingEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.authorizingEd25519PublicKey = $util.newBuffer(object.authorizingEd25519PublicKey);
+                    }
+                    object.deviceCredential = null;
+                    if (options.bytes === String)
+                        object.deviceSignature = "";
+                    else {
+                        object.deviceSignature = [];
+                        if (options.bytes !== Array)
+                            object.deviceSignature = $util.newBuffer(object.deviceSignature);
+                    }
+                    if (options.bytes === String)
+                        object.signature = "";
+                    else {
+                        object.signature = [];
+                        if (options.bytes !== Array)
+                            object.signature = $util.newBuffer(object.signature);
+                    }
+                    if (options.bytes === String)
+                        object.nextSignature = "";
+                    else {
+                        object.nextSignature = [];
+                        if (options.bytes !== Array)
+                            object.nextSignature = $util.newBuffer(object.nextSignature);
+                    }
+                }
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    object.version = message.version;
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    object.address = message.address;
+                if (message.retiredEd25519PublicKey != null && Object.hasOwnProperty.call(message, "retiredEd25519PublicKey"))
+                    object.retiredEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.retiredEd25519PublicKey, 0, message.retiredEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.retiredEd25519PublicKey) : message.retiredEd25519PublicKey;
+                if (message.retiredX25519PublicKey != null && Object.hasOwnProperty.call(message, "retiredX25519PublicKey"))
+                    object.retiredX25519PublicKey = options.bytes === String ? $util.base64.encode(message.retiredX25519PublicKey, 0, message.retiredX25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.retiredX25519PublicKey) : message.retiredX25519PublicKey;
+                if (message.nextEd25519PublicKey != null && Object.hasOwnProperty.call(message, "nextEd25519PublicKey"))
+                    object.nextEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.nextEd25519PublicKey, 0, message.nextEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.nextEd25519PublicKey) : message.nextEd25519PublicKey;
+                if (message.nextX25519PublicKey != null && Object.hasOwnProperty.call(message, "nextX25519PublicKey"))
+                    object.nextX25519PublicKey = options.bytes === String ? $util.base64.encode(message.nextX25519PublicKey, 0, message.nextX25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.nextX25519PublicKey) : message.nextX25519PublicKey;
+                if (message.rotatedAt != null && Object.hasOwnProperty.call(message, "rotatedAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.rotatedAt = typeof message.rotatedAt === "number" ? BigInt(message.rotatedAt) : $util.Long.fromBits(message.rotatedAt.low >>> 0, message.rotatedAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.rotatedAt === "number")
+                        object.rotatedAt = options.longs === String ? String(message.rotatedAt) : message.rotatedAt;
+                    else
+                        object.rotatedAt = options.longs === String ? $util.Long.prototype.toString.call(message.rotatedAt) : options.longs === Number ? new $util.LongBits(message.rotatedAt.low >>> 0, message.rotatedAt.high >>> 0).toNumber() : message.rotatedAt;
+                if (message.nextRevision != null && Object.hasOwnProperty.call(message, "nextRevision"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.nextRevision = typeof message.nextRevision === "number" ? BigInt(message.nextRevision) : $util.Long.fromBits(message.nextRevision.low >>> 0, message.nextRevision.high >>> 0, true).toBigInt();
+                    else if (typeof message.nextRevision === "number")
+                        object.nextRevision = options.longs === String ? String(message.nextRevision) : message.nextRevision;
+                    else
+                        object.nextRevision = options.longs === String ? $util.Long.prototype.toString.call(message.nextRevision) : options.longs === Number ? new $util.LongBits(message.nextRevision.low >>> 0, message.nextRevision.high >>> 0).toNumber(true) : message.nextRevision;
+                if (message.prevSignatureHash != null && Object.hasOwnProperty.call(message, "prevSignatureHash"))
+                    object.prevSignatureHash = options.bytes === String ? $util.base64.encode(message.prevSignatureHash, 0, message.prevSignatureHash.length) : options.bytes === Array ? Array.prototype.slice.call(message.prevSignatureHash) : message.prevSignatureHash;
+                if (message.authorizingEd25519PublicKey != null && Object.hasOwnProperty.call(message, "authorizingEd25519PublicKey"))
+                    object.authorizingEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.authorizingEd25519PublicKey, 0, message.authorizingEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.authorizingEd25519PublicKey) : message.authorizingEd25519PublicKey;
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    object.deviceCredential = $root.dmcn.identity.Credential.toObject(message.deviceCredential, options, q + 1);
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    object.deviceSignature = options.bytes === String ? $util.base64.encode(message.deviceSignature, 0, message.deviceSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceSignature) : message.deviceSignature;
+                if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
+                    object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
+                if (message.nextSignature != null && Object.hasOwnProperty.call(message, "nextSignature"))
+                    object.nextSignature = options.bytes === String ? $util.base64.encode(message.nextSignature, 0, message.nextSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.nextSignature) : message.nextSignature;
+                return object;
+            };
+
+            /**
+             * Converts this RotationEntry to JSON.
+             * @function toJSON
+             * @memberof dmcn.identity.RotationEntry
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            RotationEntry.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for RotationEntry
+             * @function getTypeUrl
+             * @memberof dmcn.identity.RotationEntry
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            RotationEntry.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.identity.RotationEntry";
+            };
+
+            return RotationEntry;
+        })();
+
+        identity.AddressHistoryRecord = (function() {
+
+            /**
+             * Properties of an AddressHistoryRecord.
+             * @memberof dmcn.identity
+             * @interface IAddressHistoryRecord
+             * @property {number|null} [version] AddressHistoryRecord version
+             * @property {string|null} [domain] AddressHistoryRecord domain
+             * @property {string|null} [address] AddressHistoryRecord address
+             * @property {Array.<dmcn.identity.IRotationEntry>|null} [chain] AddressHistoryRecord chain
+             */
+
+            /**
+             * Constructs a new AddressHistoryRecord.
+             * @memberof dmcn.identity
+             * @classdesc Represents an AddressHistoryRecord.
+             * @implements IAddressHistoryRecord
+             * @constructor
+             * @param {dmcn.identity.IAddressHistoryRecord=} [properties] Properties to set
+             */
+            function AddressHistoryRecord(properties) {
+                this.chain = [];
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * AddressHistoryRecord version.
+             * @member {number} version
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @instance
+             */
+            AddressHistoryRecord.prototype.version = 0;
+
+            /**
+             * AddressHistoryRecord domain.
+             * @member {string} domain
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @instance
+             */
+            AddressHistoryRecord.prototype.domain = "";
+
+            /**
+             * AddressHistoryRecord address.
+             * @member {string} address
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @instance
+             */
+            AddressHistoryRecord.prototype.address = "";
+
+            /**
+             * AddressHistoryRecord chain.
+             * @member {Array.<dmcn.identity.IRotationEntry>} chain
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @instance
+             */
+            AddressHistoryRecord.prototype.chain = $util.emptyArray;
+
+            /**
+             * Creates a new AddressHistoryRecord instance using the specified properties.
+             * @function create
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {dmcn.identity.IAddressHistoryRecord=} [properties] Properties to set
+             * @returns {dmcn.identity.AddressHistoryRecord} AddressHistoryRecord instance
+             */
+            AddressHistoryRecord.create = function create(properties) {
+                return new AddressHistoryRecord(properties);
+            };
+
+            /**
+             * Encodes the specified AddressHistoryRecord message. Does not implicitly {@link dmcn.identity.AddressHistoryRecord.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {dmcn.identity.IAddressHistoryRecord} message AddressHistoryRecord message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            AddressHistoryRecord.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.version);
+                if (message.domain != null && Object.hasOwnProperty.call(message, "domain"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).string(message.domain);
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).string(message.address);
+                if (message.chain != null && message.chain.length)
+                    for (let i = 0; i < message.chain.length; ++i)
+                        $root.dmcn.identity.RotationEntry.encode(message.chain[i], writer.uint32(/* id 4, wireType 2 =*/34).fork(), q + 1).ldelim();
+                return writer;
+            };
+
+            /**
+             * Encodes the specified AddressHistoryRecord message, length delimited. Does not implicitly {@link dmcn.identity.AddressHistoryRecord.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {dmcn.identity.IAddressHistoryRecord} message AddressHistoryRecord message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            AddressHistoryRecord.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes an AddressHistoryRecord message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.identity.AddressHistoryRecord} AddressHistoryRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            AddressHistoryRecord.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.identity.AddressHistoryRecord();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.version = reader.uint32();
+                            break;
+                        }
+                    case 2: {
+                            message.domain = reader.string();
+                            break;
+                        }
+                    case 3: {
+                            message.address = reader.string();
+                            break;
+                        }
+                    case 4: {
+                            if (!(message.chain && message.chain.length))
+                                message.chain = [];
+                            message.chain.push($root.dmcn.identity.RotationEntry.decode(reader, reader.uint32(), undefined, long + 1));
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes an AddressHistoryRecord message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.identity.AddressHistoryRecord} AddressHistoryRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            AddressHistoryRecord.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies an AddressHistoryRecord message.
+             * @function verify
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            AddressHistoryRecord.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    if (!$util.isInteger(message.version))
+                        return "version: integer expected";
+                if (message.domain != null && Object.hasOwnProperty.call(message, "domain"))
+                    if (!$util.isString(message.domain))
+                        return "domain: string expected";
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    if (!$util.isString(message.address))
+                        return "address: string expected";
+                if (message.chain != null && Object.hasOwnProperty.call(message, "chain")) {
+                    if (!Array.isArray(message.chain))
+                        return "chain: array expected";
+                    for (let i = 0; i < message.chain.length; ++i) {
+                        let error = $root.dmcn.identity.RotationEntry.verify(message.chain[i], long + 1);
+                        if (error)
+                            return "chain." + error;
+                    }
+                }
+                return null;
+            };
+
+            /**
+             * Creates an AddressHistoryRecord message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.identity.AddressHistoryRecord} AddressHistoryRecord
+             */
+            AddressHistoryRecord.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.identity.AddressHistoryRecord)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.identity.AddressHistoryRecord: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.identity.AddressHistoryRecord();
+                if (object.version != null)
+                    message.version = object.version >>> 0;
+                if (object.domain != null)
+                    message.domain = String(object.domain);
+                if (object.address != null)
+                    message.address = String(object.address);
+                if (object.chain) {
+                    if (!Array.isArray(object.chain))
+                        throw TypeError(".dmcn.identity.AddressHistoryRecord.chain: array expected");
+                    message.chain = [];
+                    for (let i = 0; i < object.chain.length; ++i) {
+                        if (!$util.isObject(object.chain[i]))
+                            throw TypeError(".dmcn.identity.AddressHistoryRecord.chain: object expected");
+                        message.chain[i] = $root.dmcn.identity.RotationEntry.fromObject(object.chain[i], long + 1);
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Creates a plain object from an AddressHistoryRecord message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {dmcn.identity.AddressHistoryRecord} message AddressHistoryRecord
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            AddressHistoryRecord.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.arrays || options.defaults)
+                    object.chain = [];
+                if (options.defaults) {
+                    object.version = 0;
+                    object.domain = "";
+                    object.address = "";
+                }
+                if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                    object.version = message.version;
+                if (message.domain != null && Object.hasOwnProperty.call(message, "domain"))
+                    object.domain = message.domain;
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    object.address = message.address;
+                if (message.chain && message.chain.length) {
+                    object.chain = [];
+                    for (let j = 0; j < message.chain.length; ++j)
+                        object.chain[j] = $root.dmcn.identity.RotationEntry.toObject(message.chain[j], options, q + 1);
+                }
+                return object;
+            };
+
+            /**
+             * Converts this AddressHistoryRecord to JSON.
+             * @function toJSON
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            AddressHistoryRecord.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for AddressHistoryRecord
+             * @function getTypeUrl
+             * @memberof dmcn.identity.AddressHistoryRecord
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            AddressHistoryRecord.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.identity.AddressHistoryRecord";
+            };
+
+            return AddressHistoryRecord;
         })();
 
         identity.CompromisedKey = (function() {
@@ -11302,6 +12388,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.relay.IGetBlocklistRequest|null} [getBlocklist] RelayRequest getBlocklist
              * @property {dmcn.relay.IPutRecordRequest|null} [putRecord] RelayRequest putRecord
              * @property {dmcn.relay.IGetRelayDescriptorRequest|null} [getRelayDescriptor] RelayRequest getRelayDescriptor
+             * @property {dmcn.relay.IGetHistoryRequest|null} [getHistory] RelayRequest getHistory
              */
 
             /**
@@ -11439,17 +12526,25 @@ export const dmcn = $root.dmcn = (() => {
              */
             RelayRequest.prototype.getRelayDescriptor = null;
 
+            /**
+             * RelayRequest getHistory.
+             * @member {dmcn.relay.IGetHistoryRequest|null|undefined} getHistory
+             * @memberof dmcn.relay.RelayRequest
+             * @instance
+             */
+            RelayRequest.prototype.getHistory = null;
+
             // OneOf field names bound to virtual getters and setters
             let $oneOfFields;
 
             /**
              * RelayRequest request.
-             * @member {"store"|"fetchInit"|"fetchProof"|"ack"|"ping"|"mailboxOp"|"storeInit"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|undefined} request
+             * @member {"store"|"fetchInit"|"fetchProof"|"ack"|"ping"|"mailboxOp"|"storeInit"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|undefined} request
              * @memberof dmcn.relay.RelayRequest
              * @instance
              */
             Object.defineProperty(RelayRequest.prototype, "request", {
-                get: $util.oneOfGetter($oneOfFields = ["store", "fetchInit", "fetchProof", "ack", "ping", "mailboxOp", "storeInit", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor"]),
+                get: $util.oneOfGetter($oneOfFields = ["store", "fetchInit", "fetchProof", "ack", "ping", "mailboxOp", "storeInit", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor", "getHistory"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -11511,6 +12606,8 @@ export const dmcn = $root.dmcn = (() => {
                     $root.dmcn.relay.PutRecordRequest.encode(message.putRecord, writer.uint32(/* id 24, wireType 2 =*/194).fork(), q + 1).ldelim();
                 if (message.getRelayDescriptor != null && Object.hasOwnProperty.call(message, "getRelayDescriptor"))
                     $root.dmcn.relay.GetRelayDescriptorRequest.encode(message.getRelayDescriptor, writer.uint32(/* id 25, wireType 2 =*/202).fork(), q + 1).ldelim();
+                if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory"))
+                    $root.dmcn.relay.GetHistoryRequest.encode(message.getHistory, writer.uint32(/* id 27, wireType 2 =*/218).fork(), q + 1).ldelim();
                 return writer;
             };
 
@@ -11609,6 +12706,10 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 25: {
                             message.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorRequest.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 27: {
+                            message.getHistory = $root.dmcn.relay.GetHistoryRequest.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
                         }
                     default:
@@ -11799,6 +12900,16 @@ export const dmcn = $root.dmcn = (() => {
                             return "getRelayDescriptor." + error;
                     }
                 }
+                if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory")) {
+                    if (properties.request === 1)
+                        return "request: multiple values";
+                    properties.request = 1;
+                    {
+                        let error = $root.dmcn.relay.GetHistoryRequest.verify(message.getHistory, long + 1);
+                        if (error)
+                            return "getHistory." + error;
+                    }
+                }
                 return null;
             };
 
@@ -11895,6 +13006,11 @@ export const dmcn = $root.dmcn = (() => {
                         throw TypeError(".dmcn.relay.RelayRequest.getRelayDescriptor: object expected");
                     message.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorRequest.fromObject(object.getRelayDescriptor, long + 1);
                 }
+                if (object.getHistory != null) {
+                    if (!$util.isObject(object.getHistory))
+                        throw TypeError(".dmcn.relay.RelayRequest.getHistory: object expected");
+                    message.getHistory = $root.dmcn.relay.GetHistoryRequest.fromObject(object.getHistory, long + 1);
+                }
                 return message;
             };
 
@@ -11990,6 +13106,11 @@ export const dmcn = $root.dmcn = (() => {
                     if (options.oneofs)
                         object.request = "getRelayDescriptor";
                 }
+                if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory")) {
+                    object.getHistory = $root.dmcn.relay.GetHistoryRequest.toObject(message.getHistory, options, q + 1);
+                    if (options.oneofs)
+                        object.request = "getHistory";
+                }
                 return object;
             };
 
@@ -12045,6 +13166,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.relay.IGetBlocklistResponse|null} [getBlocklist] RelayResponse getBlocklist
              * @property {dmcn.relay.IPutRecordResponse|null} [putRecord] RelayResponse putRecord
              * @property {dmcn.relay.IGetRelayDescriptorResponse|null} [getRelayDescriptor] RelayResponse getRelayDescriptor
+             * @property {dmcn.relay.IGetHistoryResponse|null} [getHistory] RelayResponse getHistory
              * @property {dmcn.relay.IMailboxKvPutResponse|null} [mailboxKvPut] RelayResponse mailboxKvPut
              * @property {dmcn.relay.IMailboxKvGetResponse|null} [mailboxKvGet] RelayResponse mailboxKvGet
              * @property {dmcn.relay.IMailboxKvListResponse|null} [mailboxKvList] RelayResponse mailboxKvList
@@ -12204,6 +13326,14 @@ export const dmcn = $root.dmcn = (() => {
             RelayResponse.prototype.getRelayDescriptor = null;
 
             /**
+             * RelayResponse getHistory.
+             * @member {dmcn.relay.IGetHistoryResponse|null|undefined} getHistory
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.getHistory = null;
+
+            /**
              * RelayResponse mailboxKvPut.
              * @member {dmcn.relay.IMailboxKvPutResponse|null|undefined} mailboxKvPut
              * @memberof dmcn.relay.RelayResponse
@@ -12248,12 +13378,12 @@ export const dmcn = $root.dmcn = (() => {
 
             /**
              * RelayResponse response.
-             * @member {"store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat"|undefined} response
+             * @member {"store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat"|undefined} response
              * @memberof dmcn.relay.RelayResponse
              * @instance
              */
             Object.defineProperty(RelayResponse.prototype, "response", {
-                get: $util.oneOfGetter($oneOfFields = ["store", "fetchChallenge", "fetch", "ack", "ping", "error", "mailboxList", "mailboxBodyHeader", "mailboxDelete", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor", "mailboxKvPut", "mailboxKvGet", "mailboxKvList", "mailboxKvDelete", "mailboxKvStat"]),
+                get: $util.oneOfGetter($oneOfFields = ["store", "fetchChallenge", "fetch", "ack", "ping", "error", "mailboxList", "mailboxBodyHeader", "mailboxDelete", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor", "getHistory", "mailboxKvPut", "mailboxKvGet", "mailboxKvList", "mailboxKvDelete", "mailboxKvStat"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -12329,6 +13459,8 @@ export const dmcn = $root.dmcn = (() => {
                     $root.dmcn.relay.PutRecordResponse.encode(message.putRecord, writer.uint32(/* id 33, wireType 2 =*/266).fork(), q + 1).ldelim();
                 if (message.getRelayDescriptor != null && Object.hasOwnProperty.call(message, "getRelayDescriptor"))
                     $root.dmcn.relay.GetRelayDescriptorResponse.encode(message.getRelayDescriptor, writer.uint32(/* id 34, wireType 2 =*/274).fork(), q + 1).ldelim();
+                if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory"))
+                    $root.dmcn.relay.GetHistoryResponse.encode(message.getHistory, writer.uint32(/* id 37, wireType 2 =*/298).fork(), q + 1).ldelim();
                 return writer;
             };
 
@@ -12435,6 +13567,10 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 34: {
                             message.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 37: {
+                            message.getHistory = $root.dmcn.relay.GetHistoryResponse.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
                         }
                     case 18: {
@@ -12665,6 +13801,16 @@ export const dmcn = $root.dmcn = (() => {
                             return "getRelayDescriptor." + error;
                     }
                 }
+                if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.GetHistoryResponse.verify(message.getHistory, long + 1);
+                        if (error)
+                            return "getHistory." + error;
+                    }
+                }
                 if (message.mailboxKvPut != null && Object.hasOwnProperty.call(message, "mailboxKvPut")) {
                     if (properties.response === 1)
                         return "response: multiple values";
@@ -12821,6 +13967,11 @@ export const dmcn = $root.dmcn = (() => {
                         throw TypeError(".dmcn.relay.RelayResponse.getRelayDescriptor: object expected");
                     message.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorResponse.fromObject(object.getRelayDescriptor, long + 1);
                 }
+                if (object.getHistory != null) {
+                    if (!$util.isObject(object.getHistory))
+                        throw TypeError(".dmcn.relay.RelayResponse.getHistory: object expected");
+                    message.getHistory = $root.dmcn.relay.GetHistoryResponse.fromObject(object.getHistory, long + 1);
+                }
                 if (object.mailboxKvPut != null) {
                     if (!$util.isObject(object.mailboxKvPut))
                         throw TypeError(".dmcn.relay.RelayResponse.mailboxKvPut: object expected");
@@ -12975,6 +14126,11 @@ export const dmcn = $root.dmcn = (() => {
                     object.getRelayDescriptor = $root.dmcn.relay.GetRelayDescriptorResponse.toObject(message.getRelayDescriptor, options, q + 1);
                     if (options.oneofs)
                         object.response = "getRelayDescriptor";
+                }
+                if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory")) {
+                    object.getHistory = $root.dmcn.relay.GetHistoryResponse.toObject(message.getHistory, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "getHistory";
                 }
                 return object;
             };
@@ -15146,6 +16302,8 @@ export const dmcn = $root.dmcn = (() => {
              * @property {string|null} [address] FetchProof address
              * @property {Uint8Array|null} [nonce] FetchProof nonce
              * @property {Uint8Array|null} [signature] FetchProof signature
+             * @property {Uint8Array|null} [deviceEd25519PublicKey] FetchProof deviceEd25519PublicKey
+             * @property {Uint8Array|null} [deviceSignature] FetchProof deviceSignature
              */
 
             /**
@@ -15188,6 +16346,22 @@ export const dmcn = $root.dmcn = (() => {
             FetchProof.prototype.signature = $util.newBuffer([]);
 
             /**
+             * FetchProof deviceEd25519PublicKey.
+             * @member {Uint8Array} deviceEd25519PublicKey
+             * @memberof dmcn.relay.FetchProof
+             * @instance
+             */
+            FetchProof.prototype.deviceEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * FetchProof deviceSignature.
+             * @member {Uint8Array} deviceSignature
+             * @memberof dmcn.relay.FetchProof
+             * @instance
+             */
+            FetchProof.prototype.deviceSignature = $util.newBuffer([]);
+
+            /**
              * Creates a new FetchProof instance using the specified properties.
              * @function create
              * @memberof dmcn.relay.FetchProof
@@ -15221,6 +16395,10 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.nonce);
                 if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
                     writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.signature);
+                if (message.deviceEd25519PublicKey != null && Object.hasOwnProperty.call(message, "deviceEd25519PublicKey"))
+                    writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.deviceEd25519PublicKey);
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.deviceSignature);
                 return writer;
             };
 
@@ -15273,6 +16451,14 @@ export const dmcn = $root.dmcn = (() => {
                             message.signature = reader.bytes();
                             break;
                         }
+                    case 4: {
+                            message.deviceEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 5: {
+                            message.deviceSignature = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -15321,6 +16507,12 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
                     if (!(message.signature && typeof message.signature.length === "number" || $util.isString(message.signature)))
                         return "signature: buffer expected";
+                if (message.deviceEd25519PublicKey != null && Object.hasOwnProperty.call(message, "deviceEd25519PublicKey"))
+                    if (!(message.deviceEd25519PublicKey && typeof message.deviceEd25519PublicKey.length === "number" || $util.isString(message.deviceEd25519PublicKey)))
+                        return "deviceEd25519PublicKey: buffer expected";
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    if (!(message.deviceSignature && typeof message.deviceSignature.length === "number" || $util.isString(message.deviceSignature)))
+                        return "deviceSignature: buffer expected";
                 return null;
             };
 
@@ -15354,6 +16546,16 @@ export const dmcn = $root.dmcn = (() => {
                         $util.base64.decode(object.signature, message.signature = $util.newBuffer($util.base64.length(object.signature)), 0);
                     else if (object.signature.length >= 0)
                         message.signature = object.signature;
+                if (object.deviceEd25519PublicKey != null)
+                    if (typeof object.deviceEd25519PublicKey === "string")
+                        $util.base64.decode(object.deviceEd25519PublicKey, message.deviceEd25519PublicKey = $util.newBuffer($util.base64.length(object.deviceEd25519PublicKey)), 0);
+                    else if (object.deviceEd25519PublicKey.length >= 0)
+                        message.deviceEd25519PublicKey = object.deviceEd25519PublicKey;
+                if (object.deviceSignature != null)
+                    if (typeof object.deviceSignature === "string")
+                        $util.base64.decode(object.deviceSignature, message.deviceSignature = $util.newBuffer($util.base64.length(object.deviceSignature)), 0);
+                    else if (object.deviceSignature.length >= 0)
+                        message.deviceSignature = object.deviceSignature;
                 return message;
             };
 
@@ -15390,6 +16592,20 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.signature = $util.newBuffer(object.signature);
                     }
+                    if (options.bytes === String)
+                        object.deviceEd25519PublicKey = "";
+                    else {
+                        object.deviceEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.deviceEd25519PublicKey = $util.newBuffer(object.deviceEd25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.deviceSignature = "";
+                    else {
+                        object.deviceSignature = [];
+                        if (options.bytes !== Array)
+                            object.deviceSignature = $util.newBuffer(object.deviceSignature);
+                    }
                 }
                 if (message.address != null && Object.hasOwnProperty.call(message, "address"))
                     object.address = message.address;
@@ -15397,6 +16613,10 @@ export const dmcn = $root.dmcn = (() => {
                     object.nonce = options.bytes === String ? $util.base64.encode(message.nonce, 0, message.nonce.length) : options.bytes === Array ? Array.prototype.slice.call(message.nonce) : message.nonce;
                 if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
                     object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
+                if (message.deviceEd25519PublicKey != null && Object.hasOwnProperty.call(message, "deviceEd25519PublicKey"))
+                    object.deviceEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.deviceEd25519PublicKey, 0, message.deviceEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceEd25519PublicKey) : message.deviceEd25519PublicKey;
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    object.deviceSignature = options.bytes === String ? $util.base64.encode(message.deviceSignature, 0, message.deviceSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceSignature) : message.deviceSignature;
                 return object;
             };
 
@@ -16381,6 +17601,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {string|null} [version] PingResponse version
              * @property {number|Long|null} [uptimeSeconds] PingResponse uptimeSeconds
              * @property {number|null} [storedEnvelopes] PingResponse storedEnvelopes
+             * @property {Array.<string>|null} [capabilities] PingResponse capabilities
              */
 
             /**
@@ -16392,6 +17613,7 @@ export const dmcn = $root.dmcn = (() => {
              * @param {dmcn.relay.IPingResponse=} [properties] Properties to set
              */
             function PingResponse(properties) {
+                this.capabilities = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -16421,6 +17643,14 @@ export const dmcn = $root.dmcn = (() => {
              * @instance
              */
             PingResponse.prototype.storedEnvelopes = 0;
+
+            /**
+             * PingResponse capabilities.
+             * @member {Array.<string>} capabilities
+             * @memberof dmcn.relay.PingResponse
+             * @instance
+             */
+            PingResponse.prototype.capabilities = $util.emptyArray;
 
             /**
              * Creates a new PingResponse instance using the specified properties.
@@ -16456,6 +17686,9 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.uptimeSeconds);
                 if (message.storedEnvelopes != null && Object.hasOwnProperty.call(message, "storedEnvelopes"))
                     writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.storedEnvelopes);
+                if (message.capabilities != null && message.capabilities.length)
+                    for (let i = 0; i < message.capabilities.length; ++i)
+                        writer.uint32(/* id 4, wireType 2 =*/34).string(message.capabilities[i]);
                 return writer;
             };
 
@@ -16508,6 +17741,12 @@ export const dmcn = $root.dmcn = (() => {
                             message.storedEnvelopes = reader.uint32();
                             break;
                         }
+                    case 4: {
+                            if (!(message.capabilities && message.capabilities.length))
+                                message.capabilities = [];
+                            message.capabilities.push(reader.string());
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -16556,6 +17795,13 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.storedEnvelopes != null && Object.hasOwnProperty.call(message, "storedEnvelopes"))
                     if (!$util.isInteger(message.storedEnvelopes))
                         return "storedEnvelopes: integer expected";
+                if (message.capabilities != null && Object.hasOwnProperty.call(message, "capabilities")) {
+                    if (!Array.isArray(message.capabilities))
+                        return "capabilities: array expected";
+                    for (let i = 0; i < message.capabilities.length; ++i)
+                        if (!$util.isString(message.capabilities[i]))
+                            return "capabilities: string[] expected";
+                }
                 return null;
             };
 
@@ -16590,6 +17836,13 @@ export const dmcn = $root.dmcn = (() => {
                         message.uptimeSeconds = new $util.LongBits(object.uptimeSeconds.low >>> 0, object.uptimeSeconds.high >>> 0).toNumber();
                 if (object.storedEnvelopes != null)
                     message.storedEnvelopes = object.storedEnvelopes >>> 0;
+                if (object.capabilities) {
+                    if (!Array.isArray(object.capabilities))
+                        throw TypeError(".dmcn.relay.PingResponse.capabilities: array expected");
+                    message.capabilities = [];
+                    for (let i = 0; i < object.capabilities.length; ++i)
+                        message.capabilities[i] = String(object.capabilities[i]);
+                }
                 return message;
             };
 
@@ -16610,6 +17863,8 @@ export const dmcn = $root.dmcn = (() => {
                 if (q > $util.recursionLimit)
                     throw Error("max depth exceeded");
                 let object = {};
+                if (options.arrays || options.defaults)
+                    object.capabilities = [];
                 if (options.defaults) {
                     object.version = "";
                     if ($util.Long) {
@@ -16630,6 +17885,11 @@ export const dmcn = $root.dmcn = (() => {
                         object.uptimeSeconds = options.longs === String ? $util.Long.prototype.toString.call(message.uptimeSeconds) : options.longs === Number ? new $util.LongBits(message.uptimeSeconds.low >>> 0, message.uptimeSeconds.high >>> 0).toNumber() : message.uptimeSeconds;
                 if (message.storedEnvelopes != null && Object.hasOwnProperty.call(message, "storedEnvelopes"))
                     object.storedEnvelopes = message.storedEnvelopes;
+                if (message.capabilities && message.capabilities.length) {
+                    object.capabilities = [];
+                    for (let j = 0; j < message.capabilities.length; ++j)
+                        object.capabilities[j] = message.capabilities[j];
+                }
                 return object;
             };
 
@@ -19097,6 +20357,493 @@ export const dmcn = $root.dmcn = (() => {
             return GetBlocklistResponse;
         })();
 
+        relay.GetHistoryRequest = (function() {
+
+            /**
+             * Properties of a GetHistoryRequest.
+             * @memberof dmcn.relay
+             * @interface IGetHistoryRequest
+             * @property {string|null} [address] GetHistoryRequest address
+             */
+
+            /**
+             * Constructs a new GetHistoryRequest.
+             * @memberof dmcn.relay
+             * @classdesc Represents a GetHistoryRequest.
+             * @implements IGetHistoryRequest
+             * @constructor
+             * @param {dmcn.relay.IGetHistoryRequest=} [properties] Properties to set
+             */
+            function GetHistoryRequest(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * GetHistoryRequest address.
+             * @member {string} address
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @instance
+             */
+            GetHistoryRequest.prototype.address = "";
+
+            /**
+             * Creates a new GetHistoryRequest instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {dmcn.relay.IGetHistoryRequest=} [properties] Properties to set
+             * @returns {dmcn.relay.GetHistoryRequest} GetHistoryRequest instance
+             */
+            GetHistoryRequest.create = function create(properties) {
+                return new GetHistoryRequest(properties);
+            };
+
+            /**
+             * Encodes the specified GetHistoryRequest message. Does not implicitly {@link dmcn.relay.GetHistoryRequest.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {dmcn.relay.IGetHistoryRequest} message GetHistoryRequest message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            GetHistoryRequest.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.address);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified GetHistoryRequest message, length delimited. Does not implicitly {@link dmcn.relay.GetHistoryRequest.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {dmcn.relay.IGetHistoryRequest} message GetHistoryRequest message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            GetHistoryRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a GetHistoryRequest message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.GetHistoryRequest} GetHistoryRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            GetHistoryRequest.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.GetHistoryRequest();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.address = reader.string();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a GetHistoryRequest message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.GetHistoryRequest} GetHistoryRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            GetHistoryRequest.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a GetHistoryRequest message.
+             * @function verify
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            GetHistoryRequest.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    if (!$util.isString(message.address))
+                        return "address: string expected";
+                return null;
+            };
+
+            /**
+             * Creates a GetHistoryRequest message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.GetHistoryRequest} GetHistoryRequest
+             */
+            GetHistoryRequest.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.GetHistoryRequest)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.GetHistoryRequest: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.GetHistoryRequest();
+                if (object.address != null)
+                    message.address = String(object.address);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a GetHistoryRequest message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {dmcn.relay.GetHistoryRequest} message GetHistoryRequest
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            GetHistoryRequest.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults)
+                    object.address = "";
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    object.address = message.address;
+                return object;
+            };
+
+            /**
+             * Converts this GetHistoryRequest to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            GetHistoryRequest.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for GetHistoryRequest
+             * @function getTypeUrl
+             * @memberof dmcn.relay.GetHistoryRequest
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            GetHistoryRequest.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.GetHistoryRequest";
+            };
+
+            return GetHistoryRequest;
+        })();
+
+        relay.GetHistoryResponse = (function() {
+
+            /**
+             * Properties of a GetHistoryResponse.
+             * @memberof dmcn.relay
+             * @interface IGetHistoryResponse
+             * @property {boolean|null} [found] GetHistoryResponse found
+             * @property {Uint8Array|null} [record] GetHistoryResponse record
+             */
+
+            /**
+             * Constructs a new GetHistoryResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a GetHistoryResponse.
+             * @implements IGetHistoryResponse
+             * @constructor
+             * @param {dmcn.relay.IGetHistoryResponse=} [properties] Properties to set
+             */
+            function GetHistoryResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * GetHistoryResponse found.
+             * @member {boolean} found
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @instance
+             */
+            GetHistoryResponse.prototype.found = false;
+
+            /**
+             * GetHistoryResponse record.
+             * @member {Uint8Array} record
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @instance
+             */
+            GetHistoryResponse.prototype.record = $util.newBuffer([]);
+
+            /**
+             * Creates a new GetHistoryResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {dmcn.relay.IGetHistoryResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.GetHistoryResponse} GetHistoryResponse instance
+             */
+            GetHistoryResponse.create = function create(properties) {
+                return new GetHistoryResponse(properties);
+            };
+
+            /**
+             * Encodes the specified GetHistoryResponse message. Does not implicitly {@link dmcn.relay.GetHistoryResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {dmcn.relay.IGetHistoryResponse} message GetHistoryResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            GetHistoryResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.found != null && Object.hasOwnProperty.call(message, "found"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).bool(message.found);
+                if (message.record != null && Object.hasOwnProperty.call(message, "record"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.record);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified GetHistoryResponse message, length delimited. Does not implicitly {@link dmcn.relay.GetHistoryResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {dmcn.relay.IGetHistoryResponse} message GetHistoryResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            GetHistoryResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a GetHistoryResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.GetHistoryResponse} GetHistoryResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            GetHistoryResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.GetHistoryResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.found = reader.bool();
+                            break;
+                        }
+                    case 2: {
+                            message.record = reader.bytes();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a GetHistoryResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.GetHistoryResponse} GetHistoryResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            GetHistoryResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a GetHistoryResponse message.
+             * @function verify
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            GetHistoryResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.found != null && Object.hasOwnProperty.call(message, "found"))
+                    if (typeof message.found !== "boolean")
+                        return "found: boolean expected";
+                if (message.record != null && Object.hasOwnProperty.call(message, "record"))
+                    if (!(message.record && typeof message.record.length === "number" || $util.isString(message.record)))
+                        return "record: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a GetHistoryResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.GetHistoryResponse} GetHistoryResponse
+             */
+            GetHistoryResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.GetHistoryResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.GetHistoryResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.GetHistoryResponse();
+                if (object.found != null)
+                    message.found = Boolean(object.found);
+                if (object.record != null)
+                    if (typeof object.record === "string")
+                        $util.base64.decode(object.record, message.record = $util.newBuffer($util.base64.length(object.record)), 0);
+                    else if (object.record.length >= 0)
+                        message.record = object.record;
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a GetHistoryResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {dmcn.relay.GetHistoryResponse} message GetHistoryResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            GetHistoryResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.found = false;
+                    if (options.bytes === String)
+                        object.record = "";
+                    else {
+                        object.record = [];
+                        if (options.bytes !== Array)
+                            object.record = $util.newBuffer(object.record);
+                    }
+                }
+                if (message.found != null && Object.hasOwnProperty.call(message, "found"))
+                    object.found = message.found;
+                if (message.record != null && Object.hasOwnProperty.call(message, "record"))
+                    object.record = options.bytes === String ? $util.base64.encode(message.record, 0, message.record.length) : options.bytes === Array ? Array.prototype.slice.call(message.record) : message.record;
+                return object;
+            };
+
+            /**
+             * Converts this GetHistoryResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            GetHistoryResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for GetHistoryResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.GetHistoryResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            GetHistoryResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.GetHistoryResponse";
+            };
+
+            return GetHistoryResponse;
+        })();
+
         /**
          * RecordKind enum.
          * @name dmcn.relay.RecordKind
@@ -19107,6 +20854,7 @@ export const dmcn = $root.dmcn = (() => {
          * @property {number} RECORD_KIND_ROSTER=3 RECORD_KIND_ROSTER value
          * @property {number} RECORD_KIND_REMOVAL=4 RECORD_KIND_REMOVAL value
          * @property {number} RECORD_KIND_BLOCKLIST=5 RECORD_KIND_BLOCKLIST value
+         * @property {number} RECORD_KIND_HISTORY=6 RECORD_KIND_HISTORY value
          */
         relay.RecordKind = (function() {
             const valuesById = {}, values = Object.create(valuesById);
@@ -19116,6 +20864,7 @@ export const dmcn = $root.dmcn = (() => {
             values[valuesById[3] = "RECORD_KIND_ROSTER"] = 3;
             values[valuesById[4] = "RECORD_KIND_REMOVAL"] = 4;
             values[valuesById[5] = "RECORD_KIND_BLOCKLIST"] = 5;
+            values[valuesById[6] = "RECORD_KIND_HISTORY"] = 6;
             return values;
         })();
 
@@ -19289,6 +21038,7 @@ export const dmcn = $root.dmcn = (() => {
                     case 3:
                     case 4:
                     case 5:
+                    case 6:
                         break;
                     }
                 if (message.record != null && Object.hasOwnProperty.call(message, "record"))
@@ -19345,6 +21095,10 @@ export const dmcn = $root.dmcn = (() => {
                 case "RECORD_KIND_BLOCKLIST":
                 case 5:
                     message.kind = 5;
+                    break;
+                case "RECORD_KIND_HISTORY":
+                case 6:
+                    message.kind = 6;
                     break;
                 }
                 if (object.record != null)
@@ -21714,6 +23468,8 @@ export const dmcn = $root.dmcn = (() => {
              * @interface IMailboxOp
              * @property {Uint8Array|null} [nonce] MailboxOp nonce
              * @property {Uint8Array|null} [signature] MailboxOp signature
+             * @property {Uint8Array|null} [deviceEd25519PublicKey] MailboxOp deviceEd25519PublicKey
+             * @property {Uint8Array|null} [deviceSignature] MailboxOp deviceSignature
              * @property {dmcn.relay.IMailboxListOp|null} [list] MailboxOp list
              * @property {dmcn.relay.IMailboxBodyOp|null} [body] MailboxOp body
              * @property {dmcn.relay.IMailboxDeleteOp|null} ["delete"] MailboxOp delete
@@ -21754,6 +23510,22 @@ export const dmcn = $root.dmcn = (() => {
              * @instance
              */
             MailboxOp.prototype.signature = $util.newBuffer([]);
+
+            /**
+             * MailboxOp deviceEd25519PublicKey.
+             * @member {Uint8Array} deviceEd25519PublicKey
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.deviceEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * MailboxOp deviceSignature.
+             * @member {Uint8Array} deviceSignature
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.deviceSignature = $util.newBuffer([]);
 
             /**
              * MailboxOp list.
@@ -21881,6 +23653,10 @@ export const dmcn = $root.dmcn = (() => {
                     $root.dmcn.relay.MailboxKvDeleteOp.encode(message.kvDelete, writer.uint32(/* id 11, wireType 2 =*/90).fork(), q + 1).ldelim();
                 if (message.kvStat != null && Object.hasOwnProperty.call(message, "kvStat"))
                     $root.dmcn.relay.MailboxKvStatOp.encode(message.kvStat, writer.uint32(/* id 12, wireType 2 =*/98).fork(), q + 1).ldelim();
+                if (message.deviceEd25519PublicKey != null && Object.hasOwnProperty.call(message, "deviceEd25519PublicKey"))
+                    writer.uint32(/* id 14, wireType 2 =*/114).bytes(message.deviceEd25519PublicKey);
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    writer.uint32(/* id 15, wireType 2 =*/122).bytes(message.deviceSignature);
                 return writer;
             };
 
@@ -21927,6 +23703,14 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 2: {
                             message.signature = reader.bytes();
+                            break;
+                        }
+                    case 14: {
+                            message.deviceEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 15: {
+                            message.deviceSignature = reader.bytes();
                             break;
                         }
                     case 3: {
@@ -22007,6 +23791,12 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
                     if (!(message.signature && typeof message.signature.length === "number" || $util.isString(message.signature)))
                         return "signature: buffer expected";
+                if (message.deviceEd25519PublicKey != null && Object.hasOwnProperty.call(message, "deviceEd25519PublicKey"))
+                    if (!(message.deviceEd25519PublicKey && typeof message.deviceEd25519PublicKey.length === "number" || $util.isString(message.deviceEd25519PublicKey)))
+                        return "deviceEd25519PublicKey: buffer expected";
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    if (!(message.deviceSignature && typeof message.deviceSignature.length === "number" || $util.isString(message.deviceSignature)))
+                        return "deviceSignature: buffer expected";
                 if (message.list != null && Object.hasOwnProperty.call(message, "list")) {
                     properties.op = 1;
                     {
@@ -22116,6 +23906,16 @@ export const dmcn = $root.dmcn = (() => {
                         $util.base64.decode(object.signature, message.signature = $util.newBuffer($util.base64.length(object.signature)), 0);
                     else if (object.signature.length >= 0)
                         message.signature = object.signature;
+                if (object.deviceEd25519PublicKey != null)
+                    if (typeof object.deviceEd25519PublicKey === "string")
+                        $util.base64.decode(object.deviceEd25519PublicKey, message.deviceEd25519PublicKey = $util.newBuffer($util.base64.length(object.deviceEd25519PublicKey)), 0);
+                    else if (object.deviceEd25519PublicKey.length >= 0)
+                        message.deviceEd25519PublicKey = object.deviceEd25519PublicKey;
+                if (object.deviceSignature != null)
+                    if (typeof object.deviceSignature === "string")
+                        $util.base64.decode(object.deviceSignature, message.deviceSignature = $util.newBuffer($util.base64.length(object.deviceSignature)), 0);
+                    else if (object.deviceSignature.length >= 0)
+                        message.deviceSignature = object.deviceSignature;
                 if (object.list != null) {
                     if (!$util.isObject(object.list))
                         throw TypeError(".dmcn.relay.MailboxOp.list: object expected");
@@ -22191,6 +23991,20 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.signature = $util.newBuffer(object.signature);
                     }
+                    if (options.bytes === String)
+                        object.deviceEd25519PublicKey = "";
+                    else {
+                        object.deviceEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.deviceEd25519PublicKey = $util.newBuffer(object.deviceEd25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.deviceSignature = "";
+                    else {
+                        object.deviceSignature = [];
+                        if (options.bytes !== Array)
+                            object.deviceSignature = $util.newBuffer(object.deviceSignature);
+                    }
                 }
                 if (message.nonce != null && Object.hasOwnProperty.call(message, "nonce"))
                     object.nonce = options.bytes === String ? $util.base64.encode(message.nonce, 0, message.nonce.length) : options.bytes === Array ? Array.prototype.slice.call(message.nonce) : message.nonce;
@@ -22236,6 +24050,10 @@ export const dmcn = $root.dmcn = (() => {
                     if (options.oneofs)
                         object.op = "kvStat";
                 }
+                if (message.deviceEd25519PublicKey != null && Object.hasOwnProperty.call(message, "deviceEd25519PublicKey"))
+                    object.deviceEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.deviceEd25519PublicKey, 0, message.deviceEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceEd25519PublicKey) : message.deviceEd25519PublicKey;
+                if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
+                    object.deviceSignature = options.bytes === String ? $util.base64.encode(message.deviceSignature, 0, message.deviceSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceSignature) : message.deviceSignature;
                 return object;
             };
 

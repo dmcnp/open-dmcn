@@ -1,4 +1,5 @@
 import type { ContactRecord } from '../api/contactStore';
+import type { KeyChange } from './lineage';
 
 // Pinned-identity checking: comparing what the directory hands us NOW against what we
 // recorded when we first confirmed this counterparty.
@@ -74,7 +75,7 @@ export interface DirectoryFacts {
 export type PinVerdict =
   | 'unpinned'        // nothing recorded for this counterparty — nothing to compare
   | 'match'           // everything we pinned still holds
-  | 'changed'         // the identity itself differs — danger; blocks a send
+  | 'changed'         // the identity itself differs — danger; warned about, never refused
   | 'record_changed'; // keys hold, but a pinned property changed — warn, don't block
 
 // absentIdentityFacts is what the directory offering NO identity for an address looks like as
@@ -122,7 +123,10 @@ export function changedFacts(pinned: PinnedFacts, observed: PinnedFacts): string
   if (!!pinned.noIdentity !== !!observed.noIdentity) return ['DMCN identity'];
   if (pinned.ed25519Pub && pinned.ed25519Pub !== observed.ed25519Pub) out.push('signing key');
   if (pinned.x25519Pub && pinned.x25519Pub !== observed.x25519Pub) out.push('encryption key');
-  if (pinned.adminKeyCustody !== observed.adminKeyCustody) out.push('admin key custody');
+  // Named the way it reads in a sentence ("their key custody by their provider changed"), because
+  // that is the only place it is ever shown. "admin key custody" is what the DAR bit is called;
+  // it is not what to tell somebody deciding whether to reply.
+  if (pinned.adminKeyCustody !== observed.adminKeyCustody) out.push('key custody by their provider');
   return out;
 }
 
@@ -159,9 +163,61 @@ export function hasPinnedKey(contact: ContactRecord | undefined): boolean {
  * composer and the contact list say the same thing about the same event — a key change means the
  * same thing wherever it surfaces, and three near-miss wordings would read as three different
  * severities.
+ *
+ * WRITTEN FOR THE PERSON READING IT, which took two passes to get right. The first version
+ * explained the protocol — which key signed what, which enrolled device attested it — and that is
+ * the wrong subject. The second still reached for it, offering what an ordinary re-key "looks
+ * like" versus a takeover, which is speculation about a question the sentence cannot answer and
+ * the reader cannot act on.
+ *
+ * What is left is what they need: the key changed, on this date, and here is what to do before
+ * sending anything sensitive. A detail earns its place only by changing that answer — which is why
+ * a key reported STOLEN says more (mail already received is suspect too, which is a second thing
+ * to do) and an ordinary change says less. The mechanism belongs in trust/lineage.ts, where it
+ * decides which of these sentences to show, not in the sentence.
+ *
+ * "Some other way" is spelled out as a phone call, a text, or a shared secret, because "confirm
+ * out of band" is a phrase for people who already know what it means — and the ones who do not are
+ * exactly the ones being asked to act on it.
+ *
+ * `change` is what the directory can prove (trust/lineage.ts), and it moves the sentence rather
+ * than the outcome: a stolen key produces a perfectly signed rotation, so no amount of evidence
+ * decides this for somebody. What it does decide is how alarmed to be, and "they say that key was
+ * stolen" is not the same news as "their key changed".
  */
-export function pinnedKeyWarning(address: string): string {
-  return `${address}'s key has changed since you verified them. That can be a normal rotation — a lost device, or an admin re-provisioning the account — or someone else now holding the address. Confirm with them out of band before sending anything sensitive.`;
+export function pinnedKeyWarning(address: string, change?: KeyChange): string {
+  switch (change?.kind) {
+    case 'reported-stolen':
+      return `${address} reported the key you had verified as stolen, on ${onDate(change.at)}. Mail you already `
+        + `received from them may have come from whoever took it, so treat that as suspect too. ${CHECK_FIRST}`;
+    case 'replaced':
+      return `The key for ${address} changed on ${onDate(change.at)}. ${CHECK_FIRST}`;
+    case 'recovered':
+      // One clause more than 'replaced', and only because it is the one difference that is about
+      // THEM rather than about the protocol: the change was not approved by the key this person
+      // checked. How the recovery arm works, and what it would look like in an impostor's hands,
+      // are facts about the system — true, and not what somebody deciding whether to reply needs.
+      return `The key for ${address} changed on ${onDate(change.at)}, and the change was not approved by the key `
+        + `you verified. ${CHECK_FIRST}`;
+    default:
+      return `The key for ${address} has changed since you verified them, and there is no record of why. ${CHECK_FIRST}`;
+  }
+}
+
+/**
+ * What to do about any of it, in the same words every time.
+ *
+ * One sentence, and it is the only part that asks anything of the reader. The routes are named
+ * because a person told to "verify out of band" has been given a task without a method — and the
+ * method is the whole point: it has to be a channel an attacker holding this address does not
+ * control.
+ */
+const CHECK_FIRST = 'Avoid sending anything sensitive until you have checked with them another way: a phone call, '
+  + 'a text message, or something only the two of you would know.';
+
+/** A date a person can repeat back over the phone, in their own locale. */
+function onDate(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /**
@@ -172,10 +228,12 @@ export function pinnedKeyWarning(address: string): string {
  * Worded as a downgrade rather than an error because it can legitimately be one (they closed
  * the account), and because the thing the reader needs to weigh is what sending now would
  * actually do, not whose fault it is. A fleet that simply withholds one record produces this
- * exact signal, which is why it stops a send instead of warning beside it.
+ * exact signal, which is why it is shown this prominently — and why it is still shown rather than
+ * acted on: whether to send anyway is the sender's call, not the client's.
  */
 export function pinnedIdentityGoneWarning(address: string): string {
-  return `${address} no longer has a DMCN identity, but you have verified one for them before. Sending now would deliver over a bridge as ordinary email — the bridge and every mail server after it could read it. That is expected if they closed the account, and is also what a withheld record looks like.`;
+  return `${address} no longer has a DMCN account, though you verified one before. Mail you send now would go out as `
+    + `ordinary email, which every service that handles it on the way can read. ${CHECK_FIRST}`;
 }
 
 /**
@@ -186,5 +244,6 @@ export function pinnedIdentityGoneWarning(address: string): string {
  */
 export function pinnedRecordWarning(address: string, changed: string[]): string {
   const what = changed.length ? changed.join(' and ') : 'identity record';
-  return `${address}'s ${what} changed since you verified them. Their keys are unchanged, so mail to them is still sealed to the same person — but the change was not something they signed, so confirm it is expected.`;
+  return `${address}'s ${what} changed since you verified them. Their keys are the same, so mail to them can still `
+    + `only be read by them. This was not a change they made, so check that it is expected.`;
 }

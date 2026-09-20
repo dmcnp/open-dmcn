@@ -26,9 +26,19 @@ const (
 	// authoritative RelayHints for an address; the domain authority/sub-authority issues
 	// it (and re-issues it on rebalance) so routing is operator-owned, not owner-signed.
 	RoleRouting = "routing"
+	// RoleDevice marks one enrolled DEVICE of an account. The subject is a per-device
+	// signing key generated on that device and held nowhere else — excluded from the
+	// keystore bundle, the backup export and the pairing clone payload — so possession of
+	// the ACCOUNT key alone never yields one. IssuedAt fixes the enrollment time, which is
+	// what lets a node weigh a device's tenure without holding mailbox state.
+	RoleDevice = "device"
 	// GrantDelegate, in a Credential's Grants, additionally permits issuing credentials
 	// that themselves carry Grants (i.e. creating sub-authorities). Without it a subject
 	// may only issue plain leaves for the roles it was granted.
+	// GrantDevice is the issuance grant for the device role (it aliases the role, like the
+	// others). Device credentials are minted during pairing, so whichever key runs that
+	// ceremony for a domain needs this.
+	GrantDevice   = RoleDevice
 	GrantDelegate = "grant"
 	// GrantRouting / GrantAddress are the issuance grants for the routing/address roles.
 	// A grant string equals the role string it authorises issuing, so these alias the role
@@ -42,7 +52,7 @@ const (
 // credential ever carries every role. "authority"/"sub-authority" are intentionally
 // absent: creating authorities is governed by GrantDelegate (see authorizes), and no
 // credential carries them in its Grants.
-var allGrants = []string{RoleNode, RoleBridge, RoleClient, RoleAddress, RoleRouting, GrantDelegate}
+var allGrants = []string{RoleNode, RoleBridge, RoleClient, RoleAddress, RoleRouting, RoleDevice, GrantDelegate}
 
 // rootGrants returns the implicit grants of the DNS-anchored root (a copy of allGrants).
 func rootGrants() []string { return append([]string{}, allGrants...) }

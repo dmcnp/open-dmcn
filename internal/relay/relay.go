@@ -113,6 +113,7 @@ type Relay struct {
 	draining         atomic.Bool   // drain mode: reject new STORE/assignments, non-candidate in STAT
 	limiter          *RateLimiter
 	peerLimiter      *RateLimiter // pre-auth per-peer throttle: bounds junk-request volume from non-credentialed peers (connections are open)
+	rotationLimiter  *RateLimiter // per-address re-key throttle; see NewRotationLimiter
 
 	// Recipient mail filtering (P5). filterStore yields a recipient's sealed
 	// block/allow list; the relay opens it with its mailbox key (filterPriv/Pub) and
@@ -229,6 +230,7 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 		capacityBytes:    cfg.capacityBytes,
 		limiter:          NewRateLimiter(cfg.rateLimit),
 		peerLimiter:      NewRateLimiter(cfg.rateLimit * 10),
+		rotationLimiter:  NewRotationLimiter(),
 		log:              log,
 		version:          cfg.version,
 		peers:            cfg.peers,
@@ -615,6 +617,8 @@ func (r *Relay) handleStream(s network.Stream) {
 		resp = r.handleGetFleetRoster(req.GetGetFleetRoster())
 	case req.GetGetRemoval() != nil:
 		resp = r.handleGetRemoval(req.GetGetRemoval())
+	case req.GetGetHistory() != nil:
+		resp = r.handleGetHistory(req.GetGetHistory())
 	case req.GetGetBlocklist() != nil:
 		resp = r.handleGetBlocklist(req.GetGetBlocklist())
 	case req.GetPutRecord() != nil:
@@ -1297,6 +1301,7 @@ func (r *Relay) handlePing() *dmcnpb.RelayResponse {
 				Version:         r.version,
 				UptimeSeconds:   int64(uptime.Seconds()),
 				StoredEnvelopes: r.store.Count(),
+				Capabilities:    capabilities(),
 			},
 		},
 	}

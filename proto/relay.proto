@@ -32,6 +32,7 @@ message RelayRequest {
     GetBlocklistRequest get_blocklist = 23;     // resolve a signed CredentialBlockList for a domain
     PutRecordRequest put_record = 24;           // push a self-authenticating record into a fleet node's store (replication)
     GetRelayDescriptorRequest get_relay_descriptor = 25; // resolve a relay's onion descriptor (peer-ID self-anchored)
+    GetHistoryRequest get_history = 27;         // resolve an address's AddressHistoryRecord (rotation history)
   }
 
   // GRAVESTONE: arms 9-18 and 26 were the operator/product ops (stat, set_drain,
@@ -68,6 +69,7 @@ message RelayResponse {
     GetBlocklistResponse get_blocklist = 32;
     PutRecordResponse put_record = 33;
     GetRelayDescriptorResponse get_relay_descriptor = 34;
+    GetHistoryResponse get_history = 37;
     // --- Personal storage responses. ---
     MailboxKvPutResponse mailbox_kv_put = 18;
     MailboxKvGetResponse mailbox_kv_get = 19;
@@ -142,10 +144,26 @@ message FetchChallenge {
 }
 
 // FetchProof provides the signed challenge nonce to authenticate the recipient.
+//
+// `signature` proves possession of the ACCOUNT key — who the mailbox belongs to. Where the
+// mailbox has enrolled devices, that alone is deliberately no longer enough: the proof must ALSO
+// carry a signature from one of those devices. The two answer different questions and neither
+// substitutes for the other. The account key says this is the owner's mailbox; the device key
+// says the request comes from somewhere the owner has approved. Requiring both is what makes a
+// key copied out of a backup export useless on its own, since device keys are generated on their
+// device and never travel in one.
+//
+// A mailbox that has enrolled NO devices is answered on the account signature alone, which is
+// how an account that predates the registry keeps working until it enrols for the first time.
 message FetchProof {
   string address = 1;
   bytes nonce = 2;
-  bytes signature = 3;   // Ed25519 signature over nonce
+  bytes signature = 3;   // Ed25519 by the ACCOUNT key over nonce
+  // device_ed25519_public_key names the enrolled device making this request, and
+  // device_signature is that device's own Ed25519 over the same nonce. Both empty is valid only
+  // while the mailbox has no enrolled devices.
+  bytes device_ed25519_public_key = 4;
+  bytes device_signature = 5;
 }
 
 // FetchResponse returns pending envelopes for the authenticated recipient.
@@ -172,6 +190,19 @@ message PingResponse {
   string version = 1;
   int64 uptime_seconds = 2;
   uint32 stored_envelopes = 3;
+  // capabilities names the optional protocol features this build actually implements, so a
+  // caller can learn what a fleet will accept BEFORE doing something it cannot undo.
+  //
+  // It exists because the schema and the code that honours it deploy separately. Adding a field
+  // covered by a signature is safe only in a fixed order — ship the readers, then the producers
+  // — and `version` cannot answer "have the readers landed": it is a build string whose meaning
+  // a caller would have to parse and guess at. A capability token is the build telling you what
+  // it does.
+  //
+  // Tokens are lowercase, hyphenated and additive; an unknown token is ignored, and an absent
+  // one means "assume unsupported". Ping is unsigned diagnostic metadata that nothing verifies
+  // by re-marshaling, so this field carries no ordering hazard of its own.
+  repeated string capabilities = 4;
 }
 
 // --- Fleet resolution ops ---
@@ -227,6 +258,17 @@ message GetBlocklistResponse {
   bytes record = 2;   // marshaled dmcn.identity.CredentialBlockList
 }
 
+// GetHistoryRequest resolves the AddressHistoryRecord (complete rotation history) for an address.
+// Public and unauthenticated like the other resolve ops: the record is self-authenticating through
+// the signatures on its own entries, so serving it discloses nothing a resolver could not verify.
+message GetHistoryRequest {
+  string address = 1;
+}
+message GetHistoryResponse {
+  bool found = 1;
+  bytes record = 2;   // marshaled dmcn.identity.AddressHistoryRecord
+}
+
 // RecordKind identifies which self-authenticating record a PutRecord carries.
 enum RecordKind {
   RECORD_KIND_UNSPECIFIED = 0;
@@ -235,6 +277,7 @@ enum RecordKind {
   RECORD_KIND_ROSTER = 3;     // dmcn.identity.FleetRoster
   RECORD_KIND_REMOVAL = 4;    // dmcn.identity.AddressRemovalRecord
   RECORD_KIND_BLOCKLIST = 5;  // dmcn.identity.CredentialBlockList
+  RECORD_KIND_HISTORY = 6;    // dmcn.identity.AddressHistoryRecord
 }
 
 // PutRecordRequest pushes one self-authenticating record into the recipient node's RecordStore —
@@ -310,7 +353,15 @@ message MailboxBody {
 // signature prove the caller controls the recipient identity, exactly like FETCH.
 message MailboxOp {
   bytes nonce = 1;          // echoed challenge nonce
-  bytes signature = 2;      // Ed25519 over nonce
+  bytes signature = 2;      // Ed25519 by the ACCOUNT key over nonce
+  // device_ed25519_public_key / device_signature carry the enrolled DEVICE's proof over the same
+  // nonce. Where the mailbox has enrolled devices, both are required alongside the account
+  // signature: the account key says whose mailbox this is, the device key says the request comes
+  // from somewhere the owner approved, and a key copied out of a backup export can only answer
+  // the first. Both empty is valid only while the mailbox has no enrolled devices. See
+  // FetchProof, which carries the same pair for the transient path.
+  bytes device_ed25519_public_key = 14;
+  bytes device_signature = 15;
   oneof op {
     MailboxListOp list = 3;
     MailboxBodyOp body = 4;

@@ -69,13 +69,20 @@ hosting permits, provisioning, entitlements, relay-assisted client conveniences)
      FETCH against it. This may be signed **either by a domain root key, or by the address's
      own key** — the holder of an address may always stop being reachable at it, without
      the operator.
-  2. **Re-binding.** Allowing a *different* key to take the address over MUST require a
-     **root-signed** record. An owner-signed retirement MUST NOT authorise a re-bind.
+  2. **Re-binding.** Allowing a *different* key to take the address over MUST be authorised by
+     one of exactly two things, and an owner-signed retirement is neither:
 
-  The reason for (2) is the recoverability of a stolen key: an attacker who holds the key can
-  read mail, but cannot take the address permanently, because re-binding needs the offline
-  root. If a key could authorise its own replacement, key compromise would stop being
-  recoverable and become a permanent takeover.
+     - a **root-signed** removal tombstoning the incumbent key, which frees the address for
+       any key — the operator override; or
+     - an **owner rotation** (below), which proves continuity of control without the operator.
+
+  The rule this replaces required the root in every case, and the reason was the recoverability
+  of a stolen key: an attacker holding it could read mail but not take the address permanently.
+  Allowing rotation is a deliberate trade of that property for one users need more — the ability
+  to re-key without an operator, and without losing an address when a device is lost. What it
+  costs is stated plainly in the rotation section: key compromise stops being operator-recoverable
+  and becomes a race. Domains that want the older property leave rotation disabled, which is the
+  default.
 
   A removal record is **bound to the address it names** — `Removed()` matches on the key
   alone, so a retirement at one address MUST NOT suppress another address the same key holds.
@@ -87,6 +94,49 @@ hosting permits, provisioning, entitlements, relay-assisted client conveniences)
   owner-signed record MUST NOT displace a root-signed one, or a stolen key could overwrite the
   operator's tombstone and block the recovery rule (2) exists to preserve. The append-only
   rule (the binding set may only grow) and revision monotonicity apply across both.
+
+- **Owner rotation — `RotationEntry` and the rotation chain.** An address re-keys itself by
+  publishing a record whose `rotation_chain` ends in a transition from the key being displaced to
+  the key taking over. Each entry carries **three** signatures, and a verifier MUST check all of
+  them: the outgoing key's consent, the incoming key's acceptance, and an enrolled **device**'s
+  attestation. They nest — the device signs the transition, consent covers that attestation, and
+  acceptance covers consent — so no signature can be lifted from one transition onto another.
+
+  An implementation MUST refuse a chain whose entries do not link (`retired` keys matching the
+  preceding `next` keys, `prev_signature_hash` matching the preceding signature), whose times or
+  revisions do not advance, or whose terminal entry names keys other than the ones the record
+  itself publishes. The last of these is what stops a genuine chain being carried by a record it
+  never belonged to.
+
+  **Device attestation and tenure.** The device credential names when that device was enrolled,
+  and a domain MAY require a minimum tenure before a device can authorise a rotation. This is the
+  substance of the trade above: a stolen account key alone attests nothing, because device keys
+  are generated on their device and never travel.
+
+  **Precedence.** A root-signed tombstone covering the incumbent key is evaluated FIRST and a
+  chain does not displace it — otherwise an offboarded key could argue its way back. A key the
+  root has tombstoned MUST NOT be rotated *into*.
+
+  **Honest limits.** The chain proves CONTINUITY, not origin: it says each key handed the address
+  to the next, and says nothing about whether the first key was ever really this person. That
+  needs an observer who saw it.
+
+- **The history record — `AddressHistoryRecord`.** The chain carried on an identity record is
+  capped, because it is re-marshalled on every republish. The complete history is served beside it,
+  keyed on `SHA-256(address)` like the removal record, and a reader whose pinned key falls outside
+  the retained window resolves it rather than giving up.
+
+  It carries **no signature of its own** and needs none: every entry is already signed by the keys
+  it names, so extending the history takes keys the extender must genuinely hold. An implementation
+  MUST refuse a history that does not begin at the address's first rotation, and MUST refuse one
+  that does not strictly extend what it already holds — histories only grow, so nothing already
+  recorded can be quietly rewritten. Truncation on the record is deliberately VISIBLE: the oldest
+  retained entry names a predecessor that is absent, which a reader tells apart from a genuine
+  genesis.
+
+  Together these make a key change publicly evidence-producing rather than evidence only to
+  whoever already held a pin. They do **not** establish that every reader was shown the same
+  history, which only cross-observer consistency — a gossiped log — can do.
 
 - **Verification tiers:** addresses register at `TierUnverified` (valid but untrusted) and
   are raised to `TierDomainDNS` by a domain attestation. Verification is enforced
@@ -129,6 +179,15 @@ message with its signature field cleared; `ctx` is a per-type NUL-terminated
 domain-separation tag (e.g. `dmcn-identity-self-v1\0`, `dmcn-dar-self-v1\0`,
 `dmcn-credential-v1\0`). One deliberate exception: the whole-message `SignedMessage`
 signature is computed over the canonical plaintext with no context tag.
+
+A `RotationEntry` carries three signatures over three NESTED extents, each with its own tag:
+`dmcn-identity-rotation-device-v1\0` over the transition alone,
+`dmcn-identity-rotation-v1\0` over that plus the device attestation, and
+`dmcn-identity-rotation-accept-v1\0` over that plus the consent. Separate tags are what stop an
+acceptance verifying as a consent — a key that merely received an address must never appear to
+have handed it on. The device-registry signatures (`dmcn-device-approve-v1\0`,
+`dmcn-device-retire-v1\0`) follow the same rule and additionally bind the live challenge nonce,
+so an approval cannot be made in advance and spent later.
 
 ## 3. The message model (client-side, three layers)
 

@@ -5,6 +5,7 @@ import { useMessages } from '../lib/hooks/useMessages';
 import { useSent } from '../lib/hooks/useSent';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
+import { DeviceEnroller } from './DeviceEnroller';
 import { PushRegistrar } from './PushRegistrar';
 import { NotificationOffer } from './NotificationOffer';
 import { setDraftOpen } from '../lib/draftOpen';
@@ -208,6 +209,7 @@ export function AppLayout() {
       {/* Renders nothing: it keeps this device's push registration in step with the browser's
           subscription, and refreshes the inbox when a wake-up arrives while a window is open. */}
       {address && keys && <PushRegistrar address={address} keys={keys} onNewMail={refresh} />}
+      {address && keys && <DeviceEnroller address={address} keys={keys} />}
 
       {/* And the one prompt in the app: an account that has never answered whether it wants
           notifications is asked, once, on the mail section it just unlocked into. Not over the

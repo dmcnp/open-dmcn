@@ -7,6 +7,7 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
 import { lookupIdentity, sendMessage, ApiError } from '../lib/api/client';
 import { absentIdentityFacts, checkPin, changedFacts, contactFacts, directoryFacts, pinnedIdentityGoneWarning, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
+import { loadKeyChange, type KeyChange } from '../lib/trust/lineage';
 import { encryptSplit, type SplitEnvelope, type AttachmentInput } from '../lib/crypto/split';
 import { encodeSplitEnvelope } from '../lib/crypto/protobuf';
 import { signWithKey } from '../lib/crypto/sign';
@@ -179,6 +180,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   // computed during the lookup would silently miss a changed key whenever the lookup won the race
   // against contacts loading.
   const [recipientKeys, setRecipientKeys] = useState<Record<string, PinnedFacts>>({});
+  // What the directory can prove about a changed key, per recipient (trust/lineage.ts).
+  const [keyChanges, setKeyChanges] = useState<Record<string, KeyChange>>({});
 
   // inspectRecipient resolves a recipient once: records whether it's a DMCN identity
   // or a legacy (non-DMCN) address, and turns on onion delivery when the record or its
@@ -529,13 +532,11 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           // No DMCN record for a well-formed email ⇒ a LEGACY recipient, reachable only if this
           // deployment has a way (see lib/deployment.ts sendToLegacy).
           if (e instanceof ApiError && e.status === 404 && rcpt.includes('@') && deployment.sendToLegacy) {
-            // Unless we had verified a DMCN identity for them. Falling back to a bridge would
-            // silently downgrade that correspondence to ordinary email, readable by the bridge
-            // and every hop after it — and a fleet withholding one record produces exactly this.
-            // Same refusal as a changed key, for the same reason: it is unrecoverable once sent.
-            if (checkPin(contactByAddress(rcpt), absentIdentityFacts()) === 'changed') {
-              throw new Error(pinnedIdentityGoneWarning(rcpt) + ' Confirm it in the warning above if that is expected.', { cause: e });
-            }
+            // A recipient we had verified as a DMCN identity who now resolves to nothing is a
+            // downgrade: the message leaves as ordinary email, readable by the bridge and every
+            // service after it, and a fleet withholding one record produces exactly this signal.
+            // Disclosed in the composer (pinnedIdentityGoneWarning) and NOT refused here — see
+            // the note on the changed-key case below.
             await deployment.sendToLegacy({
               recipient: rcpt,
               senderAddress: selfAddress,
@@ -551,17 +552,17 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           }
           throw e;
         }
-        // Refuse rather than warn: the harm here is sealing a message to a key the recipient does
-        // not hold, which is unrecoverable once sent. A pinned mismatch means either they rotated
-        // (harmless, and re-verifying clears it) or someone else now holds the address — and we
-        // cannot tell which from here, so the safe default is to stop.
-        const observedFacts = directoryFacts(recipient);
-        if (checkPin(contactByAddress(rcpt), observedFacts) === 'changed') {
-          throw new Error(
-            (observedFacts.noIdentity ? pinnedIdentityGoneWarning(rcpt) : pinnedKeyWarning(rcpt)) +
-            ' Confirm it in the warning above if that is expected.',
-          );
-        }
+        // A changed key is DISCLOSED, never refused. This used to throw, on the reasoning that
+        // sealing a message to a key the recipient may not hold is unrecoverable once sent — true,
+        // and still the reason the banner is red and names every affected address. What it is not
+        // is ours to decide. The same principle that made a rotation stop being applied silently
+        // (whitepaper §14.1.2, amended) says the person who pinned the key chooses what to do
+        // about it; refusing on their behalf tells them their judgement is not wanted, and teaches
+        // them that the warning is an obstacle rather than information.
+        //
+        // So the composer's job is to make the risk and the safe order impossible to miss before
+        // Send is pressed, which is what the banner above the footer does, per recipient, with the
+        // evidence the directory could actually prove.
         const recipientX25519 = fromBase64(recipient.x25519_pub);
 
         // Recipient copy: CEK wrapped only for them, STORE'd to their relay
@@ -619,21 +620,45 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   // Whether any recipient resolved as a DMCN identity — the encryption banner only
   // makes sense (and is only accurate) when there's someone it can be encrypted to.
   const hasDmcn = [...to, ...cc, ...bcc].some(a => recipientInfo[a.trim().toLowerCase()] === 'dmcn');
-  // Recipients whose key no longer matches the one we pinned. Sending to them is BLOCKED in
-  // handleSend, so this banner is the explanation for a send that is about to be refused, not a
-  // soft advisory — hence naming the addresses rather than a generic "some recipients".
+  // Recipients whose key no longer matches the one we pinned. Nothing is refused over this — the
+  // decision belongs to the person who took the pin — so this banner IS the protection rather than
+  // an explanation for a refusal, which is why it names every affected address instead of saying
+  // "some recipients" and why it sits directly above Send.
   const changedKeyRecipients = [...to, ...cc, ...bcc]
     .map(a => a.trim())
     .filter(a => a && checkPin(contactByAddress(a), recipientKeys[a.toLowerCase()]) === 'changed');
-  // Of those, the ones whose identity DISAPPEARED rather than changed keys. Same block, but a
-  // different thing to tell the reader: nothing was swapped, the mail would simply leave the
-  // network in the clear.
+  // Of those, the ones whose identity DISAPPEARED rather than changed keys. A different thing to
+  // tell the reader: nothing was swapped, the mail would simply leave the network in the clear.
   const goneRecipients = changedKeyRecipients.filter(a => recipientKeys[a.toLowerCase()]?.noIdentity);
   const keySwapRecipients = changedKeyRecipients.filter(a => !recipientKeys[a.toLowerCase()]?.noIdentity);
+  // What the directory can PROVE about each of those changes. It decides nothing — that stays with
+  // the person who pinned the key — but "they reported this key stolen" and "their old key
+  // approved the change" are different news, and showing the generic sentence for both wastes the
+  // one moment a takeover is visible to this user.
+  const swapKey = keySwapRecipients.join(',').toLowerCase();
+  useEffect(() => {
+    let live = true;
+    for (const addr of keySwapRecipients) {
+      const key = addr.toLowerCase();
+      if (keyChanges[key]) continue;
+      const pinned = contactFacts(contactByAddress(addr))?.ed25519Pub;
+      if (!pinned) continue;
+      void loadKeyChange(addr, pinned).then(change => {
+        if (live) setKeyChanges(m => (m[key] ? m : { ...m, [key]: change }));
+      });
+    }
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on WHICH recipients changed; the map itself is written here and would loop
+  }, [swapKey]);
 
   // confirmChange records the state the directory is showing NOW as the verified one, which is
-  // what unblocks this recipient — permanently, until it changes again. It re-pins rather than
+  // what clears the warning for this recipient — until it changes again. It re-pins rather than
   // clearing: the point of confirming is to move the pin forward, not to stop watching.
+  // The evidence sentence for one recipient, or the generic one while it is still loading. A
+  // missing explanation reads as "nothing signed explains this", which is the honest default: it
+  // is also exactly what a withheld record looks like.
+  const changeFor = (addr: string) => keyChanges[addr.toLowerCase()];
+
   const confirmChange = async (addr: string) => {
     const observed = recipientKeys[addr.toLowerCase()];
     if (!observed) return;
@@ -655,8 +680,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           }),
     });
   };
-  // Recipients whose KEYS still match but whose pinned properties moved. Not a send blocker: no
-  // message is mis-sealed by it, so refusing would be the wrong trade. Still shown, because
+  // Recipients whose KEYS still match but whose pinned properties moved. A quieter warning than
+  // the one above, because no message is mis-sealed by it. Still shown, because
   // adminKeyCustody flipping on is a domain asserting that an admin now holds this account's
   // keys — an operator-side change no key comparison can see.
   const changedRecordRecipients = [...to, ...cc, ...bcc]
@@ -833,22 +858,25 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       )}
 
       {/* Changed-key warning. Ranked ABOVE the legacy and encryption banners because it is the
-          only one that blocks sending, and because "end-to-end encrypted" sitting alone under a
-          swapped key would be technically true and dangerously misleading. */}
+          most serious thing on the screen, and because "end-to-end encrypted" sitting alone under
+          a swapped key would be technically true and dangerously misleading. */}
       {changedKeyRecipients.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--danger-subtle)', color: 'var(--text-body)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
             <Icon name="alert-triangle" size={15} style={{ color: 'var(--danger)', flex: 'none', marginTop: 2 }} />
             <span>
-              {keySwapRecipients.length > 0 && (
-                <>The signing key for {keySwapRecipients.join(', ')} has changed since you verified them.{' '}</>
-              )}
-              {goneRecipients.length > 0 && (
-                <>{goneRecipients.join(', ')} no longer {goneRecipients.length === 1 ? 'has' : 'have'} a DMCN
-                  identity, so mail would leave over a bridge as ordinary email.{' '}</>
-              )}
-              Sending is blocked until you confirm out of band. Confirming records what the directory
-              shows now, and applies until it changes again.
+              {keySwapRecipients.map(a => (
+                <span key={a}>{pinnedKeyWarning(a, changeFor(a))}{' '}</span>
+              ))}
+              {goneRecipients.map(a => (
+                <span key={a}>{pinnedIdentityGoneWarning(a)}{' '}</span>
+              ))}
+              {/* The sentences above carry the risk and the safe order. This adds the two things
+                  they cannot know: that nothing here stops the send, and what pressing Confirm
+                  does. Saying "you can still send" out loud matters — a warning that reads like a
+                  refusal gets treated as an obstacle to get past, and then it stops being read. */}
+              You can still send. Confirm once you have checked with them, and the warning clears
+              until something changes again.
             </span>
           </div>
           {/* One control per recipient: a compose to four people should not make you re-verify

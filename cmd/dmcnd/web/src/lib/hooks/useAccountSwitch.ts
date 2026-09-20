@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import { useKeys } from './useKeys';
-import { loginWithKeys, logoutToken } from '../api/client';
+import { loginWithKeys, logoutToken, AccountRekeyedError } from '../api/client';
 import { unlockKeystore, PasswordRequiredError } from '../crypto/reauth';
 import { DevicePasswordRequiredError, attachedAddresses, loadDeviceKeystore, unlockDevice } from '../crypto/deviceKeystore';
 import type { AuthMethod } from '../crypto/localKeystore';
@@ -83,6 +83,12 @@ function unlockErrorMessage(e: unknown): string {
   if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError')) {
     return 'Unlock cancelled.';
   }
+  // The key opened fine — it is simply no longer the account's. Trying again cannot help, and
+  // the message has to say what does, or this reads as an unlock that keeps failing.
+  if (e instanceof AccountRekeyedError) {
+    return `${e.address} got a new key on another device, so this one can no longer sign in to it. `
+      + 'Pair this device again to catch up. The mail already here stays readable.';
+  }
   return e instanceof Error ? e.message : 'Unlock failed';
 }
 
@@ -160,7 +166,7 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
       // Mint the incoming session BEFORE anything is persisted or adopted: the login
       // endpoints skip session renewal, so the outgoing bearer still installed here is
       // inert, and a failure leaves the outgoing account untouched and still signed in.
-      const token = await loginWithKeys(account.address, wk.ed25519Sign);
+      const token = await loginWithKeys(account.address, wk.ed25519Sign, wk.ed25519Public);
 
       try {
         await persistWorkingKeys(wk);
@@ -231,7 +237,7 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
       }
       const target = await chooseTarget(unlocked, o?.prefer);
       // Mint the incoming session before adopting anything, for the same reason switchTo does.
-      const token = await loginWithKeys(target.address, target.ed25519Sign);
+      const token = await loginWithKeys(target.address, target.ed25519Sign, target.ed25519Public);
       adoptKeys(target);
       setSession(target.address, token);
       setNeedsDevicePassword(false);

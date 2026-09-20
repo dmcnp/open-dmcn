@@ -118,6 +118,19 @@ message IdentityRecord {
   // fields 24/25: issued and re-issued without the owner's key. Same-revision anti-rollback
   // tiebreak: the newest issued_at across routing_credential AND operator_credentials wins.
   repeated Credential operator_credentials = 28;
+
+  // rotation_chain: this record's OWN transparency log — one RotationEntry per owner-authorized
+  // key transition, oldest first. Covered by the owner self-signature, so the current key commits
+  // to exactly the history it presents. Capped and truncated from the front; the complete history
+  // lives in the address's AddressHistoryRecord, which a reader resolves when its pinned key falls
+  // outside the retained window. Empty on a record that has never rotated. See SPEC.md §1.
+  repeated RotationEntry rotation_chain = 29;
+
+  // recovery_ed25519_public_key: an owner-held key, kept structurally apart from the active one,
+  // that may sign the NEXT rotation entry in place of the key being retired — so losing the active
+  // key stops being terminal. Covered by the owner self-signature. 32 bytes, or empty when the
+  // owner has enrolled none.
+  bytes recovery_ed25519_public_key = 30;
 }
 
 // AuthorityKey is one entry in a domain root authority's key timeline.
@@ -177,6 +190,26 @@ message DomainAuthorityRecord {
   // fail-closed on mismatch, so the authorized fleet is cryptographically confirmed by the
   // domain's own root key, not merely DNS-asserted. Covered by the DAR self-signature.
   string fleet_domain = 14;
+  // rotation_min_device_age_days: how long a device credential must have been enrolled before it
+  // may authorize a self-serve key rotation on this domain. 0 means "use the protocol default", so
+  // a domain that enables rotation and leaves this alone still gets a minimum. Domain-level rather
+  // than per-node on purpose: nodes that disagreed about admissibility would split-brain record
+  // admission. Read only when policy_flags sets POLICY_ALLOW_KEY_ROTATION. Covered by the DAR
+  // self-signature.
+  uint32 rotation_min_device_age_days = 15;
+  // device_recovery_delay_hours: how long an unapproved device must wait before it can act on a
+  // mailbox it joined through recovery — the path an owner takes when every device they had is
+  // gone and nobody is left to approve a new one.
+  //
+  // Zero means the protocol default. A domain that wants NO recovery path sets
+  // DEVICE_RECOVERY_DISABLED, which is an explicit choice with an explicit cost: on that domain,
+  // losing every enrolled device is permanent short of an operator ceremony.
+  //
+  // The tradeoff is worth stating in both directions. A recovery path means a stolen account key
+  // can eventually take the mailbox, after the delay and if nobody vetoes. No recovery path means
+  // an ordinary user who loses a phone loses their mail. The delay and the visibility of a
+  // pending device are what make the first survivable; nothing makes the second.
+  uint32 device_recovery_delay_hours = 16;
 }
 
 // FleetNode is one node/relay in a fleet roster: its peer ID, where to dial it, and
@@ -300,6 +333,79 @@ message AddressRemovalRecord {
   uint64 revision = 5;           // monotonic; bumped on every republish
   int64 created_at = 6;          // Unix seconds; selects the root key that signed it
   bytes self_signature = 7;      // 64 bytes Ed25519 by the root key over fields 1-6
+}
+
+// RotationEntry is one link in an address's rotation chain: a single owner-authorized transition
+// from one account keypair to the next.
+//
+// It carries TWO signatures, and needs both:
+//   - signature      is by the key being RETIRED (or by that record's recovery key) and proves the
+//     outgoing holder consented to hand the address over;
+//   - next_signature is by the key TAKING OVER and proves the incoming key accepted it.
+// With only the first, an entry could be minted pointing a lineage at a key that never agreed.
+// Inside an IdentityRecord the owner self-signature would close that, but entries are also read
+// DETACHED — from AddressHistoryRecord and over the directory API — so both travel with the entry.
+//
+// prev_signature_hash chains each entry to its predecessor, which makes front-truncation VISIBLE:
+// the first retained entry names a predecessor that is absent, and a reader tells that apart from
+// a genuine genesis. See SPEC.md §1.
+message RotationEntry {
+  uint32 version = 1;                     // 1
+  string address = 2;                     // binds this transition to ONE address
+  bytes retired_ed25519_public_key = 3;   // 32 bytes — the outgoing signing key
+  bytes retired_x25519_public_key = 4;    // 32 bytes — the mailbox key being vacated
+  bytes next_ed25519_public_key = 5;      // 32 bytes — the incoming signing key
+  bytes next_x25519_public_key = 6;       // 32 bytes — the incoming mailbox key
+  int64 rotated_at = 7;                   // Unix seconds
+  uint64 next_revision = 8;               // the IdentityRecord revision this transition mints
+  // prev_signature_hash: SHA-256 of the preceding entry's `signature`. 32 bytes, or empty when
+  // this entry IS the genesis transition (the address's first rotation).
+  bytes prev_signature_hash = 9;
+  // authorizing_ed25519_public_key: the key that produced `signature` — normally equal to
+  // retired_ed25519_public_key, or the owner's recovery key when the active key was unavailable.
+  // Named explicitly so an entry read DETACHED stays verifiable: a reader walking history holds no
+  // prior record and could not otherwise learn which recovery key was enrolled at the time. That a
+  // recovery key was genuinely the enrolled one is settled at admission, where the relay does hold
+  // the record being displaced. 32 bytes.
+  bytes authorizing_ed25519_public_key = 10;
+  // device_credential: the leaf Credential (role "device") of the enrolled device that authorized
+  // this rotation. Its issued_at fixes the device's enrollment time, so any node can weigh it
+  // against the domain's rotation_min_device_age_days while holding no mailbox state of its own.
+  Credential device_credential = 11;
+  // device_signature: 64 bytes by device_credential.subject over fields 1-11.
+  //
+  // The credential alone would prove nothing here. It is public once any entry carrying it is
+  // published, so an attacker holding the ACCOUNT key could lift one from an earlier transition
+  // and attach it to their own. Requiring the device's own signature over THIS transition is
+  // what makes a stolen account key insufficient: device keys are generated on their device and
+  // held nowhere else, so they are absent from the backup export and the pairing payload a
+  // thief would have.
+  bytes device_signature = 12;
+  // The three signatures NEST, each covering the ones before it, so none can be lifted from one
+  // transition and pasted onto another: the device binds itself to the transition, the outgoing
+  // key consents to a transition already carrying that device attestation, and the incoming key
+  // accepts the whole thing.
+  bytes signature = 13;                   // 64 bytes by authorizing_ed25519_public_key over fields 1-12
+  bytes next_signature = 14;              // 64 bytes by next_ed25519_public_key over fields 1-13
+}
+
+// AddressHistoryRecord is the complete, append-only rotation history for one address — the
+// per-account transparency log, served by the domain's fleet like any other record here. The
+// IdentityRecord carries a capped window of this same chain for the hot path; this record holds
+// all of it, so a key change stays publicly auditable however many rotations follow it.
+//
+// It carries NO signature of its own, and needs none: every entry is already dual-signed by the
+// account keys it names, so integrity comes from the entries and admission is the chain walk —
+// extending the history takes keys the extender must genuinely hold. Address-keying bounds
+// storage, exactly as it does for AddressRemovalRecord.
+//
+// A stored record may be replaced only by one whose chain is a strict EXTENSION of it, and whose
+// terminal entry agrees with the address's current IdentityRecord. See SPEC.md §1.
+message AddressHistoryRecord {
+  uint32 version = 1;
+  string domain = 2;
+  string address = 3;
+  repeated RotationEntry chain = 4;  // oldest first, complete from the address's first rotation
 }
 
 // CompromisedKey marks a domain countersigning key (root or sub-authority) as

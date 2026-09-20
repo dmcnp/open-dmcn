@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"strings"
 	"time"
 
@@ -25,6 +26,13 @@ func storageFailure(reason string) bool { return strings.HasPrefix(reason, stora
 // it to repair a lagging peer (push the tombstone, then retry) — PutRecordResponse carries only
 // {accepted, reason} and adding a code field would be a core schema change.
 const ReasonRebindNeedsRemoval = "rebind: root-signed removal required"
+
+// ReasonRebindChainRejected prefixes every rejection of a record that asked to re-bind on its own
+// rotation chain. Kept distinct from ReasonRebindNeedsRemoval because the two have different
+// repairs: a missing tombstone is something the publisher can push, while a chain that does not
+// verify, a domain that has not opted in, or a device too newly enrolled are all answers that
+// retrying cannot change.
+const ReasonRebindChainRejected = "rebind: rotation chain rejected"
 
 // ReasonDARNotAnchored prefixes the rejection of a domain's FIRST DAR (the genesis write, which has
 // no prior root to chain to) whose fingerprint is not published in _dmcn.<domain>. Publishers match
@@ -51,6 +59,8 @@ func (r *Relay) AcceptRecord(ctx context.Context, kind dmcnpb.RecordKind, data [
 		return r.acceptDAR(ctx, data)
 	case dmcnpb.RecordKind_RECORD_KIND_REMOVAL:
 		return r.acceptRemoval(ctx, data)
+	case dmcnpb.RecordKind_RECORD_KIND_HISTORY:
+		return r.acceptHistory(ctx, data)
 	case dmcnpb.RecordKind_RECORD_KIND_BLOCKLIST:
 		return r.acceptBlocklist(ctx, data)
 	case dmcnpb.RecordKind_RECORD_KIND_ROSTER:
@@ -113,17 +123,32 @@ func (r *Relay) checkKeyContinuity(ctx context.Context, rec *identity.IdentityRe
 	if dar != nil {
 		rm = r.storedRemoval(ctx, dar, rec.Address)
 	}
-	arm, err := identity.AuthorizeRebind(prev, rec, rm, dar)
+	arm, err := identity.AuthorizeRebind(prev, rec, rm, dar, time.Now())
 	switch {
 	case err == nil:
-		if arm == identity.RebindRootTombstone {
+		switch arm {
+		case identity.RebindRootTombstone:
 			r.log.Infof("address %s re-bound to a new key under a root-signed tombstone", rec.Address)
+		case identity.RebindOwnerRotation:
+			// Counted only on the arm that actually re-keys, so a republish of the SAME record
+			// takes the same-key arm and spends nothing.
+			if r.rotationLimiter != nil && !r.rotationLimiter.Allow(strings.ToLower(rec.Address)) {
+				return fmt.Sprintf("%s has been re-keyed too many times today — try again later", rec.Address), false
+			}
+			r.log.Infof("address %s re-keyed by its owner (revision %d, %d transitions on record)",
+				rec.Address, rec.Revision, len(rec.RotationChain))
 		}
 		return "", true
 	case errors.Is(err, identity.ErrRebindUnverifiable):
 		r.log.Warnf("accepting a key change for %s without a domain authority record", rec.Address)
 		return "", true
 	default:
+		// Route the rejection by what the record was ASKING for. A publisher repairs a
+		// ReasonRebindNeedsRemoval by pushing the tombstone this peer is missing and retrying;
+		// a record that came in on its own rotation chain has no such repair.
+		if len(rec.RotationChain) > 0 {
+			return ReasonRebindChainRejected + ": " + err.Error(), false
+		}
 		return ReasonRebindNeedsRemoval + ": " + err.Error(), false
 	}
 }
@@ -343,4 +368,90 @@ func (r *Relay) acceptRoster(ctx context.Context, data []byte) (bool, string) {
 		return false, storageFailedPrefix + "store roster"
 	}
 	return true, ""
+}
+
+// acceptHistory admits an address's complete rotation history.
+//
+// The record carries no signature of its own and needs none: every entry is signed by the key it
+// retires and by the key taking over, so extending the history takes keys the extender must
+// genuinely hold. Admission is therefore the chain walk plus two rules about how it may change.
+//
+// Deliberately no grant gate, for the same reason acceptRemoval has none: the entries' signatures
+// are stronger admission control than any fleet grant. What bounds STORAGE is different, and the
+// "idempotently keyed by address" argument only ever covered half of it: one address cannot grow
+// without limit, but nothing stopped a pusher inventing addresses. Requiring an identity record
+// this node already holds is what closes that — and, because it is checked before the chain walk,
+// it bounds the verification work a rejected record can cost as well.
+func (r *Relay) acceptHistory(ctx context.Context, data []byte) (bool, string) {
+	var pb dmcnpb.AddressHistoryRecord
+	if err := proto.Unmarshal(data, &pb); err != nil {
+		return false, "malformed history record"
+	}
+	rec, err := identity.AddressHistoryRecordFromProto(&pb)
+	if err != nil {
+		return false, "malformed history record: " + err.Error()
+	}
+	if rec.Address == "" || rec.Domain == "" {
+		return false, "history record names no address"
+	}
+	// This daemon serves the domains it holds authority records for, which is the same test
+	// acceptRemoval applies. (The product fork asks its fleet-permit set instead — a posture this
+	// single-operator core has no concept of.)
+	if dar, _ := r.records.GetDAR(ctx, rec.Domain); dar == nil {
+		return false, "no domain authority held for " + rec.Domain + " — this node does not serve it"
+	}
+
+	// The address has to be one this node already knows, and that is checked FIRST — before the
+	// chain walk, which is the expensive part. A history is an explanation of how a record came to
+	// hold the keys it holds; without the record there is nothing being explained, and a pusher
+	// could otherwise hand out verification work and storage for addresses it invented.
+	live, _ := r.records.GetIdentity(ctx, rec.Address)
+	if live == nil {
+		return false, "no identity record for " + rec.Address + " — publish the record before its history"
+	}
+	if err := rec.Verify(); err != nil {
+		return false, "history record does not verify: " + err.Error()
+	}
+
+	// APPEND-ONLY. A history may only grow, so nothing already written can be quietly rewritten
+	// by a later publish — which is the whole of what makes this record worth reading. An equal
+	// chain is not an extension, so a re-publish of unchanged history is accepted as a no-op
+	// rather than rejected: fan-out repeats, and a peer catching up must not look like an attack.
+	prior, _ := r.records.GetHistory(ctx, rec.Address)
+	if prior != nil && len(prior.Chain) > 0 {
+		if chainsEqual(prior.Chain, rec.Chain) {
+			return true, ""
+		}
+		if !rec.Extends(prior) {
+			return false, "history record does not extend the one already held (histories only grow)"
+		}
+	}
+
+	// And it must describe the address as this node knows it. A history whose last transition
+	// hands over to some other key is either stale or about a different account, and storing it
+	// would leave this node serving a past that contradicts its own present.
+	if last := rec.Terminal(); last != nil && !bytes.Equal(last.NextEd25519Public, live.Ed25519Public) {
+		return false, "history record disagrees with the identity record this node holds"
+	}
+
+	if err := r.records.PutHistory(ctx, rec); err != nil {
+		r.log.Errorf("store history for %s: %v", rec.Address, err)
+		return false, "failed to store the history record"
+	}
+	r.log.Infof("stored rotation history for %s (%d transitions)", rec.Address, len(rec.Chain))
+	return true, ""
+}
+
+// chainsEqual reports whether two chains are the same, compared on each entry's signature —
+// which covers every field, so agreement there is agreement throughout.
+func chainsEqual(a, b []identity.RotationEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !bytes.Equal(a[i].Signature, b[i].Signature) {
+			return false
+		}
+	}
+	return true
 }

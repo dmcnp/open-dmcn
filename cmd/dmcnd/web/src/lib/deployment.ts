@@ -16,6 +16,7 @@ import type { DeliveryReceiptView } from './crypto/receiptAttest';
 import type { MailFilterFactory } from './api/filterList';
 import type { StorageUsage } from './api/personalStore';
 import type { WorkingKeys } from './crypto/workingKeys';
+import type { RotatedSibling } from './crypto/rotation';
 
 // InboxNotice is one kind of request-shaped control message, surfaced as a row at the top of
 // the inbox. The shell owns the row and the dialog it opens; the deployment owns which kinds
@@ -136,6 +137,35 @@ export interface Deployment {
   // Receives the working keys because the customer's mailbox key IS the domain root — the browser
   // signs the domain record with it, and that signature is the whole of the customer's consent.
   customDomain?: ComponentType<{ address: string; keys: WorkingKeys }>;
+  // Ask this deployment's account service to attest a device — the domain's signed record that it
+  // saw this device key on this address at this moment.
+  //
+  // Deployment-specific because attesting anything needs an ONLINE key holding the domain's
+  // 'device' grant, and a single-binary self-host deliberately has no such service: its root is
+  // offline and its credentials are signed by hand. Absent ⇒ devices enrol with no credential,
+  // which is the honest answer there and costs only the ability to authorize a key rotation —
+  // that rule is checked by nodes holding no registry, and the credential is all they would have
+  // to go on.
+  //
+  // Returns the moment it recorded, which the caller uses as the device's enrolment time so the
+  // credential and the registry cannot disagree about it. Null when the domain issues none.
+  deviceCredential?: (address: string, devicePub: Uint8Array) => Promise<{ credential: Uint8Array; issuedAt: number } | null>;
+  // Publish a rotated identity record, with the complete history that explains it.
+  //
+  // Deployment-specific because a rotation needs the domain's operator-owned credentials REISSUED
+  // against the new key — the address attestation and the routing credential that carries the
+  // mailbox's relay hints. Without that the account publishes fine and lands unverified with
+  // nowhere to receive. Only a deployment with an online issuer can do it; a self-host whose root
+  // is offline re-issues by hand, so this is absent there and the ceremony refuses to start.
+  publishRotation?: (record: Uint8Array, history: Uint8Array, siblings: RotatedSibling[]) => Promise<void>;
+  /**
+   * The Settings panel that re-keys this account, where the deployment offers one.
+   *
+   * It frames itself, like the other self-framing sections: whether re-keying is offered at all
+   * depends on the domain's policy and on the fleet, and a heading drawn over an empty box would
+   * promise something the answer may be no to.
+   */
+  rotateKey?: ComponentType<{ address: string; keys: WorkingKeys }>;
   // Where a device's push endpoint is registered, for contentless new-mail notifications.
   //
   // Only this step is deployment-specific: the permission prompt, the subscribe call, the settings

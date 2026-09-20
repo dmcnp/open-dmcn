@@ -20,6 +20,7 @@ const (
 	recIdentityPrefix   = "/authrec/identity"
 	recDARPrefix        = "/authrec/dar"
 	recRemovalPrefix    = "/authrec/removal"
+	recHistoryPrefix    = "/authrec/history"
 	recBlocklistPrefix  = "/authrec/blocklist"
 	recRosterPrefix     = "/authrec/roster"
 	recDescriptorPrefix = "/authrec/relaydesc" // relay onion descriptor, keyed by peer ID
@@ -131,6 +132,35 @@ func (rs *RecordStore) PutRemoval(ctx context.Context, rec *identity.AddressRemo
 // GetRemovalBytes returns the marshaled removal record for an address, or (nil, nil) when absent.
 func (rs *RecordStore) GetRemovalBytes(ctx context.Context, address string) ([]byte, error) {
 	return rs.get(ctx, recRemovalPrefix, address)
+}
+
+// --- Rotation histories (keyed by address) ---
+
+// PutHistory stores an address's complete rotation history.
+func (rs *RecordStore) PutHistory(ctx context.Context, rec *identity.AddressHistoryRecord) error {
+	data, err := proto.Marshal(rec.ToProto())
+	if err != nil {
+		return fmt.Errorf("recordstore: marshal history: %w", err)
+	}
+	return rs.put(ctx, recHistoryPrefix, rec.Address, data)
+}
+
+// GetHistoryBytes returns the marshaled history for an address, or (nil, nil) when absent.
+func (rs *RecordStore) GetHistoryBytes(ctx context.Context, address string) ([]byte, error) {
+	return rs.get(ctx, recHistoryPrefix, address)
+}
+
+// GetHistory returns an address's rotation history, or (nil, nil) when absent.
+func (rs *RecordStore) GetHistory(ctx context.Context, address string) (*identity.AddressHistoryRecord, error) {
+	data, err := rs.GetHistoryBytes(ctx, address)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	var pb dmcnpb.AddressHistoryRecord
+	if err := proto.Unmarshal(data, &pb); err != nil {
+		return nil, fmt.Errorf("recordstore: unmarshal history: %w", err)
+	}
+	return identity.AddressHistoryRecordFromProto(&pb)
 }
 
 // --- Credential blocklists (keyed by domain) ---

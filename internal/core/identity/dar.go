@@ -38,6 +38,15 @@ const (
 	// set, senders STORE to every reachable relay hint (FETCH already merges + dedups).
 	// Default off (failover).
 	PolicyReplicateMailbox uint32 = 1 << 3
+	// PolicyAllowKeyRotation permits account holders on this domain to re-key their own
+	// address — publishing a record whose rotation chain proves continuity, with no operator
+	// or domain-root involvement. Default OFF, and deliberately its own bit: every DAR already
+	// published leaves it unset, so enabling rotation is always a deliberate root ceremony.
+	//
+	// It carries a real cost the domain owner is accepting: a stolen account key stops being
+	// recoverable by the operator and becomes a race. A domain that wants the older property
+	// leaves this off. See SPEC.md §1.
+	PolicyAllowKeyRotation uint32 = 1 << 5
 	// Bits 4 and above are reserved for extensions (see SPEC.md §8).
 )
 
@@ -102,6 +111,14 @@ type DomainAuthorityRecord struct {
 	// the authorized fleet is confirmed by the domain's own root key, not merely DNS-asserted.
 	// Covered by the DAR self-signature.
 	FleetDomain string
+
+	// RotationMinDeviceAgeDays is how long a device credential must have been enrolled before
+	// it may authorize a self-serve key rotation here. Zero means the protocol default — read
+	// it through RotationMinDeviceAge() rather than directly, so "unset" never reads as "no
+	// minimum". Domain-level rather than per-node because nodes that disagreed about
+	// admissibility would split-brain record admission. Meaningful only with
+	// PolicyAllowKeyRotation.
+	RotationMinDeviceAgeDays uint32
 }
 
 // ResolveAuthority returns the authority credential in the DAR whose Subject is pub,
@@ -156,6 +173,38 @@ func (d *DomainAuthorityRecord) RequiresOnion() bool {
 // ReplicatesMailbox reports whether the domain declares mailbox replication across an
 // address's top-k routing relays: senders STORE to every reachable relay hint (success if
 // ≥1) rather than the first reachable. Default off (failover).
+// AllowKeyRotation reports whether account holders on this domain may re-key their own address
+// without the operator. Default off.
+func (d *DomainAuthorityRecord) AllowKeyRotation() bool {
+	return d.PolicyFlags&PolicyAllowKeyRotation != 0
+}
+
+// DefaultRotationMinDeviceAge is the device tenure a rotation needs when a domain enables
+// rotation without naming one. A zero in the record means "use this", so a domain that turns
+// rotation on and leaves the field alone still gets a minimum rather than none.
+const DefaultRotationMinDeviceAge = 30 * 24 * time.Hour
+
+// RotationMinDeviceAgeNone, in DomainAuthorityRecord.RotationMinDeviceAgeDays, means the domain
+// asks for NO tenure: any enrolled device may authorize a rotation the moment it joins.
+//
+// A sentinel rather than a zero, because zero is what every record that never considered the
+// question already carries — reading it as "no minimum" would strip the protection from every
+// domain that simply enabled rotation. Choosing none is a thing an operator has to say.
+const RotationMinDeviceAgeNone uint32 = ^uint32(0)
+
+// RotationMinDeviceAge reports how long a device credential must have been enrolled before it
+// may authorize a rotation on this domain, resolving the record's zero to the protocol default.
+func (d *DomainAuthorityRecord) RotationMinDeviceAge() time.Duration {
+	switch d.RotationMinDeviceAgeDays {
+	case 0:
+		return DefaultRotationMinDeviceAge
+	case RotationMinDeviceAgeNone:
+		return 0
+	default:
+		return time.Duration(d.RotationMinDeviceAgeDays) * 24 * time.Hour
+	}
+}
+
 func (d *DomainAuthorityRecord) ReplicatesMailbox() bool {
 	return d.PolicyFlags&PolicyReplicateMailbox != 0
 }
@@ -258,6 +307,7 @@ func (d *DomainAuthorityRecord) ToProto() *dmcnpb.DomainAuthorityRecord {
 		SelfSignature:             d.SelfSignature[:],
 		ReservedLocalParts:        d.ReservedLocalParts,
 		FleetDomain:               d.FleetDomain,
+		RotationMinDeviceAgeDays:  d.RotationMinDeviceAgeDays,
 	}
 	for _, k := range d.SupersededKeys {
 		x := k.X25519Public
@@ -290,8 +340,9 @@ func DomainAuthorityRecordFromProto(pb *dmcnpb.DomainAuthorityRecord) (*DomainAu
 		// NOT normalized here — Verify() re-marshals ToProto(), so the bytes must round-trip
 		// faithfully. Casefolding happens at write time (CLI) and at compare time
 		// (ReservesLocalPart).
-		ReservedLocalParts: append([]string(nil), pb.ReservedLocalParts...),
-		FleetDomain:        pb.FleetDomain,
+		ReservedLocalParts:       append([]string(nil), pb.ReservedLocalParts...),
+		FleetDomain:              pb.FleetDomain,
+		RotationMinDeviceAgeDays: pb.RotationMinDeviceAgeDays,
 	}
 	copy(d.AuthorityX25519[:], pb.AuthorityX25519PublicKey)
 	copy(d.SelfSignature[:], pb.SelfSignature)

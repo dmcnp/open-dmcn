@@ -189,6 +189,11 @@ const (
 	RebindSameKey RebindArm = "same-key"
 	// RebindRootTombstone: the domain root tombstoned the incumbent key, freeing the address.
 	RebindRootTombstone RebindArm = "root-tombstone"
+	// RebindOwnerRotation: the owner re-keyed their own address. The incoming record carries a
+	// rotation chain whose terminal entry is signed by the key it displaces (or that record's
+	// recovery key) and attested by an enrolled device, so continuity of control is proven
+	// without the operator. Only on domains whose DAR opts in.
+	RebindOwnerRotation RebindArm = "owner-rotation"
 )
 
 var (
@@ -199,6 +204,10 @@ var (
 	// serves the domain should fail closed, while a standalone/dev node has no DAR to consult and
 	// must not be bricked by that.
 	ErrRebindUnverifiable = errors.New("identity: cannot evaluate re-binding without the domain authority record")
+	// ErrRebindRotationNotAllowed: the incoming record carries a rotation chain, but this domain
+	// does not permit owner-authorized re-keying. Distinct from a malformed chain so an operator
+	// can tell "your domain has not enabled this" from "this chain does not verify".
+	ErrRebindRotationNotAllowed = errors.New("identity: this domain does not permit owner-authorized key rotation")
 )
 
 // AuthorizeRebind decides whether `next` may replace `prev` as the record for an address, and
@@ -215,7 +224,7 @@ var (
 // check is state-relative, so a node with no prior record accepts anything as a genesis binding.
 // It defeats theft of an online issuing key; it does not defeat an operator who controls both
 // issuance and every serving node.
-func AuthorizeRebind(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *DomainAuthorityRecord) (RebindArm, error) {
+func AuthorizeRebind(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *DomainAuthorityRecord, now time.Time) (RebindArm, error) {
 	if next == nil {
 		return "", errors.New("identity: no record to authorize")
 	}
@@ -228,27 +237,146 @@ func AuthorizeRebind(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *
 	if dar == nil {
 		return "", ErrRebindUnverifiable
 	}
-	if rm == nil {
-		return "", ErrRebindTombstoneRequired
+	// The OPERATOR arm is evaluated first, so a root tombstone always outranks anything the
+	// owner can produce. An offboarded key whose binding the root freed must not be able to
+	// argue its way back by presenting a chain.
+	missing := "the incumbent key is not tombstoned"
+	if rm != nil {
+		freed, why := rebindTombstoneFrees(prev, next, rm, dar)
+		if freed {
+			return RebindRootTombstone, nil
+		}
+		missing = why
 	}
+	// Then the OWNER arm: re-keying with no operator involved, on domains that opted in.
+	if len(next.RotationChain) > 0 {
+		return authorizeOwnerRotation(prev, next, rm, dar, now)
+	}
+	return "", fmt.Errorf("%w: %s", ErrRebindTombstoneRequired, missing)
+}
+
+// rebindTombstoneFrees reports whether a root-signed removal has freed this address for any key,
+// and when it has not, which condition was missing.
+//
+// The reason is carried out rather than discarded because this arm is where an operator lands
+// when a re-provision is refused: the four ways to fail are four different things to go and fix,
+// and "requires a root-signed removal" on its own names none of them.
+func rebindTombstoneFrees(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *DomainAuthorityRecord) (bool, string) {
 	// Bind the tombstone to THIS address. Removed() matches on the key alone, so without this a
 	// root-signed removal freeing a key at one address would be a transferable capability to
 	// re-bind any other address that key happens to hold.
 	if !strings.EqualFold(rm.Address, next.Address) {
-		return "", fmt.Errorf("%w: removal record names %q, not %q", ErrRebindTombstoneRequired, rm.Address, next.Address)
+		return false, fmt.Sprintf("removal record names %q, not %q", rm.Address, next.Address)
 	}
 	if !strings.EqualFold(rm.Domain, dar.Domain) {
-		return "", fmt.Errorf("%w: removal record domain %q is outside the authority for %q", ErrRebindTombstoneRequired, rm.Domain, dar.Domain)
+		return false, fmt.Sprintf("removal record domain %q is outside the authority for %q", rm.Domain, dar.Domain)
 	}
 	// ROOT ONLY, deliberately — not RemovalSuppresses. An owner-signed retirement suppresses the
 	// binding but must never authorise a different key to take the address, or a stolen key could
 	// authorise its own replacement and key compromise would stop being recoverable. See
 	// RemovalIsOwnerSigned.
 	if !RemovalIsRootSigned(dar, rm) {
-		return "", fmt.Errorf("%w: removal record is not signed by a domain root key", ErrRebindTombstoneRequired)
+		return false, "removal record is not signed by a domain root key"
 	}
 	if _, ok := rm.Removed(prev.Ed25519Public); !ok {
-		return "", fmt.Errorf("%w: the incumbent key is not tombstoned", ErrRebindTombstoneRequired)
+		return false, "the incumbent key is not tombstoned"
 	}
-	return RebindRootTombstone, nil
+	return true, ""
+}
+
+// authorizeOwnerRotation decides whether `next` may displace `prev` on the strength of its own
+// rotation chain — the owner re-keying with no operator involved.
+//
+// What it establishes, in order: the domain permits this at all; the chain holds together and
+// belongs to this record; its terminal transition is anchored on exactly the record being
+// displaced; the key giving the address up genuinely consented; an enrolled device of sufficient
+// tenure asked for it; and the key being rotated INTO is not one the root has tombstoned.
+func authorizeOwnerRotation(prev, next *IdentityRecord, rm *AddressRemovalRecord, dar *DomainAuthorityRecord, now time.Time) (RebindArm, error) {
+	// Policy first, so a domain that has not opted in gets a clear answer rather than a
+	// cryptographic one. (The product fork additionally refuses on admin-key-custody domains,
+	// a deployment posture this core has no concept of.)
+	if !dar.AllowKeyRotation() {
+		return "", ErrRebindRotationNotAllowed
+	}
+	if err := VerifyRotationChain(next); err != nil {
+		return "", err
+	}
+
+	last := &next.RotationChain[len(next.RotationChain)-1]
+	// Anchor the terminal transition on the record actually being displaced. Without this a
+	// genuine chain ending in this key could be carried by a record displacing some OTHER
+	// incumbent — a transferable capability rather than one address's history.
+	if !bytes.Equal(last.RetiredEd25519Public, prev.Ed25519Public) || last.RetiredX25519Public != prev.X25519Public {
+		return "", fmt.Errorf("%w: the last transition retires a key other than the one currently bound", ErrRebindTombstoneRequired)
+	}
+	// The consent must come from the incumbent itself, or from the recovery key IT published.
+	// A recovery key named by the incoming record would let an attacker supply their own.
+	if !bytes.Equal(last.AuthorizingEd25519Public, prev.Ed25519Public) &&
+		!bytes.Equal(last.AuthorizingEd25519Public, prev.RecoveryEd25519Public) {
+		return "", fmt.Errorf("%w: the transition was authorized by a key the displaced record never published", ErrRebindTombstoneRequired)
+	}
+	if next.Revision <= prev.Revision {
+		return "", fmt.Errorf("%w: revision %d does not advance past %d", ErrRebindTombstoneRequired, next.Revision, prev.Revision)
+	}
+	if err := authorizeRotationDevice(last, dar, now); err != nil {
+		return "", err
+	}
+	// A key the root has tombstoned must not be rotated INTO, or an offboarded key could be
+	// brought back by a rotation the owner signs on its behalf.
+	if rm != nil && RemovalIsRootSigned(dar, rm) && strings.EqualFold(rm.Address, next.Address) {
+		if _, tombstoned := rm.Removed(next.Ed25519Public); tombstoned {
+			return "", fmt.Errorf("%w: the incoming key is tombstoned on this address", ErrRebindTombstoneRequired)
+		}
+	}
+	return RebindOwnerRotation, nil
+}
+
+// rotationSkew tolerates small clock differences when judging whether a rotation is dated ahead
+// of the node checking it, matching credSkew and permitSkew.
+const rotationSkew = 2 * time.Minute
+
+// authorizeRotationDevice checks that an enrolled device of sufficient tenure asked for this
+// transition.
+//
+// This is what makes a stolen ACCOUNT key insufficient. Device keys are generated on their
+// device and held nowhere else, so a thief working from a backup export or a pairing payload has
+// none — and the tenure minimum means that even enrolling one buys them only a wait, during
+// which the device appears in the owner's list.
+//
+// Verified against the rotation's OWN time rather than now: a credential valid when the
+// transition was made stays valid for it, which is what lets history remain checkable.
+func authorizeRotationDevice(e *RotationEntry, dar *DomainAuthorityRecord, now time.Time) error {
+	if e.DeviceCredential == nil {
+		return fmt.Errorf("%w: no enrolled device attested this transition", ErrRebindTombstoneRequired)
+	}
+	if !e.DeviceCredential.HasRole(RoleDevice) {
+		return fmt.Errorf("%w: the attesting credential is not a device credential", ErrRebindTombstoneRequired)
+	}
+	// Bind the device to THIS address, or a device enrolled for one account could authorize a
+	// rotation on another.
+	if !strings.EqualFold(e.DeviceCredential.Address, e.Address) {
+		return fmt.Errorf("%w: the attesting device is enrolled for %q, not %q", ErrRebindTombstoneRequired, e.DeviceCredential.Address, e.Address)
+	}
+	if err := VerifyCredential(e.DeviceCredential, dar, nil, e.RotatedAt); err != nil {
+		return fmt.Errorf("%w: the attesting device credential does not verify: %v", ErrRebindTombstoneRequired, err)
+	}
+	// The rotation may not be dated ahead of this node's clock.
+	//
+	// Both ends of the tenure measurement below are chosen by whoever makes the entry: the
+	// credential's issue date and the rotation's own. Nothing in the chain bounds either against
+	// the outside world — entries are checked against each OTHER — so a thief who enrolled a
+	// device today and dated the transition a year out would satisfy any minimum a domain can
+	// set, and the tenure rule would be decorative. The node's clock is the outside reference,
+	// with the tolerance the credential windows already use.
+	if ahead := e.RotatedAt.Sub(now); ahead > rotationSkew {
+		return fmt.Errorf("%w: the transition is dated %s ahead of this node's clock",
+			ErrRebindTombstoneRequired, ahead.Round(time.Second))
+	}
+	// Tenure is measured to the rotation, not to now, so a slow-propagating record is judged by
+	// when it was made — and, with the bound above, cannot be stretched by claiming a later one.
+	if age := e.RotatedAt.Sub(e.DeviceCredential.IssuedAt); age < dar.RotationMinDeviceAge() {
+		return fmt.Errorf("%w: the attesting device had been enrolled %s, short of the %s this domain requires",
+			ErrRebindTombstoneRequired, age.Round(time.Hour), dar.RotationMinDeviceAge())
+	}
+	return nil
 }

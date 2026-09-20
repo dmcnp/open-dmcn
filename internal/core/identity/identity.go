@@ -32,7 +32,16 @@ const (
 	ctxIdentitySelf   = "dmcn-identity-self-v1\x00"
 	ctxDARSelf        = "dmcn-dar-self-v1\x00"
 	ctxAddressRemoval = "dmcn-address-removal-v1\x00"
-	ctxKeyCompromise  = "dmcn-key-compromise-v1\x00"
+	// ctxIdentityRotation / ctxIdentityRotationAccept separate the two signatures on a
+	// RotationEntry. They are distinct so an ACCEPTANCE by the incoming key can never be
+	// replayed as a CONSENT by the outgoing one — which would let a key that merely received
+	// an address appear to have handed it on.
+	ctxIdentityRotation       = "dmcn-identity-rotation-v1\x00"
+	ctxIdentityRotationAccept = "dmcn-identity-rotation-accept-v1\x00"
+	// ctxIdentityRotationDevice separates the enrolled device's attestation of a rotation from
+	// both the consent and the acceptance, so no one of the three can stand in for another.
+	ctxIdentityRotationDevice = "dmcn-identity-rotation-device-v1\x00"
+	ctxKeyCompromise          = "dmcn-key-compromise-v1\x00"
 	// ctxFleetRoster separates the fleet-roster self-signature (fleet domain root key
 	// over the node roster) from every other record type.
 	ctxFleetRoster = "dmcn-fleet-roster-v1\x00"
@@ -190,6 +199,19 @@ type IdentityRecord struct {
 	// "ext.rate_steps" attribute (see rate.go), operator/fleet-anchored so a BYOD tenant
 	// cannot self-grant an abusive send rate.
 	OperatorCredentials []*Credential
+
+	// RotationChain is this record's own transparency log: one entry per owner-authorized key
+	// transition, oldest first. COVERED by the owner SelfSignature, so the current key commits
+	// to exactly the history it presents. Capped at MaxRotationChain and truncated from the
+	// front — the complete history is the address's AddressHistoryRecord. Empty on a record
+	// that has never rotated. See rotation.go.
+	RotationChain []RotationEntry
+
+	// RecoveryEd25519Public is an owner-held key kept structurally apart from the active one,
+	// which may sign the next transition in place of the key being retired — so losing the
+	// active key stops being terminal. Covered by the owner SelfSignature. Nil when the owner
+	// has enrolled none.
+	RecoveryEd25519Public ed25519.PublicKey
 }
 
 // HasAddressCredential reports whether a Credential-PKI address attestation is present.
@@ -324,6 +346,11 @@ func (r *IdentityRecord) signableBytes() ([]byte, error) {
 		VerificationTier: dmcnpb.VerificationTier(r.VerificationTier),
 		RequireOnion:     r.RequireOnion,
 		Revision:         r.Revision, // owner-signed monotonic version (anti-rollback)
+		// RotationChain + RecoveryEd25519Public are OWNER-owned, so unlike the operator
+		// credentials they are signed here: the current key commits to the history it
+		// presents and to the recovery key that may replace it.
+		RotationChain:            r.rotationChainProto(),
+		RecoveryEd25519PublicKey: r.RecoveryEd25519Public,
 		// SelfSignature intentionally omitted — this is what we sign over
 	}
 
@@ -358,6 +385,9 @@ func (r *IdentityRecord) ToProto() *dmcnpb.IdentityRecord {
 		RequireOnion:     r.RequireOnion,
 		Revision:         r.Revision,
 		SelfSignature:    r.SelfSignature[:],
+		// Owner-signed, like the fields above and unlike the credentials below.
+		RotationChain:            r.rotationChainProto(),
+		RecoveryEd25519PublicKey: r.RecoveryEd25519Public,
 	}
 	if r.AddressCredential != nil {
 		pb.AddressCredential = r.AddressCredential.ToProto()
@@ -383,6 +413,15 @@ func IdentityRecordFromProto(pb *dmcnpb.IdentityRecord) (*IdentityRecord, error)
 	var x25519Pub [32]byte
 	copy(x25519Pub[:], pb.X25519PublicKey)
 
+	// A recovery key is optional, and a WRONG-LENGTH one is worse than none: the self-signature
+	// covers whatever bytes are there, so a truncated key rides along on a record that verifies
+	// perfectly, and the owner has every reason to believe recovery is enrolled. They find out
+	// otherwise the day they need it — authorizeOwnerRotation compares it against a 32-byte
+	// authorizing key, so a shorter one can never match and the recovery arm is dead.
+	if n := len(pb.RecoveryEd25519PublicKey); n != 0 && n != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("identity: recovery key is %d bytes, want %d", n, ed25519.PublicKeySize)
+	}
+
 	var selfSig [64]byte
 	copy(selfSig[:], pb.SelfSignature)
 
@@ -392,18 +431,24 @@ func IdentityRecordFromProto(pb *dmcnpb.IdentityRecord) (*IdentityRecord, error)
 	}
 
 	rec := &IdentityRecord{
-		Version:          pb.Version,
-		Address:          pb.Address,
-		Ed25519Public:    pb.Ed25519PublicKey,
-		X25519Public:     x25519Pub,
-		CreatedAt:        time.Unix(pb.CreatedAt, 0).UTC(),
-		ExpiresAt:        expiresAt,
-		RelayHints:       pb.RelayHints,
-		VerificationTier: VerificationTier(pb.VerificationTier),
-		RequireOnion:     pb.RequireOnion,
-		Revision:         pb.Revision,
-		SelfSignature:    selfSig,
+		Version:               pb.Version,
+		Address:               pb.Address,
+		Ed25519Public:         pb.Ed25519PublicKey,
+		X25519Public:          x25519Pub,
+		CreatedAt:             time.Unix(pb.CreatedAt, 0).UTC(),
+		ExpiresAt:             expiresAt,
+		RelayHints:            pb.RelayHints,
+		VerificationTier:      VerificationTier(pb.VerificationTier),
+		RequireOnion:          pb.RequireOnion,
+		Revision:              pb.Revision,
+		SelfSignature:         selfSig,
+		RecoveryEd25519Public: pb.RecoveryEd25519PublicKey,
 	}
+	chain, err := rotationChainFromProto(pb.RotationChain)
+	if err != nil {
+		return nil, fmt.Errorf("identity: %w", err)
+	}
+	rec.RotationChain = chain
 	if pb.AddressCredential != nil {
 		cred, err := CredentialFromProto(pb.AddressCredential)
 		if err != nil {

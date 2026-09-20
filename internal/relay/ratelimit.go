@@ -29,6 +29,31 @@ func NewRateLimiter(maxPerHour int) *RateLimiter {
 	}
 }
 
+// Rotation limits, per address, per day. An account re-keys on the order of once a year; a bad
+// day might need two or three in a row, and past that a loop is the only explanation.
+//
+// What a loop costs, and why this is required rather than tidy: every rotation appends to the
+// address's history record, which is append-only and grows without bound, and pushes the oldest
+// transition off the capped chain the identity record carries — so an unbounded loop inflates
+// storage on every node and walks a reader's pinned key out of the window that would have
+// explained it.
+//
+// A LIMITER rather than a protocol-level minimum interval between rotations, deliberately. A
+// floor in the rules would refuse the one case that most needs a second rotation immediately: the
+// key just rotated TO turning out to be compromised as well. A limiter delays; it never makes a
+// legitimate re-key impossible, and the budget refills as the window slides.
+const rotationsPerDay = 4
+
+// NewRotationLimiter bounds how often one address may be re-keyed on this node.
+func NewRotationLimiter() *RateLimiter {
+	return &RateLimiter{
+		maxPerHour: rotationsPerDay,
+		window:     24 * time.Hour,
+		timestamps: make(map[string][]time.Time),
+		nowFunc:    time.Now,
+	}
+}
+
 // Allow checks if a sender is within the rate limit and records the attempt.
 // Returns true if the operation is allowed, false if rate-limited.
 func (rl *RateLimiter) Allow(senderAddr string) bool {

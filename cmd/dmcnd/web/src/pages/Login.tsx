@@ -29,6 +29,10 @@ export function Login() {
   const reason = (location.state as { reason?: string } | null)?.reason;
   const expired = reason === 'expired';
   const locked = reason === 'locked';
+  // The account was re-keyed somewhere else, so the key stored here no longer opens the session.
+  // The keystore is kept anyway: the old key is what reads the mail that arrived before the
+  // change, and this device gets it back by pairing.
+  const rekeyed = reason === 'rekeyed';
   // Absent ⇒ this deployment has no pairing flow; offer no route into one.
   const pairing = deployment.pairing;
   // The account a tapped notification was for. This screen is where such a tap lands whenever the
@@ -84,11 +88,15 @@ export function Login() {
         </span>
       }
     >
-      {(expired || locked) && (
-        <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-muted)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>
-          {expired
-            ? 'Your session expired. Unlock again to continue.'
-            : 'Locked while you were away. Unlock to continue.'}
+      {(expired || locked || rekeyed) && (
+        <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: rekeyed ? 'var(--warning-subtle)' : 'var(--surface-sunken)', color: 'var(--text-muted)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>
+          {rekeyed
+            ? 'This account got a new key on another device, so this one can no longer sign in to it. '
+              + 'Pair this device again to catch up. Nothing here was deleted — the key stored on this '
+              + 'device still opens the mail that arrived before the change.'
+            : expired
+              ? 'Your session expired. Unlock again to continue.'
+              : 'Locked while you were away. Unlock to continue.'}
         </div>
       )}
       {error && <div style={{ marginBottom: 'var(--space-3)', color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{error}</div>}

@@ -34,6 +34,106 @@ function decodeAs<T>(type: StaticType, data: Uint8Array): T {
   return type.decode(data) as T;
 }
 
+// RotationEntryWire mirrors dmcn.identity.RotationEntry — one owner-authorized transition from
+// one account keypair to the next. It carries TWO signatures because one proves only half of a
+// handover: `signature` is the outgoing key's consent to give the address up, `nextSignature` is
+// the incoming key's acceptance of it. Both travel with the entry because entries are read
+// DETACHED — from an AddressHistoryRecord and over the directory API — where the record's own
+// self-signature is unavailable to close the gap.
+export interface RotationEntryWire {
+  version: number;
+  address: string;
+  retiredEd25519PublicKey: Uint8Array;
+  retiredX25519PublicKey: Uint8Array;
+  nextEd25519PublicKey: Uint8Array;
+  nextX25519PublicKey: Uint8Array;
+  rotatedAt: number;
+  nextRevision: number;
+  /** SHA-256 of the previous entry's `signature`; absent at the address's first rotation. */
+  prevSignatureHash?: Uint8Array;
+  /** The key that produced `signature`: the retiring key, or the owner's recovery key. */
+  authorizingEd25519PublicKey: Uint8Array;
+  /** Leaf Credential (role "device") of the enrolled device that authorized this rotation. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deviceCredential?: any;
+  /** By deviceCredential.subject over the transition — what a stolen ACCOUNT key cannot produce. */
+  deviceSignature?: Uint8Array;
+  signature?: Uint8Array;
+  nextSignature?: Uint8Array;
+}
+
+// Encode an address's complete rotation history. It carries no signature of its own: every entry
+// is already signed by the keys it names, so integrity comes from the entries.
+export async function encodeAddressHistory(h: {
+  version: number;
+  domain: string;
+  address: string;
+  chain: RotationEntryWire[];
+}): Promise<Uint8Array> {
+  const root = await getRoot();
+  const T = root.lookupType('dmcn.identity.AddressHistoryRecord');
+  return T.encode(T.create(canonical(h))).finish();
+}
+
+// decodeAddressHistory parses a marshaled AddressHistoryRecord. Its entries are handed on as they
+// arrived: a chain that is re-published has to re-encode to the bytes each entry's signatures
+// cover, so nothing here rebuilds them.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function decodeAddressHistory(data: Uint8Array): Promise<any> {
+  const root = await getRoot();
+  return root.lookupType('dmcn.identity.AddressHistoryRecord').decode(data);
+}
+
+// decodeAddressRemoval parses a marshaled AddressRemovalRecord — an address's tombstones, which a
+// new one must EXTEND rather than replace.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function decodeAddressRemoval(data: Uint8Array): Promise<any> {
+  const root = await getRoot();
+  return root.lookupType('dmcn.identity.AddressRemovalRecord').decode(data);
+}
+
+// decodeCredential parses a marshaled dmcn.identity.Credential so it can be NESTED inside another
+// message. This client treats credentials as opaque bytes everywhere else — it verifies none of
+// them — and the one place that changes is a rotation entry, which carries the device's credential
+// inside its own protobuf and so has to hold it as a message rather than a blob.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function decodeCredential(data: Uint8Array): Promise<any> {
+  const root = await getRoot();
+  return root.lookupType('dmcn.identity.Credential').decode(data);
+}
+
+// Encode a rotation entry with NO signature over it yet — what the enrolled device signs under
+// ROTATION_DEVICE_CTX to bind itself to this handover. Must match Go's RotationEntry.deviceBytes().
+export async function encodeRotationDeviceBytes(entry: RotationEntryWire): Promise<Uint8Array> {
+  const root = await getRoot();
+  const RotationEntry = root.lookupType('dmcn.identity.RotationEntry');
+  const msg = RotationEntry.create(canonical({
+    ...entry, deviceSignature: undefined, signature: undefined, nextSignature: undefined,
+  }));
+  return RotationEntry.encode(msg).finish();
+}
+
+// Encode a rotation entry WITHOUT either account signature — the bytes the retiring (or recovery)
+// key signs under ROTATION_CTX. It COVERS the device attestation, so an outgoing key cannot
+// consent and have a different device swapped in afterwards. Matches Go's consentBytes().
+export async function encodeRotationConsentBytes(entry: RotationEntryWire): Promise<Uint8Array> {
+  const root = await getRoot();
+  const RotationEntry = root.lookupType('dmcn.identity.RotationEntry');
+  const msg = RotationEntry.create(canonical({ ...entry, signature: undefined, nextSignature: undefined }));
+  return RotationEntry.encode(msg).finish();
+}
+
+// Encode a rotation entry WITHOUT the acceptance signature — the bytes the incoming key signs
+// under ROTATION_ACCEPT_CTX. It covers `signature`, so the incoming key countersigns the exact
+// handover the outgoing key offered rather than a handover it could still be swapped for. Must
+// match Go's RotationEntry.acceptBytes().
+export async function encodeRotationAcceptBytes(entry: RotationEntryWire): Promise<Uint8Array> {
+  const root = await getRoot();
+  const RotationEntry = root.lookupType('dmcn.identity.RotationEntry');
+  const msg = RotationEntry.create(canonical({ ...entry, nextSignature: undefined }));
+  return RotationEntry.encode(msg).finish();
+}
+
 export async function encodeIdentityRecord(record: {
   version: number;
   address: string;
@@ -50,6 +150,10 @@ export async function encodeIdentityRecord(record: {
   // browser record could never displace it. Not a security control either way: the owner signs
   // it, so a hostile rebind just picks its own value.
   revision?: number;
+  // The address's own key-change history and the recovery key that may authorize the next
+  // transition. Both are OWNER-signed, so they belong in the signable bytes below as well.
+  rotationChain?: RotationEntryWire[];
+  recoveryEd25519PublicKey?: Uint8Array;
   selfSignature?: Uint8Array;
 }): Promise<Uint8Array> {
   const root = await getRoot();
@@ -82,17 +186,54 @@ export async function encodeIdentitySignableBytes(record: {
   verificationTier: number;
   requireOnion?: boolean;
   revision?: number;
+  // Covered by the owner self-signature, so a record carrying a rotation chain verifies only
+  // when these are encoded too. A client that omitted them would reject every rotated record on
+  // the network — which is why the reader ships before any producer does.
+  rotationChain?: RotationEntryWire[];
+  recoveryEd25519PublicKey?: Uint8Array;
+  // Anything else a record carries is ignored here, deliberately — see below.
+  [other: string]: unknown;
 }): Promise<Uint8Array> {
   const root = await getRoot();
   const IdentityRecord = root.lookupType('dmcn.identity.IdentityRecord');
-  const msg = IdentityRecord.create(canonical({
-    ...record,
-    // relay_hints is operator-owned (carried in the operator-signed routing credential),
-    // so it is excluded from the owner self-signature. Must match Go's signableBytes().
-    relayHints: undefined,
-    selfSignature: undefined,
-  }));
+  const msg = IdentityRecord.create(canonical(pickOwn(record, IDENTITY_SIGNED_FIELDS)));
   return IdentityRecord.encode(msg).finish();
+}
+
+/**
+ * The fields the OWNER signs, mirroring Go's IdentityRecord.signableBytes() exactly.
+ *
+ * Everything else a record carries is operator-owned and outside the self-signature:
+ * `relay_hints` (it rides in the routing credential), the address and routing credentials
+ * themselves, the attestations and operator credentials — and `self_signature`, which is what is
+ * being signed.
+ */
+const IDENTITY_SIGNED_FIELDS = [
+  'version', 'address', 'ed25519PublicKey', 'x25519PublicKey', 'createdAt', 'expiresAt',
+  'verificationTier', 'requireOnion', 'revision', 'rotationChain', 'recoveryEd25519PublicKey',
+] as const;
+
+/**
+ * Copy the named fields that the source ACTUALLY HAS, and no others.
+ *
+ * Both halves are load-bearing, and each was a bug on its own. Spreading the whole record picked
+ * up the operator-owned fields a record decoded off the wire carries, producing signable bytes no
+ * signature could ever cover — a verifier written that way rejects every real record while passing
+ * every fixture built in this file. Naming the fields but reading them unconditionally is the
+ * mirror image: protobufjs serves absent scalars from the message PROTOTYPE, so `expiresAt` comes
+ * back as a zero Long rather than undefined, canonical() does not recognise that as a default, and
+ * a field the sender never encoded gets encoded here.
+ *
+ * Own-properties-only is what makes the result match the bytes that were on the wire, and naming
+ * the fields is what keeps a new signed field a deliberate addition rather than an accident.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pickOwn(src: any, fields: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of fields) {
+    if (Object.prototype.hasOwnProperty.call(src, f)) out[f] = src[f];
+  }
+  return out;
 }
 
 // AttachmentWire mirrors dmcnpb.AttachmentRecord (message.proto). Each record is
@@ -190,9 +331,26 @@ export async function encodeRemovalRecord(rm: RemovalRecordFields & { selfSignat
   return AddressRemovalRecord.encode(AddressRemovalRecord.create(canonical(rm))).finish();
 }
 
+/**
+ * A decoded protobufjs message, or the Long it hands back for a 64-bit field.
+ *
+ * Both are passed through VERBATIM below. A decoded message's own properties are exactly the
+ * fields that were on the wire, so re-encoding it reproduces the bytes its signature covers —
+ * where rebuilding it as a plain object would drop a zero the sender actually encoded, and would
+ * flatten a Long into {low, high}, which the writer reads back as a different number.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function decoded(v: any): boolean {
+  if (!v || typeof v !== 'object') return false;
+  if (typeof v.$type?.encode === 'function') return true; // a message
+  // A 64-bit field, as either long.js or protobufjs's own fallback hands it back.
+  return typeof v.low === 'number' && typeof v.high === 'number';
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function canonical(value: any): any {
   if (value instanceof Uint8Array) return value;
+  if (decoded(value)) return value;
   // Recurse into array ELEMENTS (e.g. attachment records) so a zero-valued field
   // inside one is stripped too — Go skips it, protobufjs would otherwise emit it,
   // and the resulting MessageContent bytes (hence body_hash) would diverge.
