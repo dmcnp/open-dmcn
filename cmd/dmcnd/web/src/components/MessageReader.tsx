@@ -110,6 +110,16 @@ type GateReason = 'blocked' | 'unauthenticated' | 'impersonation' | 'unknown';
 // `bridged` whether the message arrived over legacy email (its unknown-sender case is a
 // different statement: nothing about it is end-to-end verified), `known` whether the sender is
 // already on the owner's allowlist.
+//
+// What the gate actually withholds is the RENDERED message: HTML, remote images and attachment
+// downloads, all of which hang off downloadsUnlocked and none of which `revealed` touches. It
+// does not withhold the words, and deliberately so — "See as plain text" sits in this very
+// panel, and the peek is safe precisely because escaped text cannot act on the reader.
+//
+// This copy used to say "decide how to handle it before reading the contents", in four places,
+// with a button offering exactly that reading directly underneath. Say what is held back, and
+// say that reading it costs nothing: a warning a reader can see is false teaches them to skip
+// the next one.
 function gateView(reason: GateReason, who: string, bridged: boolean, known: boolean): {
   icon: 'clock' | 'alert-triangle' | 'shield-off';
   color: string;
@@ -122,7 +132,7 @@ function gateView(reason: GateReason, who: string, bridged: boolean, known: bool
         icon: 'shield-off',
         color: 'var(--danger)',
         title: 'You blocked this sender',
-        detail: `${who} is on your blocklist, so this message stays hidden. Manage the list in Settings if that was a mistake.`,
+        detail: `${who} is on your blocklist, so nothing in this message is rendered, fetched or downloadable. You can still read it as plain text. Manage the list in Settings if the block was a mistake.`,
       };
     case 'unauthenticated':
       return {
@@ -131,7 +141,7 @@ function gateView(reason: GateReason, who: string, bridged: boolean, known: bool
         title: `This message may not be from ${who}`,
         detail: known
           ? `You trust this sender, but legacy email carries no identity of its own and this message did not fully authenticate (details below) — so nothing here can confirm it really came from them. Trusting the address cannot answer that; this is a decision about this one message.`
-          : `It came in over legacy email through a bridge and did not fully authenticate (details below), so anyone could have put ${who} on it. They are not on your allowlist either — decide how to handle it before reading the contents.`,
+          : `It came in over legacy email through a bridge and did not fully authenticate (details below), so anyone could have put ${who} on it. They are not on your allowlist either, so its formatting, images and attachments stay blocked. Reading the plain text is safe if you need more information before deciding.`,
       };
     case 'impersonation':
       return {
@@ -154,10 +164,10 @@ function gateView(reason: GateReason, who: string, bridged: boolean, known: bool
         color: 'var(--warning)',
         title: known ? 'Check this message before you read it' : 'You don’t know this sender yet',
         detail: known
-          ? `${bridged ? 'This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified.' : 'This message is genuine and end-to-end encrypted.'} It still doesn’t match what you have on file for ${who} — confirm it before reading the contents.`
+          ? `${bridged ? 'This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified.' : 'This message is genuine and end-to-end encrypted.'} It still doesn’t match what you have on file for ${who}, so its formatting, images and attachments stay blocked until you confirm it. Reading the plain text is safe if you need more information before deciding.`
           : bridged
-            ? `This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. ${who} isn’t on your allowlist — decide how to handle it before reading the contents.`
-            : `This message is genuine and end-to-end encrypted, but ${who} isn’t on your allowlist. Decide how to handle it before reading the contents.`,
+            ? `This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. ${who} isn’t on your allowlist, so its formatting, images and attachments stay blocked. Reading the plain text is safe if you need more information before deciding.`
+            : `This message is genuine and end-to-end encrypted, but ${who} isn’t on your allowlist, so its formatting, images and attachments stay blocked. Reading the plain text is safe if you need more information before deciding.`,
       };
   }
 }

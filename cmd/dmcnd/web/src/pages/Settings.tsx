@@ -18,6 +18,7 @@ import { detachAccount, isAttached } from '../lib/crypto/deviceKeystore';
 import { isLockOnLeave, setLockOnLeave } from '../lib/devicePosture';
 import { canKeepUnlocked } from '../lib/accounts';
 import { LabelSettings } from '../components/LabelSettings';
+import { InfoHint } from '../components/InfoHint';
 import { applyLockPosture } from '../lib/crypto/workingKeys';
 import { DeviceUnlockSettings } from '../components/DeviceUnlockSettings';
 import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, type ThemePref, type Density } from '../lib/theme';
@@ -51,7 +52,26 @@ function StorageCard() {
     <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       {/* A deployment with no billing has no plan to speak of — dmcnd self-host is the whole
           product for its owner. Name the section for what it actually contains. */}
-      <SectionHeading title={Upgrade ? 'Plan & storage' : 'Storage'} />
+      <SectionHeading
+        title={Upgrade ? 'Plan & storage' : 'Storage'}
+        meta={
+          <InfoHint title="What counts towards storage">
+            <p style={{ margin: 0 }}>
+              Two things share one number: the mail in your mailbox, and your personal store, which holds
+              sent mail, contacts, settings, labels and per-message flags.
+            </p>
+            <p style={{ margin: 0 }}>
+              Received mail is usually the larger half, and attachments are most of that. Everything is
+              measured as it is stored, which means as ciphertext, because that is the only form your relay
+              ever holds it in.
+            </p>
+            <p style={{ margin: 0 }}>
+              When an account is full, new mail is refused at the relay rather than quietly dropped, so the
+              sender is told. Deleting messages, attachments first, is what frees space.
+            </p>
+          </InfoHint>
+        }
+      />
       <Card>
         <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-strong)' }}>Personal storage</span>
         {localOnly ? (
@@ -114,7 +134,11 @@ function RowGroup({ children }: { children: React.ReactNode }) {
 
 // Settings row: title + description on the left, control on the right. `grouped` is the
 // inside-a-RowGroup variant — inset padding, and no border of its own.
-function Row({ title, desc, grouped, children }: { title: string; desc?: string; grouped?: boolean; children?: React.ReactNode }) {
+//
+// `hint` is the paragraph the description cannot hold. It is optional and opt-in per row, so a
+// row that says everything it needs to in one line stays exactly as it was; only the rows whose
+// honest answer is longer than a sentence grow an (i).
+function Row({ title, desc, hint, grouped, children }: { title: string; desc?: string; hint?: React.ReactNode; grouped?: boolean; children?: React.ReactNode }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 'var(--space-6)',
@@ -122,7 +146,10 @@ function Row({ title, desc, grouped, children }: { title: string; desc?: string;
       borderBottom: grouped ? undefined : '1px solid var(--border-subtle)',
     }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>{title}</div>
+        <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>
+          {title}
+          {hint && <InfoHint title={title}>{hint}</InfoHint>}
+        </div>
         {desc && <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>}
       </div>
       {children && <div style={{ flex: 'none' }}>{children}</div>}
@@ -411,6 +438,21 @@ export function Settings() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
                 <Icon name="key" size={16} style={{ color: 'var(--brand)' }} />
                 <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Your encryption key</span>
+                <InfoHint title="Your encryption key">
+                  <p style={{ margin: 0 }}>
+                    The line below is your key&rsquo;s fingerprint: a short stand-in for the public half of your
+                    key, which anyone can look up from your address.
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    It is worth knowing what it is for, because it is the one check nothing else can do for you.
+                    If you and someone you write to read your fingerprints to each other over the phone, or
+                    compare them in person, you have confirmed you are talking to each other and not to someone
+                    who substituted their own key. Everything else on this page rests on that being possible.
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    You never need to keep it secret, and you never need to type it anywhere.
+                  </p>
+                </InfoHint>
                 {keys && <Badge variant="success" dot>Active</Badge>}
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)', background: 'var(--surface-sunken)', padding: 'var(--space-3)', letterSpacing: '0.04em', wordBreak: 'break-all' }}>
@@ -610,7 +652,19 @@ export function Settings() {
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />
               <RowGroup>
-                <Row grouped title="Signed in as" desc="This identity signs and decrypts your mail.">
+                <Row grouped title="Signed in as" desc="This identity signs and decrypts your mail."
+                  hint={<>
+                    <p style={{ margin: 0 }}>
+                      An address here names a keypair rather than a row in a user list. The public half is
+                      published so anyone can verify what you send and seal what they send you; the private
+                      half is on your devices and nowhere else.
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      That is why signing in asks your device to prove it holds the key, instead of asking you
+                      for a password we could check. There is no password on our side to check, and none to
+                      steal.
+                    </p>
+                  </>}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-body)', whiteSpace: 'nowrap' }}>{address}</span>
                     {/* The address people are asked to hand out, so it is worth copying from the
@@ -619,7 +673,20 @@ export function Settings() {
                   </div>
                 </Row>
                 {managedDomain ? (
-                  <Row grouped title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing).">
+                  <Row grouped title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing)."
+                    hint={<>
+                      <p style={{ margin: 0 }}>
+                        Your domain has chosen to hold the keys for its accounts. In practice that means your
+                        administrator can add a device to this account, and can recover it if you lose every
+                        device you have.
+                      </p>
+                      <p style={{ margin: 0 }}>
+                        It also means they are able to read this mailbox. That is the trade the setting makes,
+                        and it is named here rather than buried so you know which kind of account you are using.
+                        A personal account works the other way: nobody but you can open it, and nobody but you
+                        can recover it.
+                      </p>
+                    </>}>
                     <Badge variant="neutral"><Icon name="shield-check" size={13} /> Managed</Badge>
                   </Row>
                 ) : null}

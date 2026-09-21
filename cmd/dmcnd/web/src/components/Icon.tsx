@@ -57,6 +57,10 @@ const P: Record<string, ReactNode> = {
   key: <><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.7 12.3 8.5-8.5" /><path d="m16 5 3 3" /><path d="m13.5 8.5 2.5 2.5" /></>,
   rows: <><rect x="3" y="3" width="18" height="18" /><path d="M3 9h18M3 15h18" /></>,
   clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+  // info: the affordance that opens a longer explanation next to a label that cannot carry one.
+  // Deliberately NOT alert-octagon or alert-triangle — those say something is wrong, and this says
+  // there is more to read.
+  info: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></>,
   plus: <><path d="M12 5v14M5 12h14" /></>,
   database: <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 18 0V5" /><path d="M3 12a9 3 0 0 0 18 0" /></>,
   'external-link': <><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></>,
