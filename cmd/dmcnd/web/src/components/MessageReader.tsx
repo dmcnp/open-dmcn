@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Preview, FullBody } from '../lib/api/mailboxRest';
 import type { ComposeReplyTo } from '../lib/compose';
@@ -11,7 +11,7 @@ import { Badge, Button, IconButton, Input, Tag } from '../ds';
 import { Icon } from './Icon';
 import { ColorSwatches } from './ColorSwatches';
 import { lookupIdentity } from '../lib/api/client';
-import { verifyBridgeAttestation, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
+import { verifyBridgeAttestation, bridgeOriginalIndex, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
 import { verifyDeliveryReceipt, RECEIPT_CONTENT_TYPE, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
 import type { DecryptedAttachment } from '../lib/crypto/split';
 import { HtmlMessageBody } from './HtmlMessageBody';
@@ -219,8 +219,11 @@ const assignSelectStyle: CSSProperties = {
 
 
 // System attachments carried for protocol purposes are consumed elsewhere and hidden
-// from the user-facing attachment list: the bridge attestation and delivery receipt, the
-// raw legacy source, and whatever control payloads this deployment carries.
+// from the user-facing attachment list: the bridge attestation and delivery receipt, and
+// whatever control payloads this deployment carries. The bridge's raw legacy source is
+// hidden too, but by its slot (bridgeOriginalIndex) rather than its type — an email
+// forwarded as an attachment is message/rfc822 as well, and is the reader's to see. The
+// raw source is offered through "Show original" instead.
 // Built on demand, not at module load: `deployment` imports the screens it contributes, so
 // reading it while THIS module is being evaluated would depend on which side of that cycle
 // loaded first. A function has no such ordering to get wrong.
@@ -228,14 +231,19 @@ function internalAttachmentTypes(): Set<string> {
   return new Set<string>([
     CLASSIFICATION_CONTENT_TYPE,
     RECEIPT_CONTENT_TYPE,
-    'message/rfc822', // original.eml — raw legacy email preserved by the bridge
     ...deployment.internalAttachmentTypes,
   ]);
 }
 function userAttachments(all: DecryptedAttachment[]): DecryptedAttachment[] {
   const internal = internalAttachmentTypes();
-  return all.filter(a => !internal.has(a.contentType));
+  const original = bridgeOriginalIndex(all);
+  return all.filter((a, i) => i !== original && !internal.has(a.contentType));
 }
+
+// How much of a bridged email's raw source "Show original" renders. The source can run to
+// megabytes of base64 attachments; the headers people open it for are at the top, and the
+// whole file is a download away.
+const ORIGINAL_PREVIEW_BYTES = 256 * 1024;
 
 // sanitizeFilename strips path separators, control chars, and leading dots before the
 // name is used as a download target, so a hostile filename can't escape the download
@@ -379,6 +387,15 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // plain-text peek is safe because text is escaped; a binary download is not.
   const [attachments, setAttachments] = useState<DecryptedAttachment[]>([]);
   const [ackedDownloads, setAckedDownloads] = useState<Set<number>>(new Set());
+  // A bridged email's raw source as the bridge received it (headers and all), shown on
+  // request as escaped text — the way to see who else it was addressed to, or why it was
+  // classified as it was.
+  const [original, setOriginal] = useState<DecryptedAttachment | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const originalText = useMemo(
+    () => (original && showOriginal ? new TextDecoder().decode(original.content.subarray(0, ORIGINAL_PREVIEW_BYTES)) : ''),
+    [original, showOriginal],
+  );
   // The text/html rendering (when the message carries one). Rendered sanitized in a
   // sandboxed iframe — but ONLY for a trusted sender; a pending sender's plain-text
   // peek never renders HTML. `showHtml` toggles the HTML vs plain-text view.
@@ -455,6 +472,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     setAttestation(null);
     setReceipt(null);
     setAttachments([]);
+    setOriginal(null);
     setHtmlBody(null);
     setBridgeResolved(false);
     (openFull ?? openMessageFull)(msg.hash)
@@ -463,6 +481,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
         setBody(full.bodyText);
         setHtmlBody(full.htmlBody ?? null);
         setAttachments(userAttachments(full.attachments));
+        const originalAt = bridgeOriginalIndex(full.attachments);
+        setOriginal(originalAt >= 0 ? full.attachments[originalAt] : null);
         const senderPub = msg.senderPublicKey ? fromHex(msg.senderPublicKey) : null;
         // Resolve both attestations before revealing the trust UI (each fails closed to null).
         const [a, r] = await Promise.all([
@@ -621,7 +641,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // next message and land on that one instead.
   useEffect(() => {
     setRevealed(false); setMessageTrusted(false); setNativeTrust(null); setNativeTrustReady(false);
-    setAckedDownloads(new Set()); setShowHtml(true);
+    setAckedDownloads(new Set()); setShowHtml(true); setShowOriginal(false);
     setCreating(null); setNewName(''); setCreateErr('');
   }, [msg.hash]);
 
@@ -1036,6 +1056,34 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                   </span>
                 )}
               </span>
+            </div>
+          )}
+
+          {/* The raw source, for bridged mail. Offered wherever the body itself is readable: it is
+              escaped text like the plain-text peek, so the gate's peek is enough. Saving it as a
+              file follows the attachment lock, since a mail app opening the .eml renders its HTML. */}
+          {av && original && (!gated || revealed) && (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                <Button size="sm" variant="secondary" leftIcon={<Icon name="file" size={14} />} onClick={() => setShowOriginal(v => !v)}>
+                  {showOriginal ? 'Hide original' : 'Show original'}
+                </Button>
+                {showOriginal && downloadsUnlocked && (
+                  <Button size="sm" variant="secondary" leftIcon={<Icon name="download" size={14} />} onClick={() => downloadAttachment(original)}>Download original</Button>
+                )}
+              </div>
+              {showOriginal && (
+                <>
+                  {original.content.length > ORIGINAL_PREVIEW_BYTES && (
+                    <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                      Showing the first {formatBytes(ORIGINAL_PREVIEW_BYTES)} of {formatBytes(original.content.length)}.{downloadsUnlocked ? ' Download it to see the rest.' : ''}
+                    </div>
+                  )}
+                  <pre style={{ margin: 'var(--space-2) 0 0', maxHeight: 480, overflow: 'auto', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-body)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', lineHeight: 'var(--leading-relaxed)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', borderRadius: 'var(--radius-md)' }}>
+                    {originalText}
+                  </pre>
+                </>
+              )}
             </div>
           )}
 

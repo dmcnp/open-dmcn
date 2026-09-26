@@ -12,6 +12,20 @@ import { deployment } from '@deployment';
 
 export const CLASSIFICATION_CONTENT_TYPE = 'application/x-dmcn-bridge-classification';
 
+// bridgeOriginalIndex finds the bridge's own copy of a legacy email's raw source among a
+// message's attachments, or returns -1. A bridge seals it straight after its classification
+// record — [classification, original.eml, …the mail's own attachments] — and it is found by
+// that position, never by type alone: an email forwarded as an attachment is message/rfc822
+// too, and that one is the reader's to see.
+export function bridgeOriginalIndex(attachments: { contentType: string; filename: string }[]): number {
+  const [first, second] = attachments;
+  return first?.contentType === CLASSIFICATION_CONTENT_TYPE
+    && second?.contentType === 'message/rfc822'
+    && second.filename === 'original.eml'
+    ? 1
+    : -1;
+}
+
 export enum BridgeTrustTier {
   Unspecified = 0,
   VerifiedLegacy = 1,
