@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net/http"
 
 	"github.com/mertenvg/logr/v2"
 
 	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // IdentityHandler handles identity lookup requests.
@@ -89,8 +91,18 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rec, err := h.lookup(r.Context(), address)
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
+		// A failure to FIND OUT, not an answer: the recipient's domain publishes _dmcn but its
+		// seeds were unreachable, or the record it served did not verify. Falling through to the
+		// bridge here would silently downgrade end-to-end mail to a recipient who is on DMCN into
+		// mail the bridge decrypts and relays as ordinary email. Refuse the send instead, and say why.
+		h.log.Warn("identity lookup failed", logr.M("error", err.Error()), logr.M("address", address))
+		writeError(w, http.StatusBadGateway, "could not reach "+address+"'s domain to look it up; nothing was sent")
+		return
+	}
 	if err != nil {
-		// Not a DMCN identity. It may still be reachable as ordinary email, through this
+		// Not a DMCN identity — a definite answer: the domain publishes no _dmcn record, or its
+		// own verified fleet says there is no such address. It may still be reachable as ordinary email, through this
 		// domain's bridge — so answer with the bridge's key and address rather than a flat
 		// "not found". The client then seals to the bridge and STOREs there exactly as it
 		// would for any recipient; the bridge reads the real destination out of the decrypted

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/mertenvg/logr/v2"
 
 	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/registry"
 	"dmcn.dev/open-dmcn/internal/web/api"
 )
 
@@ -209,5 +211,45 @@ func TestHandleRelayHints_MissingAddress(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+// TestHandleLookup_OnlyADefiniteAnswerGoesToTheBridge: answering with the bridge sends the message
+// through a server that decrypts it and relays it as ordinary email. That is right for an address
+// that is definitely not on DMCN, and a silent downgrade for one on DMCN whose domain simply could
+// not be reached — so only a definite not-found gets the bridge, and a failure to find out refuses
+// the send.
+func TestHandleLookup_OnlyADefiniteAnswerGoesToTheBridge(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		want   int
+		legacy bool
+	}{
+		{"not a DMCN address", fmt.Errorf("node: resolve: gmail.com not registered: %w", registry.ErrNotFound), http.StatusOK, true},
+		{"seeds unreachable", errors.New("node: resolve x@try.dmcn.email: all 1 seed(s) failed: dial timeout"), http.StatusBadGateway, false},
+		{"record fails verification", errors.New("registry: routing credential: signature invalid"), http.StatusBadGateway, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := api.NewIdentityHandler(
+				func(context.Context, string) (*identity.IdentityRecord, error) { return nil, tc.err },
+				nil, nil,
+				func(context.Context, string) ([]string, error) { return nil, nil },
+				logr.With(logr.M("test", true)),
+			)
+			h.SetBridgeResolver(func(context.Context) ([32]byte, string, error) {
+				return [32]byte{1}, "/ip4/127.0.0.1/tcp/7400/p2p/12D3KooWMQ5yrvamx9soSQVt3J5ixgwYtonwgLQhKAQ7oM7eHc4w", nil
+			})
+			rr := httptest.NewRecorder()
+			h.HandleLookup(rr, httptest.NewRequest("GET", "/api/v1/identity/lookup?address=x@try.dmcn.email", nil))
+			if rr.Code != tc.want {
+				t.Fatalf("lookup error %q answered %d, want %d", tc.err, rr.Code, tc.want)
+			}
+			var resp struct{ Legacy bool `json:"legacy"` }
+			_ = json.NewDecoder(rr.Body).Decode(&resp)
+			if resp.Legacy != tc.legacy {
+				t.Fatalf("legacy = %v, want %v", resp.Legacy, tc.legacy)
+			}
+		})
 	}
 }
