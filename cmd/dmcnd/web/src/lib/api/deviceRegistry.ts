@@ -15,6 +15,7 @@ import { getOrCreateDeviceKey, loadDeviceKey, deviceChallengeBytes } from '../cr
 import { deviceApprovalBytes, deviceRetirementBytes } from '../crypto/deviceKey';
 import { signWithKey } from '../crypto/sign';
 import { fromBase64, toBase64 } from '../crypto/keys';
+import { openSealed, sealToRecipients, type SealedBlobJSON } from '../crypto/sealedBlob';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
 /**
@@ -204,18 +205,23 @@ export type EnrolmentState =
  * the first time it meets the registry. One path, no migration mode: an account with no enrolled
  * devices is an account whose first device is about to arrive, however old the account is.
  *
+ * `sealedLabel` names the device in the owner's list (sealDeviceLabel). The relay keeps it only
+ * from the enrolment that admits the device, so passing it on every open costs nothing and
+ * changes nothing once the device is on.
+ *
  * It deliberately does NOT fall back to the recovery path when shut out. Recovery admits an
  * unapproved device on a delay that other devices can veto, and starting that silently — on every
  * sign-in from an unfamiliar browser — would turn a deliberate act into background noise, which
  * is exactly how a real hostile request would go unnoticed.
  */
-export async function ensureDeviceEnrolled(account: AccountSigner): Promise<EnrolmentState> {
+export async function ensureDeviceEnrolled(account: AccountSigner, sealedLabel?: Uint8Array): Promise<EnrolmentState> {
   try {
     const device = await getOrCreateDeviceKey(account.address);
     const attested = await attestDevice(account.address, device.publicKey);
     const res = await deviceOp<{ genesis: boolean }>(account, {
       op: 'device_enroll',
       device_public: toBase64(device.publicKey),
+      ...(sealedLabel ? { device_label: toBase64(sealedLabel) } : {}),
       ...(attested ? { device_credential: toBase64(attested.credential) } : {}),
     }, undefined, attested?.issuedAt);
     return { state: 'enrolled', genesis: res.genesis };
@@ -246,4 +252,88 @@ export function classifyEnrolment(err: unknown): EnrolmentState {
     if (err.message.includes('this device is already enrolled')) return { state: 'enrolled', genesis: false };
   }
   return { state: 'unavailable', error: err };
+}
+
+/**
+ * Whether a mailbox call failed because this browser is not one of the account's enrolled devices:
+ * never paired, or removed from another device. Holding the account key is not enough once an
+ * account has devices, so the remedy is pairing, not signing in again.
+ *
+ * Matched on the relay's sentence (relay.ErrDeviceNotEnrolled), which the mailbox proxy forwards,
+ * for the reason classifyEnrolment gives; TestDeviceErrorPhrasesTheBrowserMatches pins it on the
+ * Go side.
+ */
+export function isUnapprovedDevice(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  return message.includes('requires a proof from an enrolled device');
+}
+
+/** Where a device stands on the mailbox at `nowSec`. */
+export type DeviceStanding = 'active' | 'waiting' | 'removed';
+
+/**
+ * `waiting` is a recovery request inside its delay: admitted without any device's approval, able
+ * to do nothing yet, and removable by any active device, which is the owner's veto.
+ */
+export function deviceStanding(d: DeviceRecord, nowSec: number): DeviceStanding {
+  if (d.retired_at) return 'removed';
+  if (d.eligible_at && nowSec < d.eligible_at) return 'waiting';
+  return 'active';
+}
+
+/** The longest device name kept, in characters. It is a name, not a note. */
+export const MAX_DEVICE_LABEL = 64;
+
+/**
+ * Seal a device's name to the account's own key, for the relay to keep beside the device.
+ *
+ * The relay stores it and cannot read it: which devices someone uses, and what they call them, is
+ * the owner's business. Sealed with the same scheme as the mail filter (sealedBlob.ts), to the
+ * account key alone.
+ */
+export async function sealDeviceLabel(label: string, ownerX25519: Uint8Array): Promise<Uint8Array | undefined> {
+  const name = [...label.trim()].slice(0, MAX_DEVICE_LABEL).join('');
+  if (!name) return undefined;
+  const blob = await sealToRecipients(new TextEncoder().encode(name), [ownerX25519]);
+  return new TextEncoder().encode(JSON.stringify(blob));
+}
+
+/**
+ * Read a device's name back. Empty when it has none or it cannot be opened; a device enrolled
+ * before names were kept, or by a client that sent none, is still a device.
+ */
+export async function openDeviceLabel(sealedB64: string | undefined, keys: WorkingKeys): Promise<string> {
+  if (!sealedB64) return '';
+  try {
+    const blob = JSON.parse(new TextDecoder().decode(fromBase64(sealedB64))) as SealedBlobJSON;
+    const name = new TextDecoder().decode(await openSealed(blob, keys.x25519Derive, keys.x25519Public));
+    return [...name].slice(0, MAX_DEVICE_LABEL).join('');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * A plain name for the browser this runs in ("Chrome on macOS"), for a device the owner did not
+ * name. Coarse on purpose: it only has to tell the owner's own devices apart.
+ */
+export function describeBrowser(ua: string): string {
+  const browser =
+    /Edg(e|A|iOS)?\//.test(ua) ? 'Edge'
+    : /OPR\/|Opera/.test(ua) ? 'Opera'
+    : /Firefox\/|FxiOS\//.test(ua) ? 'Firefox'
+    : /Chrome\/|CriOS\/|Chromium\//.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari'
+    : '';
+  const os =
+    /iPhone/.test(ua) ? 'iPhone'
+    : /iPad/.test(ua) ? 'iPad'
+    : /Android/.test(ua) ? 'Android'
+    : /CrOS/.test(ua) ? 'ChromeOS'
+    : /Windows/.test(ua) ? 'Windows'
+    : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
+    : /Linux/.test(ua) ? 'Linux'
+    : '';
+  if (browser && os) return `${browser} on ${os}`;
+  return browser || os || 'Web browser';
 }

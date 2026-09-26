@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode, createElement } from 'react';
 import { MailboxSync, type Preview, type FullBody } from '../api/mailboxRest';
 import { ApiError } from '../api/client';
+import { isUnapprovedDevice } from '../api/deviceRegistry';
 import { POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
@@ -12,7 +13,10 @@ export type { Preview } from '../api/mailboxRest';
 // AccessState reflects the account's node-enforced access entitlement, learned from the
 // mailbox-sync response: 'ok' (reads allowed), 'suspended' (lapsed/grace — reads locked,
 // inbound still delivered), or 'closed' (terminal). The UI shows a banner for the latter two.
-export type AccessState = 'ok' | 'suspended' | 'closed';
+// 'unapproved-device' is this BROWSER rather than the account: the account has enrolled devices
+// and this is not one of them (never paired, or removed from another device), so the way back
+// is pairing it, which the inbox offers.
+export type AccessState = 'ok' | 'suspended' | 'closed' | 'unapproved-device';
 
 interface MessagesContextValue {
   messages: Preview[];
@@ -64,6 +68,11 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
           if (err instanceof ApiError && err.status === 403 && err.code === 'access_closed') {
             setAccessState('closed');
             setError('Your account has been closed.');
+            return;
+          }
+          if (isUnapprovedDevice(err)) {
+            setAccessState('unapproved-device');
+            setError('This browser is not one of the approved devices for this account, so it cannot open the mailbox.');
             return;
           }
           setError(err instanceof Error ? err.message : String(err));

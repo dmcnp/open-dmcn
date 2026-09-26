@@ -21,7 +21,7 @@
 
 import { useEffect } from 'react';
 import type { WorkingKeys } from '../lib/crypto/workingKeys';
-import { ensureDeviceEnrolled, signerFor } from '../lib/api/deviceRegistry';
+import { describeBrowser, ensureDeviceEnrolled, sealDeviceLabel, signerFor } from '../lib/api/deviceRegistry';
 
 export function DeviceEnroller({ address, keys, onNeedsApproval }: {
   address: string;
@@ -33,7 +33,10 @@ export function DeviceEnroller({ address, keys, onNeedsApproval }: {
     if (!address || !keys) return;
     let cancelled = false;
     void (async () => {
-      const result = await ensureDeviceEnrolled(signerFor(keys));
+      // Named after the browser, so the owner's device list says "Chrome on macOS" rather than
+      // a key. Only the enrolment that admits the device keeps it; after that this changes nothing.
+      const label = await sealDeviceLabel(describeBrowser(navigator.userAgent), keys.x25519Public).catch(() => undefined);
+      const result = await ensureDeviceEnrolled(signerFor(keys), label);
       if (cancelled) return;
       if (result.state === 'needs-approval') onNeedsApproval?.();
       // 'unavailable' changes nothing on screen — a fleet that cannot be reached right now says

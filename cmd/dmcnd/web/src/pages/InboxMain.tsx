@@ -6,6 +6,7 @@ import { useSent, isSentStoreHash } from '../lib/hooks/useSent';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
 import { useAuth } from '../lib/hooks/useAuth';
+import { UnapprovedDeviceNotice } from '../components/UnapprovedDeviceNotice';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
@@ -291,7 +292,7 @@ function PullIndicator({ distance, armed, refreshing, dragging }: PullState) {
 
 /** The mail content (list + reader) that fills the app shell's main column. */
 export function InboxMain() {
-  const { messages, error, refresh, deleteMessage } = useMessages();
+  const { messages, error, accessState, refresh, deleteMessage } = useMessages();
   const { sent, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
   const { isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
   const { knownFolderIds, labelById, folderById } = useLabels();
@@ -472,7 +473,10 @@ export function InboxMain() {
                   <span>Your address is awaiting approval by the domain administrator. Your mailbox will be available once it's countersigned.</span>
                 </div>
               )}
-              {!pending && listError && (
+              {/* In every folder, Sent included: its store is behind the same device check, and one
+                  sentence about the browser beats a second error about the symptom. */}
+              {!pending && accessState === 'unapproved-device' && address && <UnapprovedDeviceNotice address={address} />}
+              {!pending && listError && accessState !== 'unapproved-device' && (
                 <div style={{ margin: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>{listError}</div>
               )}
 

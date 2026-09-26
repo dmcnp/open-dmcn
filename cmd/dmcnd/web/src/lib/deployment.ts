@@ -166,6 +166,14 @@ export interface Deployment {
    * promise something the answer may be no to.
    */
   rotateKey?: ComponentType<{ address: string; keys: WorkingKeys }>;
+  /**
+   * The Settings panel listing the devices that may open this mailbox, and removing them.
+   *
+   * Deployment-specific because the device registry is: it lives on the product's relays, and a
+   * device joins it through pairing, which only a deployment with pairing has. The reference
+   * daemon keeps no registry, so there is nothing to list or remove there. Absent ⇒ no panel.
+   */
+  devices?: ComponentType<{ address: string; keys: WorkingKeys }>;
   // Where a device's push endpoint is registered, for contentless new-mail notifications.
   //
   // Only this step is deployment-specific: the permission prompt, the subscribe call, the settings

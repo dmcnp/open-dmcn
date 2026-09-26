@@ -174,6 +174,7 @@ export function Settings() {
   const Aliases = deployment.aliases;
   const CustomDomain = deployment.customDomain;
   const RotateKey = deployment.rotateKey;
+  const Devices = deployment.devices;
   const navigate = useNavigate();
   const embedded = !useIsMobile();
   // The shell hands down onAppearanceChange so toggling theme/density here re-themes
@@ -463,6 +464,10 @@ export function Settings() {
                 copy of your keys — not even encrypted. All encryption and signing happens client-side.
               </p>
             </div>
+
+            {/* Beside the key it guards: the key says whose mailbox this is, and this list says
+                which devices may open it. */}
+            {Devices && keys && address && <Devices address={address} keys={keys} />}
 
             <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>

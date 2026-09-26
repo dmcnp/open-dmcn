@@ -70,11 +70,44 @@ export async function loadDeviceKey(address: string): Promise<DeviceKey | null> 
 export async function getOrCreateDeviceKey(address: string): Promise<DeviceKey> {
   const existing = await loadDeviceKey(address);
   if (existing) return existing;
+  return mintDeviceKey(deviceKeyRef(address));
+}
 
+/**
+ * Mint the key this browser will pair under, without touching the one it has.
+ *
+ * Pairing always arrives as a NEW device. A key that was removed from the mailbox stays removed
+ * (the relay keeps its tombstone and refuses that key for good), so a browser coming back after a
+ * removal needs a fresh one; and a key left over from an earlier attempt that never completed is
+ * better replaced than trusted.
+ *
+ * The fresh key waits beside the current one until the approval lands (commitPairingDeviceKey).
+ * Replacing it up front would lock a working browser out of its own mailbox the moment someone
+ * opened the pairing screen and walked away, and if that browser was the account's only enrolled
+ * device, nothing could let it back in short of the recovery wait.
+ */
+export async function pairingDeviceKey(address: string): Promise<DeviceKey> {
+  return mintDeviceKey(pendingDeviceKeyRef(address));
+}
+
+/**
+ * Make the key minted for a pairing this browser's device key, once the pairing has been approved
+ * (so the relay has enrolled it). No-op when there is nothing pending.
+ */
+export async function commitPairingDeviceKey(address: string): Promise<void> {
+  const pending = await idbGet<StoredDeviceKey>(DEVICE_STORE, pendingDeviceKeyRef(address));
+  if (!pending?.privateKey || !pending.publicKey?.length) return;
+  await idbPut(DEVICE_STORE, deviceKeyRef(address), pending);
+  await idbDelete(DEVICE_STORE, pendingDeviceKeyRef(address));
+}
+
+const pendingDeviceKeyRef = (address: string) => `device-key-pending:${address.toLowerCase()}`;
+
+async function mintDeviceKey(ref: string): Promise<DeviceKey> {
   const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify']) as CryptoKeyPair;
   const raw = await crypto.subtle.exportKey('raw', pair.publicKey);
   const stored: StoredDeviceKey = { publicKey: new Uint8Array(raw), privateKey: pair.privateKey };
-  await idbPut(DEVICE_STORE, deviceKeyRef(address), stored);
+  await idbPut(DEVICE_STORE, ref, stored);
   return wrap(stored);
 }
 
