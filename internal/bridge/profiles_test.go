@@ -33,14 +33,14 @@ func TestInboundMultiProfileMapping(t *testing.T) {
 	})
 
 	// Recipient on the bob profile → mapped to bob.com.
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "y@bridge.bob.com", []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"y@bridge.bob.com"}, []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
 		t.Fatalf("inbound bob: %v", err)
 	}
 	if gotAddr != "y@bob.com" {
 		t.Fatalf("bob profile mapped to %q, want y@bob.com", gotAddr)
 	}
 	// Recipient on the default profile → mapped to the default DMCN domain.
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "x@bridge.localhost", []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"x@bridge.localhost"}, []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
 		t.Fatalf("inbound default: %v", err)
 	}
 	if gotAddr != "x@dmcn.localhost" {

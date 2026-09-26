@@ -74,7 +74,7 @@ func TestBridgeFold(t *testing.T) {
 	// An inbound legacy email to alice@<bridgeDomain> → translated to alice@<dmcnDomain>, wrapped,
 	// and delivered into alice's mailbox on this node.
 	raw := []byte("From: ext@gmail.com\r\nTo: alice@" + bridgeDomain + "\r\nSubject: hello\r\n\r\nhi alice from the legacy world\r\n")
-	if err := br.Inbound().HandleMessage(ctx, "1.2.3.4", "ext@gmail.com", "alice@"+bridgeDomain, raw); err != nil {
+	if err := br.Inbound().HandleMessage(ctx, "1.2.3.4", "ext@gmail.com", []string{"alice@" + bridgeDomain}, raw); err != nil {
 		t.Fatalf("inbound HandleMessage: %v", err)
 	}
 

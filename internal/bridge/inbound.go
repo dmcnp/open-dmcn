@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/mail"
 	"strings"
@@ -80,9 +81,58 @@ func (h *InboundHandler) servesBridgeDomain(domain string) bool {
 	return h.profiles.servesBridgeDomain(domain)
 }
 
-// HandleMessage processes an inbound SMTP message, classifies it, wraps it
-// in a DMCN envelope, and stores it on the relay.
-func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to string, rawMsg []byte) error {
+// inboundRecipient is one RCPT TO of an inbound transaction: the SMTP address it was accepted
+// for, the DMCN address that maps to, and — once looked up — that address's identity record.
+type inboundRecipient struct {
+	smtpAddr string
+	dmcnAddr string
+	rec      *identity.IdentityRecord // nil until looked up
+}
+
+// recipient maps a RCPT TO onto its DMCN address using the recipient domain's profile.
+func (h *InboundHandler) recipient(smtpAddr string) inboundRecipient {
+	bridgeDomain, dmcnDomain := h.profiles.forBridgeDomain(domainOf(smtpAddr))
+	return inboundRecipient{smtpAddr: smtpAddr, dmcnAddr: SMTPToDMCN(smtpAddr, bridgeDomain, dmcnDomain)}
+}
+
+// resolveRecipient maps and looks up one RCPT TO. The SMTP session calls it at RCPT time, so an
+// unknown address is refused for that recipient alone rather than failing the whole transaction
+// at DATA, where SMTP has only one reply for every recipient. The lookup error is wrapped, so
+// the caller can tell registry.ErrNotFound (permanent) from a fleet it could not reach.
+func (h *InboundHandler) resolveRecipient(ctx context.Context, smtpAddr string) (inboundRecipient, error) {
+	r := h.recipient(smtpAddr)
+	rec, err := h.lookup(ctx, r.dmcnAddr)
+	if err != nil {
+		return r, fmt.Errorf("%w: %s: %w", ErrRecipientNotFound, r.dmcnAddr, err)
+	}
+	r.rec = rec
+	return r, nil
+}
+
+// HandleMessage processes one inbound SMTP transaction addressed to every address in to: it
+// authenticates and classifies the message once, then delivers a DMCN envelope to each
+// recipient. One transaction routinely carries several recipients — a sending MTA batches
+// everyone behind the same MX into it.
+func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from string, to []string, rawMsg []byte) error {
+	rcpts := make([]inboundRecipient, 0, len(to))
+	for _, addr := range to {
+		rcpts = append(rcpts, h.recipient(addr))
+	}
+	return h.handle(ctx, senderIP, from, rcpts, rawMsg)
+}
+
+// handle is HandleMessage over recipients that may already be resolved (the SMTP session looks
+// them up at RCPT time); any still unresolved are looked up here.
+func (h *InboundHandler) handle(ctx context.Context, senderIP, from string, rcpts []inboundRecipient, rawMsg []byte) error {
+	if len(rcpts) == 0 {
+		return fmt.Errorf("%w: no recipients", ErrRecipientNotFound)
+	}
+	smtpTo := make([]string, len(rcpts))
+	for i, r := range rcpts {
+		smtpTo[i] = r.smtpAddr
+	}
+	to := strings.Join(smtpTo, ", ")
+
 	// 1. Verify authentication
 	authResult, err := h.authVerifier.Verify(ctx, senderIP, from, rawMsg)
 	if err != nil {
@@ -125,24 +175,7 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 		return fmt.Errorf("bridge: marshal classification: %w", err)
 	}
 
-	// 4. Map bridge address to DMCN address using the recipient domain's profile.
-	bridgeDomain, dmcnDomain := h.profiles.forBridgeDomain(domainOf(to))
-	dmcnAddr := SMTPToDMCN(to, bridgeDomain, dmcnDomain)
-
-	// 5. Look up recipient
-	recipientRec, err := h.lookup(ctx, dmcnAddr)
-	if err != nil {
-		// Bounce suppression: never reject (and thereby trigger a bounce) a
-		// null-sender or auto-submitted message — that is how bounce loops form
-		// (RFC 5321 §6.1, RFC 3834). Accept and drop it instead.
-		if isNullSender(from) || (hdrErr == nil && isAutoSubmitted(hdr)) {
-			h.log.Warnf("dropping undeliverable auto/bounce message from %q to %s (suppressing bounce)", from, dmcnAddr)
-			return nil
-		}
-		return fmt.Errorf("%w: %s: %v", ErrRecipientNotFound, dmcnAddr, err)
-	}
-
-	// 6. Build the DMCN PlaintextMessage from the parsed MIME, preserving the real subject, body
+	// 4. Build the DMCN PlaintextMessage from the parsed MIME, preserving the real subject, body
 	// content type, attachments, and threading. Fall back to the raw source as the body if the
 	// message doesn't parse (or carries no body), so a malformed message is never dropped.
 	// The sender is the LEGACY sender, not the bridge. A mail client shows this field, and a
@@ -154,10 +187,13 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 	// its SPF/DKIM/DMARC verdict for exactly this address before treating the name as meaningful.
 	// That is the whole point of the attestation — attributing the mail to the bridge instead
 	// would throw away the identity the bridge just went to the trouble of checking.
+	//
+	// The message is built once and shared by every recipient's copy, which differ only in
+	// recipient_address — as a native sender's copies do.
 	senderAddr, senderDisplay := inboundSender(hdr, from)
 	msg, err := message.NewPlaintextMessage(
 		senderAddr,
-		dmcnAddr,
+		"",
 		fmt.Sprintf("Bridged message from %s", senderAddr),
 		"",
 		h.bridgeKP.Ed25519Public,
@@ -170,7 +206,7 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 	msg.SenderDisplay = senderDisplay
 	parsed, perr := parseInboundMIME(rawMsg)
 	if perr != nil {
-		h.log.Warnf("inbound MIME parse failed for %s, delivering raw source as body: %v", dmcnAddr, perr)
+		h.log.Warnf("inbound MIME parse failed for %s, delivering raw source as body: %v", to, perr)
 		msg.Body = message.MessageBody{ContentType: "text/plain", Content: rawMsg}
 	} else {
 		if parsed.Subject != "" {
@@ -225,31 +261,135 @@ func (h *InboundHandler) HandleMessage(ctx context.Context, senderIP, from, to s
 		msg.Attachments = append(msg.Attachments, parsed.Attachments...)
 	}
 
-	// 7. Split into an independently-signed header + body and encrypt both under
-	// one per-message CEK — the same v2 format clients use, so bridged mail flows
-	// through the recipient's mailbox and the identical decrypt path (and the
+	// 5. Split into an independently-signed header + body — the same v2 format clients use, so
+	// bridged mail flows through the recipient's mailbox and the identical decrypt path (and the
 	// classification stays in MessageContent.Attachments, where clients read it).
 	sh, content, err := message.Split(msg, h.bridgeKP.Ed25519Private)
 	if err != nil {
 		return fmt.Errorf("bridge: split message: %w", err)
 	}
-	env, err := message.EncryptSplit(sh, content, []message.RecipientInfo{{
-		DeviceID:  h.bridgeKP.DeviceID,
-		X25519Pub: recipientRec.X25519Public,
-	}}, h.bridgeKP.Ed25519Private)
-	if err != nil {
-		return fmt.Errorf("bridge: encrypt: %w", err)
+	// The visible To/Cc the mail was addressed to, so the reader shows everyone it went to and
+	// Reply All has someone to reply to. EncryptSplit re-signs the header, which covers them.
+	sh.Header.To, sh.Header.Cc = h.inboundAudience(hdr)
+
+	// 6. Seal and deliver one copy per recipient mailbox.
+	type failure struct {
+		to  string
+		err error
+	}
+	var (
+		delivered int
+		failed    []failure
+		sealed    = map[[32]byte]bool{}
+	)
+	for _, r := range rcpts {
+		if r.rec == nil {
+			rec, err := h.lookup(ctx, r.dmcnAddr)
+			if err != nil {
+				// Bounce suppression: never reject (and thereby trigger a bounce) a
+				// null-sender or auto-submitted message — that is how bounce loops form
+				// (RFC 5321 §6.1, RFC 3834). Accept and drop it instead.
+				if isNullSender(from) || (hdr != nil && isAutoSubmitted(hdr)) {
+					h.log.Warnf("dropping undeliverable auto/bounce message from %q to %s (suppressing bounce)", from, r.dmcnAddr)
+					continue
+				}
+				failed = append(failed, failure{r.dmcnAddr, fmt.Errorf("%w: %s: %v", ErrRecipientNotFound, r.dmcnAddr, err)})
+				continue
+			}
+			r.rec = rec
+		}
+		// One mailbox, one copy: an address and its shared alias (or the same address named
+		// twice) reach one mailbox, and a second copy would show the message there twice.
+		if sealed[r.rec.X25519Public] {
+			continue
+		}
+		sealed[r.rec.X25519Public] = true
+
+		copyHdr := *sh
+		copyHdr.Header.RecipientAddress = r.dmcnAddr
+		env, err := message.EncryptSplit(&copyHdr, content, []message.RecipientInfo{{
+			DeviceID:  h.bridgeKP.DeviceID,
+			X25519Pub: r.rec.X25519Public,
+		}}, h.bridgeKP.Ed25519Private)
+		if err != nil {
+			failed = append(failed, failure{r.dmcnAddr, fmt.Errorf("bridge: encrypt for %s: %w", r.dmcnAddr, err)})
+			continue
+		}
+
+		// Deliver to the recipient (their relay hints, or our own mailbox if we are the
+		// recipient's relay).
+		if err := h.deliver(ctx, r.rec, env); err != nil {
+			failed = append(failed, failure{r.dmcnAddr, fmt.Errorf("bridge: deliver to %s: %w", r.dmcnAddr, err)})
+			continue
+		}
+		delivered++
+
+		h.log.Infof("inbound message from %s to %s delivered, hash: %x", from, r.dmcnAddr, computeEnvelopeHash(env))
+		h.audit.Record(AuditEvent{Action: "inbound.deliver", From: from, To: r.dmcnAddr, SenderIP: senderIP, TrustTier: tier, Success: true})
 	}
 
-	// 8. Deliver to the recipient (their relay hints, or our own mailbox if we are
-	// the recipient's relay).
-	if err := h.deliver(ctx, recipientRec, env); err != nil {
-		return fmt.Errorf("bridge: deliver to %s: %w", dmcnAddr, err)
+	if len(failed) == 0 {
+		return nil
 	}
-
-	h.log.Infof("inbound message from %s to %s delivered, hash: %x", from, dmcnAddr, computeEnvelopeHash(env))
-	h.audit.Record(AuditEvent{Action: "inbound.deliver", From: from, To: dmcnAddr, SenderIP: senderIP, TrustTier: tier, Success: true})
+	if delivered == 0 {
+		errs := make([]error, len(failed))
+		for i, f := range failed {
+			errs[i] = f.err
+		}
+		return errors.Join(errs...)
+	}
+	// Some copies are already delivered. SMTP answers DATA once for every recipient, so failing
+	// the transaction now would make the sender retry it — and deliver a second copy to everyone
+	// who already has one. Accept, and leave each failure in the log and the audit trail.
+	for _, f := range failed {
+		h.log.Errorf("inbound message from %s delivered to %d recipient(s) but not to %s: %v", from, delivered, f.to, f.err)
+		h.audit.Record(AuditEvent{Action: "inbound.deliver", From: from, To: f.to, SenderIP: senderIP, TrustTier: tier, Detail: f.err.Error()})
+	}
 	return nil
+}
+
+// maxInboundAudience caps how many To/Cc addresses a bridged header carries. The header is what
+// every inbox listing downloads, so a mail addressed to a huge visible list must not bloat it;
+// the full list stays in the original.eml attachment.
+const maxInboundAudience = 100
+
+// inboundAudience returns the To and Cc a legacy message was addressed to, for the signed
+// header. Addresses on a bridge domain this node serves are mapped to their DMCN address — the
+// same mapping as the envelope recipient — so the reader recognises its own address and Reply
+// All answers a DMCN recipient natively; every other address is carried as written. Like
+// sender_address, the lists are a bridge-signed claim about what the legacy header said. hdr is
+// nil when the header block did not parse, which yields no audience.
+func (h *InboundHandler) inboundAudience(hdr mail.Header) (to, cc []string) {
+	if hdr == nil {
+		return nil, nil
+	}
+	budget := maxInboundAudience
+	list := func(field string) []string {
+		addrs, err := hdr.AddressList(field)
+		if err != nil {
+			return nil
+		}
+		var out []string
+		for _, a := range addrs {
+			if budget == 0 {
+				break
+			}
+			addr := strings.TrimSpace(a.Address)
+			if addr == "" || strings.ContainsAny(addr, "\r\n") {
+				continue
+			}
+			if d := domainOf(addr); h.profiles.servesBridgeDomain(d) {
+				bridgeDomain, dmcnDomain := h.profiles.forBridgeDomain(d)
+				addr = SMTPToDMCN(addr, bridgeDomain, dmcnDomain)
+			}
+			out = append(out, addr)
+			budget--
+		}
+		return out
+	}
+	to = list("To")
+	cc = list("Cc")
+	return to, cc
 }
 
 // inboundSender picks the address the recipient sees as the sender of a bridged legacy

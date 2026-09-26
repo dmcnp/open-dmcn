@@ -25,7 +25,7 @@ func TestBridgeEnvelopeAcceptedByMailbox(t *testing.T) {
 	store := &capturingStore{}
 	h := newInbound(passingAuth(), lookup, store.fn, bridgeKP)
 
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if store.env == nil {

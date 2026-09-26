@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -12,6 +13,8 @@ import (
 	"github.com/emersion/go-smtp"
 	"github.com/mertenvg/logr/v2"
 	"github.com/pires/go-proxyproto"
+
+	"dmcn.dev/open-dmcn/internal/registry"
 )
 
 // smtpTLS configures transport security for the inbound SMTP listener.
@@ -167,7 +170,7 @@ func (b *smtpBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 	}, nil
 }
 
-// smtpSession implements smtp.Session, collecting MAIL FROM, RCPT TO,
+// smtpSession implements smtp.Session, collecting MAIL FROM, every RCPT TO,
 // and DATA before passing to the InboundHandler.
 type smtpSession struct {
 	handler     *InboundHandler
@@ -177,7 +180,7 @@ type smtpSession struct {
 	requireTLS  bool
 	log         logr.Logger
 	from        string
-	to          string
+	rcpts       []inboundRecipient // every accepted RCPT TO, resolved; a transaction may carry many
 	remoteIP    string
 	ipKey       string
 	releaseConn func()
@@ -204,11 +207,22 @@ func (s *smtpSession) Mail(from string, _ *smtp.MailOptions) error {
 func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	// RCPT confinement: accept mail only for a recipient on a bridge domain this node serves
 	// (cheaper than failing at DATA, and stops the bridge accepting mail for domains it does
-	// not bridge). The DMCN-address mapping + registry lookup still gate delivery afterward.
+	// not bridge).
 	if !s.handler.servesBridgeDomain(domainOf(to)) {
 		return &smtp.SMTPError{Code: 550, EnhancedCode: smtp.EnhancedCode{5, 1, 1}, Message: "relay not permitted for this recipient domain"}
 	}
-	s.to = to
+	// Resolve the recipient now, so an unknown address is refused for itself alone. DATA has
+	// one reply for every recipient: an unknown address found there would either fail the whole
+	// transaction (and duplicate it for the rest on retry) or be dropped without a bounce.
+	r, err := s.handler.resolveRecipient(s.ctx, to)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return &smtp.SMTPError{Code: 550, EnhancedCode: smtp.EnhancedCode{5, 1, 1}, Message: "no such recipient"}
+		}
+		s.log.Warnf("recipient lookup for %s failed: %v", to, err)
+		return &smtp.SMTPError{Code: 451, EnhancedCode: smtp.EnhancedCode{4, 4, 3}, Message: "recipient lookup failed, try again later"}
+	}
+	s.rcpts = append(s.rcpts, r)
 	return nil
 }
 
@@ -218,8 +232,8 @@ func (s *smtpSession) Data(r io.Reader) error {
 		return err
 	}
 
-	if err := s.handler.HandleMessage(
-		s.ctx, s.remoteIP, s.from, s.to, buf.Bytes(),
+	if err := s.handler.handle(
+		s.ctx, s.remoteIP, s.from, s.rcpts, buf.Bytes(),
 	); err != nil {
 		s.log.Warnf("inbound message handling failed: %v", err)
 		return err
@@ -230,7 +244,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 
 func (s *smtpSession) Reset() {
 	s.from = ""
-	s.to = ""
+	s.rcpts = nil
 }
 
 func (s *smtpSession) Logout() error {

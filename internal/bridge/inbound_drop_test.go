@@ -28,7 +28,7 @@ func TestInboundDropsHardFail(t *testing.T) {
 	auth := fixedAuth{res: &bridge.AuthResult{DMARC: bridge.DMARCFail, DMARCPolicy: bridge.DMARCPolicyReject}}
 	h := newInbound(auth, lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "9.9.9.9", "ext@gmail.com", "alice@bridge.localhost", []byte("From: x@gmail.com\r\n\r\nhi"))
+	err := h.HandleMessage(context.Background(), "9.9.9.9", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte("From: x@gmail.com\r\n\r\nhi"))
 	if !errors.Is(err, bridge.ErrMessageRejected) {
 		t.Fatalf("expected ErrMessageRejected, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestInboundDeliversQuarantineFail(t *testing.T) {
 	auth := fixedAuth{res: &bridge.AuthResult{DMARC: bridge.DMARCFail, DMARCPolicy: bridge.DMARCPolicyQuarantine}}
 	h := newInbound(auth, lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "9.9.9.9", "ext@gmail.com", "alice@bridge.localhost", []byte("From: x@gmail.com\r\n\r\nhi"))
+	err := h.HandleMessage(context.Background(), "9.9.9.9", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte("From: x@gmail.com\r\n\r\nhi"))
 	if err != nil {
 		t.Fatalf("quarantine-policy failure should be delivered, got %v", err)
 	}

@@ -22,7 +22,7 @@ func deliverInbound(t *testing.T, envelopeFrom string, raw string) (*message.Sig
 	store := &capturingStore{}
 	h := newInbound(passingAuth(), lookup, store.fn, bridgeKP)
 
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", envelopeFrom, "alice@bridge.localhost", []byte(raw)); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", envelopeFrom, []string{"alice@bridge.localhost"}, []byte(raw)); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if store.env == nil {

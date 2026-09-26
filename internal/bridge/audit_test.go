@@ -56,7 +56,7 @@ func TestAuditInboundDeliver(t *testing.T) {
 		Log:          testLog(),
 	})
 
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte("From: ext@gmail.com\r\n\r\nhi")); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	ev := audit.byAction("inbound.deliver")

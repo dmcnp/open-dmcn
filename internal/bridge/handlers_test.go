@@ -98,7 +98,7 @@ func TestInboundAuthError(t *testing.T) {
 	}
 	h := newInbound(erroringAuth{}, lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", []byte("hi"))
+	err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte("hi"))
 	if err == nil || !strings.Contains(err.Error(), "auth verify") {
 		t.Fatalf("expected auth verify error, got %v", err)
 	}
@@ -114,7 +114,7 @@ func TestInboundRecipientNotFound(t *testing.T) {
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", []byte("hi"))
+	err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte("hi"))
 	if !errors.Is(err, bridge.ErrRecipientNotFound) {
 		t.Fatalf("expected ErrRecipientNotFound, got %v", err)
 	}
@@ -139,7 +139,7 @@ func TestInboundStoresDecryptableEnvelope(t *testing.T) {
 	store := &capturingStore{}
 	h := newInbound(passingAuth(), lookup, store.fn, bridgeKP)
 
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", []byte(body)); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, []byte(body)); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 
@@ -501,7 +501,7 @@ func TestInboundAttributesTheLegacySender(t *testing.T) {
 	})
 
 	raw := []byte("From: someone@gmail.com\r\nSubject: hello\r\n\r\nbody\r\n")
-	if err := h.HandleMessage(context.Background(), "203.0.113.9", "someone@gmail.com", "alice@bridge.localhost", raw); err != nil {
+	if err := h.HandleMessage(context.Background(), "203.0.113.9", "someone@gmail.com", []string{"alice@bridge.localhost"}, raw); err != nil {
 		t.Fatalf("inbound: %v", err)
 	}
 	if delivered == nil {

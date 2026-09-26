@@ -30,7 +30,7 @@ func TestInboundDropsMailLoop(t *testing.T) {
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", msgWithReceived(26))
+	err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, msgWithReceived(26))
 	if !errors.Is(err, bridge.ErrMailLoop) {
 		t.Fatalf("expected ErrMailLoop, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestInboundAllowsUnderHopLimit(t *testing.T) {
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
-	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", "alice@bridge.localhost", msgWithReceived(3)); err != nil {
+	if err := h.HandleMessage(context.Background(), "1.2.3.4", "ext@gmail.com", []string{"alice@bridge.localhost"}, msgWithReceived(3)); err != nil {
 		t.Fatalf("a normal message must be delivered, got %v", err)
 	}
 	if store.calls != 1 {
@@ -65,7 +65,7 @@ func TestInboundSuppressesBounceForNullSender(t *testing.T) {
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "1.2.3.4", "<>", "ghost@bridge.localhost",
+	err := h.HandleMessage(context.Background(), "1.2.3.4", "<>", []string{"ghost@bridge.localhost"},
 		[]byte("From: postmaster@gmail.com\r\nSubject: Delivery failure\r\n\r\nbounce body"))
 	if err != nil {
 		t.Fatalf("null-sender undeliverable must be dropped silently, got %v", err)
@@ -85,7 +85,7 @@ func TestInboundSuppressesBounceForAutoSubmitted(t *testing.T) {
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
 	raw := []byte("From: vacation@gmail.com\r\nAuto-Submitted: auto-replied\r\nSubject: Out of office\r\n\r\naway")
-	err := h.HandleMessage(context.Background(), "1.2.3.4", "vacation@gmail.com", "ghost@bridge.localhost", raw)
+	err := h.HandleMessage(context.Background(), "1.2.3.4", "vacation@gmail.com", []string{"ghost@bridge.localhost"}, raw)
 	if err != nil {
 		t.Fatalf("auto-submitted undeliverable must be dropped, got %v", err)
 	}
@@ -103,7 +103,7 @@ func TestInboundStillRejectsNormalUndeliverable(t *testing.T) {
 	}
 	h := newInbound(passingAuth(), lookup, store.fn, mustKeyPair(t))
 
-	err := h.HandleMessage(context.Background(), "1.2.3.4", "real@gmail.com", "ghost@bridge.localhost",
+	err := h.HandleMessage(context.Background(), "1.2.3.4", "real@gmail.com", []string{"ghost@bridge.localhost"},
 		[]byte("From: real@gmail.com\r\nSubject: hello\r\n\r\nhi"))
 	if !errors.Is(err, bridge.ErrRecipientNotFound) {
 		t.Fatalf("expected ErrRecipientNotFound for a normal undeliverable, got %v", err)
