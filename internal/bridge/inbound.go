@@ -101,12 +101,26 @@ func (h *InboundHandler) recipient(smtpAddr string) inboundRecipient {
 // the caller can tell registry.ErrNotFound (permanent) from a fleet it could not reach.
 func (h *InboundHandler) resolveRecipient(ctx context.Context, smtpAddr string) (inboundRecipient, error) {
 	r := h.recipient(smtpAddr)
-	rec, err := h.lookup(ctx, r.dmcnAddr)
+	rec, err := h.lookupRecipient(ctx, r.dmcnAddr)
 	if err != nil {
-		return r, fmt.Errorf("%w: %s: %w", ErrRecipientNotFound, r.dmcnAddr, err)
+		return r, err
 	}
 	r.rec = rec
 	return r, nil
+}
+
+// lookupRecipient looks up a DMCN recipient's record and checks there is somewhere to deliver
+// to: a record with no relay hints has no mailbox, so its mail is refused (ErrRecipientHasNoMailbox)
+// rather than held here for a collection that will not come.
+func (h *InboundHandler) lookupRecipient(ctx context.Context, dmcnAddr string) (*identity.IdentityRecord, error) {
+	rec, err := h.lookup(ctx, dmcnAddr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", ErrRecipientNotFound, dmcnAddr, err)
+	}
+	if len(rec.RelayHints) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrRecipientHasNoMailbox, dmcnAddr)
+	}
+	return rec, nil
 }
 
 // HandleMessage processes one inbound SMTP transaction addressed to every address in to: it
@@ -284,7 +298,7 @@ func (h *InboundHandler) handle(ctx context.Context, senderIP, from string, rcpt
 	)
 	for _, r := range rcpts {
 		if r.rec == nil {
-			rec, err := h.lookup(ctx, r.dmcnAddr)
+			rec, err := h.lookupRecipient(ctx, r.dmcnAddr)
 			if err != nil {
 				// Bounce suppression: never reject (and thereby trigger a bounce) a
 				// null-sender or auto-submitted message — that is how bounce loops form
@@ -293,7 +307,7 @@ func (h *InboundHandler) handle(ctx context.Context, senderIP, from string, rcpt
 					h.log.Warnf("dropping undeliverable auto/bounce message from %q to %s (suppressing bounce)", from, r.dmcnAddr)
 					continue
 				}
-				failed = append(failed, failure{r.dmcnAddr, fmt.Errorf("%w: %s: %v", ErrRecipientNotFound, r.dmcnAddr, err)})
+				failed = append(failed, failure{r.dmcnAddr, err})
 				continue
 			}
 			r.rec = rec

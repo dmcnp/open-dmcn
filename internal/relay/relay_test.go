@@ -57,26 +57,14 @@ func TestMessageStoreBasic(t *testing.T) {
 		t.Error("hash mismatch")
 	}
 
-	// Delivery status
-	status, err := store.DeliveryStatusOf(hash)
-	if err != nil {
-		t.Fatalf("status: %v", err)
-	}
-	if status != Pending {
-		t.Errorf("status = %d, want Pending", status)
-	}
-
-	// Ack
+	// Once FETCH has handed it out, Ack deletes it: a delivered envelope is not kept.
+	store.MarkFetched("bob@localhost", hashes)
 	if err := store.Ack(hash); err != nil {
 		t.Fatalf("ack: %v", err)
 	}
-
-	status, _ = store.DeliveryStatusOf(hash)
-	if status != Delivered {
-		t.Errorf("status after ack = %d, want Delivered", status)
+	if c := store.Count(); c != 0 {
+		t.Errorf("count after ack = %d, want 0", c)
 	}
-
-	// Fetch should return empty after ack (only pending)
 	envs, _ = store.Fetch("bob@localhost")
 	if len(envs) != 0 {
 		t.Errorf("fetched %d after ack, want 0", len(envs))
@@ -86,16 +74,11 @@ func TestMessageStoreBasic(t *testing.T) {
 func TestMessageStoreNotFound(t *testing.T) {
 	store := NewMessageStore()
 
-	// Ack non-existent
-	err := store.Ack([32]byte{99})
-	if err != ErrEnvelopeNotFound {
+	if err := store.Ack([32]byte{99}); err != ErrEnvelopeNotFound {
 		t.Errorf("ack non-existent: got %v, want ErrEnvelopeNotFound", err)
 	}
-
-	// Status non-existent
-	_, err = store.DeliveryStatusOf([32]byte{99})
-	if err != ErrEnvelopeNotFound {
-		t.Errorf("status non-existent: got %v, want ErrEnvelopeNotFound", err)
+	if err := store.Remove("bob@localhost", [32]byte{99}); err != ErrEnvelopeNotFound {
+		t.Errorf("remove non-existent: got %v, want ErrEnvelopeNotFound", err)
 	}
 }
 

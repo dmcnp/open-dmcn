@@ -24,6 +24,7 @@ const (
 	// this field is informational — a fixture using an email would model a shape the protocol
 	// no longer has.
 	tBridgeAddr   = "12D3KooWBridgeTestPeerIDFixture0000000000000000"
+	tHomeRelay    = "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWGzBqTbM8Qfv3HzqCnFLv1s6qL8dmrkcFzZwRnMYxmYUv"
 	tBridgeDomain = "bridge.localhost"
 	tDMCNDomain   = "dmcn.localhost"
 )
@@ -46,6 +47,7 @@ func recordFor(addr string, kp *identity.IdentityKeyPair) *identity.IdentityReco
 		Address:       addr,
 		Ed25519Public: kp.Ed25519Public,
 		X25519Public:  kp.X25519Public,
+		RelayHints:    []string{tHomeRelay},
 	}
 }
 

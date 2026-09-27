@@ -179,6 +179,8 @@ func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, c
 		BridgeDomain:  cfg.bridgeDomain,
 		DMCNDomain:    cfg.domain,
 		AuditLogPath:  os.Getenv("DMCND_BRIDGE_AUDIT_LOG"),
+		// Outbound mail gets the same lifetime as the rest of the node's queue.
+		OutboundMaxAge: cfg.transitMaxAge,
 	}
 	signer, err := applyBridgeModes(&bcfg, cfg, log)
 	if err != nil {

@@ -60,6 +60,9 @@ type Config struct {
 	// OnionForwardJitter, when > 0, adds a random per-hop delay in [0, jitter)
 	// before forwarding/delivering onion packets (timing-correlation hardening).
 	OnionForwardJitter time.Duration
+	// TransitMaxAge drops mail that has waited this long in the in-flight store without being
+	// collected (relay.WithTransitMaxAge). 0 = kept until collected.
+	TransitMaxAge time.Duration
 
 	// AllowedPeers gates which libp2p peers may federate (connect, take part in
 	// peer discovery, open relay streams). Entries are bare base58 peer IDs or
@@ -336,6 +339,13 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		relay.WithPeerGrantCheck(func(p peer.ID, grant string) bool {
 			return credentials.hasFleetGrant(p, grant)
 		}),
+	}
+	if cfg.TransitMaxAge > 0 {
+		relayOpts = append(relayOpts, relay.WithTransitMaxAge(cfg.TransitMaxAge))
+	}
+	// The relay's own X25519 key is the key a co-located bridge receives outbound mail on.
+	if !cfg.ClientOnly {
+		relayOpts = append(relayOpts, relay.WithRelayX25519Pub(relayPub))
 	}
 	// Make the relay's in-flight message store durable when a datastore is
 	// available, so queued mail survives a restart.

@@ -29,6 +29,10 @@ var (
 	ErrInvalidSignature = errors.New("bridge: invalid signature")
 	// ErrRecipientNotFound is returned when the DMCN recipient cannot be found.
 	ErrRecipientNotFound = errors.New("bridge: recipient not found in registry")
+	// ErrRecipientHasNoMailbox is returned for a DMCN recipient whose record names no relay to
+	// deliver to. The bridge refuses mail for it rather than holding the mail itself: the bridge
+	// is not a mailbox, and nothing would come to collect it.
+	ErrRecipientHasNoMailbox = errors.New("bridge: recipient has no mailbox relay")
 	// ErrSenderNotFound is returned when the DMCN sender cannot be found.
 	ErrSenderNotFound = errors.New("bridge: sender not found in registry")
 	// ErrNotLegacyAddress is returned when an outbound recipient is not a legacy address.
@@ -61,6 +65,13 @@ var (
 	// subject contains CR/LF/NUL — a header-injection attempt — and is refused
 	// before any SMTP message is built.
 	ErrUnsafeHeader = errors.New("bridge: unsafe header content (possible injection)")
+	// ErrUndecryptable is returned when an outbound envelope cannot be opened with the bridge's
+	// key or its signature does not verify. No retry can change either.
+	ErrUndecryptable = errors.New("bridge: cannot decrypt envelope")
+	// ErrDeliveryDeferred marks an SMTP failure the remote side may yet turn into a delivery: a
+	// 4xx reply, a server that could not be reached, a DNS lookup that timed out. The bridge
+	// retries it; any other delivery error is the remote side's final answer.
+	ErrDeliveryDeferred = errors.New("bridge: delivery deferred")
 )
 
 // BridgeTrustTier represents the trust classification assigned to an

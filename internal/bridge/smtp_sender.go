@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"net/textproto"
 	"os"
 	"sort"
 	"strings"
@@ -180,7 +181,11 @@ func (s *SMTPSender) Deliver(ctx context.Context, from, to string, msg *message.
 	}
 	hosts, err := s.mxHosts(ctx, domain)
 	if err != nil {
-		return fmt.Errorf("smtp: resolve MX for %s: %w", domain, err)
+		err = fmt.Errorf("smtp: resolve MX for %s: %w", domain, err)
+		if deferred(err) {
+			return fmt.Errorf("%w: %w", ErrDeliveryDeferred, err)
+		}
+		return err
 	}
 
 	var errs []error
@@ -193,8 +198,53 @@ func (s *SMTPSender) Deliver(ctx context.Context, from, to string, msg *message.
 		s.log.Infof("delivered to %s via %s", to, h)
 		return nil
 	}
-	return fmt.Errorf("smtp: all %d MX host(s) failed for %s: %w", len(hosts), domain, errors.Join(errs...))
+	err = fmt.Errorf("smtp: all %d MX host(s) failed for %s: %w", len(hosts), domain, errors.Join(errs...))
+	if !anyDeferred(errs) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ErrDeliveryDeferred, err)
 }
+
+// anyDeferred decides for a message every MX host failed to take. The hosts were tried in
+// preference order, and the most preferred one that answered with a reply speaks for the domain:
+// a 451 from the primary is "come back later" even if a stale backup says "554 relaying denied",
+// and a 550 from the primary is final even if a backup would have queued it. With no reply from
+// any host it is worth trying again if any failed in a way that may pass, and final only when
+// every host is gone for good.
+func anyDeferred(errs []error) bool {
+	for _, e := range errs {
+		var reply *textproto.Error
+		if errors.As(e, &reply) {
+			return reply.Code >= 400 && reply.Code < 500
+		}
+	}
+	for _, e := range errs {
+		if deferred(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// deferred reports whether an SMTP delivery failure may pass if the message is tried again
+// later. A reply code decides when there is one: 4xx is "come back later", 5xx is final. A DNS
+// failure is temporary unless the name does not exist. Anything else that went wrong talking to
+// a server — refused, timed out, reset, a failed TLS handshake — is the network or the server
+// having a bad moment, and mail servers retry exactly those.
+func deferred(err error) bool {
+	var reply *textproto.Error
+	if errors.As(err, &reply) {
+		return reply.Code >= 400 && reply.Code < 500
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return !dnsErr.IsNotFound
+	}
+	return !errors.Is(err, errNullMX)
+}
+
+// errNullMX is a recipient domain's published "accepts no mail" (RFC 7505).
+var errNullMX = errors.New("smtp: domain publishes a null MX (accepts no mail)")
 
 // mxHosts returns the recipient domain's MX hosts in preference order. With no MX records it
 // falls back to the domain itself (implicit MX, RFC 5321 §5.1); a single null MX ("." host,
@@ -209,7 +259,7 @@ func (s *SMTPSender) mxHosts(ctx context.Context, domain string) ([]string, erro
 		return nil, err
 	}
 	if len(recs) == 1 && strings.TrimSuffix(recs[0].Host, ".") == "" {
-		return nil, fmt.Errorf("smtp: %s publishes a null MX (accepts no mail)", domain)
+		return nil, fmt.Errorf("%w: %s", errNullMX, domain)
 	}
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].Pref < recs[j].Pref })
 	hosts := make([]string, 0, len(recs))
@@ -239,6 +289,11 @@ func (s *SMTPSender) deliverTo(ctx context.Context, host, from, to string, msg [
 		deadline = d
 	}
 	_ = conn.SetDeadline(deadline)
+	// The deadline bounds a session in minutes; a bridge that is stopping should not wait that
+	// long, so cancelling ctx closes the connection. The message then counts as deferred and is
+	// tried again after the restart.
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
 
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
@@ -278,5 +333,11 @@ func (s *SMTPSender) deliverTo(ctx context.Context, host, from, to string, msg [
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("finalise DATA: %w", err)
 	}
-	return c.Quit()
+	// The server's reply to the end of DATA is what accepts the message; from here it is
+	// delivered. A QUIT that fails afterwards is only a connection closing badly, and reporting it
+	// as a failure would send the message again — to the next MX host, or on the retry schedule.
+	if err := c.Quit(); err != nil {
+		s.log.Debugf("QUIT to %s after delivery: %v", host, err)
+	}
+	return nil
 }

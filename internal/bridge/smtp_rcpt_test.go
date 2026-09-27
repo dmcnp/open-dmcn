@@ -56,8 +56,13 @@ func startRcptServer(t *testing.T, lookup LookupFunc) (addr string, delivered fu
 	}
 }
 
-// registered resolves the given DMCN addresses to fresh records; anything else is not found, and
-// "flaky@dmcn.localhost" fails as an unreachable fleet would.
+// testHomeRelay is where the test recipients' mailboxes are: any relay will do, so long as there
+// is one.
+const testHomeRelay = "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWGzBqTbM8Qfv3HzqCnFLv1s6qL8dmrkcFzZwRnMYxmYUv"
+
+// registered resolves the given DMCN addresses to fresh records; anything else is not found,
+// "flaky@dmcn.localhost" fails as an unreachable fleet would, and "nomailbox@dmcn.localhost" is
+// registered but names no relay to deliver to.
 func registered(t *testing.T, addrs ...string) LookupFunc {
 	recs := map[string]*identity.IdentityRecord{}
 	for _, a := range addrs {
@@ -65,11 +70,14 @@ func registered(t *testing.T, addrs ...string) LookupFunc {
 		if err != nil {
 			t.Fatalf("keygen: %v", err)
 		}
-		recs[a] = &identity.IdentityRecord{Address: a, Ed25519Public: kp.Ed25519Public, X25519Public: kp.X25519Public}
+		recs[a] = &identity.IdentityRecord{Address: a, Ed25519Public: kp.Ed25519Public, X25519Public: kp.X25519Public, RelayHints: []string{testHomeRelay}}
 	}
 	return func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
 		if addr == "flaky@dmcn.localhost" {
 			return nil, errors.New("dial fleet: connection refused")
+		}
+		if addr == "nomailbox@dmcn.localhost" {
+			return &identity.IdentityRecord{Address: addr}, nil
 		}
 		if rec, ok := recs[addr]; ok {
 			return rec, nil
@@ -88,8 +96,9 @@ func smtpCode(err error) int {
 
 // A sending MTA batches every recipient behind our MX into one transaction. Each RCPT TO must
 // get its own copy — the session used to keep only the last one and drop the rest after a 250.
-// An unknown recipient is refused at RCPT (550) without disturbing the others, and a fleet that
-// cannot be reached is a temporary refusal (451), never a permanent one.
+// An unknown recipient, or one with no relay to deliver to, is refused at RCPT (550) without
+// disturbing the others, and a fleet that cannot be reached is a temporary refusal (451), never a
+// permanent one.
 func TestSMTPEveryRecipientDelivered(t *testing.T) {
 	addr, delivered := startRcptServer(t, registered(t, "alice@dmcn.localhost", "bob@dmcn.localhost"))
 
@@ -109,6 +118,9 @@ func TestSMTPEveryRecipientDelivered(t *testing.T) {
 	}
 	if err := c.Rcpt("flaky@bridge.localhost", nil); smtpCode(err) != 451 {
 		t.Fatalf("RCPT with unreachable fleet: want 451, got %v", err)
+	}
+	if err := c.Rcpt("nomailbox@bridge.localhost", nil); smtpCode(err) != 550 {
+		t.Fatalf("RCPT for an address with no mailbox relay: want 550, got %v", err)
 	}
 	if err := c.Rcpt("bob@bridge.localhost", nil); err != nil {
 		t.Fatalf("RCPT bob: %v", err)
@@ -150,5 +162,15 @@ func TestSMTPEveryRecipientDelivered(t *testing.T) {
 	got = delivered()
 	if got["alice@dmcn.localhost"] != 1 || got["bob@dmcn.localhost"] != 2 {
 		t.Fatalf("after second transaction delivered %v, want alice=1 bob=2", got)
+	}
+}
+
+// The bridge is not a mailbox: delivery to a recipient whose record names no relay is refused,
+// never held on the bridge's own node for a collection that will not come.
+func TestDeliverRefusesARecipientWithNoMailbox(t *testing.T) {
+	deliver := makeBridgeDeliver(nil, "", nil, testLogr())
+	err := deliver(context.Background(), &identity.IdentityRecord{Address: "alice@dmcn.localhost"}, nil)
+	if !errors.Is(err, ErrRecipientHasNoMailbox) {
+		t.Fatalf("err = %v, want ErrRecipientHasNoMailbox", err)
 	}
 }

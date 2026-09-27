@@ -9,7 +9,6 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/node"
-	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // TestEndToEndAliceBob is the end-to-end integration test.
@@ -183,13 +182,9 @@ func TestEndToEndAliceBob(t *testing.T) {
 		t.Fatalf("ack message: %v", err)
 	}
 
-	// Verify delivery status on node-B's relay store
-	status, err := nodeB.Relay().Store().DeliveryStatusOf(envHash)
-	if err != nil {
-		t.Fatalf("check delivery status: %v", err)
-	}
-	if status != relay.Delivered {
-		t.Errorf("delivery status = %d, want Delivered (%d)", status, relay.Delivered)
+	// The ACK deletes it from node-B's relay store: delivered mail is not kept.
+	if c := nodeB.Relay().Store().Count(); c != 0 {
+		t.Errorf("node-B store count after ACK = %d, want 0", c)
 	}
 }
 

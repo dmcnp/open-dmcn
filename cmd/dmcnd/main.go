@@ -90,6 +90,7 @@ func main() {
 		Domain:          cfg.domain,
 		Peers:           cfg.peers,
 		AllowedPeers:    cfg.allowedPeers,
+		TransitMaxAge:   cfg.transitMaxAge,
 	}
 	// Dev mode stubs DAR DNS anchoring so a local domain with no real _dmcn TXT verifies
 	// (production resolves the real record). The seed's static _dmcn still supplies the
@@ -387,6 +388,9 @@ type config struct {
 	// put the domain root back on the node.
 	bundlePath  string
 	petitionTTL time.Duration
+	// transitMaxAge is how long undelivered mail may wait in the in-flight queue, and how long the
+	// bridge retries outbound mail before it tells the sender it gave up.
+	transitMaxAge time.Duration
 
 	// SMTP bridge (opt-in). When enabled, the daemon folds an SMTP↔DMCN bridge onto its shared
 	// node: inbound legacy email is signed+encrypted into DMCN mailboxes, and DMCN mail to the
@@ -402,6 +406,10 @@ type config struct {
 	bridgeSendIPs    []string // public addresses this bridge sends from, for the SPF/PTR guidance
 	bridgeDomain     string   // the legacy email (SMTP) domain the bridge represents
 }
+
+// defaultTransitMaxAge is the bridge's outbound lifetime, so the node's queue and the bridge's
+// give-up are one number.
+const defaultTransitMaxAge = bridge.DefaultOutboundMaxAge
 
 func loadConfig() config {
 	devMode := envBool("DMCND_DEV")
@@ -446,6 +454,15 @@ func loadConfig() config {
 			log.Warnf("DMCND_PETITION_TTL %q is not a positive duration — using %s", v, petition.DefaultTTL)
 		} else {
 			c.petitionTTL = d
+		}
+	}
+	c.transitMaxAge = defaultTransitMaxAge
+	if v := os.Getenv("DMCND_TRANSIT_MAX_AGE"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			log.Warnf("DMCND_TRANSIT_MAX_AGE %q is not a positive duration — using %s", v, defaultTransitMaxAge)
+		} else {
+			c.transitMaxAge = d
 		}
 	}
 	if c.webHost == "" {

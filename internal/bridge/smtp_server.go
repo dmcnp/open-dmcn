@@ -219,6 +219,9 @@ func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 		if errors.Is(err, registry.ErrNotFound) {
 			return &smtp.SMTPError{Code: 550, EnhancedCode: smtp.EnhancedCode{5, 1, 1}, Message: "no such recipient"}
 		}
+		if errors.Is(err, ErrRecipientHasNoMailbox) {
+			return &smtp.SMTPError{Code: 550, EnhancedCode: smtp.EnhancedCode{5, 1, 1}, Message: "no mailbox for this recipient"}
+		}
 		s.log.Warnf("recipient lookup for %s failed: %v", to, err)
 		return &smtp.SMTPError{Code: 451, EnhancedCode: smtp.EnhancedCode{4, 4, 3}, Message: "recipient lookup failed, try again later"}
 	}

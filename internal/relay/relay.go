@@ -181,8 +181,16 @@ type Relay struct {
 	// forwarding/delivering, to blur timing correlation. 0 ⇒ no delay.
 	onionJitter time.Duration
 
+	// transitMaxAge is how long undelivered mail may wait in the in-flight store (0 ⇒ forever).
+	// See transitexpiry.go.
+	transitMaxAge time.Duration
+	// relayXPubHex is the hex of this relay's own X25519 key, the key a co-located bridge
+	// receives outbound mail on; its queue gets longer before the expiry sweep. Empty ⇒ unset.
+	relayXPubHex string
+
 	mu      sync.Mutex
 	started bool
+	stopBg  context.CancelFunc // ends the background loops Start began; nil while stopped
 }
 
 // onionArrival describes how an envelope reached acceptEnvelope, so RequireOnion
@@ -243,6 +251,7 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 		isRelayPeer:      cfg.isRelayPeer,
 		onionPolicy:      cfg.onionPolicy,
 		onionJitter:      cfg.onionJitter,
+		transitMaxAge:    cfg.transitMaxAge,
 
 		filterStore:    cfg.filterStore,
 		filterPriv:     cfg.filterPriv,
@@ -254,6 +263,9 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 		replicates:   cfg.replicates,
 		records:      cfg.records,
 		darAnchor:    cfg.darAnchor,
+	}
+	if cfg.relayXPub != ([32]byte{}) {
+		r.relayXPubHex = fmt.Sprintf("%x", cfg.relayXPub[:])
 	}
 	return r
 }
@@ -276,6 +288,8 @@ type relayOptions struct {
 	isRelayPeer      func(peer.ID) bool
 	onionPolicy      func(context.Context, *identity.IdentityRecord) bool
 	onionJitter      time.Duration
+	transitMaxAge    time.Duration
+	relayXPub        [32]byte // this relay's own X25519 pubkey (unset = zero)
 
 	filterStore    MailFilterStore
 	filterPriv     [32]byte
@@ -518,6 +532,9 @@ func (r *Relay) Start() {
 	r.startTime = time.Now()
 	r.host.SetStreamHandler(ProtocolID, r.handleStream)
 	r.host.SetStreamHandler(PeersProtocolID, r.handlePeers)
+	ctx, cancel := context.WithCancel(context.Background())
+	r.stopBg = cancel
+	r.startTransitExpiry(ctx)
 	r.log.Info("relay started")
 }
 
@@ -529,6 +546,8 @@ func (r *Relay) Stop() {
 		return
 	}
 	r.started = false
+	r.stopBg()
+	r.stopBg = nil
 	r.host.RemoveStreamHandler(ProtocolID)
 	r.host.RemoveStreamHandler(PeersProtocolID)
 	r.log.Info("relay stopped")
@@ -974,11 +993,13 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 			pbHashes[i] = hash[:]
 		}
 		r.log.Debugf("FETCH returning %d envelope(s) for %s", len(envs), init.Address)
-		writeResponse(s, &dmcnpb.RelayResponse{
+		if err := writeResponse(s, &dmcnpb.RelayResponse{
 			Response: &dmcnpb.RelayResponse_Fetch{
 				Fetch: &dmcnpb.FetchResponse{Envelopes: pbEnvs, EnvelopeHashes: pbHashes},
 			},
-		})
+		}); err == nil {
+			r.store.MarkFetched(addr, hashes)
+		}
 
 	case authReq.GetMailboxOp() != nil:
 		op := authReq.GetMailboxOp()

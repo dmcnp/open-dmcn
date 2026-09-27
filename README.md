@@ -184,6 +184,7 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_DATA_DIR` | `data` | mailbox/record store, sessions, node key, petition queue |
 | `DMCND_IDENTITY` | `<data-dir>/node.key` | persistent libp2p identity key — the peer ID is published in DNS, so it must survive restarts |
 | `DMCND_PETITION_TTL` | `24h` | how long an unclaimed mailbox petition survives |
+| `DMCND_TRANSIT_MAX_AGE` | `120h` | how long mail may wait undelivered in the in-flight queue before it is dropped; with the bridge on, outbound mail is retried this long and then the sender gets a failure notice. Delivered mail is deleted at once |
 | `DMCND_TLS_CERT` / `DMCND_TLS_KEY` | — | TLS cert/key; absent + not dev ⇒ autocert |
 | `DMCND_DEV` | `false` | plain-HTTP-on-localhost + stub DAR DNS anchoring |
 | `DMCND_PEERS` | — | bootstrap/discovery peer multiaddrs (federation) |

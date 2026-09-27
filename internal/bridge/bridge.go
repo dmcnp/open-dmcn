@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mertenvg/logr/v2"
@@ -38,8 +40,13 @@ type Config struct {
 	// multi-tenant). The default {BridgeDomain, DMCNDomain} pair is always served too.
 	Profiles     []DomainProfile
 	PollInterval time.Duration // how often to poll relay for outbound messages
-	AuthVerifier AuthVerifier  // nil = use stub
-	Deliverer    SMTPDeliverer // nil = use stub
+	// OutboundMaxAge is how long outbound mail keeps being retried before the bridge gives up and
+	// tells the sender. 0 ⇒ DefaultOutboundMaxAge: there is always a lifetime, or a message nothing
+	// can deliver — a forgery included — would be kept and retried forever. The node's own in-flight lifetime for
+	// everything else is node.Config.TransitMaxAge; the daemon sets both.
+	OutboundMaxAge time.Duration
+	AuthVerifier   AuthVerifier  // nil = use stub
+	Deliverer      SMTPDeliverer // nil = use stub
 
 	// AllowedSenderDomains are the DMCN domains whose users may relay outbound
 	// mail through this bridge (the open-relay guard). Empty ⇒ only DMCNDomain.
@@ -84,10 +91,29 @@ type Bridge struct {
 	smtp       *SMTPServer
 	auditFile  *FileAuditLog // non-nil when an audit log file is open; closed on Stop
 	poll       time.Duration
+	maxAge     time.Duration // give up on outbound mail this old (always set: see Config.OutboundMaxAge)
+	retryMu    sync.Mutex
+	retries    map[[32]byte]retryState    // outbound envelopes waiting for their next attempt
+	inFlight   map[[32]byte]bool          // outbound envelopes an attempt is running for
+	routed     map[[32]byte]routedMessage // where each envelope already opened is going
+	pool       *workerPool                // domain workers delivering outbound mail
+	handleJob  func(outboundJob)          // what a domain worker does with a job: runJob (a test seam)
+	work       sync.WaitGroup             // running domain workers, waited for by Stop
+	wake       chan struct{}              // asks the poll loop for a pass before its next tick
+	pollDone   chan struct{}              // closed when the poll loop has exited; nil until Start
 	log        logr.Logger
 	ctx        context.Context
 	cancel     context.CancelFunc
 }
+
+// DefaultOutboundMaxAge is five days, the lifetime mail servers have long given a message they
+// cannot deliver before bouncing it.
+const DefaultOutboundMaxAge = 5 * 24 * time.Hour
+
+// keyMismatchLifetime is how long a message whose signing key is not its named sender's is
+// retried. The retry is only for a record the bridge holds that a key rotation has since replaced,
+// which a lookup sees within minutes; past that it is a forgery, and nobody is told.
+const keyMismatchLifetime = time.Hour
 
 // New creates the SMTP bridge over an already-running DMCN node it SHARES with the daemon. The
 // caller (the daemon) owns the node's lifecycle and provisions the bridge identity (bridgeKP,
@@ -109,6 +135,9 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 	}
 	if cfg.PollInterval == 0 {
 		cfg.PollInterval = 5 * time.Second
+	}
+	if cfg.OutboundMaxAge <= 0 {
+		cfg.OutboundMaxAge = DefaultOutboundMaxAge
 	}
 	if cfg.AuthVerifier == nil {
 		cfg.AuthVerifier = &StubAuthVerifier{
@@ -209,7 +238,7 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 	}
 	smtpSrv := NewSMTPServer(ctx, cfg.SMTPListenAddr, inbound, cfg.BridgeDomain, limits, tlsOpts, proxyPolicy, l)
 
-	return &Bridge{
+	b := &Bridge{
 		node:       n,
 		bridgeKP:   bridgeKP,
 		inbound:    inbound,
@@ -219,10 +248,18 @@ func New(ctx context.Context, n *node.Node, bridgeKP *identity.IdentityKeyPair, 
 		smtp:       smtpSrv,
 		auditFile:  auditFile,
 		poll:       cfg.PollInterval,
+		maxAge:     cfg.OutboundMaxAge,
+		retries:    make(map[[32]byte]retryState),
+		inFlight:   make(map[[32]byte]bool),
+		routed:     make(map[[32]byte]routedMessage),
+		pool:       newWorkerPool(),
+		wake:       make(chan struct{}, 1),
 		log:        l,
 		ctx:        ctx,
 		cancel:     cancel,
-	}, nil
+	}
+	b.handleJob = b.runJob
+	return b, nil
 }
 
 // Start begins the SMTP server and outbound relay polling.
@@ -231,6 +268,7 @@ func (b *Bridge) Start() error {
 		return fmt.Errorf("bridge: start SMTP: %w", err)
 	}
 
+	b.pollDone = make(chan struct{})
 	go b.pollLoop()
 
 	b.log.Info("bridge started")
@@ -240,6 +278,7 @@ func (b *Bridge) Start() error {
 // pollLoop periodically fetches envelopes from the relay addressed to
 // the bridge and processes them for outbound SMTP delivery.
 func (b *Bridge) pollLoop() {
+	defer close(b.pollDone)
 	ticker := time.NewTicker(b.poll)
 	defer ticker.Stop()
 
@@ -248,6 +287,8 @@ func (b *Bridge) pollLoop() {
 		case <-b.ctx.Done():
 			return
 		case <-ticker.C:
+			b.processPending()
+		case <-b.wake:
 			b.processPending()
 		}
 	}
@@ -260,95 +301,437 @@ func (b *Bridge) pollLoop() {
 // self-hosted daemon is always a mailbox host while browser-composed mail is always split, so
 // polling only the in-flight store meant outbound mail sat in the mailbox forever. That went
 // unnoticed for as long as nothing could discover the bridge to send to it in the first place.
+//
+// Either way an envelope leaves its store once the bridge is finished with it: delivered, refused
+// with a verdict or for good, or given up on after maxAge.
 func (b *Bridge) processPending() {
 	rxHex := fmt.Sprintf("%x", b.bridgeKP.X25519Public[:])
+	var items []outboundItem
 
 	// In-flight store: unsplit envelopes, and anything stored before a mailbox existed.
 	store := b.node.Relay().Store()
-	envs, hashes := store.Fetch(rxHex)
-	for i, env := range envs {
-		if b.deliverOne(env) {
-			if err := store.Ack(hashes[i]); err != nil {
-				b.log.Warnf("ack failed for %x: %v", hashes[i], err)
-			}
-		}
+	for _, q := range store.Queued(rxHex) {
+		items = append(items, outboundItem{
+			hash:     q.Hash,
+			queuedAt: q.StoredAt,
+			load:     func() (*message.EncryptedEnvelope, error) { return q.Envelope, nil },
+			remove:   func() error { return store.Remove(rxHex, q.Hash) },
+		})
 	}
 
 	// Durable mailbox: the normal path for split envelopes.
-	b.processMailbox(b.ctx, rxHex)
+	mailbox, listed := b.mailboxItems(b.ctx, rxHex)
+	items = append(items, mailbox...)
+
+	b.dispatch(items, listed)
 }
 
-// processMailbox drains split envelopes addressed to the bridge out of the durable mailbox.
-func (b *Bridge) processMailbox(ctx context.Context, rxHex string) {
+// outboundItem is one queued envelope, from whichever store holds it.
+type outboundItem struct {
+	hash     [32]byte
+	queuedAt time.Time
+	load     func() (*message.EncryptedEnvelope, error)
+	remove   func() error // deletes it from its store once the bridge is finished with it
+}
+
+// mailboxItems lists the split envelopes addressed to the bridge in the durable mailbox, and
+// reports false when the listing failed, so the caller does not mistake a failed read for an
+// empty mailbox.
+func (b *Bridge) mailboxItems(ctx context.Context, rxHex string) ([]outboundItem, bool) {
 	mbox := b.node.Relay().Mailbox()
 	if mbox == nil {
-		return
+		return nil, true
 	}
 	entries, _, err := mbox.List(ctx, rxHex, 0, "")
 	if err != nil {
 		b.log.Warnf("outbound: list mailbox: %v", err)
-		return
+		return nil, false
 	}
+	items := make([]outboundItem, 0, len(entries))
 	for _, entry := range entries {
 		var hash [32]byte
 		copy(hash[:], entry.Hash)
-		body, berr := mbox.GetBody(ctx, rxHex, hash)
-		if berr != nil {
-			b.log.Warnf("outbound: fetch body %x: %v", hash, berr)
+		items = append(items, outboundItem{
+			hash:     hash,
+			queuedAt: time.Unix(entry.StoredAt, 0),
+			load: func() (*message.EncryptedEnvelope, error) {
+				body, err := mbox.GetBody(ctx, rxHex, hash)
+				if err != nil {
+					return nil, fmt.Errorf("fetch body: %w", err)
+				}
+				return relay.EnvelopeFromParts(entry, body)
+			},
+			remove: func() error { return mbox.Delete(ctx, rxHex, hash) },
+		})
+	}
+	return items, true
+}
+
+// Outbound mail is delivered by a pool of domain workers. A worker takes one recipient domain and
+// drains that domain's queue, one message after another, so mail to one domain goes out back to
+// back at the speed of its SMTP sessions while a server that hangs holds up only its own queue.
+// When the queue is empty the worker stops and goes back to the pool, to be recycled for the
+// next domain that has mail.
+const (
+	outboundWorkers = 8  // domain workers, and so how many domains are delivered to at once
+	domainQueueSize = 32 // messages queued on one domain's worker; the rest wait for a later pass
+)
+
+// outboundJob is a queued envelope, already opened, on its way to its domain's worker.
+type outboundJob struct {
+	item   outboundItem
+	opened *OpenedMessage
+}
+
+// domainWorker drains one recipient domain's queue. The pool makes each once and reuses it.
+type domainWorker struct {
+	domain string
+	jobs   chan outboundJob
+}
+
+// workerPool hands recipient domains to domain workers.
+type workerPool struct {
+	mu     sync.Mutex
+	active map[string]*domainWorker // domain → the worker draining its queue
+	idle   []*domainWorker          // workers free to take a domain
+}
+
+func newWorkerPool() *workerPool {
+	p := &workerPool{active: make(map[string]*domainWorker)}
+	for i := 0; i < outboundWorkers; i++ {
+		p.idle = append(p.idle, &domainWorker{jobs: make(chan outboundJob, domainQueueSize)})
+	}
+	return p
+}
+
+// dispatch routes each queued envelope that is due and not already under way to its domain's
+// worker, opening it to learn the domain unless an earlier attempt already did. When items is
+// complete — every store listed — it also forgets what it knew of anything that has left the
+// queue some other way; after a failed listing that would wipe the schedule of everything backing
+// off and send it all out again at once.
+func (b *Bridge) dispatch(items []outboundItem, complete bool) {
+	if complete {
+		queued := make(map[[32]byte]bool, len(items))
+		for _, it := range items {
+			queued[it.hash] = true
+		}
+		b.retryMu.Lock()
+		for hash := range b.retries {
+			if !queued[hash] {
+				delete(b.retries, hash)
+			}
+		}
+		var gone []routedMessage
+		for hash, r := range b.routed {
+			if !queued[hash] {
+				delete(b.routed, hash)
+				gone = append(gone, r)
+			}
+		}
+		b.retryMu.Unlock()
+		for _, r := range gone {
+			b.outbound.retrying.forget(r.msgID, r.recipient)
+		}
+	}
+
+	for _, it := range items {
+		if b.ctx.Err() != nil {
+			return
+		}
+		if !b.claim(it.hash) {
 			continue
 		}
-		env, eerr := relay.EnvelopeFromParts(entry, body)
-		if eerr != nil {
-			b.log.Warnf("outbound: rebuild envelope %x: %v", hash, eerr)
+		// A message whose lifetime is up is given up on here if no worker can take it, rather than
+		// left to wait until the relay drops it without a word to anyone.
+		expired := time.Since(it.queuedAt) >= b.maxAge
+		// A message whose domain has no room right now is not opened again just to find that out.
+		if domain, ok := b.knownDomain(it.hash); ok && !expired && !b.hasRoom(domain) {
+			b.release(it.hash)
 			continue
 		}
-		if !b.deliverOne(env) {
+		opened, ok := b.open(it)
+		if !ok {
+			b.release(it.hash)
 			continue
 		}
-		// Delete only after a delivery attempt that produced a receipt. A message left in
-		// place would be retried forever; one deleted on a transport error would be lost.
-		if derr := mbox.Delete(ctx, rxHex, hash); derr != nil {
-			b.log.Warnf("outbound: delete %x after delivery: %v", hash, derr)
+		domain := domainOf(opened.Plaintext.RecipientAddress)
+		b.note(it.hash, opened, domain)
+		if b.enqueue(domain, outboundJob{item: it, opened: opened}) {
+			continue
 		}
+		if expired {
+			b.expireUnsent(it, opened)
+		}
+		b.release(it.hash) // no worker free, or its queue is full: a later pass takes it
 	}
 }
 
-// deliverOne runs one envelope through the outbound handler and returns whether it is finished
-// with — i.e. whether the bridge reached a verdict it can report, success or failure alike.
-func (b *Bridge) deliverOne(env *message.EncryptedEnvelope) bool {
-	receipt, deliverErr := b.outbound.HandleEnvelope(b.ctx, env)
-	if deliverErr != nil && receipt == nil {
-		b.log.Warnf("outbound handling failed: %v", deliverErr)
+// expireUnsent gives up on a message whose lifetime ran out while it waited for a worker, and
+// tells its sender just as a worker giving up would have.
+func (b *Bridge) expireUnsent(it outboundItem, opened *OpenedMessage) {
+	b.log.Warnf("outbound: giving up on %x after %s: no worker was free to send it", it.hash, b.maxAge)
+	a := b.outbound.Expire(b.ctx, opened)
+	receipt := b.outbound.Abandon(a, b.maxAge)
+	b.finished(it.hash)
+	if shouldNotifySender(receipt) {
+		b.sendReceipt(b.ctx, opened.Plaintext, a.Sender, receipt)
+	}
+	if err := it.remove(); err != nil {
+		b.log.Warnf("outbound: delete %x: %v", it.hash, err)
+	}
+}
+
+// open loads and opens a queued envelope. It reports false for one that cannot go to a worker
+// now: one that could not be loaded (retried on the schedule, dropped once past maxAge) or opened
+// (dropped at once — no retry decrypts it).
+func (b *Bridge) open(it outboundItem) (*OpenedMessage, bool) {
+	env, err := it.load()
+	if err != nil {
+		// Something the bridge cannot even load — a mailbox entry whose body is gone — gets the
+		// same schedule and lifetime as anything else it cannot deliver, and then goes. Nobody
+		// can be told: nothing names a sender.
+		if time.Since(it.queuedAt) < b.maxAge {
+			b.log.Warnf("outbound: load %x, next attempt at %s: %v", it.hash, b.deferRetry(it.hash).Format(time.RFC3339), err)
+			return nil, false
+		}
+		b.log.Warnf("outbound: giving up on %x after %s: %v", it.hash, b.maxAge, err)
+		b.drop(it, &OutboundAttempt{Err: fmt.Errorf("load queued envelope: %w", err), Retry: true})
+		return nil, false
+	}
+	opened, err := b.outbound.Open(env)
+	if err != nil {
+		b.log.Warnf("outbound: dropping a message no retry can deliver: %v", err)
+		b.drop(it, &OutboundAttempt{Err: err})
+		return nil, false
+	}
+	return opened, true
+}
+
+// drop ends an envelope the bridge could not get as far as a worker: audited, never notified.
+func (b *Bridge) drop(it outboundItem, a *OutboundAttempt) {
+	b.outbound.Abandon(a, b.maxAge)
+	b.finished(it.hash)
+	if err := it.remove(); err != nil {
+		b.log.Warnf("outbound: delete %x: %v", it.hash, err)
+	}
+}
+
+// hasRoom reports whether a message for domain could be queued now: its worker's queue has space,
+// or it has no worker and one is free.
+func (b *Bridge) hasRoom(domain string) bool {
+	p := b.pool
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if w, ok := p.active[domain]; ok {
+		return len(w.jobs) < cap(w.jobs)
+	}
+	return len(p.idle) > 0
+}
+
+// enqueue puts a job on its domain's worker, taking a worker from the pool and starting it when
+// the domain has none. It never blocks: false means no worker is free or the queue is full.
+func (b *Bridge) enqueue(domain string, job outboundJob) bool {
+	p := b.pool
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	w, ok := p.active[domain]
+	if !ok {
+		if len(p.idle) == 0 {
+			return false
+		}
+		w = p.idle[len(p.idle)-1]
+		p.idle = p.idle[:len(p.idle)-1]
+		w.domain = domain
+		p.active[domain] = w
+		b.work.Add(1)
+		go b.runWorker(w)
+	}
+	select {
+	case w.jobs <- job:
+		return true
+	default:
 		return false
 	}
+}
+
+// runWorker drains a domain worker's queue, then returns the worker to the pool. The queue is
+// checked for emptiness under the pool's lock, the same lock enqueue sends under, so nothing
+// can be queued on a worker that has just decided to stop.
+func (b *Bridge) runWorker(w *domainWorker) {
+	defer b.work.Done()
+	p := b.pool
+	for {
+		select {
+		case <-b.ctx.Done():
+			// Stopping: what is still queued stays in its store for the restart.
+			for len(w.jobs) > 0 {
+				b.release((<-w.jobs).item.hash)
+			}
+			return
+		case job := <-w.jobs:
+			b.handleJob(job)
+			continue
+		default:
+		}
+		p.mu.Lock()
+		if len(w.jobs) > 0 {
+			p.mu.Unlock()
+			continue
+		}
+		delete(p.active, w.domain)
+		w.domain = ""
+		p.idle = append(p.idle, w)
+		p.mu.Unlock()
+		b.nudge() // a worker is free: mail waiting for one need not wait for the next poll
+		return
+	}
+}
+
+// runJob makes one attempt at a job and deletes the envelope from its store if the bridge is
+// finished with it.
+func (b *Bridge) runJob(job outboundJob) {
+	defer b.release(job.item.hash)
+	if !b.attempt(job.opened, job.item.hash, job.item.queuedAt) {
+		return
+	}
+	if err := job.item.remove(); err != nil {
+		b.log.Warnf("outbound: delete %x after delivery: %v", job.item.hash, err)
+	}
+}
+
+// nudge asks the poll loop for a pass now rather than at its next tick.
+func (b *Bridge) nudge() {
+	select {
+	case b.wake <- struct{}{}:
+	default:
+	}
+}
+
+// Retry schedule for outbound mail that reached no verdict: a minute, then doubling, then every
+// six hours until maxAge — the shape mail servers have long used, which is quick about a moment's
+// trouble and patient with a server that stays down.
+const (
+	firstRetry = time.Minute
+	maxRetry   = 6 * time.Hour
+)
+
+// retryState is where one envelope is on the retry schedule.
+type retryState struct {
+	attempts int
+	next     time.Time
+}
+
+// claim marks an envelope as under way if it is due and no attempt at it is running, and reports
+// whether it did. The schedule is in memory, so a restart tries everything once more straight
+// away.
+func (b *Bridge) claim(hash [32]byte) bool {
+	b.retryMu.Lock()
+	defer b.retryMu.Unlock()
+	if b.inFlight[hash] {
+		return false
+	}
+	if r, ok := b.retries[hash]; ok && time.Now().Before(r.next) {
+		return false
+	}
+	b.inFlight[hash] = true
+	return true
+}
+
+// release ends the claim on an envelope.
+func (b *Bridge) release(hash [32]byte) {
+	b.retryMu.Lock()
+	defer b.retryMu.Unlock()
+	delete(b.inFlight, hash)
+}
+
+// deferRetry moves an envelope one step along the retry schedule and returns when it is next due.
+func (b *Bridge) deferRetry(hash [32]byte) time.Time {
+	b.retryMu.Lock()
+	defer b.retryMu.Unlock()
+	r := b.retries[hash]
+	wait := maxRetry
+	if r.attempts < 20 { // past that the doubling has long since passed the cap
+		wait = min(firstRetry<<r.attempts, maxRetry)
+	}
+	r.attempts++
+	r.next = time.Now().Add(wait)
+	b.retries[hash] = r
+	return r.next
+}
+
+// finished drops an envelope from the retry schedule.
+func (b *Bridge) finished(hash [32]byte) {
+	b.retryMu.Lock()
+	defer b.retryMu.Unlock()
+	delete(b.retries, hash)
+	delete(b.routed, hash)
+}
+
+// routedMessage is what the bridge learned about a queued envelope by opening it.
+type routedMessage struct {
+	domain    string   // recipient domain, whose worker it goes to
+	msgID     [16]byte // with recipient, the key the outbound handler remembers it under
+	recipient string
+}
+
+// note remembers where an opened envelope is going, so a later pass need not open it again.
+func (b *Bridge) note(hash [32]byte, opened *OpenedMessage, domain string) {
+	b.retryMu.Lock()
+	defer b.retryMu.Unlock()
+	b.routed[hash] = routedMessage{domain: domain, msgID: opened.Plaintext.MessageID, recipient: opened.Plaintext.RecipientAddress}
+}
+
+// knownDomain is the recipient domain of an envelope, once a pass has opened it.
+func (b *Bridge) knownDomain(hash [32]byte) (string, bool) {
+	b.retryMu.Lock()
+	defer b.retryMu.Unlock()
+	r, ok := b.routed[hash]
+	return r.domain, ok
+}
+
+// attempt sends one opened envelope through the outbound handler and reports whether the bridge
+// is finished with it, so the caller can delete it. Finished means a verdict it can act on,
+// success or failure alike, or a refusal no retry can change. Anything else is retried on the
+// schedule until it has been queued for maxAge, and then given up on. Deleted on a transport
+// error it would be lost; kept for good it would be retried, and stored, forever.
+func (b *Bridge) attempt(opened *OpenedMessage, hash [32]byte, queuedAt time.Time) bool {
+	a := b.outbound.Send(b.ctx, opened)
+	receipt := a.Receipt
+	if receipt == nil && a.Err != nil {
+		lifetime := b.maxAge
+		if errors.Is(a.Err, ErrSenderKeyMismatch) {
+			lifetime = min(lifetime, keyMismatchLifetime)
+		}
+		switch {
+		case b.ctx.Err() != nil:
+			// Stopping: the attempt was cut short, not answered. It stays queued for the restart
+			// rather than being dropped, or given up on with a notice nothing could now send.
+			return false
+		case !a.Retry:
+			b.log.Warnf("outbound: dropping a message no retry can deliver: %v", a.Err)
+		case time.Since(queuedAt) < lifetime:
+			b.log.Warnf("outbound handling failed, next attempt at %s: %v", b.deferRetry(hash).Format(time.RFC3339), a.Err)
+			return false
+		default:
+			b.log.Warnf("outbound: giving up after %s: %v", lifetime, a.Err)
+		}
+		receipt = b.outbound.Abandon(a, b.maxAge)
+	}
+	b.finished(hash)
 	// Only failures come back to the sender. Email has always worked this way — a DSN is for
 	// non-delivery, and nobody expects a note confirming each message arrived — and a receipt per
 	// successful send would put a second message in the sender's own mailbox for every one they
 	// write. The signed success receipt still exists on the audit trail; it just is not mail.
+	// There is a receipt only when the sender was verified, so a.Sender is their checked record.
 	if shouldNotifySender(receipt) {
-		b.sendReceipt(b.ctx, env, receipt)
+		b.sendReceipt(b.ctx, a.Plaintext, a.Sender, receipt)
 	}
 	return true
 }
 
-func (b *Bridge) sendReceipt(ctx context.Context, originalEnv *message.EncryptedEnvelope, receipt *BridgeDeliveryReceipt) {
-	// Decrypt the original to learn who to send the receipt to. Uses the same format-agnostic
-	// path the delivery itself does — a split envelope (what any browser produces) is not
-	// readable by message.Decrypt, so using that here meant the receipt was silently dropped for
-	// exactly the messages that were successfully delivered.
-	pt, _, err := decryptForBridge(originalEnv, b.bridgeKP)
-	if err != nil {
-		b.log.Warnf("cannot decrypt for receipt: %v", err)
-		return
-	}
-
-	// Look up sender to encrypt receipt to them
-	senderRec, err := b.node.Lookup(ctx, pt.SenderAddress)
-	if err != nil {
-		b.log.Warnf("cannot look up sender for receipt: %v", err)
-		return
-	}
-
+// sendReceipt tells the sender of pt how their message fared, sealed to senderRec — the record
+// its signing key was checked against when it was handled.
+func (b *Bridge) sendReceipt(ctx context.Context, pt *message.PlaintextMessage, senderRec *identity.IdentityRecord, receipt *BridgeDeliveryReceipt) {
 	receiptBytes, err := receipt.Marshal()
 	if err != nil {
 		b.log.Warnf("marshal receipt: %v", err)
@@ -434,6 +817,12 @@ func (b *Bridge) SMTPAddr() string {
 // closed here — only the bridge's own SMTP server, poll loop, and audit file.
 func (b *Bridge) Stop() error {
 	b.cancel()
+	// Let the poll loop and any running attempt finish before the shared node is used by anyone
+	// else or goes away.
+	if b.pollDone != nil {
+		<-b.pollDone
+	}
+	b.work.Wait()
 	b.smtp.Stop()
 	if b.auditFile != nil {
 		b.auditFile.Close()
@@ -445,9 +834,9 @@ func (b *Bridge) Stop() error {
 // makeBridgeDeliver builds the DeliverFunc the bridge uses for both inbound mail
 // and delivery receipts. It STOREs the (split) envelope to the recipient's relay
 // hints via the relay client — the same path a client sender uses, so the mail
-// lands in the recipient's mailbox — falling back to a local store when the
-// recipient's relay is the bridge's own node (avoiding a self-dial), or when the
-// recipient publishes no relay hints.
+// lands in the recipient's mailbox — storing locally when the recipient's relay is
+// the bridge's own node (avoiding a self-dial). A recipient with no relay hints has
+// no mailbox and is refused: the bridge does not hold mail for it.
 func makeBridgeDeliver(n *node.Node, senderAddr string, senderKP *identity.IdentityKeyPair, log logr.Logger) DeliverFunc {
 	storeLocal := func(ctx context.Context, env *message.EncryptedEnvelope) error {
 		hash := computeEnvelopeHash(env)
@@ -467,7 +856,7 @@ func makeBridgeDeliver(n *node.Node, senderAddr string, senderKP *identity.Ident
 
 	return func(ctx context.Context, recipient *identity.IdentityRecord, env *message.EncryptedEnvelope) error {
 		if len(recipient.RelayHints) == 0 {
-			return storeLocal(ctx, env) // legacy fallback: recipient fetches from us
+			return fmt.Errorf("%w: %s", ErrRecipientHasNoMailbox, recipient.Address)
 		}
 		// Routing integrity: only route to hints attested by a verified operator routing
 		// credential (RelayHints are unsigned by the owner),
