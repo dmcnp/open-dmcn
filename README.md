@@ -213,6 +213,11 @@ so the relay stores ciphertext it cannot read. Sign in elsewhere and both follow
 A relay may decline to offer storage (no datastore, or a deliberately minimal node). It answers
 `UNSUPPORTED` and the client keeps that state in IndexedDB instead — single-device, still working.
 
+Two things never sync: the search index and the mail list's rows. To search the text of your
+mail, each device downloads every message once and keeps its own index in IndexedDB; it also keeps
+the list's rows so an unlock shows your mail at once. Both are encrypted under a key derived from
+the unlocked account, so they are unreadable while the account is locked and are rebuilt if lost.
+
 ### Federation
 
 Two daemons on different domains interoperate the way email does — via DNS, not a global

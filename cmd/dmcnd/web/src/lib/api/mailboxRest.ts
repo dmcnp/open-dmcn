@@ -2,7 +2,11 @@
 // challenge/complete the caller polls). It signs each relay challenge with the
 // in-browser key, decrypts + verifies header previews, and fetches/verifies
 // bodies on open. The private key never leaves the browser. Replaces the former
-// WebSocket MailboxClient; the decrypt/cache logic is unchanged.
+// WebSocket MailboxClient.
+//
+// The rows it draws are also kept on this device, sealed (previewCache.ts), so an unlock shows the
+// list at once and a poll only opens what is new. Those rows are only ever drawn: opening a message
+// fetches its header afresh from the listing and verifies it before any body is decrypted.
 
 import { postJSONAs } from './client';
 import { asDecryptOnly, retiredKeys } from '../crypto/retiredKeys';
@@ -12,6 +16,7 @@ import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike
 import { fromBase64, toHex } from '../crypto/keys';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import type { AccountIdentity } from '../deployment';
+import { PreviewCache } from './previewCache';
 
 export interface FullBody {
   bodyText: string;
@@ -57,13 +62,49 @@ export interface Preview {
 // A header field the bundle may leave unset renders as an empty id.
 const hexOrEmpty = (b: Uint8Array | undefined): string => (b ? toHex(b) : '');
 
-interface CachedEntry {
+interface OpenedEntry {
   entry: MailboxEntryLike;
   header: MessageHeaderFields;
   // The keys this copy was sealed to — the body opens with the same ones.
   keys: WorkingKeys;
-  deliveredTo?: string;
 }
+
+interface CachedEntry {
+  // The row, from a header verified this session or read back from this device.
+  preview: Preview;
+  // The entry as the relay listed it this session (base64 wire bytes). Absent for a row read back
+  // from this device until the first listing lands.
+  raw?: string;
+  // The entry opened: decoded, its header decrypted and signature-verified. Present for what this
+  // session opened itself; a row from this device is opened when someone opens the message.
+  opened?: OpenedEntry;
+}
+
+// previewOf maps a verified header to the row the list draws.
+function previewOf(hash: string, h: MessageHeaderFields, deliveredTo?: string): Preview {
+  return {
+    hash,
+    messageId: hexOrEmpty(h.messageId),
+    threadId: hexOrEmpty(h.threadId),
+    senderAddress: h.senderAddress,
+    senderPublicKey: hexOrEmpty(h.senderPublicKey),
+    recipientAddress: h.recipientAddress,
+    to: h.to ?? [],
+    cc: h.cc ?? [],
+    bcc: h.bcc ?? [],
+    subject: h.subject,
+    snippet: h.snippet,
+    senderDisplay: h.senderDisplay ?? '',
+    sentAt: Number(h.sentAt),
+    bodySize: Number(h.bodySize),
+    attachmentCount: h.attachmentCount,
+    deliveredTo,
+  };
+}
+
+// Two rows for one hash say the same thing. Only a row read back from this device can differ from
+// the header the relay serves now, and then the relay's verified header is what the list shows.
+const sameRow = (a: Preview, b: Preview) => JSON.stringify(a) === JSON.stringify(b);
 
 // keyringFor lays out the keys a mailbox may hold copies sealed to: the account's own first,
 // then each isolated identity's, by the hex of the X25519 key a recipient record names.
@@ -135,7 +176,7 @@ interface BodyResp { hash: string; body: string }
 
 export class MailboxSync {
   private keys: WorkingKeys;
-  private cache = new Map<string, CachedEntry>(); // hash → entry + verified header
+  private cache = new Map<string, CachedEntry>(); // hash → row, and the entry once listed/opened
   private onPreviews: (p: Preview[]) => void;
   // Signature of the previews last emitted. Previews are immutable per hash, so the
   // set of hashes fully identifies the inbox state; skipping onPreviews when it is
@@ -151,6 +192,14 @@ export class MailboxSync {
   private identities?: () => Promise<AccountIdentity[]>;
   // When each retired address was retired, refreshed on every list. Empty until the first poll.
   private retired = new Map<string, number>();
+  // The decrypt ring from the latest listing, for opening an entry that was listed but not opened.
+  private ring: Map<string, { keys: WorkingKeys; address?: string }> | null = null;
+  // This account's rows on this device (null: none for these keys); loaded once, on first list.
+  private rows: PreviewCache | null = null;
+  private restoring?: Promise<void>;
+  // Whether a listing has completed this session: until one has, a row without a listed entry may
+  // simply not have been listed yet.
+  private listed = false;
 
   // Errors surface via the returned promises (list/fetchFull/deleteMessage reject),
   // so callers handle them at the call site — no separate error channel needed.
@@ -181,11 +230,42 @@ export class MailboxSync {
     });
   }
 
+  // restore draws the rows this device kept from an earlier session, before anything is fetched.
+  // Once per instance; a failure only means starting from the relay, as before.
+  private restore(): Promise<void> {
+    return (this.restoring ??= (async () => {
+      try {
+        this.rows = await PreviewCache.open(this.keys, 'inbox');
+        if (!this.rows) return;
+        for (const [hash, row] of await this.rows.load()) {
+          if (!this.cache.has(hash)) this.cache.set(hash, { preview: row.preview });
+        }
+        if (this.cache.size > 0) this.emit();
+      } catch (err) {
+        this.rows = null;
+        console.warn('list cache unavailable; listing from the relay', err);
+      }
+    })());
+  }
+
+  // openEntry decodes a listed entry, finds which of our keys it was sealed to, and decrypts and
+  // verifies its header.
+  private async openEntry(raw: string): Promise<OpenedEntry & { address?: string }> {
+    if (!this.ring) throw new Error('mailbox not listed yet');
+    const entry = (await decodeMailboxEntry(fromBase64(raw))) as unknown as MailboxEntryLike;
+    const ours = sealedToOurs(entry, this.ring);
+    if (!ours) throw new Error('sealed to none of this account\'s keys');
+    const header = await decryptHeader(entry, ours.keys.x25519Derive, ours.keys.x25519Public);
+    return { entry, header, keys: ours.keys, address: ours.address };
+  }
+
   // list pulls every page of header previews, rebuilds the preview cache (pruning
   // anything no longer present), and emits the sorted previews.
   async list(): Promise<Preview[]> {
+    await this.restore();
     const seen = new Set<string>();
     const { ring, retired } = await keyringFor(this.keys, this.identities);
+    this.ring = ring;
     this.retired = retired;
     let cursor = '';
     do {
@@ -193,17 +273,19 @@ export class MailboxSync {
       const res = await this.complete<ListResp>(ch.correlation_id, ch.nonce);
       for (const e of res.entries) {
         seen.add(e.hash);
-        // The hash IS the envelope digest, so an entry is immutable under it: a
-        // header already decrypted and signature-verified this session never needs
-        // redoing. That keeps a poll cheap on a large mailbox — and is what makes
-        // counting another account's unread mail in the background affordable.
-        if (this.cache.has(e.hash)) continue;
+        // The hash IS the envelope digest, so an entry is immutable under it: a row already
+        // drawn — verified this session, or in an earlier one and kept on this device — never
+        // needs opening again to be listed. That keeps a poll cheap on a large mailbox, and is
+        // what makes counting another account's unread mail in the background affordable.
+        const had = this.cache.get(e.hash);
+        if (had) { had.raw = e.entry; continue; }
         try {
-          const entryProto = (await decodeMailboxEntry(fromBase64(e.entry))) as unknown as MailboxEntryLike;
-          const ours = sealedToOurs(entryProto, ring);
-          if (!ours) throw new Error('sealed to none of this account\'s keys');
-          const header = await decryptHeader(entryProto, ours.keys.x25519Derive, ours.keys.x25519Public);
-          this.cache.set(e.hash, { entry: entryProto, header, keys: ours.keys, deliveredTo: ours.address });
+          const o = await this.openEntry(e.entry);
+          this.cache.set(e.hash, {
+            preview: previewOf(e.hash, o.header, o.address),
+            raw: e.entry,
+            opened: { entry: o.entry, header: o.header, keys: o.keys },
+          });
         } catch (err) {
           console.error('preview decrypt failed for', e.hash, err);
         }
@@ -211,17 +293,35 @@ export class MailboxSync {
       cursor = res.next_cursor || '';
     } while (cursor.length > 0);
 
-    // Drop cached entries that are no longer in the mailbox (deleted here or on
-    // another device).
+    // Drop entries that are no longer in the mailbox (deleted here or on another device), and
+    // rows kept on this device for mail that has gone since.
     for (const h of [...this.cache.keys()]) if (!seen.has(h)) this.cache.delete(h);
 
+    this.listed = true;
+    const previews = this.emit();
+    this.persist();
+    return previews;
+  }
+
+  // emit hands the previews to the subscriber when the set of messages changed (or when told to:
+  // a row was corrected in place), and returns them.
+  private emit(force = false): Preview[] {
     const previews = this.previews();
     const sig = previews.map(p => p.hash).join('|');
-    if (sig !== this.lastPreviewSig) {
+    if (force || sig !== this.lastPreviewSig) {
       this.lastPreviewSig = sig;
       this.onPreviews(previews);
     }
     return previews;
+  }
+
+  // persist writes the current rows to this device. Best effort: a failed write costs the next
+  // unlock some decrypting, nothing else.
+  private persist(): void {
+    if (!this.rows) return;
+    const rows = new Map<string, { preview: Preview }>();
+    for (const [hash, c] of this.cache) rows.set(hash, { preview: c.preview });
+    void this.rows.save(rows).catch(err => console.warn('list cache: could not save', err));
   }
 
   // fetchBody fetches + verifies a message body on open; resolves with the text.
@@ -231,13 +331,34 @@ export class MailboxSync {
 
   // fetchFull fetches + verifies a message body and returns its text AND any
   // decrypted attachments (used by device pairing's control messages).
+  //
+  // A row read back from this device is not trusted to open anything: the header comes from this
+  // session's listing and is verified here, and if it says something other than the row did, the
+  // row is corrected to match it.
   async fetchFull(hash: string): Promise<FullBody> {
-    const cached = this.cache.get(hash);
-    if (!cached) throw new Error('no cached header for this message');
+    await this.restore();
+    let cached = this.cache.get(hash);
+    if (!cached?.raw && !this.listed) {
+      // Drawn from this device, and the first listing has not landed yet: wait for one.
+      await this.list();
+      cached = this.cache.get(hash);
+    }
+    if (!cached?.raw) throw new Error('no cached header for this message');
+    if (!cached.opened) {
+      const o = await this.openEntry(cached.raw);
+      cached.opened = { entry: o.entry, header: o.header, keys: o.keys };
+      const verified = previewOf(hash, o.header, o.address);
+      if (!sameRow(verified, cached.preview)) {
+        cached.preview = verified;
+        this.emit(true);
+        this.persist();
+      }
+    }
+    const { entry, header, keys } = cached.opened;
     const ch = await this.challenge({ op: 'body', hash });
     const res = await this.complete<BodyResp>(ch.correlation_id, ch.nonce);
     const bodyProto = (await decodeMailboxBody(fromBase64(res.body))) as unknown as MailboxBodyLike;
-    const content = await decryptBody(cached.entry, bodyProto, cached.header, cached.keys.x25519Derive, cached.keys.x25519Public);
+    const content = await decryptBody(entry, bodyProto, header, keys.x25519Derive, keys.x25519Public);
     return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
   }
 
@@ -247,9 +368,8 @@ export class MailboxSync {
     const ch = await this.challenge({ op: 'delete', hash });
     await this.complete<{ hash: string }>(ch.correlation_id, ch.nonce);
     this.cache.delete(hash);
-    const previews = this.previews();
-    this.lastPreviewSig = previews.map(p => p.hash).join('|');
-    this.onPreviews(previews);
+    this.emit();
+    this.persist();
   }
 
   private previews(): Preview[] {
@@ -262,29 +382,12 @@ export class MailboxSync {
     // before it was retired, which is exactly what the sealed list is marked (not emptied) to keep.
     const retired = this.retired;
     for (const [hash, c] of this.cache) {
-      if (arrivedAfterRetirement(c.deliveredTo ?? c.header.recipientAddress, Number(c.header.sentAt), retired)) {
+      if (arrivedAfterRetirement(c.preview.deliveredTo ?? c.preview.recipientAddress, c.preview.sentAt, retired)) {
         this.cache.delete(hash);
         void this.deleteMessage(hash).catch(() => { /* it stays on the relay; it is still hidden here */ });
         continue;
       }
-      previews.push({
-        hash,
-        messageId: hexOrEmpty(c.header.messageId),
-        threadId: hexOrEmpty(c.header.threadId),
-        senderAddress: c.header.senderAddress,
-        senderPublicKey: hexOrEmpty(c.header.senderPublicKey),
-        recipientAddress: c.header.recipientAddress,
-        to: c.header.to ?? [],
-        cc: c.header.cc ?? [],
-        bcc: c.header.bcc ?? [],
-        subject: c.header.subject,
-        snippet: c.header.snippet,
-        senderDisplay: c.header.senderDisplay ?? '',
-        sentAt: Number(c.header.sentAt),
-        bodySize: Number(c.header.bodySize),
-        attachmentCount: c.header.attachmentCount,
-        deliveredTo: c.deliveredTo,
-      });
+      previews.push(c.preview);
     }
     previews.sort((a, b) => b.sentAt - a.sentAt);
     return previews;

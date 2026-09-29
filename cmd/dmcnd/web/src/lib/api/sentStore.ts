@@ -14,6 +14,7 @@ import { asDecryptOnly, retiredKeys } from '../crypto/retiredKeys';
 import { KDF_V1, KDF_V2 } from '../crypto/sealVersion';
 import type { MessageHeaderFields } from '../crypto/protobuf';
 import { toBase64, fromBase64, toHex } from '../crypto/keys';
+import { PreviewCache } from './previewCache';
 
 // A synthetic hash keys each Sent row, distinct from real mailbox hashes so the two
 // sources never collide.
@@ -154,12 +155,28 @@ function previewFromHeader(hash: string, h: MessageHeaderFields): Preview {
   };
 }
 
+// One Sent row: what the list draws, the storage version it was read at, and — once this session
+// has listed or opened it — the stored header and the opened entry the body decrypts with.
+interface SentRow {
+  preview: Preview;
+  version: number;
+  raw?: StoredHeader;
+  opened?: { entry: MailboxEntryLike; header: MessageHeaderFields };
+}
+
+const sortedPreviews = (rows: Map<string, SentRow>) =>
+  [...rows.values()].map(r => r.preview).sort((a, b) => b.sentAt - a.sentAt);
+
 export class SentStore {
   private store: PersonalStore;
   private keys: WorkingKeys;
-  // hash → verified header + entry, populated by listPreviews so fetchFull can decrypt
-  // the body on open without re-listing.
-  private cache = new Map<string, { entry: MailboxEntryLike; header: MessageHeaderFields }>();
+  // hash → row, populated by listPreviews (and, before the first listing, from this device) so
+  // fetchFull can decrypt the body on open without re-listing.
+  private cache = new Map<string, SentRow>();
+  // The rows kept on this device (previewCache.ts); loaded once, on first use.
+  private rows: PreviewCache | null = null;
+  private restoring?: Promise<void>;
+  private listed = false;
 
   constructor(keys: WorkingKeys) {
     this.store = new PersonalStore(keys);
@@ -214,9 +231,40 @@ export class SentStore {
     await this.store.put(sentBodyKey(messageIdHex), encodeBody(env));
   }
 
-  // listPreviews decrypts every stored header into an inbox-style Preview and caches the
-  // header + entry for a later fetchFull. Entries it can't read are skipped rather than
-  // failing the whole list.
+  // restore reads the rows this device kept from an earlier session. Once; a failure only means
+  // starting from the store, as before.
+  private restore(): Promise<void> {
+    return (this.restoring ??= (async () => {
+      try {
+        this.rows = await PreviewCache.open(this.keys, 'sent');
+        if (!this.rows) return;
+        for (const [hash, row] of await this.rows.load()) {
+          if (!this.cache.has(hash)) this.cache.set(hash, { preview: row.preview, version: row.version ?? -1 });
+        }
+      } catch (err) {
+        this.rows = null;
+        console.warn('Sent: list cache unavailable; listing from the store', err);
+      }
+    })());
+  }
+
+  private persist(): void {
+    if (!this.rows) return;
+    const rows = new Map<string, { preview: Preview; version: number }>();
+    for (const [hash, r] of this.cache) rows.set(hash, { preview: r.preview, version: r.version });
+    void this.rows.save(rows).catch(err => console.warn('Sent: could not save the list cache', err));
+  }
+
+  /** The rows this device kept from an earlier session, to draw before the first listing lands. */
+  async cachedPreviews(): Promise<Preview[]> {
+    await this.restore();
+    return sortedPreviews(this.cache);
+  }
+
+  // listPreviews decrypts every stored header it has not already opened into an inbox-style
+  // Preview. An entry already held at the same storage version — from this session, or kept on
+  // this device from an earlier one — is not opened again. Entries it can't read are skipped
+  // rather than failing the whole list.
   //
   // That includes rows written before Sent moved to storing the self-sealed envelope. A
   // reader for them existed briefly and was dropped deliberately: no deployment holds such
@@ -225,15 +273,20 @@ export class SentStore {
   // not exist anywhere. If that ever stops being true, rendering them is the fix (the row
   // already holds everything the list and reader need); silently skipping them is not.
   async listPreviews(): Promise<Preview[]> {
+    await this.restore();
     const entries = await this.store.list<StoredHeader>('sent/');
-    const previews: Preview[] = [];
-    const next = new Map<string, { entry: MailboxEntryLike; header: MessageHeaderFields }>();
+    const next = new Map<string, SentRow>();
     for (const e of entries) {
+      const hash = SENT_HASH_PREFIX + midFromKey(e.key);
+      const had = this.cache.get(hash);
+      if (had && had.version === e.version) {
+        had.raw = e.value;
+        next.set(hash, had);
+        continue;
+      }
       try {
-        const { entry, header } = await this.openHeader(e.value);
-        const hash = SENT_HASH_PREFIX + midFromKey(e.key);
-        next.set(hash, { entry, header });
-        previews.push(previewFromHeader(hash, header));
+        const opened = await this.openHeader(e.value);
+        next.set(hash, { preview: previewFromHeader(hash, opened.header), version: e.version, raw: e.value, opened });
       } catch (err) {
         // Unreadable entry (foreign/legacy) — skip it, but say so: a Sent folder that is
         // silently short of a row it just wrote is undiagnosable from the page.
@@ -241,24 +294,40 @@ export class SentStore {
       }
     }
     this.cache = next;
-    previews.sort((a, b) => b.sentAt - a.sentAt);
-    return previews;
+    this.listed = true;
+    this.persist();
+    return sortedPreviews(next);
   }
 
   // fetchFull decrypts a Sent message's body on open (attachments + HTML alternatives),
-  // in the same shape the inbox reader consumes.
+  // in the same shape the inbox reader consumes. A row kept on this device opens nothing by
+  // itself: the header comes from this session's listing and is opened here.
   async fetchFull(hash: string): Promise<FullBody> {
-    const cached = this.cache.get(hash);
-    if (!cached) throw new Error('no cached header for this sent message');
+    await this.restore();
+    let row = this.cache.get(hash);
+    if (!row?.raw && !this.listed) {
+      await this.listPreviews();
+      row = this.cache.get(hash);
+    }
+    if (!row?.raw) throw new Error('no cached header for this sent message');
+    if (!row.opened) {
+      row.opened = await this.openHeader(row.raw);
+      const verified = previewFromHeader(hash, row.opened.header);
+      if (JSON.stringify(verified) !== JSON.stringify(row.preview)) {
+        row.preview = verified;
+        this.persist();
+      }
+    }
     const mid = hash.startsWith(SENT_HASH_PREFIX) ? hash.slice(SENT_HASH_PREFIX.length) : hash;
     const b = await this.store.get<StoredBody>(sentBodyKey(mid));
     if (!b) throw new Error('sent body not found');
-    const content = await this.openBody(cached.entry, toBody(b.value), cached.header);
+    const content = await this.openBody(row.opened.entry, toBody(b.value), row.opened.header);
     return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
   }
 
   async delete(messageIdHex: string): Promise<void> {
     await this.store.delete(sentKey(messageIdHex));
     await this.store.delete(sentBodyKey(messageIdHex));
+    if (this.cache.delete(SENT_HASH_PREFIX + messageIdHex)) this.persist();
   }
 }

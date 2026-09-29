@@ -32,6 +32,7 @@ import { useSettings } from '../lib/hooks/useSettings';
 import { useStorageUsage } from '../lib/hooks/useStorageUsage';
 import { Badge, Button, Input, Textarea, Switch, Tabs, UsageMeter } from '../ds';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
+import { useSearch } from '../lib/search/useSearchIndex';
 import { deployment } from '@deployment';
 import { Icon } from '../components/Icon';
 import { formatBytes } from '../lib/format';
@@ -165,6 +166,44 @@ function SegOption({ active, onClick, children }: { active: boolean; onClick: ()
       background: active ? 'var(--brand-subtle)' : 'var(--surface-card)', color: active ? 'var(--brand-text)' : 'var(--text-body)',
       fontWeight: active ? 600 : 500, cursor: 'pointer',
     }}>{children}</button>
+  );
+}
+
+// The on-device search index: what it is, how far along, and a way to start it again.
+function SearchIndexCard() {
+  const { progress, clear } = useSearch();
+  const [busy, setBusy] = useState(false);
+  const status = progress === null
+    ? 'Starts once your mailbox has loaded.'
+    : progress.indexed >= progress.total
+      ? `Up to date: ${progress.total.toLocaleString()} ${progress.total === 1 ? 'message' : 'messages'}.`
+      : `${progress.indexed.toLocaleString()} of ${progress.total.toLocaleString()} messages so far. It carries on while this ${isInstalledApp() ? 'app' : 'tab'} is open.`;
+  return (
+    <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>
+          Search on this device
+          <InfoHint title="Search on this device">
+            <p style={{ margin: 0 }}>
+              To find mail by what it says, this device downloads each message once and keeps a list of the
+              words in it. The list stays on this device and is encrypted with your account, so it can only
+              be read while your account is unlocked here.
+            </p>
+            <p style={{ margin: 0 }}>
+              The first time, that means downloading your whole mailbox, attachments included, which can take
+              a while. After that, only new mail is added. Each device keeps its own.
+            </p>
+          </InfoHint>
+        </div>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2, lineHeight: 'var(--leading-normal)' }}>
+          {status}
+        </div>
+      </div>
+      <Button variant="secondary" size="sm" disabled={busy || progress === null}
+        onClick={() => { setBusy(true); void clear().finally(() => setBusy(false)); }}>
+        {busy ? 'Starting over…' : 'Rebuild'}
+      </Button>
+    </div>
   );
 }
 
@@ -577,6 +616,8 @@ export function Settings() {
                   void (async () => { await setLockOnLeave(v); await applyLockPosture(); })();
                 }} />
             </div>
+
+            <SearchIndexCard />
 
             <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>

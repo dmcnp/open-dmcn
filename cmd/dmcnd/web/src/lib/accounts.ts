@@ -36,6 +36,8 @@ import { forgetEndpoint } from './push/subscription';
 import { detachAccount } from './crypto/deviceKeystore';
 import { workingKeyRef } from './sessionLifetime';
 import { storageKey } from './appContext';
+import { forgetSearchIndex } from './search/indexStore';
+import { forgetPreviewCache } from './api/previewCache';
 
 export interface DeviceAccount {
   address: string;
@@ -226,6 +228,10 @@ export async function forgetAccount(address: string): Promise<void> {
   forgetLiveHandles(address);
   for (const ref of bothWorkingRefs(address)) await clearWorkingKeys(ref);
   await clearLocalKeystore(address);
+  // Its search index and list cache are unreadable without the keys just removed, and would only
+  // take up space.
+  await forgetSearchIndex(address).catch(() => undefined);
+  await forgetPreviewCache(address).catch(() => undefined);
   // An account that is gone cannot be the one to land in.
   if (lastAccount() === address) {
     try { localStorage.removeItem(storageKey(LAST_ACCOUNT_KEY)); } catch { /* ignore */ }

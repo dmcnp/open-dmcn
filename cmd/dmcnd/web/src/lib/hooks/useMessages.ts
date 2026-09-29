@@ -20,6 +20,9 @@ export type AccessState = 'ok' | 'suspended' | 'closed' | 'unapproved-device';
 
 interface MessagesContextValue {
   messages: Preview[];
+  // True once a full listing has landed for this account. Until then `messages` being empty says
+  // nothing about the mailbox, which matters to anything that would act on a message's absence.
+  loaded: boolean;
   error: string | null;
   accessState: AccessState;
   // Resolves when the sync it started has settled, so a caller that shows progress
@@ -41,6 +44,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
   const { keys } = useKeys();
   const { sessionToken, isAuthenticated } = useAuth();
   const [messages, setMessages] = useState<Preview[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accessState, setAccessState] = useState<AccessState>('ok');
   const clientRef = useRef<MailboxSync | null>(null);
@@ -55,7 +59,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const doSync = () =>
       client.list()
-        .then(() => { if (cancelled) return; setError(null); setAccessState('ok'); })
+        .then(() => { if (cancelled) return; setLoaded(true); setError(null); setAccessState('ok'); })
         .catch(err => {
           if (cancelled) return;
           // A node-enforced access lock is a 403 with a machine code — surface it as a
@@ -88,6 +92,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
       clientRef.current = null;
       syncRef.current = () => Promise.resolve();
       setMessages([]);
+      setLoaded(false);
       setAccessState('ok');
     };
   }, [keys, sessionToken, isAuthenticated]);
@@ -113,7 +118,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     MessagesContext.Provider,
-    { value: { messages, error, accessState, refresh, openMessage, openMessageFull, deleteMessage } },
+    { value: { messages, loaded, error, accessState, refresh, openMessage, openMessageFull, deleteMessage } },
     children
   );
 }

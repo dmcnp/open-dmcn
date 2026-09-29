@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Preview, FullBody } from '../lib/api/mailboxRest';
 import type { ComposeReplyTo } from '../lib/compose';
@@ -11,8 +11,10 @@ import { Badge, Button, IconButton, Input, Tag } from '../ds';
 import { Icon } from './Icon';
 import { ColorSwatches } from './ColorSwatches';
 import { lookupIdentity } from '../lib/api/client';
-import { verifyBridgeAttestation, bridgeOriginalIndex, BridgeTrustTier, CLASSIFICATION_CONTENT_TYPE, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
-import { verifyDeliveryReceipt, RECEIPT_CONTENT_TYPE, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
+import { verifyBridgeAttestation, bridgeOriginalIndex, BridgeTrustTier, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
+import { verifyDeliveryReceipt, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
+import { userAttachments } from '../lib/userAttachments';
+import { useSearch } from '../lib/search/useSearchIndex';
 import type { DecryptedAttachment } from '../lib/crypto/split';
 import { HtmlMessageBody } from './HtmlMessageBody';
 import { sanitizeOutgoing } from '../lib/html/sanitize';
@@ -27,7 +29,6 @@ import { categorizeSender } from '../lib/trust/category';
 import { contactFacts, directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
-import { deployment } from '@deployment';
 import { formatBytes, formatDate, formatTime } from '../lib/format';
 
 // attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
@@ -218,28 +219,6 @@ const assignSelectStyle: CSSProperties = {
 };
 
 
-// System attachments carried for protocol purposes are consumed elsewhere and hidden
-// from the user-facing attachment list: the bridge attestation and delivery receipt, and
-// whatever control payloads this deployment carries. The bridge's raw legacy source is
-// hidden too, but by its slot (bridgeOriginalIndex) rather than its type — an email
-// forwarded as an attachment is message/rfc822 as well, and is the reader's to see. The
-// raw source is offered through "Show original" instead.
-// Built on demand, not at module load: `deployment` imports the screens it contributes, so
-// reading it while THIS module is being evaluated would depend on which side of that cycle
-// loaded first. A function has no such ordering to get wrong.
-function internalAttachmentTypes(): Set<string> {
-  return new Set<string>([
-    CLASSIFICATION_CONTENT_TYPE,
-    RECEIPT_CONTENT_TYPE,
-    ...deployment.internalAttachmentTypes,
-  ]);
-}
-function userAttachments(all: DecryptedAttachment[]): DecryptedAttachment[] {
-  const internal = internalAttachmentTypes();
-  const original = bridgeOriginalIndex(all);
-  return all.filter((a, i) => i !== original && !internal.has(a.contentType));
-}
-
 // How much of a bridged email's raw source "Show original" renders. The source can run to
 // megabytes of base64 attachments; the headers people open it for are at the top, and the
 // whole file is a download away.
@@ -307,6 +286,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const { contactByAddress, nameFor, allowlist, pinKey, ready: contactsReady } = useContacts();
   const { filter: mailFilter, blockSender, ready: filterReady } = useMailFilter();
   const { settings } = useSettings();
+  // Held in a ref: the body effect below must not re-fetch just because the index opened.
+  const { noteBody } = useSearch();
+  const noteBodyRef = useRef(noteBody);
+  noteBodyRef.current = noteBody;
 
   // Extrinsic assignment for this message (labels are many; folder is single).
   const appliedLabelIds = labelsOf(msg.hash);
@@ -478,6 +461,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     (openFull ?? openMessageFull)(msg.hash)
       .then(async full => {
         if (cancelled) return;
+        noteBodyRef.current(msg.hash, full);
         setBody(full.bodyText);
         setHtmlBody(full.htmlBody ?? null);
         setAttachments(userAttachments(full.attachments));

@@ -1,4 +1,4 @@
-// Minimal IndexedDB wrapper (no dependency). One database with four object stores:
+// Minimal IndexedDB wrapper (no dependency). One database with seven object stores:
 //   - 'working'  — the unlocked, non-extractable CryptoKey handles (session-scoped)
 //   - 'keystore' — the client-side encrypted blob + unlock metadata (persistent)
 //   - 'personal' — the account's mail state (Sent, flags/labels, contacts, settings) when the
@@ -7,6 +7,10 @@
 //   - 'device'   — what this CONTEXT does with unlocked keys: the lock posture, and the optional
 //                  device secret that opens several accounts at once (see lib/devicePosture.ts,
 //                  crypto/deviceKeystore.ts)
+//   - 'search'   — the on-device full-text search index, encrypted per account under a key
+//                  derived from the unlocked account (see lib/search/indexStore.ts)
+//   - 'headers'  — the mail list's rows (subject, sender, preview…) for Inbox and Sent, sealed
+//                  the same way, so an unlock shows the list at once (see api/previewCache.ts)
 //
 // We store structured-cloneable values directly (CryptoKey objects survive the
 // clone with their bytes never serialized into JS reach). Keys are simple strings.
@@ -26,6 +30,14 @@
 //     saw a contact has no honest basis for claiming a pin on them. The cost is that a
 //     fresh context adopts the KV's pins once, on first sight — the same exposure any
 //     new device has, and documented as such in trust/pinStore.ts.
+//
+// 'search' and 'headers' are the first stores to hold what mail SAYS, which the in-memory-only rule
+// above was written to prevent — so they re-open that reasoning too, and settle it the other way
+// round from 'personal''s local fallback: nothing in them is readable without the account. Every
+// record is AES-GCM under a key derived from the account's aliasRoot handle, which exists only
+// while the account is unlocked, so a locked account leaves ciphertext behind and nothing else
+// (crypto/deviceSeal.ts). Both are caches: per context like the rest (DB_NAME), rebuilt from the
+// relay if lost, and wiped when the key they were written under no longer opens them (a rotation).
 
 import { usesOwnStore } from '../appContext';
 
@@ -33,10 +45,11 @@ import { usesOwnStore } from '../appContext';
 // pinning stops a display-mode change from re-pointing the database under an open
 // transaction.
 const DB_NAME = usesOwnStore() ? 'dmcn-app' : 'dmcn';
-// v2 added PINS_STORE; v3 added PERSONAL_STORE; v4 added DEVICE_STORE. onupgradeneeded creates
-// only the stores that are missing, so an existing database keeps its working handles, keystore
-// and pins across any of those bumps.
-const DB_VERSION = 4;
+// v2 added PINS_STORE; v3 added PERSONAL_STORE; v4 added DEVICE_STORE; v5 added SEARCH_STORE and
+// HEADERS_STORE.
+// onupgradeneeded creates only the stores that are missing, so an existing database keeps its
+// working handles, keystore and pins across any of those bumps.
+const DB_VERSION = 5;
 export const WORKING_STORE = 'working';
 export const KEYSTORE_STORE = 'keystore';
 export const PERSONAL_STORE = 'personal';
@@ -47,6 +60,8 @@ export const PINS_STORE = 'pins';
 // mobile Chrome clear localStorage far more readily than IndexedDB, and the old arrangement read
 // the resulting absence as "nobody asked to stay signed in" and dropped every handle.
 export const DEVICE_STORE = 'device';
+export const SEARCH_STORE = 'search';
+export const HEADERS_STORE = 'headers';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -61,6 +76,8 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(PERSONAL_STORE)) db.createObjectStore(PERSONAL_STORE);
       if (!db.objectStoreNames.contains(PINS_STORE)) db.createObjectStore(PINS_STORE);
       if (!db.objectStoreNames.contains(DEVICE_STORE)) db.createObjectStore(DEVICE_STORE);
+      if (!db.objectStoreNames.contains(SEARCH_STORE)) db.createObjectStore(SEARCH_STORE);
+      if (!db.objectStoreNames.contains(HEADERS_STORE)) db.createObjectStore(HEADERS_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -117,4 +134,47 @@ export function idbPut(store: string, key: string, value: unknown): Promise<void
 
 export function idbDelete(store: string, key: string): Promise<void> {
   return tx(store, 'readwrite', s => s.delete(key)).then(() => undefined);
+}
+
+// The multi-record calls below exist for the device-sealed caches. The search index's shards and
+// manifest have to land together or not at all: a manifest that says a message is indexed while its postings were lost
+// would hide that message from every search, for good. One transaction per call, and a write is
+// finished when that transaction commits, for the reason tx() gives.
+// Every key that starts with prefix. '\uffff' sorts after any character a key here can hold.
+const prefixRange = (prefix: string) => IDBKeyRange.bound(prefix, prefix + '\uffff');
+
+/** Writes `puts` and removes `deletes` in ONE transaction: all of it lands, or none of it. */
+export function idbPutMany(store: string, puts: Array<[string, unknown]>, deletes: string[] = []): Promise<void> {
+  return openDB().then(
+    db =>
+      new Promise<void>((resolve, reject) => {
+        const t = db.transaction(store, 'readwrite');
+        const s = t.objectStore(store);
+        for (const [k, v] of puts) s.put(v, k);
+        for (const k of deletes) s.delete(k);
+        t.oncomplete = () => resolve();
+        t.onabort = () => reject(t.error ?? new Error(`indexeddb: ${store} transaction aborted`));
+        t.onerror = () => reject(t.error ?? new Error(`indexeddb: ${store} transaction failed`));
+      })
+  );
+}
+
+export function idbDeletePrefix(store: string, prefix: string): Promise<void> {
+  return tx(store, 'readwrite', s => s.delete(prefixRange(prefix))).then(() => undefined);
+}
+
+/** Every [key, value] under prefix, read in one transaction. */
+export function idbEntriesWithPrefix<T>(store: string, prefix: string): Promise<Array<[string, T]>> {
+  return openDB().then(
+    db =>
+      new Promise<Array<[string, T]>>((resolve, reject) => {
+        const t = db.transaction(store, 'readonly');
+        const s = t.objectStore(store);
+        const keys = s.getAllKeys(prefixRange(prefix));
+        const values = s.getAll(prefixRange(prefix));
+        t.oncomplete = () => resolve((keys.result as string[]).map((k, i) => [k, values.result[i] as T]));
+        t.onabort = () => reject(t.error ?? new Error(`indexeddb: ${store} transaction aborted`));
+        t.onerror = () => reject(t.error ?? new Error(`indexeddb: ${store} transaction failed`));
+      })
+  );
 }

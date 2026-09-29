@@ -87,3 +87,22 @@ describe('idbPut', () => {
     await expect(idbDelete(WORKING_STORE, 'acct:a@x.test')).rejects.toThrow(/aborted|Quota/i);
   });
 });
+
+describe('idbPutMany', () => {
+  it('writes and deletes in one committed transaction', async () => {
+    const { idbPutMany, idbGet, SEARCH_STORE } = await import('./idb');
+    data.set('gone', 1);
+    await idbPutMany(SEARCH_STORE, [['a', 1], ['b', 2]], ['gone']);
+    expect(await idbGet(SEARCH_STORE, 'a')).toBe(1);
+    expect(await idbGet(SEARCH_STORE, 'b')).toBe(2);
+    expect(data.has('gone')).toBe(false);
+  });
+
+  // The search index's shards and manifest go out together; a caller told they landed when the
+  // transaction then aborted would believe messages were searchable that are not.
+  it('rejects when the transaction aborts', async () => {
+    const { idbPutMany, SEARCH_STORE } = await import('./idb');
+    outcome = 'abort-after-success';
+    await expect(idbPutMany(SEARCH_STORE, [['a', 1]])).rejects.toThrow(/aborted|Quota/i);
+  });
+});

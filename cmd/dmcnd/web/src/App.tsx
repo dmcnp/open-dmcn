@@ -8,6 +8,7 @@ import { LabelsProvider } from './lib/hooks/useLabels';
 import { SettingsProvider } from './lib/hooks/useSettings';
 import { ContactsProvider } from './lib/hooks/useContacts';
 import { MailFilterProvider } from './lib/hooks/useMailFilter';
+import { SearchIndexProvider } from './lib/search/useSearchIndex';
 import { Login } from './pages/Login';
 import { InboxMain } from './pages/InboxMain';
 import { Contacts } from './pages/Contacts';
@@ -41,6 +42,7 @@ export function App() {
         <SettingsProvider>
         <ContactsProvider>
         <MailFilterProvider>
+        <SearchIndexProvider>
         <BrowserRouter>
           <SessionRenewer />
           {/* Above the routes on purpose: a tapped notification for a LOCKED account has to be
@@ -64,6 +66,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/inbox" replace />} />
           </Routes>
         </BrowserRouter>
+        </SearchIndexProvider>
         </MailFilterProvider>
         </ContactsProvider>
         </SettingsProvider>

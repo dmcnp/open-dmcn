@@ -16,6 +16,8 @@ export { SENT_HASH_PREFIX, isSentStoreHash } from '../api/sentStore';
 
 interface SentContextValue {
   sent: Preview[];
+  // True once the Sent headers have been listed in full for this account (see useMessages).
+  loaded: boolean;
   error: string | null;
   refreshSent: () => Promise<void>;
   // Decrypt a Sent message's full body (attachments + HTML) on open.
@@ -32,6 +34,7 @@ export function SentProvider({ children }: { children: ReactNode }) {
   const { keys } = useKeys();
   const { address, sessionToken, isAuthenticated } = useAuth();
   const [sent, setSent] = useState<Preview[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const storeRef = useRef<SentStore | null>(null);
   const syncRef = useRef<() => Promise<void>>(() => Promise.resolve());
@@ -48,10 +51,16 @@ export function SentProvider({ children }: { children: ReactNode }) {
         .then(previews => {
           if (cancelled) return;
           setSent(previews);
+          setLoaded(true);
           setError(null);
         })
         .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });
     syncRef.current = doSync;
+    // Draw what this device kept from an earlier session while the first listing is on its way;
+    // the listing replaces it as soon as it lands.
+    store.cachedPreviews()
+      .then(previews => { if (!cancelled && previews.length) setSent(prev => (prev.length ? prev : previews)); })
+      .catch(() => { /* nothing kept; the listing will do */ });
     doSync();
 
 
@@ -60,6 +69,7 @@ export function SentProvider({ children }: { children: ReactNode }) {
       storeRef.current = null;
       syncRef.current = () => Promise.resolve();
       setSent([]);
+      setLoaded(false);
     };
   }, [keys, sessionToken, isAuthenticated, address]);
 
@@ -80,7 +90,7 @@ export function SentProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     SentContext.Provider,
-    { value: { sent, error, refreshSent, fetchSentFull, deleteSent } },
+    { value: { sent, loaded, error, refreshSent, fetchSentFull, deleteSent } },
     children
   );
 }

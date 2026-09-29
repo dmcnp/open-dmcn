@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useMessages, type Preview } from '../lib/hooks/useMessages';
@@ -24,6 +24,8 @@ import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
 import { deployment } from '@deployment';
 import { formatWhen } from '../lib/format';
+import { matches, parseQuery, type MatchContext } from '../lib/search/query';
+import { useSearch, useSearchHits } from '../lib/search/useSearchIndex';
 
 // Control messages this deployment carries (device pairing, countersign requests) are
 // surfaced in their own panels, not the normal mail folders. Empty on a deployment whose
@@ -333,9 +335,23 @@ export function InboxMain() {
       ? !!contactByAddress(recipientsOf(m)[0])
       : !isSent(m.senderAddress) && catOf(m) === 'allowlisted';
 
-  const q = filter.trim().toLowerCase();
-  const matchesQ = (m: Preview) =>
-    !q || `${m.senderAddress} ${m.recipientAddress} ${m.deliveredTo ?? ''} ${[...m.to, ...m.cc].join(' ')} ${m.subject} ${m.snippet}`.toLowerCase().includes(q);
+  // Search: operators and header fields answer at once from the previews; words are also looked
+  // up in the on-device index of message text, whose answer arrives a moment later and fills in.
+  const q = filter.trim();
+  const parsed = useMemo(() => parseQuery(filter), [filter]);
+  const hits = useSearchHits(parsed);
+  const { progress: indexProgress } = useSearch();
+  const matchCtx: MatchContext = {
+    nameFor,
+    isRead,
+    isStarred,
+    labelNames: h => labelsOf(h).map(id => labelById(id)?.name ?? '').filter(Boolean),
+  };
+  const matchesQ = (m: Preview) => !q || matches(m, parsed, matchCtx, hits);
+  // Said while the index is still catching up, so a search that misses a message's text does not
+  // read as "no such message".
+  const indexCatchingUp = q !== '' && (parsed.words.length > 0 || parsed.filenames.length > 0)
+    && indexProgress !== null && indexProgress.indexed < indexProgress.total;
 
   let rows: Row[];
   if (folder === 'sent') {
@@ -453,6 +469,15 @@ export function InboxMain() {
             </div>
             <IconButton size="sm" aria-label="Refresh" onClick={doRefresh}><Icon name="refresh" size={16} /></IconButton>
           </div>
+          {indexCatchingUp && indexProgress && (
+            <div role="status" style={{
+              padding: 'var(--space-2) var(--space-4)', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-subtle)',
+              fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
+            }}>
+              Search is still catching up on this device: {indexProgress.indexed.toLocaleString()} of{' '}
+              {indexProgress.total.toLocaleString()} messages can be found by their text so far.
+            </div>
+          )}
 
           {/* List body. The frame stays put and the list slides inside it: what the pull
               uncovers at the top is the indicator, and what it pushes past the bottom the
