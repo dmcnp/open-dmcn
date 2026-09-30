@@ -296,11 +296,11 @@ function PullIndicator({ distance, armed, refreshing, dragging }: PullState) {
 export function InboxMain() {
   const { messages, error, accessState, refresh, deleteMessage } = useMessages();
   const { sent, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
-  const { isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
-  const { knownFolderIds, labelById, folderById } = useLabels();
+  const { ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
+  const { ready: labelsReady, knownFolderIds, labelById, folderById } = useLabels();
   const { address } = useAuth();
   const { contactByAddress, nameFor } = useContacts();
-  const { filter: mailFilter } = useMailFilter();
+  const { filter: mailFilter, ready: filterReady } = useMailFilter();
   const isMobile = useIsMobile();
   const { folder, filter, openCompose } = useOutletContext<MailOutletContext>();
 
@@ -353,8 +353,16 @@ export function InboxMain() {
   const indexCatchingUp = q !== '' && (parsed.words.length > 0 || parsed.filenames.length > 0)
     && indexProgress !== null && indexProgress.indexed < indexProgress.total;
 
+  // Which received view a message belongs in is decided by flags (archived, starred, labels),
+  // folder definitions and the blocklist, each loaded from the personal store after the kept
+  // rows are already drawn. Until all three have answered a view shows nothing, rather than every
+  // message followed a moment later by the archived, filed and blocked ones disappearing.
+  const sorting = folder !== 'sent' && !(flagsReady && labelsReady && filterReady);
+
   let rows: Row[];
-  if (folder === 'sent') {
+  if (sorting) {
+    rows = [];
+  } else if (folder === 'sent') {
     // Sent reads from the personal store; also fold in any legacy self-copies still
     // in the mailbox (deduped by messageId) so nothing is lost on upgrade.
     const storeMsgIds = new Set(sent.map(p => p.messageId));
@@ -510,7 +518,7 @@ export function InboxMain() {
                   and a filter result is a search for mail, not for them. */}
               {folder === 'inbox' && !q && <InboxNotices />}
 
-              {rows.length === 0 ? (
+              {sorting ? null : rows.length === 0 ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
                   <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>

@@ -15,6 +15,9 @@ import { storeKey, useSyncChanges, useSyncLive } from '../sync/useSync';
 
 interface FlagsContextValue {
   flags: Map<string, FlagRecord>;
+  // ready is false until the first load settles. Until then every message reads as unarchived
+  // and unread, so a view built on flags waits for it rather than drawing that and taking it back.
+  ready: boolean;
   refreshFlags: () => void;
   setFlag: (messageHash: string, delta: FlagDelta) => Promise<void>;
   markRead: (messageHash: string) => Promise<void>;
@@ -35,6 +38,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   const { keys } = useKeys();
   const { sessionToken, isAuthenticated } = useAuth();
   const [flags, setFlags] = useState<Map<string, FlagRecord>>(new Map());
+  const [ready, setReady] = useState(false);
   const storeRef = useRef<FlagStore | null>(null);
   const flagsRef = useRef<Map<string, FlagRecord>>(new Map());
   const syncRef = useRef<() => void>(() => {});
@@ -53,7 +57,8 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
           flagsRef.current = map;
           setFlags(map);
         })
-        .catch(() => { /* transient; keep the last good map */ });
+        .catch(() => { /* transient; keep the last good map */ })
+        .finally(() => { if (!cancelled) setReady(true); });
     };
     syncRef.current = doSync;
     doSync();
@@ -64,6 +69,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
       storeRef.current = null;
       flagsRef.current = new Map();
       syncRef.current = () => {};
+      setReady(false);
       setFlags(new Map());
     };
   }, [keys, sessionToken, isAuthenticated]);
@@ -130,7 +136,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     FlagsContext.Provider,
-    { value: { flags, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } },
+    { value: { flags, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } },
     children
   );
 }

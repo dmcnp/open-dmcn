@@ -70,9 +70,9 @@ function GroupLabel({ children, collapsed }: { children: ReactNode; collapsed: b
 export function AppLayout() {
   const { messages, refresh } = useMessages();
   const { refreshSent } = useSent();
-  const { flags } = useFlags();
+  const { flags, ready: flagsReady } = useFlags();
   const { labels, folders } = useLabels();
-  const { filter: mailFilter } = useMailFilter();
+  const { filter: mailFilter, ready: filterReady } = useMailFilter();
   const { address, clearSession } = useAuth();
   const { keys, clearKeys, clearAllKeys } = useKeys();
   const navigate = useNavigate();
@@ -128,8 +128,9 @@ export function AppLayout() {
 
   // One combined inbox: every unread received message except blocked senders (trust is
   // decided at read time by the reader's gate, not by list placement). The rule lives in
-  // lib/unread so the account switcher's per-account counts mean the same thing.
-  const unreadCount = countUnread(messages, address, flags, mailFilter);
+  // lib/unread so the account switcher's per-account counts mean the same thing. No count until
+  // flags and the blocklist have loaded: before then every message would read as unread.
+  const unreadCount = flagsReady && filterReady ? countUnread(messages, address, flags, mailFilter) : 0;
 
   // Notifications deliberately survive this. Signing out locks the account, it does not tell
   // the world to stop reaching you — mail still arrives, and being told so is still useful. The

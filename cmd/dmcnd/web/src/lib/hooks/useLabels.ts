@@ -22,6 +22,9 @@ function newId(): string {
 export const LABEL_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b'];
 
 interface LabelsContextValue {
+  // ready is false until the first load settles: before it no folder is known, so mail filed
+  // into one would read as Inbox mail.
+  ready: boolean;
   labels: LabelDef[];
   folders: FolderDef[];
   knownFolderIds: Set<string>;
@@ -45,6 +48,7 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
   const { keys } = useKeys();
   const { sessionToken, isAuthenticated } = useAuth();
   const [doc, setDoc] = useState<LabelsDoc>(emptyLabelsDoc());
+  const [ready, setReady] = useState(false);
   const storeRef = useRef<LabelStore | null>(null);
   const syncRef = useRef<() => void>(() => {});
 
@@ -58,7 +62,8 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
     const doSync = () => {
       store.get()
         .then(({ doc }) => { if (!cancelled) setDoc(doc); })
-        .catch(() => { /* transient; keep the last good doc */ });
+        .catch(() => { /* transient; keep the last good doc */ })
+        .finally(() => { if (!cancelled) setReady(true); });
     };
     syncRef.current = doSync;
     doSync();
@@ -78,6 +83,7 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', onWake);
       storeRef.current = null;
       syncRef.current = () => {};
+      setReady(false);
       setDoc(emptyLabelsDoc());
     };
   }, [keys, sessionToken, isAuthenticated]);
@@ -128,6 +134,7 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
     mutate(d => ({ ...d, folders: d.folders.filter(f => f.id !== id) })), [mutate]);
 
   const value: LabelsContextValue = {
+    ready,
     labels: doc.labels,
     folders: doc.folders,
     knownFolderIds: new Set(doc.folders.map(f => f.id)),
