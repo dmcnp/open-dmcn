@@ -17,6 +17,7 @@ import { fromBase64, toHex } from '../crypto/keys';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import type { AccountIdentity } from '../deployment';
 import { PreviewCache } from './previewCache';
+import type { ChangeEvent, FeedPosition } from '../sync/changes';
 
 export interface FullBody {
   bodyText: string;
@@ -171,6 +172,9 @@ function sealedToOurs(entry: MailboxEntryLike, ring: Map<string, { keys: Working
 }
 
 interface ChallengeResp { correlation_id: string; nonce: string }
+// Entries asked for per list page. The relay caps a page by bytes as well, so this is an upper
+// bound, set to make a large mailbox a few round trips rather than hundreds.
+const LIST_PAGE = 500;
 interface ListResp { entries: Array<{ hash: string; entry: string }>; next_cursor: string }
 interface BodyResp { hash: string; body: string }
 
@@ -219,7 +223,7 @@ export class MailboxSync {
 
 
 
-  private async challenge(req: { op: 'list' | 'body' | 'delete'; cursor?: string; hash?: string }): Promise<ChallengeResp> {
+  private async challenge(req: { op: 'list' | 'body' | 'delete'; cursor?: string; hash?: string; limit?: number }): Promise<ChallengeResp> {
     return this.post<ChallengeResp>('/api/v1/mailbox/challenge', req);
   }
 
@@ -231,21 +235,133 @@ export class MailboxSync {
   }
 
   // restore draws the rows this device kept from an earlier session, before anything is fetched.
-  // Once per instance; a failure only means starting from the relay, as before.
+  // Once per instance; a failure only means starting from the relay, as before. Public as
+  // showKept for a caller that will bring the rows up to date some other way than listing (the
+  // change feed, useSync.ts).
+  showKept(): Promise<void> {
+    return this.restore();
+  }
+
   private restore(): Promise<void> {
     return (this.restoring ??= (async () => {
       try {
         this.rows = await PreviewCache.open(this.keys, 'inbox');
         if (!this.rows) return;
-        for (const [hash, row] of await this.rows.load()) {
+        const kept = await this.rows.load();
+        for (const [hash, row] of kept.rows) {
           if (!this.cache.has(hash)) this.cache.set(hash, { preview: row.preview });
         }
+        // Read once, with the rows: from here this instance's position describes this instance's
+        // rows, whatever another tab writes to the shared store afterwards.
+        this.position ??= kept.position;
         if (this.cache.size > 0) this.emit();
       } catch (err) {
         this.rows = null;
         console.warn('list cache unavailable; listing from the relay', err);
       }
     })());
+  }
+
+  // ensureRing builds the decrypt ring when nothing has listed yet this session.
+  private async ensureRing(): Promise<void> {
+    if (this.ring) return;
+    const { ring, retired } = await keyringFor(this.keys, this.identities);
+    this.ring = ring;
+    this.retired = retired;
+  }
+
+  // Where the change feed stands for these rows. Kept with the rows on this device when they
+  // are kept (previewCache.ts), else only for this session.
+  private position: FeedPosition | null = null;
+
+  /** The change-feed position these rows are at, or null when a full listing is needed first. */
+  async feedPosition(): Promise<FeedPosition | null> {
+    await this.restore();
+    return this.position;
+  }
+
+  /** Record the position these rows are now at, and (as the writer) keep both on this device. */
+  async setFeedPosition(p: FeedPosition): Promise<void> {
+    await this.restore();
+    this.position = p;
+    if (this.writer && this.rows) await this.rows.save(this.snapshot(), p);
+  }
+
+  // Whether this instance keeps the list on this device. Several tabs of one account share the
+  // store, and each holds its own rows at its own position; if they all wrote, the store could
+  // end up with one tab's rows beside another's position, and an unlock would then skip events.
+  // So exactly one writes — the tab holding the account's lock (useMessages) — and the others
+  // only read at start. Off by default: a background reader (the unread counter) never writes.
+  private writer = false;
+
+  /**
+   * Become the one that keeps this list on this device. What is stored may be another tab's, so
+   * the first write replaces all of it with this instance's rows and position.
+   */
+  async becomeWriter(): Promise<void> {
+    await this.restore();
+    this.writer = true;
+    if (!this.rows) return;
+    this.rows.rewriteAll();
+    await this.rows.save(this.snapshot(), this.position);
+  }
+
+  private snapshot(): Map<string, { preview: Preview; raw?: string }> {
+    const rows = new Map<string, { preview: Preview; raw?: string }>();
+    for (const [hash, c] of this.cache) rows.set(hash, { preview: c.preview, raw: c.raw });
+    return rows;
+  }
+
+  /** Resolves once every write of rows to this device queued so far has landed. */
+  settled(): Promise<void> {
+    return this.rows ? this.rows.settled() : Promise.resolve();
+  }
+
+  /** Forget the decrypt ring, so the next open rebuilds it (the account's aliases changed). */
+  invalidateRing(): void {
+    this.ring = null;
+  }
+
+  /**
+   * Apply change-feed events to the list, and write the result to this device before resolving —
+   * the caller advances its feed position only after that, so a crash replays events rather than
+   * losing them. Replay is harmless: a message already held is not added twice, one already gone
+   * is not deleted twice.
+   *
+   * A stored message arrives with its list entry, which is opened and verified exactly as a
+   * listing's would be. One deleted since it was stored arrives without, and its deletion follows.
+   */
+  async applyEvents(events: ChangeEvent[]): Promise<void> {
+    await this.restore();
+    let changed = false;
+    for (const e of events) {
+      if (!e.hash) continue;
+      if (e.kind === 'mail_deleted') {
+        if (this.cache.delete(e.hash)) changed = true;
+        continue;
+      }
+      if (e.kind !== 'mail_stored' || !e.entry) continue;
+      const had = this.cache.get(e.hash);
+      if (had) {
+        if (!had.raw) { had.raw = e.entry; changed = true; }
+        continue;
+      }
+      try {
+        await this.ensureRing();
+        const o = await this.openEntry(e.entry);
+        this.cache.set(e.hash, {
+          preview: previewOf(e.hash, o.header, o.address),
+          raw: e.entry,
+          opened: { entry: o.entry, header: o.header, keys: o.keys },
+        });
+        changed = true;
+      } catch (err) {
+        console.error('preview decrypt failed for', e.hash, err);
+      }
+    }
+    if (!changed) return;
+    this.emit();
+    if (this.writer && this.rows) await this.rows.save(this.snapshot(), this.position);
   }
 
   // openEntry decodes a listed entry, finds which of our keys it was sealed to, and decrypts and
@@ -268,8 +384,9 @@ export class MailboxSync {
     this.ring = ring;
     this.retired = retired;
     let cursor = '';
+    let firstPage = true;
     do {
-      const ch = await this.challenge({ op: 'list', cursor });
+      const ch = await this.challenge({ op: 'list', cursor, limit: LIST_PAGE });
       const res = await this.complete<ListResp>(ch.correlation_id, ch.nonce);
       for (const e of res.entries) {
         seen.add(e.hash);
@@ -291,6 +408,12 @@ export class MailboxSync {
         }
       }
       cursor = res.next_cursor || '';
+      // A relay that lists newest first has just handed over the mail most likely to be missing
+      // from the list: draw it now rather than after the whole mailbox. Nothing is pruned until
+      // the last page, so an early draw only ever adds rows. (An older relay lists oldest
+      // first; drawing early there is merely less useful, never wrong.)
+      if (firstPage && cursor.length > 0) this.emit();
+      firstPage = false;
     } while (cursor.length > 0);
 
     // Drop entries that are no longer in the mailbox (deleted here or on another device), and
@@ -318,10 +441,8 @@ export class MailboxSync {
   // persist writes the current rows to this device. Best effort: a failed write costs the next
   // unlock some decrypting, nothing else.
   private persist(): void {
-    if (!this.rows) return;
-    const rows = new Map<string, { preview: Preview }>();
-    for (const [hash, c] of this.cache) rows.set(hash, { preview: c.preview });
-    void this.rows.save(rows).catch(err => console.warn('list cache: could not save', err));
+    if (!this.writer || !this.rows) return;
+    void this.rows.save(this.snapshot(), this.position).catch(err => console.warn('list cache: could not save', err));
   }
 
   // fetchBody fetches + verifies a message body on open; resolves with the text.
@@ -338,6 +459,11 @@ export class MailboxSync {
   async fetchFull(hash: string): Promise<FullBody> {
     await this.restore();
     let cached = this.cache.get(hash);
+    if (cached && !cached.raw && this.rows) {
+      // Kept on this device beside its row: no listing needed to open it.
+      cached.raw = await this.rows.entry(hash);
+      if (cached.raw) await this.ensureRing();
+    }
     if (!cached?.raw && !this.listed) {
       // Drawn from this device, and the first listing has not landed yet: wait for one.
       await this.list();

@@ -17,6 +17,7 @@ import type { MailFilterFactory } from './api/filterList';
 import type { StorageUsage } from './api/personalStore';
 import type { WorkingKeys } from './crypto/workingKeys';
 import type { RotatedSibling } from './crypto/rotation';
+import type { ChangeFeed } from './sync/changes';
 
 // InboxNotice is one kind of request-shaped control message, surfaced as a row at the top of
 // the inbox. The shell owns the row and the dialog it opens; the deployment owns which kinds
@@ -244,6 +245,12 @@ export interface Deployment {
   // How the account's block/allow list is stored — and therefore whether a block is
   // enforced at the relay or only honoured by this client. See lib/api/filterList.ts.
   mailFilter: MailFilterFactory;
+
+  // Where the client learns what changed in the mailbox and personal store since it last looked,
+  // if this deployment's relays say. Both answers are correct: a relay that keeps a change log
+  // lets the client touch only what changed (sync/useSync.ts); without one the client re-lists
+  // on a timer, as it always has. Absent ⇒ re-list.
+  changeFeed?: (keys: WorkingKeys, explicitToken?: string) => ChangeFeed;
 
   // Message payloads the deployment carries for its OWN protocol purposes, which the mail
   // UI must recognise but never show as mail. The product moves device-pairing and

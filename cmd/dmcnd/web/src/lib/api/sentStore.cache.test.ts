@@ -14,6 +14,7 @@ vi.mock('../crypto/idb', () => ({
   idbDeletePrefix: async (_s: string, prefix: string) => {
     for (const k of [...idb.keys()]) if (k.startsWith(prefix)) idb.delete(k);
   },
+  idbKeysWithPrefix: async (_s: string, prefix: string) => [...idb.keys()].filter(k => k.startsWith(prefix)),
   idbEntriesWithPrefix: async (_s: string, prefix: string) => [...idb.entries()].filter(([k]) => k.startsWith(prefix)),
 }));
 vi.mock('../crypto/retiredKeys', () => ({ retiredKeys: async () => [], asDecryptOnly: () => ({}) }));

@@ -4,6 +4,7 @@ import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 import { usePolling } from './usePolling';
+import { storeKey, useSyncChanges, useSyncLive } from '../sync/useSync';
 
 // useFlags owns the extrinsic per-message metadata (read/unread, archived, starred,
 // labels) from the "flags/" namespace of the personal store. Views (Inbox excludes
@@ -67,7 +68,10 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     };
   }, [keys, sessionToken, isAuthenticated]);
 
-  usePolling(() => syncRef.current(), STORAGE_POLL_INTERVAL_MS);
+  // The timer stands down while the change feed answers; a change to flags/ refreshes instead.
+  const live = useSyncLive();
+  usePolling(() => { if (!live) syncRef.current(); }, STORAGE_POLL_INTERVAL_MS);
+  useSyncChanges(storeKey('flags/'), () => syncRef.current());
 
   const refreshFlags = useCallback(() => syncRef.current(), []);
 

@@ -16,6 +16,7 @@ vi.mock('../crypto/idb', () => ({
   idbDeletePrefix: async (_s: string, prefix: string) => {
     for (const k of [...data.keys()]) if (k.startsWith(prefix)) data.delete(k);
   },
+  idbKeysWithPrefix: async (_s: string, prefix: string) => [...data.keys()].filter(k => k.startsWith(prefix)),
   idbEntriesWithPrefix: async (_s: string, prefix: string) =>
     [...data.entries()].filter(([k]) => k.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)),
 }));
@@ -45,11 +46,11 @@ beforeEach(() => {
 describe('PreviewCache', () => {
   it('keeps rows across sessions, sealed', async () => {
     const pc = (await PreviewCache.open(await keysFor('bob@example.com'), 'inbox'))!;
-    expect((await pc.load()).size).toBe(0);
+    expect(((await pc.load()).rows).size).toBe(0);
     await pc.save(rowsOf('aa01', 'bb02'));
 
     const again = (await PreviewCache.open(await keysFor('bob@example.com'), 'inbox'))!;
-    const loaded = await again.load();
+    const loaded = (await again.load()).rows;
     expect([...loaded.keys()].sort()).toEqual(['aa01', 'bb02']);
     expect(loaded.get('aa01')!.preview.subject).toBe('subject of aa01');
 
@@ -83,7 +84,7 @@ describe('PreviewCache', () => {
     await pc.save(new Map());
     expect(data.has(`bob@example.com::inbox/b/${bucketOf('only')}`)).toBe(false);
     const again = (await PreviewCache.open(await keysFor('bob@example.com'), 'inbox'))!;
-    expect((await again.load()).size).toBe(0);
+    expect(((await again.load()).rows).size).toBe(0);
   });
 
   it('starts again empty once the account key changes', async () => {
@@ -91,7 +92,7 @@ describe('PreviewCache', () => {
     await pc.load();
     await pc.save(rowsOf('aa01'));
     const rotated = (await PreviewCache.open(await keysFor('bob@example.com', 2), 'inbox'))!;
-    expect((await rotated.load()).size).toBe(0);
+    expect(((await rotated.load()).rows).size).toBe(0);
     expect([...data.keys()].filter(k => k.includes('/b/'))).toEqual([]);
   });
 
@@ -100,9 +101,9 @@ describe('PreviewCache', () => {
     await inbox.load();
     await inbox.save(rowsOf('aa01'));
     const sent = (await PreviewCache.open(await keysFor('bob@example.com'), 'sent'))!;
-    expect((await sent.load()).size).toBe(0);
+    expect(((await sent.load()).rows).size).toBe(0);
     const other = (await PreviewCache.open(await keysFor('carol@example.com'), 'inbox'))!;
-    expect((await other.load()).size).toBe(0);
+    expect(((await other.load()).rows).size).toBe(0);
 
     await forgetPreviewCache('bob@example.com');
     expect([...data.keys()].some(k => k.startsWith('bob@example.com::'))).toBe(false);
@@ -117,7 +118,7 @@ describe('PreviewCache', () => {
     const victim = `bob@example.com::inbox/b/${bucketOf('h0')}`;
     const other = [...data.keys()].find(k => k.includes('/b/') && k !== victim)!;
     data.set(victim, data.get(other)); // a record moved to another slot does not open
-    const loaded = await (await PreviewCache.open(await keysFor('bob@example.com'), 'inbox'))!.load();
+    const loaded = (await (await PreviewCache.open(await keysFor('bob@example.com'), 'inbox'))!.load()).rows;
     expect(loaded.has('h0')).toBe(false);
     expect(loaded.size).toBeGreaterThan(30);
   });

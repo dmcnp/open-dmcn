@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode, createElement } from 'react';
+import { filterChanged, useSyncChanges } from '../sync/useSync';
 import { emptyFilterList, type FilterList, type MailFilter } from '../api/filterList';
 import { deployment } from '@deployment';
 import { useKeys } from './useKeys';
@@ -24,6 +25,7 @@ export function MailFilterProvider({ children }: { children: ReactNode }) {
   const [filter, setFilter] = useState<FilterList | null>(null);
   const [ready, setReady] = useState(false);
   const clientRef = useRef<MailFilter | null>(null);
+  const loadRef = useRef<() => void>(() => {});
 
   // Gate on the account session, not just keys — same pairing race as
   // ContactsProvider: the blocklist must load against the real account token, not
@@ -46,6 +48,7 @@ export function MailFilterProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => { /* transient */ })
       .finally(() => { if (!cancelled) setReady(true); });
+    loadRef.current = load;
     load();
     // Refresh on wake so a block/allow edit made in Settings (a separate client)
     // reflects here without a full remount.
@@ -59,10 +62,14 @@ export function MailFilterProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', onWake);
       window.removeEventListener('focus', onWake);
       clientRef.current = null;
+      loadRef.current = () => {};
       setReady(false);
       setFilter(null);
     };
   }, [keys, sessionToken, isAuthenticated]);
+
+  // A block or allow made on another device applies here as soon as the change feed says so.
+  useSyncChanges(filterChanged, () => loadRef.current());
 
   // blockSender adds the sender's key to the unconditional key-bound blocklist
   // (§14.3.1) — so the block survives an address change. In deny mode we also list

@@ -24,8 +24,8 @@ import (
 //	/mbox/x/<rxHex>/<hashHex>        -> the header key (hash index, for Delete)
 //
 // seq is the zero-padded store time in nanoseconds, so a key range-scan over the
-// header prefix yields messages in chronological (oldest-first) order — which is
-// also a stable pagination order.
+// header prefix yields messages in the order they arrived — which is also a stable
+// pagination order, walked either way (ListOrder).
 const (
 	mboxHeaderPrefix = "/mbox/h"
 	mboxBodyPrefix   = "/mbox/b"
@@ -33,6 +33,25 @@ const (
 
 	// defaultListLimit caps an unbounded FETCH-LIST page.
 	defaultListLimit = 50
+	// maxListLimit caps what a caller may ask for in one page.
+	maxListLimit = 1000
+)
+
+// listByteBudget ends a page early once its entries reach this many encoded bytes, so a page
+// always fits the 4 MB protocol frame (maxMessageSize) whatever the header sizes. A var only so
+// a test can shrink it.
+var listByteBudget = 3 << 20
+
+// ListOrder is the direction List walks a mailbox.
+type ListOrder int
+
+const (
+	// ListNewestFirst is what an owner's client is served: the mail it most likely lacks
+	// comes first, so it can draw a page before the rest arrives.
+	ListNewestFirst ListOrder = iota
+	// ListOldestFirst is for the relay's own queue work (the bridge's outbound queue,
+	// drain handoff), where the oldest item is the one closest to expiring.
+	ListOldestFirst
 )
 
 // MailboxStore is a durable, hold-until-deleted mailbox backed by an ordered
@@ -162,44 +181,56 @@ func (m *MailboxStore) Store(ctx context.Context, rxHex string, hash [32]byte, e
 	return nil
 }
 
-// List returns up to limit header entries for the recipient in chronological
-// (oldest-first) order, starting strictly after cursor (empty cursor = from the
-// beginning). nextCursor is the cursor for the following page, or empty when the
-// mailbox has been fully drained. Listing is non-consuming.
-func (m *MailboxStore) List(ctx context.Context, rxHex string, limit int, cursor string) (entries []*dmcnpb.MailboxEntry, nextCursor string, err error) {
+// List returns up to limit header entries for the recipient, walking the mailbox in the
+// given order and starting strictly past cursor (empty cursor = from that end). nextCursor
+// continues the walk, or is empty when the mailbox has been fully drained. A page also ends
+// early once its entries reach listByteBudget. Listing is non-consuming.
+func (m *MailboxStore) List(ctx context.Context, rxHex string, limit int, cursor string, order ListOrder) (entries []*dmcnpb.MailboxEntry, nextCursor string, err error) {
 	if limit <= 0 {
 		limit = defaultListLimit
 	}
+	if limit > maxListLimit {
+		limit = maxListLimit
+	}
 
-	res, err := m.store.Query(ctx, dsquery.Query{Prefix: headerPrefix(rxHex)})
+	q := dsquery.Query{Prefix: headerPrefix(rxHex), Orders: []dsquery.Order{dsquery.OrderByKey{}}}
+	past := func(key string) bool { return key > cursor }
+	if order == ListNewestFirst {
+		q.Orders = []dsquery.Order{dsquery.OrderByKeyDescending{}}
+		past = func(key string) bool { return key < cursor }
+	}
+	res, err := m.store.Query(ctx, q)
 	if err != nil {
 		return nil, "", fmt.Errorf("mailbox: list: query: %w", err)
 	}
 	defer res.Close()
 
 	lastKey := ""
+	size := 0
+	full := false
 	for r := range res.Next() {
 		if r.Error != nil {
 			return nil, "", fmt.Errorf("mailbox: list: %w", r.Error)
 		}
-		// Skip everything at or before the cursor (keys iterate sorted ascending).
-		if cursor != "" && r.Key <= cursor {
+		if cursor != "" && !past(r.Key) {
 			continue
+		}
+		if len(entries) >= limit || (len(entries) > 0 && size+len(r.Value) > listByteBudget) {
+			full = true
+			break
 		}
 		e := &dmcnpb.MailboxEntry{}
 		if err := proto.Unmarshal(r.Value, e); err != nil {
 			continue // skip a corrupt entry rather than failing the whole page
 		}
 		entries = append(entries, e)
+		size += len(r.Value)
 		lastKey = r.Key
-		if len(entries) >= limit {
-			break
-		}
 	}
 
-	// A full page means there may be more; hand back a cursor to continue. The
-	// final (partial or empty) page returns an empty cursor.
-	if len(entries) == limit {
+	// More remains past this page: hand back a cursor to continue. The final page
+	// returns an empty cursor.
+	if full {
 		nextCursor = lastKey
 	}
 	return entries, nextCursor, nil

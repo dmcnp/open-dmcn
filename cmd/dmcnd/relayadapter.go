@@ -64,7 +64,7 @@ func (p *inProcRelay) List(ctx context.Context, address string, nonce, signature
 	if err != nil {
 		return nil, nil, err
 	}
-	entries, next, err := p.node.Relay().Mailbox().List(ctx, rxHex, limit, string(cursor))
+	entries, next, err := p.node.Relay().Mailbox().List(ctx, rxHex, limit, string(cursor), relay.ListNewestFirst)
 	if err != nil {
 		return nil, nil, err
 	}

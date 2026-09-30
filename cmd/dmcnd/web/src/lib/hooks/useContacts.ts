@@ -6,6 +6,7 @@ import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 import { usePolling } from './usePolling';
+import { storeKey, useSyncChanges, useSyncLive } from '../sync/useSync';
 
 export interface Contact {
   address: string;
@@ -223,7 +224,10 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
     };
   }, [keys, sessionToken, isAuthenticated]);
 
-  usePolling(() => loadRef.current(), STORAGE_POLL_INTERVAL_MS);
+  // The timer stands down while the change feed answers; a change to contacts/ refreshes instead.
+  const live = useSyncLive();
+  usePolling(() => { if (!live) loadRef.current(); }, STORAGE_POLL_INTERVAL_MS);
+  useSyncChanges(storeKey('contacts/'), () => loadRef.current());
 
   const contacts = useMemo<Contact[]>(
     () => records.map(r => ({ address: r.address, name: r.name, fingerprint: r.fingerprint })).sort(byName),

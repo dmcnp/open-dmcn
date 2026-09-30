@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode, createElement } from 'react';
+import { storeKey, useSyncChanges } from '../sync/useSync';
 import { LabelStore, emptyLabelsDoc, type LabelsDoc, type LabelDef, type FolderDef } from '../api/labelStore';
 import { StorageConflictError } from '../api/personalStore';
 import { useKeys } from './useKeys';
@@ -100,6 +101,9 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
     }
     throw new Error('labels: too many concurrent edits, please retry');
   }, []);
+
+  // Another device renaming or adding a label shows up as soon as the change feed says so.
+  useSyncChanges(storeKey('settings/labels'), () => syncRef.current());
 
   const refreshLabels = useCallback(() => syncRef.current(), []);
 

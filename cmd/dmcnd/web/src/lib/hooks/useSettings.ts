@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode, createElement } from 'react';
+import { storeKey, useSyncChanges } from '../sync/useSync';
 import { SettingsStore, emptySettings, type AppSettings } from '../api/settingsStore';
 import { StorageConflictError } from '../api/personalStore';
 import { useKeys } from './useKeys';
@@ -55,6 +56,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setSettings(emptySettings());
     };
   }, [keys, sessionToken, isAuthenticated]);
+
+  // A setting changed on another device shows up as soon as the change feed says so.
+  useSyncChanges(storeKey('settings/app'), () => syncRef.current());
 
   const refreshSettings = useCallback(() => syncRef.current(), []);
 

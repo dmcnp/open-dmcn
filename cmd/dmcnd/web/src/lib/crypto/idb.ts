@@ -178,3 +178,8 @@ export function idbEntriesWithPrefix<T>(store: string, prefix: string): Promise<
       })
   );
 }
+
+/** Every key under prefix, without reading values. */
+export function idbKeysWithPrefix(store: string, prefix: string): Promise<string[]> {
+  return tx<string[]>(store, 'readonly', s => s.getAllKeys(prefixRange(prefix)) as unknown as IDBRequest<string[]>);
+}

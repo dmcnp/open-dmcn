@@ -5,6 +5,7 @@ import { STORAGE_POLL_INTERVAL_MS } from '../config';
 import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 import { usePolling } from './usePolling';
+import { storeKey, useSyncChanges, useSyncLive } from '../sync/useSync';
 
 // The Sent folder reads self-sealed message envelopes from the owner-only personal store
 // ("sent/" + "sent-body/" namespaces), not the mailbox. Each is a normal split envelope,
@@ -73,7 +74,10 @@ export function SentProvider({ children }: { children: ReactNode }) {
     };
   }, [keys, sessionToken, isAuthenticated, address]);
 
-  usePolling(() => syncRef.current(), STORAGE_POLL_INTERVAL_MS);
+  // The timer stands down while the change feed answers; a change to sent/ refreshes instead.
+  const live = useSyncLive();
+  usePolling(() => { if (!live) void syncRef.current(); }, STORAGE_POLL_INTERVAL_MS);
+  useSyncChanges(storeKey('sent/'), () => { void syncRef.current(); });
 
   const refreshSent = useCallback(() => syncRef.current(), []);
   const fetchSentFull = useCallback((hash: string): Promise<FullBody> => {

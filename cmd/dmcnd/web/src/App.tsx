@@ -9,6 +9,7 @@ import { SettingsProvider } from './lib/hooks/useSettings';
 import { ContactsProvider } from './lib/hooks/useContacts';
 import { MailFilterProvider } from './lib/hooks/useMailFilter';
 import { SearchIndexProvider } from './lib/search/useSearchIndex';
+import { SyncProvider } from './lib/sync/useSync';
 import { Login } from './pages/Login';
 import { InboxMain } from './pages/InboxMain';
 import { Contacts } from './pages/Contacts';
@@ -35,6 +36,7 @@ export function App() {
   return (
     <AuthProvider>
       <KeysProvider>
+        <SyncProvider>
         <MessagesProvider>
         <SentProvider>
         <FlagsProvider>
@@ -74,6 +76,7 @@ export function App() {
         </FlagsProvider>
         </SentProvider>
         </MessagesProvider>
+        </SyncProvider>
       </KeysProvider>
     </AuthProvider>
   );

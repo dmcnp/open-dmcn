@@ -7,6 +7,10 @@ import { useKeys } from './useKeys';
 import { useAuth } from './useAuth';
 import { usePolling } from './usePolling';
 import { deployment } from '@deployment';
+import { storageKey } from '../appContext';
+import { useSyncBus } from '../sync/useSync';
+import { feedPass } from '../sync/feedSync';
+import { ChangeFeedUnavailable } from '../sync/changes';
 
 export type { Preview } from '../api/mailboxRest';
 
@@ -43,6 +47,7 @@ const MessagesContext = createContext<MessagesContextValue | null>(null);
 export function MessagesProvider({ children }: { children: ReactNode }) {
   const { keys } = useKeys();
   const { sessionToken, isAuthenticated } = useAuth();
+  const { publish, setLive } = useSyncBus();
   const [messages, setMessages] = useState<Preview[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +62,8 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
     clientRef.current = client;
 
     let cancelled = false;
-    const doSync = () =>
-      client.list()
-        .then(() => { if (cancelled) return; setLoaded(true); setError(null); setAccessState('ok'); })
-        .catch(err => {
+    const synced = () => { if (cancelled) return; setLoaded(true); setError(null); setAccessState('ok'); };
+    const failed = (err: unknown) => {
           if (cancelled) return;
           // A node-enforced access lock is a 403 with a machine code — surface it as a
           // distinct account state (not a transient sync error) so the UI can explain it.
@@ -80,22 +83,63 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
             return;
           }
           setError(err instanceof Error ? err.message : String(err));
+    };
+    const listOnce = () => client.list().then(synced, failed);
+
+    // Where the deployment's relays keep a change log, a poll asks what changed rather than
+    // re-listing, and the kept rows are drawn at once while it does (sync/feedSync.ts). A relay
+    // that turns out to keep none drops this session back to listing, as before.
+    const feed = deployment.changeFeed ? deployment.changeFeed(keys) : null;
+    let useFeed = feed !== null;
+    const feedOnce = (): Promise<void> =>
+      feedPass(feed!, client, publish)
+        .then(() => { if (!cancelled) setLive(true); synced(); })
+        .catch(err => {
+          if (err instanceof ChangeFeedUnavailable) {
+            useFeed = false;
+            if (!cancelled) setLive(false);
+            return listOnce();
+          }
+          failed(err);
         });
+    // One pass at a time: a poll, a push wake-up and a pull-to-refresh can all ask at once.
+    let inFlight: Promise<void> | null = null;
+    const doSync = () => (inFlight ??= (useFeed ? feedOnce() : listOnce()).finally(() => { inFlight = null; }));
     syncRef.current = doSync;
 
+    if (useFeed) void client.showKept();
     doSync(); // initial sync
+
+    // One tab per account keeps the list on this device (see MailboxSync.becomeWriter): whichever
+    // holds this lock. The others read the kept list at start and otherwise keep theirs in memory.
+    // A browser without Web Locks has one tab's worth of guarantee, which is every tab writing.
+    let releaseLock: (() => void) | null = null;
+    const takeOver = () => { void client.becomeWriter().catch(err => console.warn('list cache: could not take over', err)); };
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      void navigator.locks.request(storageKey(`dmcn-list:${keys.address.toLowerCase()}`), () =>
+        new Promise<void>(release => {
+          releaseLock = release;
+          if (cancelled) release(); else takeOver();
+        }),
+      ).catch(() => undefined);
+    } else {
+      takeOver();
+    }
 
 
     return () => {
       cancelled = true;
+      // Let go only once this instance's writes have landed, so the next writer starts from them.
+      void client.settled().finally(() => releaseLock?.());
       client.close();
       clientRef.current = null;
       syncRef.current = () => Promise.resolve();
       setMessages([]);
       setLoaded(false);
       setAccessState('ok');
+      setLive(false);
     };
-  }, [keys, sessionToken, isAuthenticated]);
+  }, [keys, sessionToken, isAuthenticated, publish, setLive]);
 
   usePolling(() => syncRef.current(), POLL_INTERVAL_MS);
 

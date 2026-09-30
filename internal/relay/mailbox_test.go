@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -61,6 +62,38 @@ func makeSplitEnvelope(t *testing.T, rxPub [32]byte, subject, body string) (*mes
 	return env, crypto.SHA256Hash(b)
 }
 
+// drainList walks every page of a mailbox in one order and returns the hashes in the order
+// they were served.
+func drainList(t *testing.T, mbox *MailboxStore, rxHex string, limit int, order ListOrder) [][32]byte {
+	t.Helper()
+	ctx := context.Background()
+	var out [][32]byte
+	seen := map[[32]byte]bool{}
+	cursor := ""
+	for pages := 0; ; pages++ {
+		if pages > 100 {
+			t.Fatal("pagination did not terminate")
+		}
+		entries, next, err := mbox.List(ctx, rxHex, limit, cursor, order)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		for _, e := range entries {
+			var h [32]byte
+			copy(h[:], e.Hash)
+			if seen[h] {
+				t.Fatalf("duplicate hash across pages: %x", h)
+			}
+			seen[h] = true
+			out = append(out, h)
+		}
+		if next == "" {
+			return out
+		}
+		cursor = next
+	}
+}
+
 func TestMailboxListPaginates(t *testing.T) {
 	ctx := context.Background()
 	d := openMailboxDS(t, t.TempDir())
@@ -69,58 +102,68 @@ func TestMailboxListPaginates(t *testing.T) {
 
 	rxPub, _, rxHex := mailboxTestRecipient(t)
 
+	// A second apart, so arrival order is visible in StoredAt as well as in the key.
 	const n = 7
 	base := time.Unix(1_700_000_000, 0)
-	want := make(map[[32]byte]bool, n)
+	var stored [][32]byte
 	for i := 0; i < n; i++ {
 		env, hash := makeSplitEnvelope(t, rxPub, "msg", "body content")
-		if err := mbox.Store(ctx, rxHex, hash, env, base.Add(time.Duration(i)*time.Millisecond)); err != nil {
+		if err := mbox.Store(ctx, rxHex, hash, env, base.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatalf("store %d: %v", i, err)
 		}
-		want[hash] = true
+		stored = append(stored, hash)
 	}
 
-	// Drain pages with limit 3; collect every hash exactly once, in stored order.
-	got := make(map[[32]byte]bool, n)
-	var order []int64
-	cursor := ""
-	pages := 0
-	for {
-		entries, next, err := mbox.List(ctx, rxHex, 3, cursor)
-		if err != nil {
-			t.Fatalf("list: %v", err)
+	for _, limit := range []int{1, 3, 7, 50} {
+		if got := drainList(t, mbox, rxHex, limit, ListOldestFirst); !slices.Equal(got, stored) {
+			t.Fatalf("oldest-first, limit %d: got %x, want arrival order", limit, got)
 		}
-		pages++
-		for _, e := range entries {
-			var h [32]byte
-			copy(h[:], e.Hash)
-			if got[h] {
-				t.Fatalf("duplicate hash across pages: %x", h)
-			}
-			got[h] = true
-			order = append(order, e.StoredAt)
-		}
-		if next == "" {
-			break
-		}
-		cursor = next
-		if pages > n+2 {
-			t.Fatal("pagination did not terminate")
+		newest := slices.Clone(stored)
+		slices.Reverse(newest)
+		if got := drainList(t, mbox, rxHex, limit, ListNewestFirst); !slices.Equal(got, newest) {
+			t.Fatalf("newest-first, limit %d: got %x, want reverse arrival order", limit, got)
 		}
 	}
 
-	if len(got) != n {
-		t.Fatalf("drained %d messages, want %d", len(got), n)
+	// An exact page leaves nothing behind: no cursor pointing at an empty page.
+	if _, next, _ := mbox.List(ctx, rxHex, n, "", ListNewestFirst); next != "" {
+		t.Fatalf("a page holding the whole mailbox returned cursor %q", next)
 	}
-	for h := range want {
-		if !got[h] {
-			t.Fatalf("missing message %x after draining all pages", h)
+}
+
+// A page stops at the byte budget even under its entry limit, so it always fits a frame, and
+// the cursor carries on from where it stopped.
+func TestMailboxListByteBudget(t *testing.T) {
+	ctx := context.Background()
+	d := openMailboxDS(t, t.TempDir())
+	defer d.Close()
+	mbox := NewMailboxStore(d)
+	rxPub, _, rxHex := mailboxTestRecipient(t)
+
+	base := time.Unix(1_700_000_000, 0)
+	var one int
+	for i := 0; i < 10; i++ {
+		env, hash := makeSplitEnvelope(t, rxPub, "msg", "body content")
+		if err := mbox.Store(ctx, rxHex, hash, env, base.Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		if one == 0 {
+			entries, _, _ := mbox.List(ctx, rxHex, 1, "", ListNewestFirst)
+			one = proto.Size(entries[0])
 		}
 	}
-	for i := 1; i < len(order); i++ {
-		if order[i] < order[i-1] {
-			t.Fatalf("pages not in chronological order: %v", order)
-		}
+	defer func(was int) { listByteBudget = was }(listByteBudget)
+	listByteBudget = one*3 + one/2
+
+	entries, next, err := mbox.List(ctx, rxHex, 100, "", ListNewestFirst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 || next == "" {
+		t.Fatalf("got %d entries and cursor %q; want 3 and a cursor", len(entries), next)
+	}
+	if got := drainList(t, mbox, rxHex, 100, ListNewestFirst); len(got) != 10 {
+		t.Fatalf("drained %d of 10 across byte-limited pages", len(got))
 	}
 }
 
@@ -137,7 +180,7 @@ func TestMailboxBodyRoundTrip(t *testing.T) {
 	}
 
 	// LIST yields the header view; decrypt it for the preview (no body read).
-	entries, _, err := mbox.List(ctx, rxHex, 10, "")
+	entries, _, err := mbox.List(ctx, rxHex, 10, "", ListOldestFirst)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("list: %v (n=%d)", err, len(entries))
 	}
@@ -205,7 +248,7 @@ func TestMailboxDelete(t *testing.T) {
 	if _, err := mbox.GetBody(ctx, rxHex, h1); !errors.Is(err, ErrEnvelopeNotFound) {
 		t.Fatalf("deleted body should be gone, got %v", err)
 	}
-	entries, _, _ := mbox.List(ctx, rxHex, 10, "")
+	entries, _, _ := mbox.List(ctx, rxHex, 10, "", ListOldestFirst)
 	if len(entries) != 1 {
 		t.Fatalf("list after delete = %d entries, want 1", len(entries))
 	}
@@ -255,7 +298,7 @@ func TestMailboxPersistsAcrossRestart(t *testing.T) {
 	d2 := openMailboxDS(t, dir)
 	defer d2.Close()
 	mbox2 := NewMailboxStore(d2)
-	entries, _, err := mbox2.List(ctx, rxHex, 10, "")
+	entries, _, err := mbox2.List(ctx, rxHex, 10, "", ListOldestFirst)
 	if err != nil {
 		t.Fatalf("list after restart: %v", err)
 	}

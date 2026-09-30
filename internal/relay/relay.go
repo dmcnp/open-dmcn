@@ -1038,7 +1038,7 @@ func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, ad
 	switch {
 	case op.GetList() != nil:
 		lo := op.GetList()
-		entries, next, err := r.mailbox.List(ctx, rxHex, int(lo.Limit), string(lo.Cursor))
+		entries, next, err := r.mailbox.List(ctx, rxHex, int(lo.Limit), string(lo.Cursor), ListNewestFirst)
 		if err != nil {
 			r.log.Errorf("mailbox LIST failed for %s: %v", address, err)
 			writeResponse(s, errorResponse("STORAGE_FAILED", "list failed"))

@@ -238,7 +238,7 @@ export class SentStore {
       try {
         this.rows = await PreviewCache.open(this.keys, 'sent');
         if (!this.rows) return;
-        for (const [hash, row] of await this.rows.load()) {
+        for (const [hash, row] of (await this.rows.load()).rows) {
           if (!this.cache.has(hash)) this.cache.set(hash, { preview: row.preview, version: row.version ?? -1 });
         }
       } catch (err) {

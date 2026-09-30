@@ -342,7 +342,7 @@ func (b *Bridge) mailboxItems(ctx context.Context, rxHex string) ([]outboundItem
 	if mbox == nil {
 		return nil, true
 	}
-	entries, _, err := mbox.List(ctx, rxHex, 0, "")
+	entries, _, err := mbox.List(ctx, rxHex, 0, "", relay.ListOldestFirst)
 	if err != nil {
 		b.log.Warnf("outbound: list mailbox: %v", err)
 		return nil, false
