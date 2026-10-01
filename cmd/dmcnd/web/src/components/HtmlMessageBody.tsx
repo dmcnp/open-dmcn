@@ -102,8 +102,9 @@ export function HtmlMessageBody({ html, attachments, allowRemoteImages = false }
     return { doc: shell, blockedRemote };
   }, [html, attachments, allowRemoteImages]);
 
+  // No outer margin: the reader spaces its sections with one gap, and a margin here doubled it.
   return (
-    <div style={{ marginTop: 'var(--space-6)' }}>
+    <div>
       {blockedRemote && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
           <Icon name="eye-off" size={15} style={{ flex: 'none' }} />

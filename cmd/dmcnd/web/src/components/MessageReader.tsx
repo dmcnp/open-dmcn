@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { Preview, FullBody } from '../lib/api/mailboxRest';
 import type { ComposeReplyTo } from '../lib/compose';
 import { useMessages } from '../lib/hooks/useMessages';
@@ -7,7 +7,7 @@ import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels, LABEL_COLORS } from '../lib/hooks/useLabels';
 import type { LabelDef } from '../lib/api/labelStore';
 import { useAuth } from '../lib/hooks/useAuth';
-import { Badge, Button, IconButton, Input, Tag } from '../ds';
+import { Button, IconButton, Input, Tag } from '../ds';
 import { Icon } from './Icon';
 import { ColorSwatches } from './ColorSwatches';
 import { lookupIdentity } from '../lib/api/client';
@@ -17,10 +17,11 @@ import { userAttachments } from '../lib/userAttachments';
 import { useSearch } from '../lib/search/useSearchIndex';
 import type { DecryptedAttachment } from '../lib/crypto/split';
 import { HtmlMessageBody } from './HtmlMessageBody';
+import { MessageChecks } from './MessageChecks';
 import { sanitizeOutgoing } from '../lib/html/sanitize';
 import { fromPlainText, escapeHtml } from '../lib/html/fromPlainText';
 import { evaluateSenderTrust, type SenderTrust } from '../lib/crypto/senderTrust';
-import { senderTrustView } from '../lib/trust/trustView';
+import { messageChecks } from '../lib/trust/checks';
 import { loadKeyChange, type KeyChange } from '../lib/trust/lineage';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
@@ -31,73 +32,6 @@ import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
 import { formatBytes, formatDate, formatTime } from '../lib/format';
 
-// attestationView maps a bridged-message verdict to its display treatment. Bridged mail is
-// NEVER shown with a trust shield: even the best case (SPF/DKIM/DMARC pass + an operator-
-// trusted bridge) is only domain-authentication relayed by a bridge you trust — not the
-// end-to-end cryptographic identity a native dmcn sender carries. So the strongest tier is a
-// NEUTRAL "Legacy email"; weaker outcomes are warning/danger. An unverified verdict is always
-// danger, regardless of the (untrusted) tier it claims.
-// authBreakdown renders the three checks behind the tier as one short line. Shown
-// alongside the verdict because the tier alone cannot answer "which check did not
-// pass" — and the answer changes what the reader should conclude. A message with
-// spf=pass dmarc=pass dkim=none authenticated correctly under DMARC and simply missed
-// this classifier's stricter DKIM-and-DMARC conjunction; one with dkim=fail did not.
-//
-// It also names the SMTP envelope sender when it differs from the displayed From address
-// (bulk senders relay through a provider: From reddit.com, envelope …@amazonses.com). The
-// displayed address is the identity DMARC checked; the envelope is who handed it over, and
-// hiding that difference would be the kind of omission this client exists to avoid.
-function authBreakdown(a: BridgeAttestation, senderAddress: string): string | null {
-  const parts = [
-    a.spf ? `SPF ${a.spf}` : null,
-    a.dkim ? `DKIM ${a.dkim}` : null,
-    a.dmarc ? `DMARC ${a.dmarc}` : null,
-  ].filter(Boolean);
-  const envelope = domainPart(a.smtpFrom);
-  if (envelope && envelope !== domainPart(senderAddress)) parts.push(`via ${envelope}`);
-  return parts.length ? parts.join(' · ') : null;
-}
-
-// domainPart returns the lower-cased domain of an address ('' when there isn't one).
-function domainPart(addr: string): string {
-  const at = (addr || '').lastIndexOf('@');
-  return at >= 0 ? addr.slice(at + 1).toLowerCase() : '';
-}
-
-// senderAddress is the address the reader DISPLAYS (the message's From, which the bridge
-// authenticated), not the classification's envelope sender — naming a bulk sender's
-// per-message bounce address here told the reader a domain they never saw had been checked.
-function attestationView(a: BridgeAttestation, senderAddress: string): {
-  variant: 'neutral' | 'warning' | 'danger';
-  icon: 'mail' | 'alert-triangle';
-  label: string;
-  detail: string;
-} {
-  if (!a.verified) {
-    return {
-      variant: 'danger',
-      icon: 'alert-triangle',
-      label: 'Unverified bridge',
-      detail: `This message claims to arrive via an SMTP bridge that could not be verified${a.reason ? ` (${a.reason})` : ''}. Its sender cannot be confirmed — treat it with caution.`,
-    };
-  }
-  const who = senderAddress || a.smtpFrom || 'the sender';
-  const domain = domainPart(who);
-  switch (a.trustTier) {
-    case BridgeTrustTier.VerifiedLegacy:
-      return {
-        variant: 'neutral',
-        icon: 'mail',
-        label: 'Legacy email',
-        detail: `Authenticated by ${domain ? `${domain}'s domain` : 'the sending domain'} (SPF/DKIM/DMARC) and relayed by a trusted bridge. Not end-to-end verified like a dmcn sender.`,
-      };
-    case BridgeTrustTier.Suspicious:
-      return { variant: 'danger', icon: 'alert-triangle', label: 'Legacy email — failed checks', detail: `Legacy authentication (SPF/DKIM/DMARC) failed for ${who} — this sender may be forged. Treat it with caution.` };
-    default:
-      return { variant: 'warning', icon: 'alert-triangle', label: 'Legacy email — unauthenticated', detail: `${who}'s domain did not fully authenticate this message, so the sender can't be confirmed.` };
-  }
-}
-
 // GateReason names WHY the pending-queue gate is holding a body back. The four reasons are
 // not interchangeable, and the difference decides what the reader can DO about it: an unknown
 // sender is a question about a PERSON, which trusting settles for good; a legacy message the
@@ -107,53 +41,54 @@ function attestationView(a: BridgeAttestation, senderAddress: string): {
 // points at an action that will not lift the gate.
 type GateReason = 'blocked' | 'unauthenticated' | 'impersonation' | 'unknown';
 
-// gateView is the gate's copy for one reason. `who` is the sender address as displayed,
-// `bridged` whether the message arrived over legacy email (its unknown-sender case is a
-// different statement: nothing about it is end-to-end verified), `known` whether the sender is
-// already on the owner's allowlist.
+// gateCopy is the gate panel's wording for one reason, in both of its states: the message
+// HIDDEN (nothing rendered, nothing fetched) and the message SHOWN AS PLAIN TEXT (escaped, so
+// nothing in it can act on the reader). `who` is the sender as displayed, `first` how a sentence
+// names them to the reader ("contact Ada another way"), `known` whether they are already on the
+// owner's allowlist.
+//
+// WHY the gate closed is said once, in the checks strip above it (lib/trust/checks.ts) — a key
+// that changed, checks that failed. The panel says what is being held back and what the reader can
+// do about it, and does not restate the verdict in different words.
 //
 // What the gate actually withholds is the RENDERED message: HTML, remote images and attachment
 // downloads, all of which hang off downloadsUnlocked and none of which `revealed` touches. It
-// does not withhold the words, and deliberately so — "See as plain text" sits in this very
-// panel, and the peek is safe precisely because escaped text cannot act on the reader.
+// does not withhold the words, and deliberately so — "View as plain text" sits in this very
+// panel, and the peek is safe precisely because escaped text cannot act on the reader. Say what
+// is held back, and say that reading it costs nothing: a warning a reader can see is false teaches
+// them to skip the next one.
 //
-// This copy used to say "decide how to handle it before reading the contents", in four places,
-// with a button offering exactly that reading directly underneath. Say what is held back, and
-// say that reading it costs nothing: a warning a reader can see is false teaches them to skip
-// the next one.
-function gateView(reason: GateReason, who: string, bridged: boolean, known: boolean): {
-  icon: 'clock' | 'alert-triangle' | 'shield-off';
-  color: string;
-  title: string;
-  detail: string;
-} {
+// An unauthenticated message has no hidden state: it opens straight onto its plain text, because
+// the doubt is about its links and formatting, not about whether to read it at all.
+function gateCopy(
+  reason: GateReason,
+  who: string,
+  first: string,
+  { known, keyChanged, hasHtml }: { known: boolean; keyChanged: boolean; hasHtml: boolean },
+): { hiddenTitle: string; hiddenDetail: string; plainTitle: string; plainDetail: string } {
+  const links = 'Links show where they really go and cannot be clicked.';
+  const checkFirst = `If you are not sure, contact ${first} another way, such as a phone call, before you trust ${keyChanged ? 'the new key' : 'them'}.`;
   switch (reason) {
     case 'blocked':
       return {
-        icon: 'shield-off',
-        color: 'var(--danger)',
-        title: 'You blocked this sender',
-        detail: `${who} is on your blocklist, so nothing in this message is rendered, fetched or downloadable. You can still read it as plain text. Manage the list in Settings if the block was a mistake.`,
+        hiddenTitle: 'You blocked this sender',
+        hiddenDetail: `${who} is on your blocklist, so nothing in this message loads. You can still read it as plain text. Manage the list in Settings if the block was a mistake.`,
+        plainTitle: 'Shown as plain text because you blocked this sender',
+        plainDetail: links,
       };
     case 'unauthenticated':
       return {
-        icon: 'alert-triangle',
-        color: 'var(--warning)',
-        title: `This message may not be from ${who}`,
-        detail: known
-          ? `You trust this sender, but legacy email carries no identity of its own and this message did not fully authenticate (details below) — so nothing here can confirm it really came from them. Trusting the address cannot answer that; this is a decision about this one message.`
-          : `It came in over legacy email through a bridge and did not fully authenticate (details below), so anyone could have put ${who} on it. They are not on your allowlist either, so its formatting, images and attachments stay blocked. Reading the plain text is safe if you need more information before deciding.`,
+        hiddenTitle: 'Shown as plain text because the checks failed',
+        hiddenDetail: links,
+        plainTitle: 'Shown as plain text because the checks failed',
+        plainDetail: hasHtml ? `${links} The HTML version can hide where a link leads, so it stays off unless you choose it.` : links,
       };
     case 'impersonation':
       return {
-        icon: 'alert-triangle',
-        color: 'var(--danger)',
-        title: 'Verify this sender before you read this',
-        // Same event as the key-change warning further down the page, so it is written the same
-        // way (trust/pinnedKey.ts): what happened, both things it could mean, and what to do.
-        // Naming the mechanism here — which key the directory publishes, what re-checking does —
-        // described the system to somebody who only needs to decide whether to read a message.
-        detail: `This message was not signed with the key you have on file for ${who} (details below). That is what it looks like when someone changes their key, and also what an impersonation looks like. Once you have checked with them another way, trusting them again clears this.`,
+        hiddenTitle: 'Message hidden until you decide',
+        hiddenDetail: `Nothing in this message loads while it is hidden. ${checkFirst}`,
+        plainTitle: 'Shown as plain text until you decide',
+        plainDetail: `${links} ${checkFirst}`,
       };
     case 'unknown':
       // `known` is not redundant here: a sender ON the allowlist still reaches this gate when the
@@ -161,62 +96,37 @@ function gateView(reason: GateReason, who: string, bridged: boolean, known: bool
       // unverifiable bridge classification). Telling that reader they "don't know this sender"
       // and pointing them at an allowlist they already added them to describes neither.
       return {
-        icon: 'clock',
-        color: 'var(--warning)',
-        title: known ? 'Check this message before you read it' : 'You don’t know this sender yet',
-        detail: known
-          ? `${bridged ? 'This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified.' : 'This message is genuine and end-to-end encrypted.'} It still doesn’t match what you have on file for ${who}, so its formatting, images and attachments stay blocked until you confirm it. Reading the plain text is safe if you need more information before deciding.`
-          : bridged
-            ? `This message came in over legacy email through a bridge, so its sender isn’t cryptographically verified and it wasn’t end-to-end encrypted. ${who} isn’t on your allowlist, so its formatting, images and attachments stay blocked. Reading the plain text is safe if you need more information before deciding.`
-            : `This message is genuine and end-to-end encrypted, but ${who} isn’t on your allowlist, so its formatting, images and attachments stay blocked. Reading the plain text is safe if you need more information before deciding.`,
+        hiddenTitle: 'Message hidden until you decide',
+        hiddenDetail: known
+          ? `${who} is in your contacts, but this message does not match what you have on file. Nothing in it loads while it is hidden. Reading the plain text is safe if that helps you decide.`
+          : `You don’t know this sender yet. Nothing in this message loads while it is hidden, so its formatting, images and attachments cannot reach you. Reading the plain text is safe if that helps you decide.`,
+        plainTitle: 'Shown as plain text until you decide',
+        plainDetail: `${links} Its formatting, images and attachments stay blocked until you trust ${first}.`,
       };
   }
 }
 
-// calloutColors resolves the inline background/foreground for a trust callout. The neutral
-// variant has no `--neutral-subtle` token, so map it explicitly to the sunken surface.
-function calloutColors(variant: 'neutral' | 'success' | 'warning' | 'danger'): { bg: string; fg: string } {
-  switch (variant) {
-    case 'neutral': return { bg: 'var(--surface-sunken)', fg: 'var(--text-muted)' };
-    case 'success': return { bg: 'var(--success-subtle)', fg: 'var(--success)' };
-    case 'warning': return { bg: 'var(--warning-subtle)', fg: 'var(--warning)' };
-    case 'danger': return { bg: 'var(--danger-subtle)', fg: 'var(--danger)' };
-  }
+// firstName is how a sentence addresses the sender: the first word of a name, or the whole
+// address when there is no name to take one from.
+function firstName(name: string, address: string): string {
+  if (!name || name === address || name.includes('@')) return address;
+  return name.split(/\s+/)[0] || address;
 }
 
-// receiptView maps a delivery-receipt verdict to its display treatment: a verified receipt shows the
-// bridge's delivered/failed outcome; an unverified one is a warning.
-function receiptView(r: DeliveryReceiptView): {
-  variant: 'success' | 'warning' | 'danger';
-  icon: 'shield-check' | 'alert-triangle';
-  label: string;
-  detail: string;
-} {
-  if (!r.verified) {
-    return {
-      variant: 'warning',
-      icon: 'alert-triangle',
-      label: 'Unverified receipt',
-      detail: `This delivery receipt could not be verified${r.reason ? ` (${r.reason})` : ''}.`,
-    };
-  }
-  const who = r.recipientEmail || 'the recipient';
-  if (r.delivered) {
-    return { variant: 'success', icon: 'shield-check', label: 'Delivered', detail: `The bridge delivered your message to ${who}.` };
-  }
-  return { variant: 'danger', icon: 'alert-triangle', label: 'Delivery failed', detail: `The bridge could not deliver your message to ${who}${r.errorDetail ? `: ${r.errorDetail}` : ''}.` };
+// initials for the sender's monogram: the first letters of a name's first two words, or the first
+// two letters of an address (its separators and digits are noise: leo-5msr@… is "LE", not "L5").
+function initials(name: string): string {
+  const letters = (w: string) => Array.from(w).filter(c => /\p{L}/u.test(c));
+  if (name.includes('@')) return (letters(name.split('@')[0]).slice(0, 2).join('') || '?').toUpperCase();
+  const words = name.split(/\s+/).map(letters).filter(w => w.length > 0);
+  const out = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? ['?']).slice(0, 2).join('');
+  return out.toUpperCase();
 }
+
 
 // The option that means "none of these — make one". A label id is 16 hex characters, so this
 // cannot collide with one.
 const NEW_OPTION = '__new__';
-
-// Minimal themed style for the native label/folder assignment selects.
-const assignSelectStyle: CSSProperties = {
-  font: 'inherit', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
-  background: 'var(--surface-card)', border: '1px solid var(--border-default)',
-  borderRadius: 'var(--radius-sm)', padding: '3px 8px', cursor: 'pointer',
-};
 
 
 // How much of a bridged email's raw source "Show original" renders. The source can run to
@@ -296,6 +206,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const appliedLabels = appliedLabelIds.map(id => labelById(id)).filter((l): l is LabelDef => !!l);
   const availableLabels = labels.filter(l => !appliedLabelIds.includes(l.id));
   const currentFolder = folderOf(msg.hash);
+  const currentFolderDef = currentFolder ? folders.find(f => f.id === currentFolder) : undefined;
 
   // Making a label or folder from here, on the message that prompted it. The rail lists them and
   // Settings names them; neither is any use mid-read, and leaving for Settings costs the place in
@@ -384,6 +295,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // peek never renders HTML. `showHtml` toggles the HTML vs plain-text view.
   const [htmlBody, setHtmlBody] = useState<string | null>(null);
   const [showHtml, setShowHtml] = useState(true);
+  // The "View HTML anyway" confirmation, open or not. Asked once more because what it renders is
+  // exactly what the gate was holding back.
+  const [confirmHtml, setConfirmHtml] = useState(false);
 
   const senderContact = contactByAddress(msg.senderAddress);
   // Content signature of the sender's allowlist entry — used as an effect dep so
@@ -507,29 +421,6 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- senderContact tracked via contactSig
   }, [msg.hash, msg.senderAddress, msg.senderPublicKey, ownMessage, contactSig]);
 
-  const av = attestation ? attestationView(attestation, msg.senderAddress) : null;
-  const rv = receipt ? receiptView(receipt) : null;
-  // Native trust badge/callout — suppressed when a bridge attestation is shown (bridged legacy
-  // mail: sender_address is a legacy email vouched for by the bridge, not a native identity), and
-  // held back until contacts + filter + the bridge attestation have all settled so it resolves
-  // straight to the correct verdict instead of flashing "unknown" (or a native verdict on a
-  // legacy address) first.
-  const tv = contactsReady && filterReady && bridgeResolved && !av && !rv && nativeTrust
-    ? senderTrustView(nativeTrust, keyChange ?? undefined, msg.senderAddress)
-    : null;
-  // The encryption statement appears twice — as the badge beside the subject and as the callout
-  // under the body — and unlike av/rv/tv it has no view object to carry its glyph, so the two
-  // sites were free to disagree, and did (a lock above, a shield or an envelope below). One const,
-  // read by both, so the pair can only ever move together.
-  //
-  // Which glyph is not a free choice: `shield-check` already MEANS "a DMCN identity, therefore
-  // end to end" everywhere else in the client — it is what the teal list shield claims in
-  // KindIcon, upgraded to blue for a trusted contact — so native dmcn mail keeps it here and the
-  // reader's two badges read as the same vocabulary the list speaks, teal beside blue. Bridged
-  // legacy mail gets a plain `lock` instead, because it is genuinely the weaker statement: the
-  // bridge→you hop is encrypted, but nothing about the sender is cryptographically established,
-  // and lending it the shield would claim exactly the thing that did not happen.
-  const cryptoIcon = av ? 'lock' : 'shield-check';
   // A verified bridge classification means the DMCN "sender" is a legacy email relayed by a
   // trusted bridge. Allowlist/block it by ADDRESS only — there is no directory key to pin, and the
   // shared bridge key (in sender_public_key) must never be pinned or blocked.
@@ -590,30 +481,43 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       : nativeDanger
         ? 'impersonation'
         : 'unknown';
-  // "I trust the sender" is offered only where it can actually change the outcome. For an
-  // allowlisted legacy sender whose message failed its checks it provably cannot — the entry
-  // is already there and the bridge still cannot authenticate this message — and for a blocked
-  // sender the filter decides before the allowlist is ever consulted. A button that silently
-  // does nothing is what made trusting feel broken on exactly the mail that needs the decision.
-  const trustActionable = gateReason !== 'blocked' && !(senderIsLegacyContact && gateReason === 'unauthenticated');
-  // The per-message override, offered exactly where trusting the address cannot lift the gate.
-  // Not for 'blocked' (that gate is the owner's own standing decision, lifted by unblocking)
-  // and not for 'impersonation' (the directory says this signature is not the sender's, so the
-  // safe plain-text peek stays the only way in — re-verifying the key is the real remedy).
-  const overrideActionable = gateReason === 'unauthenticated';
+  // A changed key on a native contact: the trust action re-pins rather than introduces, and the
+  // panel says so ("Trust new key").
+  const keyChanged = !bridgedLegacy && nativeTrust?.kind === 'key_changed';
+  // Trusting is offered only where it can actually change the outcome. For a message whose checks
+  // failed it cannot: the address is precisely the part anyone can forge, so an allowlist entry
+  // cannot stand in for the authentication that is missing and the next message claiming it is
+  // gated again. For a blocked sender the filter decides before the allowlist is ever consulted.
+  // A button that silently does nothing is what made trusting feel broken on exactly the mail
+  // that needs the decision.
+  const trustActionable = gateReason !== 'blocked' && gateReason !== 'unauthenticated';
+  // "View HTML anyway": the per-message override, scoped to the open message and expiring with
+  // it. It grants exactly what trusting the sender would grant this message (its HTML, attachment
+  // downloads) and asserts nothing about the next one; remote images stay off regardless (below).
+  // Offered where the doubt is about THIS message's rendering — checks that failed, or a contact's
+  // key that changed and is waiting on a decision — and only when there is HTML to show. Not for
+  // 'blocked' (the owner's own standing decision, lifted by unblocking), and not where the
+  // directory disowns the signing key outright (key_mismatch, identity_unverifiable): there the
+  // plain-text peek stays the only way in.
+  const overrideActionable = !!htmlBody && (gateReason === 'unauthenticated' || (gateReason === 'impersonation' && keyChanged));
   const gated = trustReady && category !== 'allowlisted' && !messageTrusted;
+  // A message whose checks failed opens straight onto its plain text: the doubt is about its links
+  // and formatting, not about whether to read it. Every other gate starts hidden.
+  const plainShown = gated && (revealed || gateReason === 'unauthenticated');
   // Attachment downloads unlock on sender TRUST (own message or allowlisted) or on the owner's
   // explicit decision about this message, plus the per-file "download anyway" acknowledgment.
   // Deliberately independent of `revealed`: the plain-text peek is safe because the text is
   // escaped and a binary download is not, so peeking is not a decision.
   const downloadsUnlocked = ownMessage || category === 'allowlisted' || messageTrusted;
   // HTML renders ONLY for a trusted sender (mirrors downloadsUnlocked) — a pending
-  // sender's "See as plain text" peek shows escaped text, never rendered HTML.
+  // sender's "View as plain text" peek shows escaped text, never rendered HTML.
   const htmlAllowed = !!htmlBody && downloadsUnlocked;
   // Remote images ride on htmlAllowed rather than on a gate of their own, so opting in can
   // only change WHAT a trusted sender's HTML may fetch — never WHICH senders get HTML. Off
-  // by default; the reader turns it on in Settings → Privacy & security.
-  const remoteImagesAllowed = htmlAllowed && settings.remoteImagesForTrusted === true;
+  // by default; the reader turns it on in Settings → Privacy & security. The setting is about
+  // TRUSTED senders, so "View HTML anyway" on a gated message never carries it: a remote image is
+  // a read receipt, and the override is not a decision to send one.
+  const remoteImagesAllowed = htmlAllowed && (ownMessage || category === 'allowlisted') && settings.remoteImagesForTrusted === true;
   // Inline images (disposition=inline) render inside the HTML body, so they're kept out
   // of the downloadable-attachment list.
   const downloadAttachments = attachments.filter(a => a.disposition !== 'inline');
@@ -625,7 +529,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // next message and land on that one instead.
   useEffect(() => {
     setRevealed(false); setMessageTrusted(false); setNativeTrust(null); setNativeTrustReady(false);
-    setAckedDownloads(new Set()); setShowHtml(true); setShowOriginal(false);
+    setAckedDownloads(new Set()); setShowHtml(true); setShowOriginal(false); setConfirmHtml(false);
     setCreating(null); setNewName(''); setCreateErr('');
   }, [msg.hash]);
 
@@ -746,240 +650,250 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const { primary: counterpartyName, secondary: counterpartyAddress } =
     senderLabel(counterparty, contactName, sentView ? '' : msg.senderDisplay);
   const namedCounterparty = counterpartyAddress !== '';
+  // The checks strip (lib/trust/checks.ts), held back until every fact it describes has settled so
+  // it resolves straight to the right verdict instead of flashing "unknown" — or a native verdict
+  // on a legacy address — first. A bridged message or a receipt needs no directory answer.
+  const checksReady = ownMessage
+    || (contactsReady && filterReady && bridgeResolved && (!!attestation || !!receipt || nativeTrustReady));
+  const checks = checksReady
+    ? messageChecks({
+        address: msg.senderAddress,
+        name: counterpartyName,
+        recipients: dedupe([...msg.to, ...msg.cc]).length,
+        own: ownMessage,
+        attestation,
+        receipt,
+        trust: nativeTrust,
+        keyChange: keyChange ?? undefined,
+      })
+    : null;
   // The gate's copy, resolved once from the reason the gate closed for.
-  const gv = gateView(gateReason, counterparty, !!av, !!senderContact);
+  const senderFirst = firstName(counterpartyName, counterparty);
+  const gc = gateCopy(gateReason, counterparty, senderFirst, { known: !!senderContact, keyChanged, hasHtml: !!htmlBody });
+  const trustLabel = keyChanged ? 'Trust new key' : 'I trust the sender';
+  const htmlWarning = gateReason === 'unauthenticated'
+    ? 'HTML can hide where links really lead. This message failed its checks. Remote images stay off either way.'
+    : `HTML can hide where links really lead. ${senderFirst === counterparty ? 'The' : `${senderFirst}’s`} new key is still unconfirmed. Remote images stay off either way.`;
+  const showSource = !!attestation?.verified && !!original && (!gated || plainShown);
+
+  // The gate panel's actions, shared by its hidden and plain-text states. Delete and Block sit
+  // apart, at the far end, so the decision the panel is asking for is the first thing in it.
+  const gateActions = (plain: boolean) => (
+    <div style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+      {trustActionable && (
+        <Button leftIcon={<Icon name="check" size={16} strokeWidth={2.4} />} onClick={handleTrust} disabled={actioning}>{trustLabel}</Button>
+      )}
+      {!plain && (
+        <Button variant="secondary" onClick={() => setRevealed(true)}>View as plain text</Button>
+      )}
+      {plain && overrideActionable && (
+        <div style={{ position: 'relative' }}>
+          <Button variant="secondary" aria-expanded={confirmHtml} aria-controls="reader-html-confirm" onClick={() => setConfirmHtml(o => !o)}>View HTML anyway</Button>
+          {confirmHtml && !mobile && (
+            <HtmlConfirm warning={htmlWarning} onCancel={() => setConfirmHtml(false)} onConfirm={() => { setConfirmHtml(false); setMessageTrusted(true); }} floating />
+          )}
+        </div>
+      )}
+      {/* On a phone the row wraps, so Delete and Block take a line of their own rather than
+          whichever of them happens to fit beside the decision. */}
+      <div style={mobile ? { flexBasis: '100%', height: 0 } : { flex: 1, minWidth: 'var(--space-4)' }} />
+      <Button variant="secondary" leftIcon={<Icon name="trash" size={16} />} onClick={handleDelete} disabled={actioning}>Delete</Button>
+      {gateReason !== 'blocked' && (
+        <Button variant="secondary" leftIcon={<Icon name="alert-octagon" size={16} />} onClick={handleBlock} disabled={actioning} style={dangerOutline}>Block sender</Button>
+      )}
+    </div>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-page)' }}>
-      {/* Reader toolbar */}
-      <div style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', gap: 2, padding: '0 var(--space-3)', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-default)' }}>
-        <IconButton aria-label="Back to inbox" onClick={onBack}><Icon name="chevron-left" /></IconButton>
+      {/* Reader toolbar: back on the left; organising, then the message actions, on the right. */}
+      <div style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', gap: 2, padding: mobile ? '0 var(--space-2)' : '0 var(--space-4) 0 var(--space-3)', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-default)' }}>
+        <Button variant="ghost" size="sm" aria-label="Back to inbox" leftIcon={<Icon name="chevron-left" size={16} />} onClick={onBack}>Back</Button>
         <div style={{ flex: 1 }} />
+        {creating === null && (
+          <>
+            <PickerButton
+              icon="tag"
+              label="Add label"
+              value=""
+              onChange={id => {
+                if (id === NEW_OPTION) beginCreate('label');
+                else if (id) void addLabel(msg.hash, id);
+              }}
+            >
+              <option value="">Add label</option>
+              {availableLabels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              <option value={NEW_OPTION}>New label…</option>
+            </PickerButton>
+            <PickerButton
+              icon="folder"
+              label="Move to folder"
+              value={currentFolder ?? ''}
+              onChange={id => {
+                if (id === NEW_OPTION) beginCreate('folder');
+                else void setFolder(msg.hash, id || undefined);
+              }}
+            >
+              <option value="">No folder</option>
+              {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              <option value={NEW_OPTION}>New folder…</option>
+            </PickerButton>
+            <div aria-hidden="true" style={{ width: 1, height: 20, margin: '0 6px', background: 'var(--border-default)' }} />
+          </>
+        )}
         {onToggleStar && (
-          <IconButton aria-label={starred ? 'Unstar' : 'Star'} onClick={onToggleStar}>
+          <IconButton aria-label={starred ? 'Unstar' : 'Star'} title={starred ? 'Unstar' : 'Star'} onClick={onToggleStar}>
             <Icon name={starred ? 'star-fill' : 'star'} style={starred ? { color: 'var(--warning)' } : undefined} />
           </IconButton>
         )}
         {onArchive && (
-          <IconButton aria-label={archived ? 'Unarchive' : 'Archive'} onClick={onArchive}><Icon name="archive" /></IconButton>
+          <IconButton aria-label={archived ? 'Unarchive' : 'Archive'} title={archived ? 'Unarchive' : 'Archive'} onClick={onArchive}><Icon name="archive" /></IconButton>
         )}
-        <IconButton aria-label="Delete" onClick={handleDelete}><Icon name="trash" /></IconButton>
+        <IconButton aria-label="Delete" title="Delete" onClick={handleDelete}><Icon name="trash" /></IconButton>
       </div>
 
-      <div style={{ overflowY: 'auto', flex: 1, padding: mobile ? 'var(--space-4)' : 'var(--space-6) var(--space-8)' }}>
-        <div style={{ maxWidth: 760, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: mobile ? 'var(--text-xl)' : 'var(--text-2xl)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>
-              {msg.subject || '(no subject)'}
-            </h1>
-            {/* Legacy mail is encrypted only on the bridge→you hop (it crossed plaintext SMTP
-                first), so tone the badge down from the brand "Encrypted" (which signals full E2E)
-                to a neutral "Encrypted to you". The callout below spells out the caveat. */}
-            <Badge variant={av ? 'neutral' : 'brand'} icon={<Icon name={cryptoIcon} size={12} />}>{av ? 'Encrypted to you' : 'Encrypted'}</Badge>
-            {av && <Badge variant={av.variant} icon={<Icon name={av.icon} size={12} />}>{av.label}</Badge>}
-            {rv && <Badge variant={rv.variant} icon={<Icon name={rv.icon} size={12} />}>{rv.label}</Badge>}
-            {tv && <Badge variant={tv.variant} icon={<Icon name={tv.icon} size={12} />}>{tv.label}</Badge>}
-          </div>
+      <div style={{ overflowY: 'auto', flex: 1, padding: mobile ? 'var(--space-4)' : 'var(--space-8) var(--space-8) var(--space-10)' }}>
+        <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: mobile ? 'var(--space-5)' : 'var(--space-6)' }}>
+          <h1 style={{ margin: 0, fontSize: mobile ? 'var(--text-xl)' : 'var(--text-2xl)', fontWeight: 650, lineHeight: 1.25, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)', overflowWrap: 'anywhere' }}>
+            {msg.subject || '(no subject)'}
+          </h1>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-5)' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div title={sentView ? toList.join(', ') : counterparty} style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {sentView
-                  ? <>To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span></>
-                  : <>{counterpartyName}{namedCounterparty && <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 'var(--space-2)' }}>{counterpartyAddress}</span>}</>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: mobile ? 'var(--space-3)' : 14 }}>
+              <div aria-hidden="true" style={{
+                width: mobile ? 36 : 44, height: mobile ? 36 : 44, flex: 'none', borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: mobile ? 'var(--text-sm)' : 'var(--text-base)', fontWeight: 650,
+              }}>
+                {initials(counterpartyName)}
               </div>
-              {!sentView && toList.length > 0 && !soleRecipientIsMe && (
-                <div title={toList.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  To {toList.map(nameFor).join(', ')}
-                </div>
-              )}
-              {msg.cc.length > 0 && (
-                <div title={msg.cc.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Cc {msg.cc.map(nameFor).join(', ')}
-                </div>
-              )}
-              {msg.bcc.length > 0 && (
-                <div title={msg.bcc.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Bcc {msg.bcc.map(nameFor).join(', ')}
-                </div>
-              )}
-              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                {sentByMe ? 'from me' : msg.deliveredTo ? `to me at ${msg.deliveredTo}` : 'to me'} &middot; {formatDate(msg.sentAt)} &middot; {formatTime(msg.sentAt)}
-              </div>
-            </div>
-            <IconButton aria-label="Reply" onClick={() => onReply(buildReply(false))}><Icon name="reply" /></IconButton>
-            {showReplyAll && (
-              <IconButton aria-label="Reply all" onClick={() => onReply(replyAll)}><Icon name="reply-all" /></IconButton>
-            )}
-          </div>
-
-          {/* Organising this message. Offered unconditionally now, including on an account that
-              has defined nothing yet: the rail lists labels and folders but no longer makes them,
-              so without a door here the first one could only be made by leaving the mail. */}
-          <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
-            {appliedLabels.map(l => (
-              <Tag key={l.id} color={l.color} onRemove={() => void removeLabel(msg.hash, l.id)}>{l.name}</Tag>
-            ))}
-            {creating === null ? (
-              <>
-                <select
-                  value=""
-                  aria-label="Add label"
-                  onChange={e => {
-                    const id = e.target.value;
-                    e.currentTarget.value = '';
-                    if (id === NEW_OPTION) beginCreate('label');
-                    else if (id) void addLabel(msg.hash, id);
-                  }}
-                  style={assignSelectStyle}
-                >
-                  <option value="">+ Label</option>
-                  {availableLabels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  <option value={NEW_OPTION}>+ New label…</option>
-                </select>
-                <select
-                  value={currentFolder ?? ''}
-                  aria-label="Move to folder"
-                  onChange={e => {
-                    const id = e.target.value;
-                    if (id === NEW_OPTION) { e.currentTarget.value = currentFolder ?? ''; beginCreate('folder'); }
-                    else void setFolder(msg.hash, id || undefined);
-                  }}
-                  style={assignSelectStyle}
-                >
-                  <option value="">No folder</option>
-                  {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                  <option value={NEW_OPTION}>+ New folder…</option>
-                </select>
-              </>
-            ) : (
-              <>
-                <Input
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder={creating === 'label' ? 'New label name' : 'New folder name'}
-                  aria-label={creating === 'label' ? 'New label name' : 'New folder name'}
-                  autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') void confirmCreate(); if (e.key === 'Escape') cancelCreate(); }}
-                  style={{ width: 180 }}
-                />
-                {creating === 'label' && <ColorSwatches selected={newColor} onPick={setNewColor} />}
-                <IconButton size="sm" aria-label={creating === 'label' ? 'Create label' : 'Create folder'}
-                  disabled={createBusy || !newName.trim()} onClick={() => void confirmCreate()}>
-                  <Icon name="check" size={15} />
-                </IconButton>
-                <IconButton size="sm" aria-label="Cancel" disabled={createBusy} onClick={cancelCreate}>
-                  <Icon name="x" size={15} />
-                </IconButton>
-              </>
-            )}
-          </div>
-          {createErr && (
-            <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--danger)' }}>{createErr}</div>
-          )}
-
-          {/* Pending-queue gate (§14.2): a non-allowlisted sender's body stays hidden
-              behind a decision. "See as plain text" is a deliberate, small deviation
-              from §14.2.1's strict hide — but DMCN bodies are text/plain rendered as an
-              escaped React string (no HTML, images, or remote content), so revealing is
-              inherently sanitized. "Show this message" is the fuller override, offered
-              only where the gate is about THIS message rather than about the sender: it
-              grants the open message what trusting the sender would grant it, and expires
-              with it. Until trust data is loaded, show a neutral placeholder rather than
-              flashing the gate or the body. */}
-          {!trustReady ? (
-            <div style={{ marginTop: 'var(--space-6)', minHeight: 80 }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>Loading…</span>
-            </div>
-          ) : gated && !revealed ? (
-            <div style={{ marginTop: 'var(--space-6)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--surface-sunken)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
-                <Icon name={gv.icon} size={18} style={{ color: gv.color, marginTop: 2, flex: 'none' }} />
-                <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-strong)' }}>{gv.title}</div>
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 4 }}>{gv.detail}</div>
-                </div>
-              </div>
-              <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                {trustActionable && (
-                  <Button leftIcon={<Icon name="shield-check" size={16} />} onClick={handleTrust} disabled={actioning}>I trust the sender</Button>
-                )}
-                {overrideActionable && (
-                  <Button variant={trustActionable ? 'secondary' : 'primary'} leftIcon={<Icon name="unlock" size={16} />} onClick={() => setMessageTrusted(true)}>Show this message</Button>
-                )}
-                <Button variant="secondary" leftIcon={<Icon name="eye" size={16} />} onClick={() => setRevealed(true)}>See as plain text</Button>
-                <Button variant="secondary" leftIcon={<Icon name="trash" size={16} />} onClick={handleDelete} disabled={actioning}>Delete this message</Button>
-                {gateReason !== 'blocked' && (
-                  <Button variant="danger" leftIcon={<Icon name="alert-octagon" size={16} />} onClick={handleBlock} disabled={actioning}>Block this sender</Button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <>
-              {messageTrusted && category !== 'allowlisted' && (
-                <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-                  <Icon name="unlock" size={16} style={{ color: 'var(--warning)', flex: 'none' }} />
-                  <span style={{ flex: 1, minWidth: 160 }}>Shown because you asked for it. Nothing about the sender changed — the checks below still stand, and the next message from this address will ask again.</span>
-                  <Button size="sm" variant="danger" leftIcon={<Icon name="alert-octagon" size={14} />} onClick={handleBlock} disabled={actioning}>Block</Button>
-                </div>
-              )}
-              {gated && revealed && (
-                <div style={{ marginTop: 'var(--space-4)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)', background: 'var(--warning-subtle)', color: 'var(--text-body)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-                  <Icon name="eye" size={16} style={{ color: 'var(--warning)', flex: 'none' }} />
-                  <span style={{ flex: 1, minWidth: 160 }}>
-                    {overrideActionable
-                      ? `Shown as plain text — nothing could authenticate this message’s sender.${htmlBody ? ' The HTML version stays hidden until you choose to show it.' : ''}`
-                      : `Shown as plain text — you haven’t added this sender to your allowlist.${htmlBody ? ' The HTML version stays hidden until you trust the sender.' : ''}`}
-                  </span>
-                  {trustActionable && (
-                    <Button size="sm" leftIcon={<Icon name="shield-check" size={14} />} onClick={handleTrust} disabled={actioning}>Trust</Button>
-                  )}
-                  {overrideActionable && (
-                    <Button size="sm" variant={trustActionable ? 'secondary' : 'primary'} leftIcon={<Icon name="unlock" size={14} />} onClick={() => setMessageTrusted(true)}>Show this message</Button>
-                  )}
-                  <Button size="sm" variant="danger" leftIcon={<Icon name="alert-octagon" size={14} />} onClick={handleBlock} disabled={actioning}>Block</Button>
-                </div>
-              )}
-              {htmlAllowed && (
-                <div style={{ marginTop: 'var(--space-4)', display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button size="sm" variant="secondary" leftIcon={<Icon name={showHtml ? 'file' : 'mail'} size={14} />} onClick={() => setShowHtml(v => !v)}>
-                    {showHtml ? 'View plain text' : 'View HTML'}
-                  </Button>
-                </div>
-              )}
-              {htmlAllowed && showHtml ? (
-                <HtmlMessageBody html={htmlBody as string} attachments={attachments} allowRemoteImages={remoteImagesAllowed} />
-              ) : (
-                <div style={{ marginTop: 'var(--space-6)', fontSize: 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', whiteSpace: 'pre-wrap', minHeight: 80 }}>
-                  {bodyError && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-                      <Icon name="alert-triangle" size={16} style={{ marginTop: 1 }} />
-                      <span>Failed to load body: {bodyError}</span>
-                    </div>
-                  )}
-                  {!bodyError && body === null && <span style={{ color: 'var(--text-muted)' }}>Loading…</span>}
-                  {/* An empty text rendering is a real outcome, not a failure — an image-only
-                      campaign mail renders down to no text at all — but an empty panel reads as
-                      one. Say which it is, and say it especially behind the gate, where the
-                      reader's next move is a decision about HTML they have not been shown. */}
-                  {body !== null && body.trim() === '' && (
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      {htmlBody
-                        ? 'This message has no text version — everything it says is in its HTML rendering.'
-                        : 'This message has no text content.'}
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div title={sentView ? toList.join(', ') : counterparty} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  {sentView ? (
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 650, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span>
                     </span>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 'var(--text-base)', fontWeight: 650, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0, maxWidth: namedCounterparty ? '60%' : '100%' }}>{counterpartyName}</span>
+                      {namedCounterparty && <span style={{ fontSize: 'var(--text-md)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{counterpartyAddress}</span>}
+                    </>
                   )}
-                  {body !== null && body.trim() !== '' && body}
                 </div>
+                {!sentView && toList.length > 0 && !soleRecipientIsMe && (
+                  <div title={toList.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    To {toList.map(nameFor).join(', ')}
+                  </div>
+                )}
+                {msg.cc.length > 0 && (
+                  <div title={msg.cc.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Cc {msg.cc.map(nameFor).join(', ')}
+                  </div>
+                )}
+                {msg.bcc.length > 0 && (
+                  <div title={msg.bcc.join(', ')} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    Bcc {msg.bcc.map(nameFor).join(', ')}
+                  </div>
+                )}
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                  {sentByMe ? 'from me' : msg.deliveredTo ? `to me at ${msg.deliveredTo}` : 'to me'} &middot; {formatDate(msg.sentAt)} &middot; {formatTime(msg.sentAt)}
+                </div>
+              </div>
+              <IconButton variant="outline" aria-label="Reply" title="Reply" onClick={() => onReply(buildReply(false))}><Icon name="reply" /></IconButton>
+              {showReplyAll && (
+                <IconButton variant="outline" aria-label="Reply all" title="Reply all" onClick={() => onReply(replyAll)}><Icon name="reply-all" /></IconButton>
               )}
-            </>
+            </div>
+
+            {/* What this message is filed under, and the in-place create the toolbar's pickers open.
+                The pickers live in the toolbar; a label or folder made here is applied to this
+                message in the same act — that is what the creators' returned id is for. */}
+            {(appliedLabels.length > 0 || currentFolderDef || creating !== null) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
+                {currentFolderDef && (
+                  <Tag onRemove={() => void setFolder(msg.hash, undefined)}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="folder" size={12} />{currentFolderDef.name}</span>
+                  </Tag>
+                )}
+                {appliedLabels.map(l => (
+                  <Tag key={l.id} color={l.color} onRemove={() => void removeLabel(msg.hash, l.id)}>{l.name}</Tag>
+                ))}
+                {creating !== null && (
+                  <>
+                    <Input
+                      value={newName}
+                      onChange={e => setNewName(e.target.value)}
+                      placeholder={creating === 'label' ? 'New label name' : 'New folder name'}
+                      aria-label={creating === 'label' ? 'New label name' : 'New folder name'}
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') void confirmCreate(); if (e.key === 'Escape') cancelCreate(); }}
+                      style={{ width: 180 }}
+                    />
+                    {creating === 'label' && <ColorSwatches selected={newColor} onPick={setNewColor} />}
+                    <IconButton size="sm" aria-label={creating === 'label' ? 'Create label' : 'Create folder'}
+                      disabled={createBusy || !newName.trim()} onClick={() => void confirmCreate()}>
+                      <Icon name="check" size={15} />
+                    </IconButton>
+                    <IconButton size="sm" aria-label="Cancel" disabled={createBusy} onClick={cancelCreate}>
+                      <Icon name="x" size={15} />
+                    </IconButton>
+                  </>
+                )}
+              </div>
+            )}
+            {createErr && (
+              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)' }}>{createErr}</div>
+            )}
+
+            <MessageChecks view={checks} />
+          </div>
+
+          {/* The body, in one of three states. Until trust data has settled, a neutral placeholder
+              rather than a flash of the gate or of the body. Behind the gate (§14.2), either HIDDEN —
+              nothing rendered or fetched — or SHOWN AS PLAIN TEXT, escaped, so nothing in it can act
+              on the reader; the peek is a deliberate, small deviation from §14.2.1's strict hide.
+              Otherwise the message itself: its HTML for a trusted sender, else its text. */}
+          {!trustReady ? (
+            <div style={{ minHeight: 80, color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>Loading…</div>
+          ) : gated && !plainShown ? (
+            <section aria-label={gc.hiddenTitle} style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: mobile ? 'var(--space-4)' : 'var(--space-6)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--surface-card)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-strong)' }}>
+                <Icon name={gateReason === 'blocked' ? 'shield-off' : 'eye-off'} size={18} style={{ flex: 'none' }} />
+                {gc.hiddenTitle}
+              </div>
+              <div style={{ maxWidth: 620, color: 'var(--text-muted)', fontSize: 'var(--text-md)', lineHeight: 1.6 }}>{gc.hiddenDetail}</div>
+              {gateActions(false)}
+            </section>
+          ) : gated ? (
+            <section aria-label={gc.plainTitle} style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--surface-card)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: mobile ? 'var(--space-4)' : 'var(--space-6)', borderBottom: '1px solid var(--border-default)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-strong)' }}>
+                  <Icon name="file" size={18} style={{ flex: 'none' }} />
+                  {gc.plainTitle}
+                </div>
+                <div style={{ maxWidth: 620, color: 'var(--text-muted)', fontSize: 'var(--text-md)', lineHeight: 1.6 }}>{gc.plainDetail}</div>
+                {gateActions(true)}
+                {confirmHtml && mobile && (
+                  <HtmlConfirm warning={htmlWarning} onCancel={() => setConfirmHtml(false)} onConfirm={() => { setConfirmHtml(false); setMessageTrusted(true); }} />
+                )}
+              </div>
+              <div style={{ minHeight: 120, padding: mobile ? 'var(--space-4)' : '22px var(--space-6)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-md)', lineHeight: 1.7, color: 'var(--text-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                <BodyText body={body} bodyError={bodyError} hasHtml={!!htmlBody} />
+              </div>
+            </section>
+          ) : htmlAllowed && showHtml ? (
+            <HtmlMessageBody html={htmlBody as string} attachments={attachments} allowRemoteImages={remoteImagesAllowed} />
+          ) : (
+            <div style={{ fontSize: 'var(--text-base)', lineHeight: 'var(--leading-relaxed)', color: 'var(--text-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', minHeight: 80 }}>
+              <BodyText body={body} bodyError={bodyError} hasHtml={!!htmlBody} />
+            </div>
           )}
 
           {/* Attachments (§ trust gate): metadata is always shown; the actual download
               is disabled for a not-yet-trusted sender until they're trusted or the file
               is individually acknowledged. Files never open inline — always save-to-disk. */}
           {downloadAttachments.length > 0 && (
-            <div style={{ marginTop: 'var(--space-6)' }}>
+            <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)' }}>
                 <Icon name="paperclip" size={15} />
                 {downloadAttachments.length} attachment{downloadAttachments.length > 1 ? 's' : ''}
@@ -1012,86 +926,169 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             </div>
           )}
 
-          {/* The ENCRYPTION callout: the long form of the "Encrypted"/"Encrypted to you" badge
-              beside the subject, so it carries that badge's glyph (cryptoIcon) in both branches.
-              The legacy branch used to show an envelope here while its badge showed a lock, which
-              spent the bridged-mail glyph on a sentence about encryption and left one statement
-              wearing two icons. */}
-          {av ? (
-            <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name={cryptoIcon} size={16} />
-              Encrypted from the bridge to you. The original email crossed standard email (SMTP) before reaching the bridge, which isn’t end-to-end encrypted.
-            </div>
-          ) : rv ? null : (
-            <div style={{ marginTop: 'var(--space-6)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name={cryptoIcon} size={16} />
-              End-to-end encrypted over dmcn — only you and {contactName} can read this.
-            </div>
-          )}
-
-          {av && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: calloutColors(av.variant).bg, color: calloutColors(av.variant).fg, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name={av.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
-              <span>
-                {av.detail}
-                {attestation && authBreakdown(attestation, msg.senderAddress) && (
-                  <span style={{ display: 'block', marginTop: 'var(--space-1)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', opacity: 0.85 }}>
-                    {authBreakdown(attestation, msg.senderAddress)}
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-
-          {/* The raw source, for bridged mail. Offered wherever the body itself is readable: it is
-              escaped text like the plain-text peek, so the gate's peek is enough. Saving it as a
-              file follows the attachment lock, since a mail app opening the .eml renders its HTML. */}
-          {av && original && (!gated || revealed) && (
-            <div style={{ marginTop: 'var(--space-3)' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
-                <Button size="sm" variant="secondary" leftIcon={<Icon name="file" size={14} />} onClick={() => setShowOriginal(v => !v)}>
-                  {showOriginal ? 'Hide original' : 'Show original'}
-                </Button>
-                {showOriginal && downloadsUnlocked && (
-                  <Button size="sm" variant="secondary" leftIcon={<Icon name="download" size={14} />} onClick={() => downloadAttachment(original)}>Download original</Button>
-                )}
-              </div>
-              {showOriginal && (
-                <>
-                  {original.content.length > ORIGINAL_PREVIEW_BYTES && (
-                    <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                      Showing the first {formatBytes(ORIGINAL_PREVIEW_BYTES)} of {formatBytes(original.content.length)}.{downloadsUnlocked ? ' Download it to see the rest.' : ''}
-                    </div>
-                  )}
-                  <pre style={{ margin: 'var(--space-2) 0 0', maxHeight: 480, overflow: 'auto', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-body)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', lineHeight: 'var(--leading-relaxed)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', borderRadius: 'var(--radius-md)' }}>
-                    {originalText}
-                  </pre>
-                </>
-              )}
-            </div>
-          )}
-
-          {rv && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${rv.variant}-subtle)`, color: `var(--${rv.variant === 'success' ? 'success' : rv.variant === 'warning' ? 'warning' : 'danger'})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name={rv.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
-              <span>{rv.detail}</span>
-            </div>
-          )}
-
-          {tv && (
-            <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: `var(--${tv.variant}-subtle)`, color: `var(--${tv.variant})`, fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
-              <Icon name={tv.icon} size={16} style={{ marginTop: 1, flex: 'none' }} />
-              <span>{tv.detail}</span>
-            </div>
-          )}
-
-          <div style={{ marginTop: 'var(--space-6)', display: 'flex', gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
             <Button variant="secondary" leftIcon={<Icon name="reply" size={16} />} onClick={() => onReply(buildReply(false))}>Reply</Button>
             {showReplyAll && (
               <Button variant="secondary" leftIcon={<Icon name="reply-all" size={16} />} onClick={() => onReply(replyAll)}>Reply all</Button>
             )}
+            <div style={{ flex: 1 }} />
+            {/* The raw source, for bridged mail. Offered wherever the body itself is readable: it is
+                escaped text like the plain-text peek, so the gate's peek is enough. */}
+            {showSource && (
+              <Button variant="secondary" aria-expanded={showOriginal} onClick={() => setShowOriginal(v => !v)}>
+                {showOriginal ? 'Hide source' : 'View source'}
+              </Button>
+            )}
+            {htmlAllowed && !gated && (
+              <Button variant="secondary" onClick={() => setShowHtml(v => !v)}>
+                {showHtml ? 'View plain text' : 'View HTML'}
+              </Button>
+            )}
           </div>
+
+          {/* Saving the source as a file follows the attachment lock, since a mail app opening the
+              .eml renders its HTML. */}
+          {showSource && showOriginal && original && (
+            <div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
+                {original.content.length > ORIGINAL_PREVIEW_BYTES && (
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                    Showing the first {formatBytes(ORIGINAL_PREVIEW_BYTES)} of {formatBytes(original.content.length)}.{downloadsUnlocked ? ' Download it to see the rest.' : ''}
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
+                {downloadsUnlocked && (
+                  <Button size="sm" variant="secondary" leftIcon={<Icon name="download" size={14} />} onClick={() => downloadAttachment(original)}>Download source</Button>
+                )}
+              </div>
+              <pre style={{ margin: 'var(--space-2) 0 0', maxHeight: 480, overflow: 'auto', padding: 'var(--space-3)', background: 'var(--surface-sunken)', color: 'var(--text-body)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', lineHeight: 'var(--leading-relaxed)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', borderRadius: 'var(--radius-md)' }}>
+                {originalText}
+              </pre>
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// An outlined danger button: the destructive action in a row of ordinary ones, marked by its
+// colour rather than filled, so it does not outweigh the decision the row is asking for.
+const dangerOutline: CSSProperties = {
+  color: 'var(--danger)',
+  borderColor: 'color-mix(in srgb, var(--danger) 45%, var(--surface-card))',
+};
+
+// BodyText is the message's words, with the two outcomes that are not words said as such: still
+// loading, and a text rendering that is empty. An empty text rendering is a real outcome, not a
+// failure — an image-only campaign mail renders down to no text at all — but an empty panel reads
+// as one. Say which it is, and say it especially behind the gate, where the reader's next move is
+// a decision about HTML they have not been shown.
+function BodyText({ body, bodyError, hasHtml }: { body: string | null; bodyError: string | null; hasHtml: boolean }) {
+  if (bodyError) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>
+        <Icon name="alert-triangle" size={16} style={{ marginTop: 1 }} />
+        <span>Failed to load body: {bodyError}</span>
+      </div>
+    );
+  }
+  if (body === null) return <span style={{ color: 'var(--text-muted)' }}>Loading…</span>;
+  if (body.trim() === '') {
+    return (
+      <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
+        {hasHtml
+          ? 'This message has no text version. Everything it says is in its HTML rendering.'
+          : 'This message has no text content.'}
+      </span>
+    );
+  }
+  return <>{body}</>;
+}
+
+// PickerButton is a toolbar icon that opens a native picker. The select is real and covers the
+// icon, invisible: the platform's own list, keyboard and screen-reader behaviour (and a phone's
+// wheel picker) come with it, and nothing has to be rebuilt to look like a menu.
+function PickerButton({ icon, label, value, onChange, children }: {
+  icon: 'tag' | 'folder';
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <span title={label} style={{
+      position: 'relative', width: 36, height: 36, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: 'var(--radius-sm)', color: 'var(--text-body)', boxShadow: focused ? 'var(--focus-ring)' : undefined,
+    }}>
+      <Icon name={icon} size={18} />
+      <select
+        aria-label={label}
+        value={value}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onChange={e => {
+          const v = e.target.value;
+          // The label picker always rests on its prompt; the folder picker on the current folder,
+          // except when "New folder…" hands over to the create row.
+          e.currentTarget.value = value;
+          onChange(v);
+        }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', font: 'inherit', border: 0 }}
+      >
+        {children}
+      </select>
+    </span>
+  );
+}
+
+// HtmlConfirm asks once more before a gated message's HTML is rendered. Floating under its button
+// on a desktop, with the arrow pointing back at it; in the flow on a phone, where a box anchored to
+// a button part-way along a wrapped row would run off the screen.
+function HtmlConfirm({ warning, onCancel, onConfirm, floating = false }: {
+  warning: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  floating?: boolean;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  // Escape, or a press anywhere outside the box and its button, closes it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (boxRef.current?.contains(t) || t?.closest?.('[aria-controls="reader-html-confirm"]')) return;
+      onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onDown); };
+  }, [onCancel]);
+  const border = 'color-mix(in srgb, var(--danger) 45%, var(--surface-card))';
+  return (
+    <div
+      ref={boxRef}
+      id="reader-html-confirm"
+      role="dialog"
+      aria-label="Confirm showing HTML"
+      style={{
+        ...(floating ? { position: 'absolute', top: 'calc(100% + 12px)', left: 0, zIndex: 20, width: 360 } : {}),
+        boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px',
+        border: `1px solid ${border}`, borderRadius: 8, background: 'var(--danger-subtle)', boxShadow: floating ? 'var(--shadow-md)' : undefined,
+        color: 'var(--text-body)', fontSize: 'var(--text-sm)', lineHeight: 1.5,
+      }}
+    >
+      {floating && (
+        <div aria-hidden="true" style={{ position: 'absolute', top: -7, left: 28, width: 12, height: 12, background: 'var(--danger-subtle)', borderTop: `1px solid ${border}`, borderLeft: `1px solid ${border}`, transform: 'rotate(45deg)' }} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <Icon name="alert-triangle" size={16} style={{ color: 'var(--danger)', marginTop: 2 }} />
+        <span>{warning}</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
+        <Button size="sm" variant="secondary" autoFocus onClick={onCancel}>No, stay with text only</Button>
+        <Button size="sm" variant="secondary" onClick={onConfirm} style={{ ...dangerOutline, borderColor: 'var(--danger)', fontWeight: 600 }}>Yes, show HTML</Button>
       </div>
     </div>
   );
