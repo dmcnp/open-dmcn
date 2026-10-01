@@ -102,6 +102,9 @@ export function AppLayout() {
   // comes back UNSUPPORTED, so the banner appears as soon as we actually know.
   const { localOnly: storageLocalOnly } = useStorageMode();
   const AppNav = deployment.appNav;
+  // An account that ends on its own says so in its own words, in place of the temporary-session
+  // line below: it has no keystore either, but nothing about it is temporary by accident.
+  const Expiring = deployment.expiring?.notice;
   // Temporary (single-session) sign-in on a shared computer: nothing is stored here.
   // Derived from the absence of an encrypted keystore rather than a flag, so it stays
   // correct when the account switcher moves the tab to (or off) such a session.
@@ -210,7 +213,9 @@ export function AppLayout() {
       {/* Renders nothing: it keeps this device's push registration in step with the browser's
           subscription, and refreshes the inbox when a wake-up arrives while a window is open. */}
       {address && keys && <PushRegistrar address={address} keys={keys} onNewMail={refresh} />}
-      {address && keys && <DeviceEnroller address={address} keys={keys} />}
+      {/* Not for an account that expires on its own: a device registry on a mailbox that is gone in
+          two days only means a second tab with the same keys is refused. */}
+      {address && keys && !deployment.expiring && <DeviceEnroller address={address} keys={keys} />}
 
       {/* And the one prompt in the app: an account that has never answered whether it wants
           notifications is asked, once, on the mail section it just unlocked into. Not over the
@@ -409,7 +414,8 @@ export function AppLayout() {
             </span>
           </div>
         )}
-        {ephemeral && (
+        {Expiring && address && <Expiring address={address} onSignOut={handleSignOut} />}
+        {ephemeral && !Expiring && (
           <div style={{
             flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
             padding: 'var(--space-2) var(--space-4)', background: 'var(--surface-sunken)',

@@ -85,6 +85,21 @@ export interface Deployment {
   // What /register renders. A hosted front door shows a signup form; a self-hosted domain
   // whose root key is offline cannot mint an address at all and shows a petition instead.
   registerScreen: ReactNode;
+  // Accounts that end on their own. A demo front door hands each visitor an address that expires
+  // after a day or two and is never seen again: there is no passphrase to unlock it with, no
+  // backup worth making, no second device to pair, and nothing to come back to once it is gone.
+  // Both answers are correct — an ordinary deployment's accounts last until someone closes them,
+  // and that is what absent means — but the shell behaves differently for the two, so it is told.
+  //
+  // Present ⇒ the deployment's own screen replaces sign-in (it is how such an account starts, and
+  // resumes in a new tab), its notice replaces the temporary-session banner (it says how long is
+  // left, and what happens at the end), this browser is never enrolled as a device, and Settings
+  // offers none of the controls that only make sense for an account someone keeps: backup, the
+  // lock, the device unlock, switching accounts.
+  expiring?: {
+    signIn: ReactNode;
+    notice: ComponentType<{ address: string; onSignOut: () => void }>;
+  };
   // Some deployments front the mail client with a SECOND service (registration, billing,
   // countersigning) that keeps its own challenge-response session — deliberately sharing no
   // secret with the mail client, each verifying identities independently.

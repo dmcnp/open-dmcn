@@ -51,7 +51,8 @@ export function App() {
               able to steer the unlock screen, which lives outside the authenticated shell. */}
           <PushIntentRouter />
           <Routes>
-            <Route path="/login" element={<Login />} />
+            {/* A deployment whose accounts expire starts (and resumes) them on its own screen. */}
+            <Route path="/login" element={deployment.expiring?.signIn ?? <Login />} />
             {/* Registration and any extra pre-auth screens are the deployment's (see
                 lib/deployment.ts): what it takes to get an address here is a property of
                 who runs the domain, not of the mail client. */}

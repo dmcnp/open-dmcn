@@ -214,6 +214,8 @@ export function Settings() {
   const CustomDomain = deployment.customDomain;
   const RotateKey = deployment.rotateKey;
   const Devices = deployment.devices;
+  // False on a deployment whose accounts end on their own (deployment.expiring).
+  const lasting = !deployment.expiring;
   const navigate = useNavigate();
   const embedded = !useIsMobile();
   // The shell hands down onAppearanceChange so toggling theme/density here re-themes
@@ -508,6 +510,9 @@ export function Settings() {
                 which devices may open it. */}
             {Devices && keys && address && <Devices address={address} keys={keys} />}
 
+            {/* Backing up, and locking, an account that deletes itself in a day or two would protect
+                nothing: it has no passphrase to lock behind and nothing to restore. */}
+            {lasting && (<>
             <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
                 <Icon name="shield-check" size={16} style={{ color: 'var(--brand)' }} />
@@ -616,6 +621,7 @@ export function Settings() {
                   void (async () => { await setLockOnLeave(v); await applyLockPosture(); })();
                 }} />
             </div>
+            </>)}
 
             <SearchIndexCard />
 
@@ -693,7 +699,7 @@ export function Settings() {
             {/* And for the same reason again: whether an account can be re-keyed depends on the
                 domain's policy, on the fleet, and on this device's own standing. */}
             {RotateKey && keys && address && <RotateKey address={address} keys={keys} />}
-        {address && <DeviceUnlockSettings address={address} />}
+        {address && lasting && <DeviceUnlockSettings address={address} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />
@@ -736,10 +742,14 @@ export function Settings() {
                     <Badge variant="neutral"><Icon name="shield-check" size={13} /> Managed</Badge>
                   </Row>
                 ) : null}
-                <Row grouped title="Switch or add account" desc="Use another identity in this tab, or add a new one.">
-                  <Button variant="secondary" size="sm" leftIcon={<Icon name="users" size={15} />} onClick={() => navigate('/login')}>Switch account</Button>
-                </Row>
-                <Row grouped title="Sign out" desc="Locks this account on this device and ends the session. It stays available to unlock again.">
+                {lasting && (
+                  <Row grouped title="Switch or add account" desc="Use another identity in this tab, or add a new one.">
+                    <Button variant="secondary" size="sm" leftIcon={<Icon name="users" size={15} />} onClick={() => navigate('/login')}>Switch account</Button>
+                  </Row>
+                )}
+                <Row grouped title="Sign out" desc={lasting
+                  ? 'Locks this account on this device and ends the session. It stays available to unlock again.'
+                  : 'Ends this address on this device. Its keys are deleted here, so it cannot be opened again.'}>
                   <Button variant="danger" size="sm" leftIcon={<Icon name="log-out" size={15} />} onClick={handleSignOut}>Sign out</Button>
                 </Row>
               </RowGroup>
