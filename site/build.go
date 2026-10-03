@@ -24,46 +24,22 @@ var siteFS embed.FS
 // the wrong directory". Without it, a stray `-out ~/` would be unrecoverable.
 const generatedMarker = ".site-generated"
 
-// layer is one row of the stack table on the home page. It mirrors the layered
-// stack at the top of SPEC.md; the spec is the authority, this is the shop
-// window.
-//
-// Detail is template.HTML because these strings carry <code> markup and are
-// author-controlled constants in this file — never user input, never content
-// read from disk.
-type layer struct {
-	Name   string
-	Detail template.HTML
-}
-
-var layers = []layer{
-	{"User identity", "An Ed25519 signing key and an X25519 key-exchange key. The address is <code>local@domain</code>, and its record signs itself."},
-	{"Resolution", "A <code>_dmcn.&lt;domain&gt;</code> TXT record gives you a fingerprint to trust and a few nodes to dial. You fetch signed records from that domain's own nodes and check them against the fingerprint."},
-	{"Message model", "PlaintextMessage → SignedMessage → EncryptedEnvelope. One AES-256-GCM key per message, wrapped to each recipient over X25519. Header and body seal separately, and both get padded to fixed size classes."},
-	{"Routing", "RelayHints say which relays hold a mailbox. They sit outside the owner's signature, so an operator can move a mailbox without the owner's key — and the address never changes."},
-	{"Relay service", "<code>/dmcn/relay/1.0.0</code> — store, fetch, mailbox operations, record lookups, onion forwarding. Length-prefixed protobuf over libp2p."},
-	// Name is a plain string, so html/template escapes it — write literal "&", not "&amp;".
-	{"Trust & federation", "Each domain has an authority record, anchored in DNS, that delegates to issuers. Peers swap and verify credentials at <code>/dmcn/join</code> before they federate."},
-	{"Transport", "libp2p streams. Discovery is DNS-seeded — no DHT, on purpose."},
-}
-
-// step is one stage of the "how a message gets there" row on the home page —
-// the concrete walk-through a newcomer needs before the layer table means
-// anything. Detail is plain text; no markup, so it stays a plain string.
+// step is one stage of the "how a message gets there" row on the home page: the walk-through a
+// newcomer reads before anything technical. Plain words only; the mechanics are on /protocol/.
+// Detail is plain text, no markup, so it stays a plain string.
 type step struct {
 	Icon, Title, Detail string
 }
 
 var steps = []step{
-	{"search", "Look it up",
-		"Your client reads a DNS record for the recipient's domain, fetches their signed identity record from that domain's own servers, and checks it against the fingerprint the DNS record published."},
-	{"lock", "Seal it to their key",
-		"The message is encrypted on your device, to that key. Header and body are sealed separately and padded to fixed sizes, so neither the contents nor the shape gives anything away."},
-	// Careful with this one: "prove they hold the key" reads as though the key is
-	// handed to the relay. It never is — the relay sends a nonce, the client signs
-	// it, and the signature is the proof. Say so plainly.
-	{"inbox", "Leave it at their relay",
-		"The sealed envelope goes to a relay the recipient nominated. They collect it by signing a challenge the relay sends — the key never leaves their device — and the relay hands back bytes it cannot read, for them to verify and open."},
+	{"search", "Look them up",
+		"Your mail app reads a DNS record for the recipient's domain and fetches their key from the servers that record names. The key is signed, so a server can't hand you a fake one."},
+	{"lock", "Seal it",
+		"The message is signed with your key and encrypted on your device, to theirs. It leaves your device already sealed."},
+	// Careful with this one: "proving they hold their key" must not read as handing the key over.
+	// It never leaves their device: the relay sends a challenge and their app signs it.
+	{"inbox", "Deliver it",
+		"The sealed message waits at a server the recipient chose. They collect it by signing a challenge with their key, which never leaves their device, and only they can open it."},
 }
 
 // pageSpec declares one output page.
@@ -74,6 +50,9 @@ type pageSpec struct {
 	toc    bool   // build and render a table of contents
 	vanity bool   // emit the Go go-import/go-source meta tags
 	note   string // optional callout above the body ({{repo}}/{{branch}} expanded)
+	// protocol adds the wire reference generated from the schema (protocol.go) after the body,
+	// through doc.html's "after-body" hook (templates/protocol.html).
+	protocol bool
 }
 
 // pages is the whole site.
@@ -94,6 +73,7 @@ func sitePages() []pageSpec {
 	return []pageSpec{
 		{url: "/", src: "index.md", tmpl: "home.html", vanity: true},
 		{url: "/spec/", src: "", tmpl: "doc.html", toc: true, note: specNote},
+		{url: "/protocol/", src: "protocol.md", tmpl: "doc.html", toc: true, protocol: true},
 		{url: "/quickstart/", src: "quickstart.md", tmpl: "doc.html", toc: true},
 		{url: "/faq/", src: "faq.md", tmpl: "doc.html", toc: true},
 		modulePage,
@@ -104,7 +84,7 @@ func sitePages() []pageSpec {
 // specNote sits above the rendered specification. It states the two things a
 // reader needs before reading anything else: that this page has no separate
 // copy to drift, and that the implementation wins where the two disagree.
-const specNote = `<p>This page is rendered directly from <a href="{{repo}}/blob/{{branch}}/SPEC.md"><code>SPEC.md</code></a> in the reference implementation — there is no second copy to drift. It is a <strong>snapshot of the reference implementation, not a frozen specification</strong>: where the two disagree, the implementation and the schemas in <code>proto/</code> are authoritative.</p>`
+const specNote = `<p>This page is rendered directly from <a href="{{repo}}/blob/{{branch}}/SPEC.md"><code>SPEC.md</code></a> in the reference implementation — there is no second copy to drift. It is a <strong>snapshot of the reference implementation, not a frozen specification</strong>: where the two disagree, the implementation and the schemas in <code>proto/</code> are authoritative.</p><p>For the field-by-field tables, generated from those schemas, see <a href="/protocol">the protocol page</a>.</p>`
 
 // pendingNote is shown on the module page while vanityActive is false. Saying
 // nothing would be the dishonest option: the meta tags are already served, so
@@ -122,8 +102,8 @@ type pageData struct {
 	Note        template.HTML
 	TOC         []tocEntry
 	Vanity      *Vanity
-	Layers      []layer
 	Steps       []step
+	Protocol    *protocolData
 }
 
 // build renders the whole site into outDir.
@@ -149,9 +129,14 @@ func build(cfg SiteConfig, outDir, specPath string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", p.url, err)
 		}
-		tmpl, err := template.New("layout.html").Funcs(template.FuncMap{"icon": iconHTML}).
-			ParseFS(siteFS, "templates/layout.html", "templates/header.html",
-				"templates/footer.html", "templates/"+p.tmpl)
+		files := []string{"templates/layout.html", "templates/header.html", "templates/footer.html", "templates/" + p.tmpl}
+		if p.protocol {
+			// Parsed after doc.html, so its "after-body" define replaces the empty block.
+			files = append(files, "templates/protocol.html")
+		}
+		tmpl, err := template.New("layout.html").
+			Funcs(template.FuncMap{"icon": iconHTML, "refHeading": refHeading}).
+			ParseFS(siteFS, files...)
 		if err != nil {
 			return fmt.Errorf("%s: parse templates: %w", p.url, err)
 		}
@@ -230,11 +215,19 @@ func renderPage(cfg SiteConfig, p pageSpec, specPath string, vanity *Vanity) (*p
 		Path:        p.url,
 		Tagline:     doc.Meta["tagline"],
 		Body:        doc.Body,
-		Layers:      layers,
 		Steps:       steps,
 	}
 	if p.toc {
 		data.TOC = doc.TOC
+	}
+	if p.protocol {
+		if data.Protocol, err = buildProtocol(); err != nil {
+			return nil, err
+		}
+		// One table of contents for the page: the prose half's headings, then the reference's.
+		for _, s := range data.Protocol.Sections {
+			data.TOC = append(data.TOC, tocEntry{ID: s.ID, Text: s.Title})
+		}
 	}
 	if p.vanity {
 		data.Vanity = vanity

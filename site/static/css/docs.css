@@ -102,6 +102,25 @@
 }
 .prose td code { white-space: nowrap; }
 
+/* ---- Reference tables on /protocol/ ----
+   Each is a native <details data-ref>: collapsed by default so the prose reads through, one
+   click to open, and no script. The leading identifier columns are set in the mono font. */
+.prose details[data-ref] {
+  margin: 14px 0 18px; border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); background: var(--surface-card);
+}
+.prose details[data-ref] > summary {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer;
+  list-style: none; font-size: 14px; font-weight: 600; color: var(--text-strong);
+}
+.prose details[data-ref] > summary::-webkit-details-marker { display: none; }
+.prose details[data-ref] .ref-chev { margin-left: auto; display: inline-flex; flex: none; transition: transform var(--dur-fast) var(--ease-standard); }
+.prose details[data-ref][open] .ref-chev { transform: rotate(180deg); }
+.prose details[data-ref] .table-wrap { margin: 0; border-top: 1px solid var(--border-subtle); }
+.prose details[data-ref] table { font-size: 13px; min-width: 560px; }
+.prose details[data-ref] td.mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-strong); white-space: nowrap; }
+.prose section + section { margin-top: 44px; }
+
 .prose a { color: var(--text-link); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--border-strong); }
 .prose a:hover { color: var(--brand); text-decoration-color: var(--brand); }
 

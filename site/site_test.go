@@ -110,7 +110,7 @@ func TestBuildEmitsEveryPage(t *testing.T) {
 	out, read := buildInto(t)
 
 	for _, f := range []string{
-		"index.html", "spec/index.html", "quickstart/index.html", "faq/index.html",
+		"index.html", "spec/index.html", "protocol/index.html", "quickstart/index.html", "faq/index.html",
 		"open-dmcn/index.html", "404.html",
 		"CNAME", ".nojekyll", "_headers", "robots.txt", "sitemap.xml",
 		"static/css/tokens.css", "static/css/site.css", "static/css/docs.css",

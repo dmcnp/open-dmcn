@@ -1,6 +1,10 @@
 package main
 
 import (
+	"html"
+	"io/fs"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -34,7 +38,8 @@ func content(t *testing.T, name string) string {
 // Rule of thumb when this test fails: the code changed, so either the claim is now true (update
 // the pin) or the copy is now wrong (fix the copy). Never delete a case to make it pass.
 func TestHonestClaims(t *testing.T) {
-	index, faq, quickstart := content(t, "index.md"), content(t, "faq.md"), content(t, "quickstart.md")
+	faq, quickstart := content(t, "faq.md"), content(t, "quickstart.md")
+	protocol := content(t, "protocol.md")
 
 	t.Run("no absolute claim that an operator cannot re-bind an address", func(t *testing.T) {
 		// The domain ROOT can free an address and let it be bound again — that is the same
@@ -50,16 +55,6 @@ func TestHonestClaims(t *testing.T) {
 		}
 		if !strings.Contains(faq, "root-signed tombstone") {
 			t.Error("faq.md no longer explains that re-binding needs a root-signed tombstone")
-		}
-	})
-
-	t.Run("no claim that a domain is served only by its own nodes", func(t *testing.T) {
-		// `fleet=` in the _dmcn record explicitly defers hosting to another domain's nodes; that
-		// is how a provider serves a customer's domain.
-		for _, src := range []struct{ name, body string }{{"index.md", index}, {"faq.md", faq}} {
-			if strings.Contains(src.body, "nobody else's") {
-				t.Errorf("%s claims a domain is served by its own nodes and nobody else's — `fleet=` delegates hosting", src.name)
-			}
 		}
 	})
 
@@ -89,6 +84,14 @@ func TestHonestClaims(t *testing.T) {
 		}
 	})
 
+	t.Run("the protocol is not presented as a finished standard", func(t *testing.T) {
+		// Formal versioning and a conformance suite do not exist yet; the technical page says so
+		// where it describes the protocol's status.
+		if !strings.Contains(protocol, "snapshot of the reference implementation") || !strings.Contains(protocol, "roadmap") {
+			t.Error("protocol.md no longer says the protocol is a snapshot with versioning and conformance on the roadmap")
+		}
+	})
+
 	t.Run("production readiness is not overstated", func(t *testing.T) {
 		if !strings.Contains(faq, "Is it production ready?") {
 			t.Error("faq.md dropped the production-readiness question")
@@ -98,15 +101,84 @@ func TestHonestClaims(t *testing.T) {
 		}
 	})
 
-	t.Run("the DNS trust anchor is not disclaimed", func(t *testing.T) {
+}
+
+// renderedText returns the visible text of every built page, keyed by its path in the output:
+// the body with tags stripped and entities decoded, and a ¶ wherever a block (heading, paragraph,
+// list item, cell, code block) ends, so a sentence never runs on into the next heading. The claims live in templates (home.html,
+// protocol.html) and Go (the landing's steps) as well as markdown, so the sweeps below read what
+// is published rather than one kind of source.
+func renderedText(t *testing.T) map[string]string {
+	t.Helper()
+	out, read := buildInto(t)
+	tags := regexp.MustCompile(`(?s)<[^>]*>`)
+	blockEnd := regexp.MustCompile(`</(h[1-6]|p|li|td|th|summary|pre|dt|dd)>`)
+	pages := map[string]string{}
+	err := filepath.WalkDir(out, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".html") {
+			return err
+		}
+		rel, _ := filepath.Rel(out, path)
+		page := read(rel)
+		if i := strings.Index(page, "<body"); i >= 0 {
+			page = page[i:]
+		}
+		page = blockEnd.ReplaceAllString(page, " ¶ ")
+		pages[rel] = normalise(html.UnescapeString(tags.ReplaceAllString(page, " ")))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pages
+}
+
+// TestRenderedPagesMakeNoBannedClaims runs the phrase bans over every published page.
+func TestRenderedPagesMakeNoBannedClaims(t *testing.T) {
+	banned := []struct{ phrase, why string }{
+		// `fleet=` in the _dmcn record defers hosting to another domain's nodes; that is how a
+		// provider serves a customer's domain.
+		{"nobody else's", "a domain can delegate hosting with `fleet=`"},
+		{"domain's own servers", "a domain can delegate hosting with `fleet=`"},
+		{"domain's own nodes", "a domain can delegate hosting with `fleet=`"},
 		// DMCNP's root of trust IS DNS (the _dmcn fingerprint), the same anchor MTA-STS and DANE
 		// use. Claiming otherwise would be the single most damaging thing this site could say.
-		for _, src := range []struct{ name, body string }{{"index.md", index}, {"faq.md", faq}} {
-			for _, banned := range []string{"keyless trust", "without DNS", "no DNS dependency"} {
-				if strings.Contains(strings.ToLower(src.body), banned) {
-					t.Errorf("%s claims %q — the trust anchor is the _dmcn DNS record", src.name, banned)
-				}
+		{"keyless trust", "the trust anchor is the _dmcn DNS record"},
+		{"without dns", "the trust anchor is the _dmcn DNS record"},
+		{"no dns dependency", "the trust anchor is the _dmcn DNS record"},
+	}
+	for page, text := range renderedText(t) {
+		lower := strings.ToLower(text)
+		for _, b := range banned {
+			if strings.Contains(lower, b.phrase) {
+				t.Errorf("%s says %q: %s", page, b.phrase, b.why)
 			}
 		}
-	})
+	}
+}
+
+// approvedDHT is every sentence on the site that mentions a DHT, each checked to say the protocol
+// has none (discovery is seeded from DNS; the DHT registry was removed). A new or reworded
+// sentence fails until someone has read it and added it here.
+var approvedDHT = map[string]bool{
+	// protocol.md
+	"Discovery is seeded from DNS, with no DHT, on purpose.":                                           true,
+	"Most decentralised messaging puts identity in a shared overlay: a DHT, a chain, a consensus set.": true,
+	// faq.md
+	"Is there a blockchain, a DHT, or a global directory?":              true,
+	"An earlier version did resolve identities through a Kademlia DHT.": true,
+	// SPEC.md, rendered at /spec/
+	`DMCN (the Decentralized Mesh Communication Network) is a peer-to-peer, end-to-end-encrypted store-and-forward mail network where cryptographic identity replaces SMTP-style trust ; the DMCN Protocol (DMCNP), specified here, is what its participants speak: every address is an Ed25519+X25519 keypair whose self-certifying record is served by the address's own domain fleet and discovered via DNS ("MX for identity" — no global DHT), and mail is hybrid-encrypted client-side and parked in recipient-designated relays' mailboxes.`: true,
+	"0 — STORE / FETCH / mailbox / onion / resolve │ trust / federation Credential PKI (DNS-anchored DAR), /dmcn/join handshake │ transport libp2p streams (no DHT — discovery is DNS-seeded)": true,
+}
+
+func TestDHTIsOnlyNamedAsAbsent(t *testing.T) {
+	sentence := regexp.MustCompile(`[^.?!¶]*\bDHT[^.?!¶]*[.?!]?`)
+	for page, text := range renderedText(t) {
+		for _, s := range sentence.FindAllString(text, -1) {
+			if s = strings.TrimSpace(s); !approvedDHT[s] {
+				t.Errorf("%s mentions a DHT in a sentence nobody has checked: %q\nIf it says the protocol has none, add it to approvedDHT.", page, s)
+			}
+		}
+	}
 }

@@ -59,6 +59,16 @@ sealed envelope — for mail that starts in the old world, they're the best sign
 daemon ships a `stub` auth mode for offline development that skips the checks; it is not the
 default, and it must never be used where real mail arrives.)
 
+## How does mail reach ordinary email addresses?
+
+Through a bridge. A domain can run an SMTP bridge alongside its nodes. Mail you send to an
+ordinary address is sealed to the bridge rather than to the recipient. The bridge opens it and
+sends it on as ordinary email, signed with the domain's DKIM key. Mail coming the other way gets
+its SPF, DKIM and DMARC checks at the bridge, as described above, before it's sealed to you.
+
+Either way the bridge reads the message, so that mail is not end-to-end encrypted. The
+[quickstart](/quickstart#the-smtp-bridge) covers setting one up.
+
 ## Is there a blockchain, a DHT, or a global directory?
 
 No, and that's deliberate.
@@ -92,6 +102,9 @@ publicly resolvable record, and a client that pinned the old key sees the change
 Yes, on purpose. The `RelayHints` that say which relays hold your mailbox sit *outside* your
 signature, in a credential the operator signs. So an operator can re-point them to rebalance
 load or drain a machine without touching your key.
+
+A record can name more than one relay. Senders try them in turn, so mail still arrives when one
+is down, and a domain can ask senders to store to all of them instead.
 
 Moving the mailbox doesn't move the identity, which is also why your address survives the move.
 

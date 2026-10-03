@@ -9,13 +9,13 @@
   <meta name="go-source" content="dmcn.dev/open-dmcn https://github.com/dmcnp/open-dmcn https://github.com/dmcnp/open-dmcn/tree/main{/dir} https://github.com/dmcnp/open-dmcn/blob/main{/dir}/{file}#L{line}">
 
   <title>The DMCN Protocol · dmcn.dev</title>
-  <meta name="description" content="DMCNP is an open protocol for end-to-end-encrypted mail, where the address is a keypair instead of a name a server vouches for. Apache-2.0 spec and schema.">
+  <meta name="description" content="DMCNP is an open protocol for email that requires every message to be signed by its sender and encrypted to its recipient, with no exceptions. Apache-2.0 spec and schema.">
   <link rel="canonical" href="https://dmcn.dev/">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="dmcn.dev">
   <meta property="og:title" content="The DMCN Protocol · dmcn.dev">
-  <meta property="og:description" content="DMCNP is an open protocol for end-to-end-encrypted mail, where the address is a keypair instead of a name a server vouches for. Apache-2.0 spec and schema.">
+  <meta property="og:description" content="DMCNP is an open protocol for email that requires every message to be signed by its sender and encrypted to its recipient, with no exceptions. Apache-2.0 spec and schema.">
   <meta property="og:url" content="https://dmcn.dev/">
 
   
@@ -50,6 +50,7 @@
     </a>
     <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
       <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/protocol" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Protocol</a>
       <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
       <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
     </nav>
@@ -60,6 +61,7 @@
       <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
       <div data-mm-panel>
         <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/protocol" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Protocol</a>
         <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
         <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
         <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
@@ -78,23 +80,40 @@
   <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 12px;margin-bottom:24px;border:1px solid var(--border-subtle);border-radius:var(--radius-pill);background:var(--surface-card);font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);">
     <svg class="lucide lucide-git-fork" style="font-size:13px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" /><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9" /><path d="M12 12v3" /></svg> DMCNP · an open protocol · Apache-2.0
   </div>
-  <h1 style="margin:0;max-width:19ch;font-size:clamp(34px,6vw,60px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">Cryptographic identity replaces SMTP-style trust.</h1>
-  <p style="margin:24px 0 0;max-width:62ch;font-size:clamp(16px,2vw,18.5px);line-height:1.6;color:var(--text-muted);">An open protocol for end-to-end-encrypted mail. Your address is a keypair. Your domain serves its own records, found through DNS. There&#39;s no global directory to censor, and no server in the middle that can read mail sent between DMCN addresses.</p>
+  <h1 style="margin:0;max-width:24ch;font-size:clamp(32px,5.4vw,54px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">An open protocol that requires every message on it to be signed and encrypted, with no exceptions.</h1>
+  <p style="margin:24px 0 0;max-width:62ch;font-size:clamp(16px,2vw,18.5px);line-height:1.6;color:var(--text-muted);">DMCNP is for email. Your address is tied to a key your domain publishes, so anyone can check who sent a message, and only the person it&#39;s sent to can read it.</p>
 
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:34px;">
-    <a href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;"><svg class="lucide lucide-book-open" style="font-size:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></svg> Read the spec</a>
-    <a href="https://github.com/dmcnp/open-dmcn/tree/main/proto" class="hov-surface-border" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;border:1px solid var(--border-default);background:var(--surface-card);color:var(--text-body);font-size:15px;font-weight:600;text-decoration:none;"><svg class="lucide lucide-code" style="font-size:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6" /><path d="m8 6-6 6 6 6" /></svg> The schema <svg class="lucide lucide-arrow-up-right" style="font-size:14px;color:var(--text-subtle);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    <a href="/protocol" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;"><svg class="lucide lucide-book-open" style="font-size:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></svg> How it works</a>
     <a href="/quickstart" class="hov-surface-border" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;border:1px solid var(--border-default);background:var(--surface-card);color:var(--text-body);font-size:15px;font-weight:600;text-decoration:none;"><svg class="lucide lucide-rocket" style="font-size:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09" /><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05" /></svg> Try it</a>
   </div>
 </section>
 
 
+
+<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
+  <article class="prose" style="max-width:70ch;"><h2 id="why-it-exists">Why it exists<a class="hash" href="#why-it-exists" aria-label="Link to this section">#</a></h2>
+<p>When an email arrives today, the name in the From line is a claim. Your provider checks what it
+can, makes a guess, and files the message accordingly, and all you ever see is the guess. That
+guessing is why spam filters exist, and why phishing still works.</p>
+<p>There have been plenty of fixes on top of email over the years: PGP, S/MIME, DKIM, DMARC,
+encrypted connections between servers. Each one is optional, and an optional check only helps
+when every server on the route takes part. In practice it falls back to whatever the weakest one
+supports.</p>
+<p>DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
+message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
+still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted,
+and the protocol is upfront about it.</p>
+</article>
+</section>
+
+
+
 <section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
   <div style="max-width:70ch;">
     <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What it is</h2>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">In traditional email a sender can claim to be anyone, and there is no reliable way to know they aren't. Believing them is a best guess the receiver makes after the mail has already arrived — which is what spam filters are for, and why phishing works at all.</p>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);"><strong style="color:var(--text-strong);">DMCNP does what SMTP cannot.</strong> It moves a message from one person to another with verifiable proof of who sent it, because the address is bound to a key. <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code> names one specific public key, published by <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> and signed so anyone can check it. A message either verifies against that key or it doesn't.</p>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Everything else follows from that. If the address is a key, mail can be sealed to it before it leaves your device — so the servers in between carry bytes they cannot read, and authenticity stops being something anyone has to guess at.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Your address, say <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code>, points to a public key that <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> publishes and signs. Every message you send is signed with your key, so whoever receives it can check it really came from you. It's also encrypted on your device to their key, so the servers that carry it can't read it.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Finding someone works the way email already does, through DNS. There's no central directory, and no single company every message has to pass through.</p>
   </div>
 
   
@@ -102,140 +121,38 @@
     
     <div style="padding:22px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
       <svg class="lucide lucide-search" style="font-size:20px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34" /><circle cx="11" cy="11" r="8" /></svg>
-      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">Look it up</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">Your client reads a DNS record for the recipient&#39;s domain, fetches their signed identity record from that domain&#39;s own servers, and checks it against the fingerprint the DNS record published.</p>
+      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">Look them up</h3>
+      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">Your mail app reads a DNS record for the recipient&#39;s domain and fetches their key from the servers that record names. The key is signed, so a server can&#39;t hand you a fake one.</p>
     </div>
     
     <div style="padding:22px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
       <svg class="lucide lucide-lock" style="font-size:20px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">Seal it to their key</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">The message is encrypted on your device, to that key. Header and body are sealed separately and padded to fixed sizes, so neither the contents nor the shape gives anything away.</p>
+      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">Seal it</h3>
+      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">The message is signed with your key and encrypted on your device, to theirs. It leaves your device already sealed.</p>
     </div>
     
     <div style="padding:22px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
       <svg class="lucide lucide-inbox" style="font-size:20px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
-      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">Leave it at their relay</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">The sealed envelope goes to a relay the recipient nominated. They collect it by signing a challenge the relay sends — the key never leaves their device — and the relay hands back bytes it cannot read, for them to verify and open.</p>
+      <h3 style="margin:12px 0 8px;font-size:16px;font-weight:600;color:var(--text-strong);letter-spacing:-0.2px;">Deliver it</h3>
+      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">The sealed message waits at a server the recipient chose. They collect it by signing a challenge with their key, which never leaves their device, and only they can open it.</p>
     </div>
     
   </div>
 
-  <p style="margin:28px 0 0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Two names, because they mean different things.</strong> <strong style="color:var(--text-strong);">DMCN</strong> is the network — the deployments that actually exchange mail. <strong style="color:var(--text-strong);">DMCNP</strong> is the protocol they speak, and that is what this site specifies. You can implement it under any name you like.</p>
+  <p style="margin:28px 0 0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Two names, because they mean different things.</strong> <strong style="color:var(--text-strong);">DMCN</strong> is the network, meaning the deployments that actually exchange mail. <strong style="color:var(--text-strong);">DMCNP</strong> is the protocol they speak, and that is what this site specifies. You can implement it under any name you like.</p>
 </section>
 
 
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <div style="padding:22px clamp(18px,3vw,28px);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-    <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;margin-bottom:12px;">A domain joins by publishing one DNS record</div>
-    <pre style="margin:0;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.6;color:var(--text-body);">_dmcn.example.com  TXT  "dmcn-verification=v1; fp=&lt;40-hex&gt;; seed=/ip4/&hellip;/tcp/7400/p2p/&lt;peerID&gt;"</pre>
-    <p style="margin:14px 0 0;font-size:13.5px;line-height:1.6;color:var(--text-muted);max-width:76ch;"><code style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-strong);">fp=</code> is the trust anchor. <code style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-strong);">seed=</code> is where to dial. Records sign themselves, so a hostile server can refuse to answer you — it can't lie to you.</p>
-  </div>
+<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(48px,7vw,72px);">
+  <p style="margin:0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Where it's up to.</strong> DMCNP works today, but it's a snapshot rather than a frozen standard. <a href="/protocol#status" class="hov-link" style="color:var(--brand-text);font-weight:600;">What that means</a></p>
 </section>
-
-
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What you'd implement</h2>
-  <p style="margin:0 0 28px;max-width:64ch;font-size:15px;line-height:1.6;color:var(--text-muted);">Seven layers. Speak all of them and you interoperate with the network.</p>
-
-  <div style="display:flex;flex-direction:column;border:1px solid var(--border-subtle);border-radius:var(--radius-md);overflow:hidden;background:var(--surface-card);">
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">User identity</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">An Ed25519 signing key and an X25519 key-exchange key. The address is <code>local@domain</code>, and its record signs itself.</div>
-    </div>
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">Resolution</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">A <code>_dmcn.&lt;domain&gt;</code> TXT record gives you a fingerprint to trust and a few nodes to dial. You fetch signed records from that domain's own nodes and check them against the fingerprint.</div>
-    </div>
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">Message model</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">PlaintextMessage → SignedMessage → EncryptedEnvelope. One AES-256-GCM key per message, wrapped to each recipient over X25519. Header and body seal separately, and both get padded to fixed size classes.</div>
-    </div>
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">Routing</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">RelayHints say which relays hold a mailbox. They sit outside the owner's signature, so an operator can move a mailbox without the owner's key — and the address never changes.</div>
-    </div>
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">Relay service</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);"><code>/dmcn/relay/1.0.0</code> — store, fetch, mailbox operations, record lookups, onion forwarding. Length-prefixed protobuf over libp2p.</div>
-    </div>
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">Trust &amp; federation</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">Each domain has an authority record, anchored in DNS, that delegates to issuers. Peers swap and verify credentials at <code>/dmcn/join</code> before they federate.</div>
-    </div>
-    
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">Transport</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">libp2p streams. Discovery is DNS-seeded — no DHT, on purpose.</div>
-    </div>
-    
-  </div>
-</section>
-
-
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
-    <div style="padding:24px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-      <svg class="lucide lucide-shield-check" style="font-size:22px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></svg>
-      <h3 style="margin:14px 0 8px;font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:-0.3px;">What's in the core</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">What you need to interoperate: resolve an address, verify an identity, send mail, receive mail. Plus two optional capabilities — onion routing and an SMTP bridge — that you can skip entirely.</p>
-    </div>
-    <div style="padding:24px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-      <svg class="lucide lucide-git-fork" style="font-size:22px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" /><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9" /><path d="M12 12v3" /></svg>
-      <h3 style="margin:14px 0 8px;font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:-0.3px;">What's left out</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">Anything an operator wants but the network doesn't need: fleet admin, hosting permits, entitlements, quotas. Those are <strong style="color:var(--text-body);">extensions</strong>, and they attach through surfaces the core designs for them — never through new core fields.</p>
-    </div>
-    <div style="padding:24px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-      <svg class="lucide lucide-check-check" style="font-size:22px;color:var(--brand);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 7 17l-5-5" /><path d="m22 10-7.5 7.5L13 16" /></svg>
-      <h3 style="margin:14px 0 8px;font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:-0.3px;">Ignore every extension and you're fine</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">That's the rule the split protects. An extension can give an operator new powers. It can never make your implementation stop interoperating. Retired field numbers stay <code style="font-family:var(--font-mono);font-size:12.5px;">reserved</code> forever.</p>
-    </div>
-  </div>
-</section>
-
-
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(48px,7vw,80px);">
-  <article class="prose"><h2 id="start-with-the-schema">Start with the schema<a class="hash" href="#start-with-the-schema" aria-label="Link to this section">#</a></h2>
-<p>The protocol is four <code>.proto</code> files. They define identity records, credentials, the message
-envelope, and the relay wire format — and they're the contract, not the prose. If the
-<a href="/spec">spec</a> and the schema ever disagree, the schema wins.</p>
-<p>Everything else on this site exists to explain them.</p>
-<h2 id="why-theres-no-global-directory">Why there's no global directory<a class="hash" href="#why-theres-no-global-directory" aria-label="Link to this section">#</a></h2>
-<p>Most decentralised messaging puts identity in a shared overlay: a DHT, a chain, a consensus
-set. DMCNP doesn't, and the reason is boring rather than ideological. A big enough hostile
-majority in a shared overlay can quietly withhold records. For something meant to replace
-email, that's fatal.</p>
-<p>So resolution works like mail delivery already does. A domain publishes a <code>_dmcn</code> TXT
-record with its trust anchor and a few seed nodes. You read it, dial that domain's own
-nodes, fetch the signed record, and check it against the anchor from DNS.</p>
-<p>A domain is served by the nodes its own DNS names — its own, or a host it explicitly delegates to
-— never by a shared pool it doesn't choose. Records sign themselves, so a server that isn't your
-domain's authority can refuse to answer you; it can't lie to you.</p>
-<h2 id="naming-and-licence">Naming and licence<a class="hash" href="#naming-and-licence" aria-label="Link to this section">#</a></h2>
-<p>Apache-2.0 covers the code and the schema, patent grant included. It does not cover the
-names. Implement the protocol under whatever name you like — just don't call something
-DMCNP unless it really conforms, because that name is how people know what they're getting.</p>
-<h2 id="where-its-up-to">Where it's up to<a class="hash" href="#where-its-up-to" aria-label="Link to this section">#</a></h2>
-<p>This is a snapshot, not a frozen standard. The schema moves with the reference
-implementation, and the implementation wins where they disagree. Formal versioning and a
-conformance suite aren't done yet.</p>
-<p>The wire schema is the compatibility contract. Everything under <code>internal/</code> is just how one
-implementation happens to work, and carries no stability promise.</p>
-</article>
-</section>
-
 
 
 <section style="border-top:1px solid var(--border-subtle);background:var(--surface-sunken);">
   <div style="max-width:1120px;margin:0 auto;padding:clamp(40px,6vw,64px) clamp(18px,5vw,40px);display:flex;gap:28px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
     <div style="flex:1;min-width:280px;">
       <h2 style="margin:0 0 8px;font-size:clamp(20px,3vw,26px);letter-spacing:-0.6px;font-weight:600;color:var(--text-strong);">Want to see it running first?</h2>
-      <p style="margin:0;max-width:56ch;font-size:15px;line-height:1.6;color:var(--text-muted);"><code style="font-family:var(--font-mono);font-size:13.5px;color:var(--text-strong);">dmcnd</code> is a small reference server — one domain, one process, webmail included. It's there to read alongside the spec and to check your own implementation against. It isn't the protocol.</p>
+      <p style="margin:0;max-width:56ch;font-size:15px;line-height:1.6;color:var(--text-muted);"><code style="font-family:var(--font-mono);font-size:13.5px;color:var(--text-strong);">dmcnd</code> is a small reference server: one domain, one process, webmail included. It's there to read alongside the spec and to check your own implementation against. It isn't the protocol.</p>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <a href="/quickstart" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;">Try it <svg class="lucide lucide-arrow-right" style="font-size:16px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg></a>
@@ -259,6 +176,7 @@ implementation happens to work, and carries no stability promise.</p>
       <nav>
         <div class="foot-label">Protocol</div>
         <a href="/spec">Specification</a>
+        <a href="/protocol">Protocol</a>
         <a href="/quickstart">Try it</a>
         <a href="/faq">FAQ</a>
         <a href="/open-dmcn">Go module</a>

@@ -1,43 +1,21 @@
 ---
 title: The DMCN Protocol
-description: DMCNP is an open protocol for end-to-end-encrypted mail, where the address is a keypair instead of a name a server vouches for. Apache-2.0 spec and schema.
-tagline: An open protocol for end-to-end-encrypted mail. Your address is a keypair. Your domain serves its own records, found through DNS. There's no global directory to censor, and no server in the middle that can read mail sent between DMCN addresses.
+description: DMCNP is an open protocol for email that requires every message to be signed by its sender and encrypted to its recipient, with no exceptions. Apache-2.0 spec and schema.
+tagline: DMCNP is for email. Your address is tied to a key your domain publishes, so anyone can check who sent a message, and only the person it's sent to can read it.
 ---
 
-## Start with the schema
+## Why it exists
 
-The protocol is four `.proto` files. They define identity records, credentials, the message
-envelope, and the relay wire format — and they're the contract, not the prose. If the
-[spec](/spec) and the schema ever disagree, the schema wins.
+When an email arrives today, the name in the From line is a claim. Your provider checks what it
+can, makes a guess, and files the message accordingly, and all you ever see is the guess. That
+guessing is why spam filters exist, and why phishing still works.
 
-Everything else on this site exists to explain them.
+There have been plenty of fixes on top of email over the years: PGP, S/MIME, DKIM, DMARC,
+encrypted connections between servers. Each one is optional, and an optional check only helps
+when every server on the route takes part. In practice it falls back to whatever the weakest one
+supports.
 
-## Why there's no global directory
-
-Most decentralised messaging puts identity in a shared overlay: a DHT, a chain, a consensus
-set. DMCNP doesn't, and the reason is boring rather than ideological. A big enough hostile
-majority in a shared overlay can quietly withhold records. For something meant to replace
-email, that's fatal.
-
-So resolution works like mail delivery already does. A domain publishes a `_dmcn` TXT
-record with its trust anchor and a few seed nodes. You read it, dial that domain's own
-nodes, fetch the signed record, and check it against the anchor from DNS.
-
-A domain is served by the nodes its own DNS names — its own, or a host it explicitly delegates to
-— never by a shared pool it doesn't choose. Records sign themselves, so a server that isn't your
-domain's authority can refuse to answer you; it can't lie to you.
-
-## Naming and licence
-
-Apache-2.0 covers the code and the schema, patent grant included. It does not cover the
-names. Implement the protocol under whatever name you like — just don't call something
-DMCNP unless it really conforms, because that name is how people know what they're getting.
-
-## Where it's up to
-
-This is a snapshot, not a frozen standard. The schema moves with the reference
-implementation, and the implementation wins where they disagree. Formal versioning and a
-conformance suite aren't done yet.
-
-The wire schema is the compatibility contract. Everything under `internal/` is just how one
-implementation happens to work, and carries no stability promise.
+DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
+message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
+still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted,
+and the protocol is upfront about it.

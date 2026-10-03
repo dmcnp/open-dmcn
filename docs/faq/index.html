@@ -46,6 +46,7 @@
     </a>
     <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
       <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/protocol" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Protocol</a>
       <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
       <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
     </nav>
@@ -56,6 +57,7 @@
       <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
       <div data-mm-panel>
         <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/protocol" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Protocol</a>
         <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
         <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
         <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
@@ -77,7 +79,7 @@
       On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </summary>
     <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
-      <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
+      <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?</a><a href="#how-does-mail-reach-ordinary-email-addresses">How does mail reach ordinary email addresses?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
     </div>
   </details>
   
@@ -87,7 +89,7 @@
       
       <div class="toc-label">On this page</div>
       <nav class="toc-list">
-        <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
+        <a href="#what-do-i-actually-need-to-implement">What do I actually need to implement?</a><a href="#how-is-this-different-from-encrypting-email">How is this different from encrypting email?</a><a href="#what-about-dkim-spf-and-dmarc">What about DKIM, SPF and DMARC?</a><a href="#how-does-mail-reach-ordinary-email-addresses">How does mail reach ordinary email addresses?</a><a href="#is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?</a><a href="#what-if-a-domains-server-lies-about-a-record">What if a domain&#39;s server lies about a record?</a><a href="#can-my-provider-move-my-mailbox-without-asking-me">Can my provider move my mailbox without asking me?</a><a href="#who-can-read-my-mail">Who can read my mail?</a><a href="#whats-core-and-whats-an-extension">What&#39;s core and what&#39;s an extension?</a><a href="#why-are-some-field-numbers-reserved">Why are some field numbers reserved?</a><a href="#is-it-decentralised-if-domains-still-have-operators">Is it decentralised if domains still have operators?</a><a href="#is-it-production-ready">Is it production ready?</a><a href="#what-does-the-license-allow">What does the license allow?</a>
       </nav>
       
     </aside>
@@ -133,6 +135,13 @@ them for real on inbound legacy mail and passes the verdict on as a signed attes
 sealed envelope — for mail that starts in the old world, they're the best signal there is. (The
 daemon ships a <code>stub</code> auth mode for offline development that skips the checks; it is not the
 default, and it must never be used where real mail arrives.)</p>
+<h2 id="how-does-mail-reach-ordinary-email-addresses">How does mail reach ordinary email addresses?<a class="hash" href="#how-does-mail-reach-ordinary-email-addresses" aria-label="Link to this section">#</a></h2>
+<p>Through a bridge. A domain can run an SMTP bridge alongside its nodes. Mail you send to an
+ordinary address is sealed to the bridge rather than to the recipient. The bridge opens it and
+sends it on as ordinary email, signed with the domain's DKIM key. Mail coming the other way gets
+its SPF, DKIM and DMARC checks at the bridge, as described above, before it's sealed to you.</p>
+<p>Either way the bridge reads the message, so that mail is not end-to-end encrypted. The
+<a href="/quickstart#the-smtp-bridge">quickstart</a> covers setting one up.</p>
 <h2 id="is-there-a-blockchain-a-dht-or-a-global-directory">Is there a blockchain, a DHT, or a global directory?<a class="hash" href="#is-there-a-blockchain-a-dht-or-a-global-directory" aria-label="Link to this section">#</a></h2>
 <p>No, and that's deliberate.</p>
 <p>An earlier version did resolve identities through a Kademlia DHT. It came out because a big
@@ -157,6 +166,8 @@ publicly resolvable record, and a client that pinned the old key sees the change
 <p>Yes, on purpose. The <code>RelayHints</code> that say which relays hold your mailbox sit <em>outside</em> your
 signature, in a credential the operator signs. So an operator can re-point them to rebalance
 load or drain a machine without touching your key.</p>
+<p>A record can name more than one relay. Senders try them in turn, so mail still arrives when one
+is down, and a domain can ask senders to store to all of them instead.</p>
 <p>Moving the mailbox doesn't move the identity, which is also why your address survives the move.</p>
 <p>Changing <em>who you are</em> is a different power, and it needs a different key. Re-binding an address to
 a new keypair is only accepted with a tombstone for the current key signed by the domain's <strong>root</strong>
@@ -239,6 +250,7 @@ conforms.</p>
       <nav>
         <div class="foot-label">Protocol</div>
         <a href="/spec">Specification</a>
+        <a href="/protocol">Protocol</a>
         <a href="/quickstart">Try it</a>
         <a href="/faq">FAQ</a>
         <a href="/open-dmcn">Go module</a>

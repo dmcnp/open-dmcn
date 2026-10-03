@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>How the protocol works · dmcn.dev</title>
+  <meta name="description" content="The DMCN protocol in technical detail: its layers, how an address is resolved, what the core covers, where the protocol is up to, and a field-by-field reference generated from the schema.">
+  <link rel="canonical" href="https://dmcn.dev/protocol/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="dmcn.dev">
+  <meta property="og:title" content="How the protocol works · dmcn.dev">
+  <meta property="og:description" content="The DMCN protocol in technical detail: its layers, how an address is resolved, what the core covers, where the protocol is up to, and a field-by-field reference generated from the schema.">
+  <meta property="og:url" content="https://dmcn.dev/protocol/">
+
+  
+  <meta property="og:image" content="https://dmcn.dev/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="A fragment of identity.proto: the IdentityRecord message, with its address, Ed25519 and X25519 public keys, and owner self-signature.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  
+  <meta name="fediverse:creator" content="@mvg@infosec.exchange">
+
+  
+  <link rel="me" href="https://infosec.exchange/@mvg">
+
+  
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/docs.css">
+</head>
+<body>
+  
+  <div data-theme="" style="min-height:100vh;display:flex;flex-direction:column;background:var(--surface-page);color:var(--text-body);font-family:var(--font-sans);">
+    
+<header style="position:sticky;top:0;z-index:30;background:var(--surface-page);border-bottom:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div style="max-width:1120px;margin:0 auto;padding:13px clamp(18px,5vw,40px);display:flex;align-items:center;gap:clamp(14px,3vw,30px);">
+    <a href="/" style="display:inline-flex;align-items:flex-end;gap:8px;text-decoration:none;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:23px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:7px;height:7px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">protocol</span>
+    </a>
+    <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
+      <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/protocol" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Protocol</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
+    </nav>
+    <a data-desk href="https://github.com/dmcnp/open-dmcn" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
+
+    <details data-mm>
+      <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
+      <div data-mm-panel>
+        <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/protocol" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Protocol</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
+        <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
+        <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
+        <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>
+        <a href="https://github.com/dmcnp/open-dmcn" class="hov-surface" style="display:flex;align-items:center;gap:5px;padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-muted);text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </div>
+    </details>
+  </div>
+</header>
+
+    <main style="flex:1;">
+      
+<div style="max-width:1120px;margin:0 auto;padding:clamp(28px,5vw,52px) clamp(18px,5vw,40px);container-type:inline-size;">
+
+  
+  
+  <details data-toc-mm>
+    <summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;margin-bottom:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:var(--text-strong);">
+      On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+    <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
+      <a href="#overview">Overview</a><a href="#why-theres-no-global-directory">Why there&#39;s no global directory</a><a href="#core-and-extensions">Core and extensions</a><a href="#status">Status</a><a href="#licence">Licence</a><a href="#identity">Identity and addressing</a><a href="#resolution-detail">Resolving an address</a><a href="#messages">Messages and encryption</a><a href="#wire">Wire protocols (libp2p)</a><a href="#relay-ops">Relay operations</a><a href="#trust">Credentials and authority</a><a href="#signing">Signing convention</a><a href="#onion">Onion routing (optional)</a>
+    </div>
+  </details>
+  
+
+  <div data-doc-grid>
+    <aside data-toc-desk>
+      
+      <div class="toc-label">On this page</div>
+      <nav class="toc-list">
+        <a href="#overview">Overview</a><a href="#why-theres-no-global-directory">Why there&#39;s no global directory</a><a href="#core-and-extensions">Core and extensions</a><a href="#status">Status</a><a href="#licence">Licence</a><a href="#identity">Identity and addressing</a><a href="#resolution-detail">Resolving an address</a><a href="#messages">Messages and encryption</a><a href="#wire">Wire protocols (libp2p)</a><a href="#relay-ops">Relay operations</a><a href="#trust">Credentials and authority</a><a href="#signing">Signing convention</a><a href="#onion">Onion routing (optional)</a>
+      </nav>
+      
+    </aside>
+
+    <article class="prose">
+      
+      <h1 id="how-the-protocol-works">How the protocol works</h1>
+<h2 id="overview">Overview<a class="hash" href="#overview" aria-label="Link to this section">#</a></h2>
+<p>DMCNP is seven layers. Speak all of them and you interoperate with the network.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>User identity</td>
+<td>An Ed25519 signing key and an X25519 key-exchange key. The address is <code>local@domain</code>, and its record signs itself.</td>
+</tr>
+<tr>
+<td>Resolution</td>
+<td>A <code>_dmcn.&lt;domain&gt;</code> TXT record gives you a fingerprint to trust and a few nodes to dial. You fetch signed records from the nodes it names and check them against the fingerprint.</td>
+</tr>
+<tr>
+<td>Message model</td>
+<td>PlaintextMessage, then SignedMessage, then EncryptedEnvelope. One AES-256-GCM key per message, wrapped to each recipient over X25519. Header and body are sealed separately, and both are padded to fixed size classes.</td>
+</tr>
+<tr>
+<td>Routing</td>
+<td>RelayHints say which relays hold a mailbox. They sit outside the owner's signature, so an operator can move a mailbox without the owner's key, and the address never changes.</td>
+</tr>
+<tr>
+<td>Relay service</td>
+<td><code>/dmcn/relay/1.0.0</code>: store, fetch, mailbox operations, record lookups and onion forwarding, as length-prefixed protobuf over libp2p.</td>
+</tr>
+<tr>
+<td>Trust and federation</td>
+<td>Each domain has an authority record, anchored in DNS, that delegates to issuers. Peers exchange and verify credentials at <code>/dmcn/join</code> before they federate.</td>
+</tr>
+<tr>
+<td>Transport</td>
+<td>libp2p streams. Discovery is seeded from DNS, with no DHT, on purpose.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The protocol itself is four <code>.proto</code> files, defining identity records, credentials, the message
+envelope and the relay wire format. They're the contract. If the <a href="/spec">spec</a> and the schema
+ever disagree, the schema wins, and the reference further down this page is generated from it.</p>
+<h2 id="why-theres-no-global-directory">Why there's no global directory<a class="hash" href="#why-theres-no-global-directory" aria-label="Link to this section">#</a></h2>
+<p>Most decentralised messaging puts identity in a shared overlay: a DHT, a chain, a consensus set.
+DMCNP doesn't, and the reason is practical. A big enough hostile majority in a shared overlay can
+quietly withhold records, and for something meant to replace email that's fatal.</p>
+<p>So resolution works the way mail delivery already does. A domain publishes a <code>_dmcn</code> TXT record
+with its trust anchor and a few seed nodes. You read it, dial the nodes it names, fetch the
+signed record, and check it against the anchor from DNS.</p>
+<p>A domain is served by the nodes its own DNS names: its own, or a host it explicitly delegates to.
+It's never served by a shared pool it didn't choose. Records sign themselves, so a server that
+isn't your domain's authority can refuse to answer you, but it can't lie to you.</p>
+<h2 id="core-and-extensions">Core and extensions<a class="hash" href="#core-and-extensions" aria-label="Link to this section">#</a></h2>
+<p>The core is what you need to interoperate: resolve an address, verify an identity, send mail and
+receive it. Two capabilities are optional and can be skipped entirely: onion routing, and an SMTP
+bridge to ordinary email.</p>
+<p>Anything an operator wants but the network doesn't need is an extension: fleet administration,
+hosting permits, entitlements, quotas. Extensions attach through surfaces the core sets aside for
+them, never through new core fields.</p>
+<p>The rule that split protects: ignore every extension and you still interoperate. An extension can
+give an operator new powers. It can never make your implementation stop working with the network.
+Retired field numbers stay <code>reserved</code> forever.</p>
+<h2 id="status">Status<a class="hash" href="#status" aria-label="Link to this section">#</a></h2>
+<p>This is a snapshot of the reference implementation, not a frozen standard. The schema moves with
+the implementation, and where this site and the implementation disagree, the implementation wins.
+Formal versioning and a conformance suite are on the roadmap and aren't done yet.</p>
+<p>The wire schema is the compatibility contract. Everything under <code>internal/</code> in the repository is
+how one implementation happens to work, and carries no stability promise.</p>
+<h2 id="licence">Licence<a class="hash" href="#licence" aria-label="Link to this section">#</a></h2>
+<p>Apache-2.0 covers the code and the schema, with an express patent grant. It doesn't cover the
+names: implement the protocol under whatever name you like, but don't call something DMCNP unless
+it really conforms. The <a href="/faq#what-does-the-license-allow">FAQ</a> has the detail.</p>
+
+  
+  <section>
+    <h2 id="identity">Identity and addressing<a class="hash" href="#identity" aria-label="Link to this section">#</a></h2>
+    <p>An address such as <code>alice@example.com</code> is a keypair: an Ed25519 signing key and an X25519 key-agreement key, bound in a self-certifying <code>IdentityRecord</code> that any reader can verify on its own. No certificate authority issues it.</p>
+    <p>The record has two ownership zones. The <strong>identity core</strong> (address, keys, validity, tier and revision) is covered by the owner's self-signature, so only the key holder can change it. The <strong>operational side</strong> is mailbox routing. It travels as an operator-signed credential that is deliberately <em>excluded</em> from the self-signature, so a domain operator can re-point or rebalance routing without ever holding the owner's key. That credential verifies against the domain authority instead (see <a href="#trust">Credentials and authority</a>).</p>
+    <p>The owner-signed <code>revision</code> never goes down. Fleets and readers reject any record whose revision is lower than one they've already verified, so a replayed old record can never roll an identity back.</p>
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>IdentityRecord fields</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>field</th><th>type</th><th>notes</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1</td><td class="mono">version</td><td class="mono">uint32</td><td>record format version</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">address</td><td class="mono">string</td><td>local@domain</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">ed25519_public_key</td><td class="mono">bytes</td><td>signing key (32 bytes)</td></tr>
+        
+        <tr><td class="mono">4</td><td class="mono">x25519_public_key</td><td class="mono">bytes</td><td>key-agreement key (32 bytes)</td></tr>
+        
+        <tr><td class="mono">5</td><td class="mono">created_at</td><td class="mono">int64</td><td>unix seconds</td></tr>
+        
+        <tr><td class="mono">6</td><td class="mono">expires_at</td><td class="mono">int64</td><td>unix seconds; 0 = no expiry</td></tr>
+        
+        <tr><td class="mono">7</td><td class="mono">relay_hints</td><td class="mono">repeated string</td><td>reader-facing mirror only, not covered by the self-signature; the authoritative copy lives inside routing_credential (25)</td></tr>
+        
+        <tr><td class="mono">8</td><td class="mono">verification_tier</td><td class="mono">VerificationTier</td><td>trust tier (see the tier table); enforcement is reader-side</td></tr>
+        
+        <tr><td class="mono">9</td><td class="mono">attestations</td><td class="mono">repeated AttestationRecord</td><td>web-of-trust attestations (in-person, fingerprint, network, organizational)</td></tr>
+        
+        <tr><td class="mono">10</td><td class="mono">self_signature</td><td class="mono">bytes</td><td>owner Ed25519 (64 bytes) over fields 1–6, 8, 23, 26, 29, 30; ctx dmcn-identity-self-v1\0</td></tr>
+        
+        <tr><td class="mono">11–22</td><td class="mono">(reserved)</td><td class="mono">—</td><td>do not reuse</td></tr>
+        
+        <tr><td class="mono">23</td><td class="mono">require_onion</td><td class="mono">bool</td><td>mailbox requires onion delivery, so relays reject direct stores; covered by the self-signature</td></tr>
+        
+        <tr><td class="mono">24</td><td class="mono">address_credential</td><td class="mono">Credential</td><td>the domain&#39;s attestation of the address↔key binding (role address); issued after self-signing, excluded from the self-signature</td></tr>
+        
+        <tr><td class="mono">25</td><td class="mono">routing_credential</td><td class="mono">Credential</td><td>operator-owned routing (role routing) carrying the authoritative relay_hints; excluded from the self-signature so operators can re-point routing without the owner&#39;s key</td></tr>
+        
+        <tr><td class="mono">26</td><td class="mono">revision</td><td class="mono">uint64</td><td>monotonic and owner-signed, so a lower revision can never overwrite a higher one (anti-rollback)</td></tr>
+        
+        <tr><td class="mono">27</td><td class="mono">(reserved)</td><td class="mono">—</td><td>do not reuse</td></tr>
+        
+        <tr><td class="mono">28</td><td class="mono">operator_credentials</td><td class="mono">repeated Credential</td><td>generic operator extension point: operator-attached credentials beyond routing (semantics by role/attributes); excluded from the self-signature; anti-rollback tiebreaks on the newest issued_at across 25 and these</td></tr>
+        
+        <tr><td class="mono">29</td><td class="mono">rotation_chain</td><td class="mono">repeated RotationEntry</td><td>the address&#39;s own key-change history: one owner-authorized transition per entry, each signed BOTH by the key it retires and by the key taking over; covered by the self-signature; capped, with the complete history in the address&#39;s AddressHistoryRecord</td></tr>
+        
+        <tr><td class="mono">30</td><td class="mono">recovery_ed25519_public_key</td><td class="mono">bytes</td><td>owner-held key, kept apart from the active one, that may authorize the next rotation when the active key is lost; covered by the self-signature; empty when none is enrolled</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Verification tiers</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>value</th><th>name</th><th>meaning</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">0</td><td class="mono">VERIFICATION_TIER_UNVERIFIED</td><td>valid but untrusted; addresses register here and still work, and trust is upgraded, never gated at registration</td></tr>
+        
+        <tr><td class="mono">1</td><td class="mono">(reserved)</td><td>do not reuse</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">VERIFICATION_TIER_DOMAIN_DNS</td><td>raised by a domain attestation (address credential) chained to the DNS-anchored domain authority</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">VERIFICATION_TIER_DANE</td><td>reserved highest tier: DNSSEC/DANE-anchored</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+  </section>
+
+  
+  <section>
+    <h2 id="resolution-detail">Resolving an address<a class="hash" href="#resolution-detail" aria-label="Link to this section">#</a></h2>
+    <p>The record format, and what a resolver checks. The design behind it is under <a href="#why-theres-no-global-directory">Why there's no global directory</a>.</p>
+    <pre>_dmcn.&lt;domain&gt;  TXT  "dmcn-verification=v1; fp=&lt;40-hex&gt;[; fleet=&lt;domain&gt;][; seed=&lt;multiaddr&gt;]..."
+
+fp     trust anchor: first 20 bytes of SHA-256(ed25519_pub ‖ x25519_pub), uppercase hex
+fleet  optional deferral to a hosting fleet's domain, for discovery only; spoofing it is DoS, never forgery
+seed   bootstrap multiaddrs; each ends /p2p/&lt;peerID&gt;, so the transport handshake authenticates the endpoint</pre>
+    <pre>$ dig +short TXT _dmcn.example.com
+"dmcn-verification=v1; fp=9F2A…C41E; seed=/dns4/id1.example.com/tcp/4001/p2p/12D3Koo…"</pre>
+    <p>A resolver dials a seed, fetches the domain authority record and the identity record, and verifies them in this order:</p>
+    <ol>
+      <li>the domain authority record's root self-signature is valid;</li>
+      <li>the authority's fingerprint equals the DNS <code>fp=</code> anchor (fail-closed);</li>
+      <li>if the authority declares a fleet domain, it matches the DNS <code>fleet=</code> deferral (opt-in pinning);</li>
+      <li>the identity record's owner self-signature is valid;</li>
+      <li>the address credential chains to the domain authority (<a href="#trust">Credentials and authority</a>);</li>
+      <li>neither key is blocked and the address is not tombstoned.</li>
+    </ol>
+    <p>Failures are strict on purpose. No <code>_dmcn</code> record means the address doesn't exist, and a transient DNS failure fails closed rather than downgrading trust.</p>
+  </section>
+
+  
+  <section>
+    <h2 id="messages">Messages and encryption<a class="hash" href="#messages" aria-label="Link to this section">#</a></h2>
+    <p>A message is written in plaintext, signed with the sender's key, then sealed once with a fresh per-message key that's wrapped separately for each recipient. That makes three layers: <code>PlaintextMessage → SignedMessage → EncryptedEnvelope</code>.</p>
+    <p>Envelope version 2 seals the content in two parts. The <strong>header</strong> is small and listable: sender, subject, snippet, recipient lists, and signed commitments to the body. The <strong>body</strong> holds the content and attachments and is fetched separately, so a mailbox can list mail without pulling bodies. The bcc list appears only on the sender's own Sent copy. Recipient copies carry an empty one.</p>
+    <pre>cek = random 32 bytes                              # one per message
+for each recipient device:
+    eph         = fresh X25519 keypair
+    shared      = X25519(eph_priv, recipient_pub)
+    kwk         = HKDF-SHA256(shared, salt="", info=&lt;context&gt;)
+    wrapped_cek = AES-256-GCM(kwk, cek)            # nonce 12, tag 16
+content = AES-256-GCM(cek, plaintext, aad)         # header and body sealed separately in v2
+
+# each wrap declares its own derivation in recipient_record.kdf; absent means 1
+kdf=1: info = "dmcn-cek-wrap-v1"                              # bare label, binds nothing
+kdf=2: info = "dmcn-cek-wrap-v2" &#8214; eph_pub &#8214; recipient_pub    # RFC 9180 §4.1 kem_context
+
+# header and body share one CEK, so each seal binds a label to keep them apart.
+# the labels are selected by the same kdf value, so blobs and wraps cannot disagree.
+kdf=1: aad = none
+kdf=2: aad = "dmcn-aad-hdr-v1\0"  |  "dmcn-aad-body-v1\0"</pre>
+    <p>A reader dispatches on the declared value and never tries derivations in turn. The field sits on the recipient record rather than the envelope because the record is what survives storage. A mailbox keeps per-recipient entries and drops the envelope's version, message id and timestamp.</p>
+    <p>A reader must also check that the sender addressed the message to the mailbox reading it, meaning some address in the signed audience (<code>recipient_address</code>, <code>to</code>, <code>cc</code>) resolves to the key the envelope was sealed to. That check, not the encryption, is what catches a message re-targeted at someone it wasn't addressed to. A legitimate recipient holds the message key, so it can re-seal the same signed header to a third party, but it can't change the audience the sender signed. The comparison is on the key rather than the address text, so several addresses sharing one mailbox need no special case.</p>
+    <p>Sealed blobs are padded into standard size buckets so ciphertext length gives away as little as possible. The padded layout is <code>[4-byte BE length][payload][zero padding]</code>. The body blob also carries a cleartext content address that any relay can verify without a key:</p>
+    <pre>body_content_address = 0x01 0x55 0x12 0x20 ‖ SHA-256(body_nonce ‖ encrypted_body ‖ body_tag)
+                       CIDv1(raw, sha2-256), 36 bytes; the signed copy inside the header is authoritative</pre>
+    <p>v1 gives at-rest and in-transit confidentiality with per-message keys, but not full forward secrecy. The <code>ratchet_pub_key</code> field is reserved for a double-ratchet upgrade and is zero today.</p>
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>EncryptedEnvelope fields</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>field</th><th>type</th><th>notes</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1</td><td class="mono">version</td><td class="mono">uint32</td><td>1 = single-blob payload; 2 = split header/body</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">message_id</td><td class="mono">bytes</td><td>16-byte UUID</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">recipients</td><td class="mono">repeated RecipientRecord</td><td>one per recipient device: ephemeral X25519 public key &#43; the wrapped CEK (nonce 12, tag 16)</td></tr>
+        
+        <tr><td class="mono">4</td><td class="mono">encrypted_payload</td><td class="mono">bytes</td><td>v1 only: AES-256-GCM ciphertext of the whole SignedMessage</td></tr>
+        
+        <tr><td class="mono">5</td><td class="mono">payload_nonce</td><td class="mono">bytes</td><td>12 bytes</td></tr>
+        
+        <tr><td class="mono">6</td><td class="mono">payload_tag</td><td class="mono">bytes</td><td>16 bytes</td></tr>
+        
+        <tr><td class="mono">7</td><td class="mono">payload_size_class</td><td class="mono">uint32</td><td>padded size in bytes, one of the size classes</td></tr>
+        
+        <tr><td class="mono">8</td><td class="mono">created_at</td><td class="mono">int64</td><td>unix seconds</td></tr>
+        
+        <tr><td class="mono">9</td><td class="mono">ratchet_pub_key</td><td class="mono">bytes</td><td>reserved for forward secrecy (protocol v2); zero in v1</td></tr>
+        
+        <tr><td class="mono">10</td><td class="mono">encrypted_header</td><td class="mono">bytes</td><td>v2 split: the sealed SignedHeader, small and listable (sender, subject, snippet, recipient lists, body commitments)</td></tr>
+        
+        <tr><td class="mono">11</td><td class="mono">header_nonce</td><td class="mono">bytes</td><td>12 bytes</td></tr>
+        
+        <tr><td class="mono">12</td><td class="mono">header_tag</td><td class="mono">bytes</td><td>16 bytes</td></tr>
+        
+        <tr><td class="mono">13</td><td class="mono">header_size_class</td><td class="mono">uint32</td><td>padded size in bytes, one of the size classes</td></tr>
+        
+        <tr><td class="mono">14</td><td class="mono">encrypted_body</td><td class="mono">bytes</td><td>v2 split: sealed MessageContent (body &#43; attachments), fetchable separately from the header</td></tr>
+        
+        <tr><td class="mono">15</td><td class="mono">body_nonce</td><td class="mono">bytes</td><td>12 bytes</td></tr>
+        
+        <tr><td class="mono">16</td><td class="mono">body_tag</td><td class="mono">bytes</td><td>16 bytes</td></tr>
+        
+        <tr><td class="mono">17</td><td class="mono">body_size_class</td><td class="mono">uint32</td><td>padded size in bytes, one of the size classes</td></tr>
+        
+        <tr><td class="mono">18</td><td class="mono">body_content_address</td><td class="mono">bytes</td><td>cleartext CIDv1 of the body blob, so relays can verify integrity without any key; the authoritative copy is signed inside the header</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Envelope size classes</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>size_class value</th><th>bucket</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1024</td><td>1 KB</td></tr>
+        
+        <tr><td class="mono">4096</td><td>4 KB</td></tr>
+        
+        <tr><td class="mono">16384</td><td>16 KB</td></tr>
+        
+        <tr><td class="mono">65536</td><td>64 KB</td></tr>
+        
+        <tr><td class="mono">262144</td><td>256 KB</td></tr>
+        
+        <tr><td class="mono">1048576</td><td>1 MB</td></tr>
+        
+        <tr><td class="mono">n × 1048576</td><td>above 1 MB: the payload plus its 4-byte length, rounded up to the next whole MB</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+  </section>
+
+  
+  <section>
+    <h2 id="wire">Wire protocols (libp2p)<a class="hash" href="#wire" aria-label="Link to this section">#</a></h2>
+    <p>Every DMCN conversation is a libp2p stream, an authenticated and encrypted transport whose handshake proves the peer's identity. A peer ID can't be spoofed without its key.</p>
+    <p>Three protocol IDs carry the core. Device pairing has no protocol of its own, on purpose. The pairing exchange uses the ordinary relay mailbox path, under a synthetic <code>pairing.local</code> domain.</p>
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>libp2p protocol IDs and framing</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>protocol ID</th><th>framing</th><th>purpose</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">/dmcn/relay/1.0.0</td><td>4-byte big-endian length prefix &#43; protobuf; 4 MB frame cap; bodies chunked past it (to 64 MB)</td><td>the workhorse: store, fetch, mailbox, resolve and onion ops</td></tr>
+        
+        <tr><td class="mono">/dmcn/peers/1.0.0</td><td>length-prefixed JSON</td><td>cluster peer discovery: a node returns its configured peer list</td></tr>
+        
+        <tr><td class="mono">/dmcn/join/1.0.0</td><td>varint-delimited protobuf</td><td>mutual credential handshake; gates federation, deny-by-default</td></tr>
+        
+        <tr><td class="mono">(extensions)</td><td>—</td><td>operator surfaces ride their own protocols and are not part of the core</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+  </section>
+
+  
+  <section>
+    <h2 id="relay-ops">Relay operations<a class="hash" href="#relay-ops" aria-label="Link to this section">#</a></h2>
+    <p>One protocol carries all relay work. Every core operation authorizes in one of three ways, and none of them is a password.</p>
+    <p><strong>Message-authenticated</strong> ops carry their proof in the message itself. A store is valid because the sender signed the envelope, and a fetch is valid because the client answers the relay's nonce challenge with a signature from the account key. <strong>Connection-gated</strong> ops need the calling peer to have presented a valid credential at the join handshake. <strong>Public reads</strong> return signed records the reader verifies for itself. The one public write, <code>put_record</code>, re-verifies every record on ingest, so a record that doesn't verify can't be stored.</p>
+    <p>The operator surface (fleet administration and operator-attached entitlements) uses separate extension protocols, <code>/dmcn/operate</code> and <code>/dmcn/mailbox-ext</code>, outside the core. The arm numbers it once used here are reserved, and the table marks them.</p>
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Relay operations</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>op</th><th>auth class</th><th>authorization</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1</td><td class="mono">store</td><td>message</td><td>sender&#39;s Ed25519 signature over the envelope; the sender must resolve and pass the recipient domain&#39;s policy gates</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">fetch_init</td><td>message</td><td>opens the mailbox challenge; the relay returns a fresh nonce</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">fetch_proof</td><td>message</td><td>Ed25519 proof over the relay&#39;s nonce with the account key; no passwords, no bearer tokens</td></tr>
+        
+        <tr><td class="mono">4</td><td class="mono">ack</td><td>connection</td><td>credential-admitted federated peer</td></tr>
+        
+        <tr><td class="mono">5</td><td class="mono">ping</td><td>public</td><td>liveness</td></tr>
+        
+        <tr><td class="mono">6</td><td class="mono">mailbox_op</td><td>message</td><td>list / body / delete and personal-KV ops, each under a fresh fetch proof</td></tr>
+        
+        <tr><td class="mono">7</td><td class="mono">store_init</td><td>message</td><td>chunked store for bodies past the frame cap; sender signature like store, or node role for relay→relay drain handoff</td></tr>
+        
+        <tr><td class="mono">8</td><td class="mono">onion_forward</td><td>connection</td><td>credential-admitted federated peer; peel one layer, then forward or deliver</td></tr>
+        
+        <tr><td class="mono">9–18</td><td class="mono">(reserved)</td><td>—</td><td>vacated by the operator extension protocols; do not reuse</td></tr>
+        
+        <tr><td class="mono">19</td><td class="mono">get_identity</td><td>public read</td><td>returns the signed IdentityRecord; the reader verifies it against the DNS anchor</td></tr>
+        
+        <tr><td class="mono">20</td><td class="mono">get_dar</td><td>public read</td><td>returns the signed domain authority record; verified against the DNS fingerprint</td></tr>
+        
+        <tr><td class="mono">21</td><td class="mono">get_fleet_roster</td><td>public read</td><td>fleet-root-signed node roster</td></tr>
+        
+        <tr><td class="mono">22</td><td class="mono">get_removal</td><td>public read</td><td>root-signed address tombstone</td></tr>
+        
+        <tr><td class="mono">23</td><td class="mono">get_blocklist</td><td>public read</td><td>root-signed credential revocation list</td></tr>
+        
+        <tr><td class="mono">24</td><td class="mono">put_record</td><td>self-gating</td><td>every record is re-verified on ingest (self-certifying); a fleet may add publisher gating</td></tr>
+        
+        <tr><td class="mono">25</td><td class="mono">get_relay_descriptor</td><td>public read</td><td>onion descriptor, self-anchored to the relay&#39;s peer ID</td></tr>
+        
+        <tr><td class="mono">26</td><td class="mono">(reserved)</td><td>—</td><td>vacated by the operator extension protocols; do not reuse</td></tr>
+        
+        <tr><td class="mono">27</td><td class="mono">get_history</td><td>public read</td><td>the address&#39;s complete rotation history; self-authenticating through the signatures on its own entries, so serving it discloses nothing a resolver could not verify</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+  </section>
+
+  
+  <section>
+    <h2 id="trust">Credentials and authority<a class="hash" href="#trust" aria-label="Link to this section">#</a></h2>
+    <p>Trust is anchored in the domain and spelled out in credentials. A credential's <em>roles</em> say what a key is and its <em>grants</em> say what it may do. No key can sign anything its grants don't cover.</p>
+    <p>Every credential chain leads back to the domain's root key, the one the DNS fingerprint anchors (<a href="#resolution-detail">Resolving an address</a>). Delegation is monotone: an issuer can never grant more than it holds, scope can only narrow (a subdomain scope covers its children, never its parents), and chains are capped at depth 8. By convention the powerful grants stay on offline keys, and the busy online services carry only what they need to run.</p>
+    <p>The <strong>domain authority record</strong> is the domain's administrative root. It holds the issuer set, reserved local-parts, key-rotation history and policy flags. Administrative authority over an address is separate from cryptographic ownership of it. A domain authority can provision, attest and revoke bindings in its namespace, but it never holds private keys and can never read mail. How a domain owner lets a fleet operator host it is an operator extension, outside this core reference.</p>
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Credential fields</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>field</th><th>type</th><th>notes</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1</td><td class="mono">version</td><td class="mono">uint32</td><td>credential format version</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">subject</td><td class="mono">bytes</td><td>Ed25519 public key: the libp2p peer ID for infrastructure and clients, the identity key for addresses</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">domain</td><td class="mono">string</td><td>the domain this credential is scoped to</td></tr>
+        
+        <tr><td class="mono">4</td><td class="mono">address</td><td class="mono">string</td><td>role address only: the attested local@domain</td></tr>
+        
+        <tr><td class="mono">5</td><td class="mono">roles</td><td class="mono">repeated string</td><td>what the subject is (see the roles table)</td></tr>
+        
+        <tr><td class="mono">6</td><td class="mono">grants</td><td class="mono">repeated string</td><td>what the subject may issue or do (see the grants table)</td></tr>
+        
+        <tr><td class="mono">7</td><td class="mono">attributes</td><td class="mono">map&lt;string, string&gt;</td><td>free-form: multiaddr, ip, x25519 onion key, …</td></tr>
+        
+        <tr><td class="mono">8</td><td class="mono">issued_at</td><td class="mono">int64</td><td>unix seconds</td></tr>
+        
+        <tr><td class="mono">9</td><td class="mono">not_after</td><td class="mono">int64</td><td>unix seconds; 0 = never expires</td></tr>
+        
+        <tr><td class="mono">10</td><td class="mono">scope</td><td class="mono">string</td><td>authority credentials: subdomain scope (empty = whole domain); delegation can only narrow it</td></tr>
+        
+        <tr><td class="mono">11</td><td class="mono">issuer_pub</td><td class="mono">bytes</td><td>the domain root, or any enrolled issuer whose own grants cover this credential</td></tr>
+        
+        <tr><td class="mono">12</td><td class="mono">signature</td><td class="mono">bytes</td><td>issuer Ed25519 over fields 1–11, 13 and 14; ctx dmcn-credential-v1\0</td></tr>
+        
+        <tr><td class="mono">13</td><td class="mono">relay_hints</td><td class="mono">repeated string</td><td>role routing only: the authoritative operator-signed mailbox relays</td></tr>
+        
+        <tr><td class="mono">14</td><td class="mono">effective_from</td><td class="mono">int64</td><td>unix seconds not-before; the validity window is [effective_from, not_after]</td></tr>
+        
+        <tr><td class="mono">15</td><td class="mono">(reserved)</td><td class="mono">—</td><td>do not reuse</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>RotationEntry fields</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>field</th><th>type</th><th>notes</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1</td><td class="mono">version</td><td class="mono">uint32</td><td>entry format version</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">address</td><td class="mono">string</td><td>the address this transition belongs to; an entry signed for one address can never be replayed into another&#39;s history</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">retired_ed25519_public_key</td><td class="mono">bytes</td><td>the signing key being given up (32 bytes)</td></tr>
+        
+        <tr><td class="mono">4</td><td class="mono">retired_x25519_public_key</td><td class="mono">bytes</td><td>the mailbox key being vacated (32 bytes)</td></tr>
+        
+        <tr><td class="mono">5</td><td class="mono">next_ed25519_public_key</td><td class="mono">bytes</td><td>the signing key taking over (32 bytes)</td></tr>
+        
+        <tr><td class="mono">6</td><td class="mono">next_x25519_public_key</td><td class="mono">bytes</td><td>the mailbox key taking over (32 bytes)</td></tr>
+        
+        <tr><td class="mono">7</td><td class="mono">rotated_at</td><td class="mono">int64</td><td>when the enrolling device attests this transition happened (unix seconds)</td></tr>
+        
+        <tr><td class="mono">8</td><td class="mono">next_revision</td><td class="mono">uint64</td><td>the IdentityRecord revision this transition mints; must advance</td></tr>
+        
+        <tr><td class="mono">9</td><td class="mono">prev_signature_hash</td><td class="mono">bytes</td><td>SHA-256 of the previous entry&#39;s signature, empty at the first rotation; this is what makes truncation visible rather than silent</td></tr>
+        
+        <tr><td class="mono">10</td><td class="mono">authorizing_ed25519_public_key</td><td class="mono">bytes</td><td>the key that produced `signature`, either the retiring key or the owner&#39;s recovery key (32 bytes)</td></tr>
+        
+        <tr><td class="mono">11</td><td class="mono">device_credential</td><td class="mono">Credential</td><td>the domain&#39;s attestation of the enrolled device that authorised this rotation; its issued_at is the device&#39;s enrolment date, which a tenure rule is measured against</td></tr>
+        
+        <tr><td class="mono">12</td><td class="mono">device_signature</td><td class="mono">bytes</td><td>64 bytes by the device; a credential alone is public and could be lifted from an earlier transition, so the device signs this one</td></tr>
+        
+        <tr><td class="mono">13</td><td class="mono">signature</td><td class="mono">bytes</td><td>the outgoing key&#39;s consent: 64 bytes by authorizing_ed25519_public_key, ctx dmcn-identity-rotation-v1\0</td></tr>
+        
+        <tr><td class="mono">14</td><td class="mono">next_signature</td><td class="mono">bytes</td><td>the incoming key&#39;s acceptance, covering the consent: 64 bytes by next_ed25519_public_key, ctx dmcn-identity-rotation-accept-v1\0</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>AddressHistoryRecord fields</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>field</th><th>type</th><th>notes</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1</td><td class="mono">version</td><td class="mono">uint32</td><td>record format version</td></tr>
+        
+        <tr><td class="mono">2</td><td class="mono">domain</td><td class="mono">string</td><td>the address&#39;s domain</td></tr>
+        
+        <tr><td class="mono">3</td><td class="mono">address</td><td class="mono">string</td><td>local@domain; the record is keyed on SHA-256 of this, like the removal record</td></tr>
+        
+        <tr><td class="mono">4</td><td class="mono">chain</td><td class="mono">repeated RotationEntry</td><td>the complete rotation history, oldest first. No container signature: every entry is already signed by the keys it names, so extending the history takes keys the extender must hold. Append-only: a stored history may only be replaced by one that strictly extends it</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Credential roles</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>role</th><th>what the subject is</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">authority</td><td>a domain&#39;s root signing authority (its key anchors the DNS fingerprint)</td></tr>
+        
+        <tr><td class="mono">sub-authority</td><td>a delegated issuer enrolled by the root</td></tr>
+        
+        <tr><td class="mono">node</td><td>a relay/storage node</td></tr>
+        
+        <tr><td class="mono">bridge</td><td>an SMTP bridge</td></tr>
+        
+        <tr><td class="mono">client</td><td>an end-user-facing client peer (mints nothing by itself)</td></tr>
+        
+        <tr><td class="mono">address</td><td>an attested address↔key binding (rides in IdentityRecord.address_credential)</td></tr>
+        
+        <tr><td class="mono">routing</td><td>an operator routing attestation (rides in IdentityRecord.routing_credential)</td></tr>
+        
+        <tr><td class="mono">device</td><td>one enrolled device of an account, keyed by a signing key generated on that device and held nowhere else</td></tr>
+        
+        <tr><td class="mono">(extensions)</td><td>further roles carry operator-attached entitlements and are not part of the core</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Credential grants</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>grant</th><th>what the holder may do</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">address</td><td>sign address credentials (attest address↔key bindings)</td></tr>
+        
+        <tr><td class="mono">routing</td><td>sign routing credentials (attest mailbox routing)</td></tr>
+        
+        <tr><td class="mono">device</td><td>sign device credentials (attest an account&#39;s enrolled devices)</td></tr>
+        
+        <tr><td class="mono">grant</td><td>delegate: issue credentials that themselves carry grants</td></tr>
+        
+        <tr><td class="mono">(extensions)</td><td>further grants cover operator entitlements and fleet administration and are not part of the core</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Domain policy flags (DAR policy_flags bits)</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>bit</th><th>flag</th><th>effect</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">1 &lt;&lt; 0</td><td class="mono">REQUIRE_COUNTERSIGN</td><td>uncountersigned addresses are unusable on this domain; enforced reader-side and at the mailbox fetch gate</td></tr>
+        
+        <tr><td class="mono">1 &lt;&lt; 2</td><td class="mono">REQUIRE_ONION</td><td>every address on the domain must receive via onion delivery</td></tr>
+        
+        <tr><td class="mono">1 &lt;&lt; 3</td><td class="mono">REPLICATE_MAILBOX</td><td>senders store to every listed relay hint instead of first-reachable failover</td></tr>
+        
+        <tr><td class="mono">1 &lt;&lt; 5</td><td class="mono">ALLOW_KEY_ROTATION</td><td>account holders may re-key their own address with an owner-signed rotation chain; off by default</td></tr>
+        
+        <tr><td class="mono">1 &lt;&lt; 1, 1 &lt;&lt; 4, 1 &lt;&lt; 6 and up</td><td class="mono">(extensions)</td><td>reserved for extensions</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+  </section>
+
+  
+  <section>
+    <h2 id="signing">Signing convention<a class="hash" href="#signing" aria-label="Link to this section">#</a></h2>
+    <p>Every signature in DMCN follows one rule.</p>
+    <pre>sig = Ed25519(priv, ctx ‖ deterministic_protobuf(message_without_signature))</pre>
+    <p>The canonical form is deterministic protobuf serialization (stable map ordering) of the message with its signature field cleared. <code>ctx</code> is a per-type, NUL-terminated domain-separation tag, so a signature over one record type can never be replayed as another. There's one deliberate exception. The whole-message <code>SignedMessage</code> signature is computed over the canonical plaintext with no context tag.</p>
+    
+<details data-ref>
+  <summary>
+    <svg class="lucide lucide-list-checks" style="font-size:15px;color:var(--brand);flex:none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h8" /><path d="M13 12h8" /><path d="M13 19h8" /><path d="m3 17 2 2 4-4" /><path d="m3 7 2 2 4-4" /></svg>
+    <span>Signature context tags</span>
+    <span class="ref-chev"><svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>context tag</th><th>signs</th></tr>
+      </thead>
+      <tbody>
+        
+        
+        <tr><td class="mono">dmcn-identity-self-v1\0</td><td>IdentityRecord owner self-signature</td></tr>
+        
+        <tr><td class="mono">dmcn-identity-rotation-v1\0</td><td>RotationEntry: the outgoing key&#39;s consent</td></tr>
+        
+        <tr><td class="mono">dmcn-identity-rotation-accept-v1\0</td><td>RotationEntry: the incoming key&#39;s acceptance</td></tr>
+        
+        <tr><td class="mono">dmcn-identity-rotation-device-v1\0</td><td>RotationEntry: the enrolled device&#39;s attestation</td></tr>
+        
+        <tr><td class="mono">dmcn-dar-self-v1\0</td><td>DomainAuthorityRecord root self-signature</td></tr>
+        
+        <tr><td class="mono">dmcn-credential-v1\0</td><td>every Credential</td></tr>
+        
+        <tr><td class="mono">dmcn-subauthority-request-v1\0</td><td>a requester&#39;s self-signed sub-authority request</td></tr>
+        
+        <tr><td class="mono">dmcn-address-removal-v1\0</td><td>AddressRemovalRecord (root-signed tombstone)</td></tr>
+        
+        <tr><td class="mono">dmcn-key-compromise-v1\0</td><td>KeyCompromiseRecord</td></tr>
+        
+        <tr><td class="mono">dmcn-fleet-roster-v1\0</td><td>FleetRoster</td></tr>
+        
+        <tr><td class="mono">dmcn-msg-header-v1\0</td><td>SignedHeader (the split-format message header)</td></tr>
+        
+        <tr><td class="mono">(extensions)</td><td>further tags sign operator-surface records and are not part of the core</td></tr>
+        
+      </tbody>
+    </table>
+  </div>
+</details>
+
+  </section>
+
+  
+  <section>
+    <h2 id="onion">Onion routing (optional)<a class="hash" href="#onion" aria-label="Link to this section">#</a></h2>
+    <p>An optional delivery mode that hides who is talking to whom from the relays in between. The packet format below is implemented and the design default is multi-hop, but today's deployments run single-hop, so don't count on the metadata privacy described here yet.</p>
+    <p>A route is 3 hops by default, ending at the recipient's home relay. Hops must sit in distinct /24 networks <em>and</em> distinct domains, so no two hops share an operator, and an optional stable guard can be the entry. Each relay publishes a <code>RelayDescriptor</code> with its onion key and addresses, signed by its own libp2p key. That key can be recovered from the relay's peer ID, so a descriptor verifies without trusting whoever served it.</p>
+    <pre>OnionPacket { version, ephemeral_pub (32), nonce (12), tag (16), encrypted_layer }
+OnionLayer  { next_hop | "DELIVER", ttl_unix, inner_packet | delivery }
+
+each relay: derive layer key from ephemeral_pub + own X25519 key → peel → forward (or deliver)</pre>
+    <p>Only the innermost delivery layer is padded to its own bucket classes (up to 36 MB, matching the message ceiling). Forwarding layers add routing overhead only. A mailbox sets <code>require_onion</code> (or its domain sets the <code>REQUIRE_ONION</code> policy) to make the relay reject direct stores with <code>ONION_REQUIRED</code>.</p>
+  </section>
+
+
+    </article>
+  </div>
+</div>
+
+    </main>
+    
+
+<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div data-foot style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);">
+    <div data-foot-brand>
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol. An open mail protocol where the address is a keypair, not a name a server vouches for.</p>
+      <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
+    </div>
+
+    
+    <div data-foot-cols>
+      <nav>
+        <div class="foot-label">Protocol</div>
+        <a href="/spec">Specification</a>
+        <a href="/protocol">Protocol</a>
+        <a href="/quickstart">Try it</a>
+        <a href="/faq">FAQ</a>
+        <a href="/open-dmcn">Go module</a>
+      </nav>
+      <nav>
+        <div class="foot-label">Source</div>
+        <a href="https://github.com/dmcnp/open-dmcn/tree/main/proto">Schema</a>
+        <a href="https://github.com/dmcnp/open-dmcn">Repository</a>
+        <a href="https://github.com/dmcnp/open-dmcn/releases">Releases</a>
+        <a href="https://github.com/dmcnp/open-dmcn/issues">Issues</a>
+        <a href="https://github.com/dmcnp/open-dmcn/blob/main/LICENSE">License</a>
+      </nav>
+      <nav>
+        <div class="foot-label">Built on DMCNP</div>
+        <a href="https://get.dmcn.email">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+        <a href="https://get.dmcnmail.com">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </nav>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border-subtle);padding:20px clamp(18px,5vw,40px);max-width:1120px;margin:0 auto;font-size:12px;line-height:1.6;color:var(--text-subtle);">
+    © 2026 DMCN LLC · dmcn.dev · The Apache-2.0 license covers the code and schema; it does not grant rights to the names <strong style="color:var(--text-muted);font-weight:600;">DMCN</strong> or <strong style="color:var(--text-muted);font-weight:600;">DMCN&nbsp;Protocol</strong>. You may implement the protocol under any name of your own.
+  </div>
+</footer>
+
+  </div>
+</body>
+</html>

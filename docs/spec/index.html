@@ -46,6 +46,7 @@
     </a>
     <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
       <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/protocol" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Protocol</a>
       <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
       <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
     </nav>
@@ -56,6 +57,7 @@
       <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
       <div data-mm-panel>
         <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/protocol" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Protocol</a>
         <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
         <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
         <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
@@ -96,7 +98,7 @@
       
       <div class="note">
         <svg class="lucide lucide-info" style="font-size:17px;color:var(--brand);margin-top:1px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
-        <div><p>This page is rendered directly from <a href="https://github.com/dmcnp/open-dmcn/blob/main/SPEC.md"><code>SPEC.md</code></a> in the reference implementation — there is no second copy to drift. It is a <strong>snapshot of the reference implementation, not a frozen specification</strong>: where the two disagree, the implementation and the schemas in <code>proto/</code> are authoritative.</p></div>
+        <div><p>This page is rendered directly from <a href="https://github.com/dmcnp/open-dmcn/blob/main/SPEC.md"><code>SPEC.md</code></a> in the reference implementation — there is no second copy to drift. It is a <strong>snapshot of the reference implementation, not a frozen specification</strong>: where the two disagree, the implementation and the schemas in <code>proto/</code> are authoritative.</p><p>For the field-by-field tables, generated from those schemas, see <a href="/protocol">the protocol page</a>.</p></div>
       </div>
       
       <h1 id="the-dmcn-protocol-dmcnp--core">The DMCN Protocol (DMCNP) — Core</h1>
@@ -163,18 +165,30 @@ append-only, per-address removal record, keyed on <code>SHA-256(address)</code>,
 <code>(key, removedAt)</code> bindings it tombstones. A tombstone does <strong>two</strong> jobs, and they have
 <strong>different signers</strong>:</p>
 <ol>
-<li><strong>Suppression.</strong> A tombstoned binding stops verifying: readers MUST drop it to
+<li>
+<p><strong>Suppression.</strong> A tombstoned binding stops verifying: readers MUST drop it to
 <code>TierUnverified</code>, and a serving node MUST stop serving it and MUST NOT authenticate a
 FETCH against it. This may be signed <strong>either by a domain root key, or by the address's
 own key</strong> — the holder of an address may always stop being reachable at it, without
-the operator.</li>
-<li><strong>Re-binding.</strong> Allowing a <em>different</em> key to take the address over MUST require a
-<strong>root-signed</strong> record. An owner-signed retirement MUST NOT authorise a re-bind.</li>
+the operator.</p>
+</li>
+<li>
+<p><strong>Re-binding.</strong> Allowing a <em>different</em> key to take the address over MUST be authorised by
+one of exactly two things, and an owner-signed retirement is neither:</p>
+<ul>
+<li>a <strong>root-signed</strong> removal tombstoning the incumbent key, which frees the address for
+any key — the operator override; or</li>
+<li>an <strong>owner rotation</strong> (below), which proves continuity of control without the operator.</li>
+</ul>
+</li>
 </ol>
-<p>The reason for (2) is the recoverability of a stolen key: an attacker who holds the key can
-read mail, but cannot take the address permanently, because re-binding needs the offline
-root. If a key could authorise its own replacement, key compromise would stop being
-recoverable and become a permanent takeover.</p>
+<p>The rule this replaces required the root in every case, and the reason was the recoverability
+of a stolen key: an attacker holding it could read mail but not take the address permanently.
+Allowing rotation is a deliberate trade of that property for one users need more — the ability
+to re-key without an operator, and without losing an address when a device is lost. What it
+costs is stated plainly in the rotation section: key compromise stops being operator-recoverable
+and becomes a race. Domains that want the older property leave rotation disabled, which is the
+default.</p>
 <p>A removal record is <strong>bound to the address it names</strong> — <code>Removed()</code> matches on the key
 alone, so a retirement at one address MUST NOT suppress another address the same key holds.
 The two signers are told apart by <strong>which key verifies the signature</strong>; no field on the wire
@@ -184,6 +198,45 @@ override, and it is how a self-retired address can still be rotated or reissued.
 owner-signed record MUST NOT displace a root-signed one, or a stolen key could overwrite the
 operator's tombstone and block the recovery rule (2) exists to preserve. The append-only
 rule (the binding set may only grow) and revision monotonicity apply across both.</p>
+</li>
+<li>
+<p><strong>Owner rotation — <code>RotationEntry</code> and the rotation chain.</strong> An address re-keys itself by
+publishing a record whose <code>rotation_chain</code> ends in a transition from the key being displaced to
+the key taking over. Each entry carries <strong>three</strong> signatures, and a verifier MUST check all of
+them: the outgoing key's consent, the incoming key's acceptance, and an enrolled <strong>device</strong>'s
+attestation. They nest — the device signs the transition, consent covers that attestation, and
+acceptance covers consent — so no signature can be lifted from one transition onto another.</p>
+<p>An implementation MUST refuse a chain whose entries do not link (<code>retired</code> keys matching the
+preceding <code>next</code> keys, <code>prev_signature_hash</code> matching the preceding signature), whose times or
+revisions do not advance, or whose terminal entry names keys other than the ones the record
+itself publishes. The last of these is what stops a genuine chain being carried by a record it
+never belonged to.</p>
+<p><strong>Device attestation and tenure.</strong> The device credential names when that device was enrolled,
+and a domain MAY require a minimum tenure before a device can authorise a rotation. This is the
+substance of the trade above: a stolen account key alone attests nothing, because device keys
+are generated on their device and never travel.</p>
+<p><strong>Precedence.</strong> A root-signed tombstone covering the incumbent key is evaluated FIRST and a
+chain does not displace it — otherwise an offboarded key could argue its way back. A key the
+root has tombstoned MUST NOT be rotated <em>into</em>.</p>
+<p><strong>Honest limits.</strong> The chain proves CONTINUITY, not origin: it says each key handed the address
+to the next, and says nothing about whether the first key was ever really this person. That
+needs an observer who saw it.</p>
+</li>
+<li>
+<p><strong>The history record — <code>AddressHistoryRecord</code>.</strong> The chain carried on an identity record is
+capped, because it is re-marshalled on every republish. The complete history is served beside it,
+keyed on <code>SHA-256(address)</code> like the removal record, and a reader whose pinned key falls outside
+the retained window resolves it rather than giving up.</p>
+<p>It carries <strong>no signature of its own</strong> and needs none: every entry is already signed by the keys
+it names, so extending the history takes keys the extender must genuinely hold. An implementation
+MUST refuse a history that does not begin at the address's first rotation, and MUST refuse one
+that does not strictly extend what it already holds — histories only grow, so nothing already
+recorded can be quietly rewritten. Truncation on the record is deliberately VISIBLE: the oldest
+retained entry names a predecessor that is absent, which a reader tells apart from a genuine
+genesis.</p>
+<p>Together these make a key change publicly evidence-producing rather than evidence only to
+whoever already held a pin. They do <strong>not</strong> establish that every reader was shown the same
+history, which only cross-observer consistency — a gossiped log — can do.</p>
 </li>
 <li>
 <p><strong>Verification tiers:</strong> addresses register at <code>TierUnverified</code> (valid but untrusted) and
@@ -220,6 +273,14 @@ message with its signature field cleared; <code>ctx</code> is a per-type NUL-ter
 domain-separation tag (e.g. <code>dmcn-identity-self-v1\0</code>, <code>dmcn-dar-self-v1\0</code>,
 <code>dmcn-credential-v1\0</code>). One deliberate exception: the whole-message <code>SignedMessage</code>
 signature is computed over the canonical plaintext with no context tag.</p>
+<p>A <code>RotationEntry</code> carries three signatures over three NESTED extents, each with its own tag:
+<code>dmcn-identity-rotation-device-v1\0</code> over the transition alone,
+<code>dmcn-identity-rotation-v1\0</code> over that plus the device attestation, and
+<code>dmcn-identity-rotation-accept-v1\0</code> over that plus the consent. Separate tags are what stop an
+acceptance verifying as a consent — a key that merely received an address must never appear to
+have handed it on. The device-registry signatures (<code>dmcn-device-approve-v1\0</code>,
+<code>dmcn-device-retire-v1\0</code>) follow the same rule and additionally bind the live challenge nonce,
+so an approval cannot be made in advance and spent later.</p>
 <h2 id="3-the-message-model-client-side-three-layers">3. The message model (client-side, three layers)<a class="hash" href="#3-the-message-model-client-side-three-layers" aria-label="Link to this section">#</a></h2>
 <p><code>PlaintextMessage</code> → <code>SignedMessage</code> (Ed25519 sender signature) → <strong><code>EncryptedEnvelope</code></strong>:</p>
 <ul>
@@ -539,6 +600,7 @@ operator capability, never interop requirements.</p>
       <nav>
         <div class="foot-label">Protocol</div>
         <a href="/spec">Specification</a>
+        <a href="/protocol">Protocol</a>
         <a href="/quickstart">Try it</a>
         <a href="/faq">FAQ</a>
         <a href="/open-dmcn">Go module</a>

@@ -13,3 +13,13 @@ module dmcn.dev/open-dmcn/site
 go 1.25.0
 
 require github.com/yuin/goldmark v1.8.5
+
+require (
+	dmcn.dev/open-dmcn v0.0.0
+	google.golang.org/protobuf v1.36.11
+)
+
+// /protocol/ is generated from this repository's own schema (dmcnpb), so it reads the module
+// beside it rather than a published version: a schema change that the page does not reflect then
+// fails `make site` here, in the repository that changed the schema.
+replace dmcn.dev/open-dmcn => ../

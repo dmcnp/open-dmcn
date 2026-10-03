@@ -31,6 +31,8 @@
       </div>
       {{ end }}
       {{ .Body }}
+      {{- /* Filled by a page that renders more than its markdown: /protocol/ (protocol.html). */ -}}
+      {{- block "after-body" . }}{{ end }}
     </article>
   </div>
 </div>

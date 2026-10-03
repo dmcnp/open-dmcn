@@ -105,6 +105,13 @@ func headingText(n ast.Node, src []byte) string {
 	return strings.TrimSpace(b.String())
 }
 
+// heading renders an h2/h3 with its "#" anchor. The generated reference on /protocol/ uses it too
+// (refHeading), so every heading on the site can be linked the same way.
+func heading(level, id, inner string) string {
+	return `<h` + level + ` id="` + id + `">` + inner +
+		`<a class="hash" href="#` + id + `" aria-label="Link to this section">#</a></h` + level + `>`
+}
+
 var headingRe = regexp.MustCompile(`(?s)<h([23]) id="([^"]+)">(.*?)</h[23]>`)
 
 // postProcess adds the two affordances goldmark does not emit:
@@ -114,8 +121,10 @@ var headingRe = regexp.MustCompile(`(?s)<h([23]) id="([^"]+)">(.*?)</h[23]>`)
 //   - a scroll container around every table, so a wide table scrolls itself
 //     instead of forcing the whole page sideways on a phone.
 func postProcess(s string) string {
-	s = headingRe.ReplaceAllString(s,
-		`<h$1 id="$2">$3<a class="hash" href="#$2" aria-label="Link to this section">#</a></h$1>`)
+	s = headingRe.ReplaceAllStringFunc(s, func(m string) string {
+		g := headingRe.FindStringSubmatch(m)
+		return heading(g[1], g[2], g[3])
+	})
 	s = strings.ReplaceAll(s, "<table>", `<div class="table-wrap"><table>`)
 	s = strings.ReplaceAll(s, "</table>", `</table></div>`)
 	return s

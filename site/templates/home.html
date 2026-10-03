@@ -5,26 +5,30 @@
   <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 12px;margin-bottom:24px;border:1px solid var(--border-subtle);border-radius:var(--radius-pill);background:var(--surface-card);font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);">
     {{ icon "git-fork" "font-size:13px;color:var(--brand);" }} DMCNP · an open protocol · Apache-2.0
   </div>
-  <h1 style="margin:0;max-width:19ch;font-size:clamp(34px,6vw,60px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">Cryptographic identity replaces SMTP-style trust.</h1>
+  <h1 style="margin:0;max-width:24ch;font-size:clamp(32px,5.4vw,54px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">An open protocol that requires every message on it to be signed and encrypted, with no exceptions.</h1>
   <p style="margin:24px 0 0;max-width:62ch;font-size:clamp(16px,2vw,18.5px);line-height:1.6;color:var(--text-muted);">{{ .Tagline }}</p>
 
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:34px;">
-    <a href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;">{{ icon "book-open" "font-size:16px;" }} Read the spec</a>
-    <a href="{{ .Cfg.RepoURL }}/tree/{{ .Cfg.Branch }}/proto" class="hov-surface-border" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;border:1px solid var(--border-default);background:var(--surface-card);color:var(--text-body);font-size:15px;font-weight:600;text-decoration:none;">{{ icon "code" "font-size:16px;" }} The schema {{ icon "arrow-up-right" "font-size:14px;color:var(--text-subtle);" }}</a>
+    <a href="/protocol" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;">{{ icon "book-open" "font-size:16px;" }} How it works</a>
     <a href="/quickstart" class="hov-surface-border" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;border:1px solid var(--border-default);background:var(--surface-card);color:var(--text-body);font-size:15px;font-weight:600;text-decoration:none;">{{ icon "rocket" "font-size:16px;" }} Try it</a>
   </div>
 </section>
 
+<!-- ---------- Why it exists (content/index.md) ---------- -->
+{{ if .Body }}
+<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
+  <article class="prose" style="max-width:70ch;">{{ .Body }}</article>
+</section>
+{{ end }}
+
 <!-- ---------- What it is ----------
-     A reader who has never heard of DMCN lands here. Before any table of layers
-     or DNS record makes sense they need three things: what job this does, what
-     is different about it, and which of the two names means what. -->
+     What a newcomer needs before anything technical: what the address is, what happens to a
+     message, and who is (and isn't) in the middle. The mechanics are on /protocol/. -->
 <section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
   <div style="max-width:70ch;">
     <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What it is</h2>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">In traditional email a sender can claim to be anyone, and there is no reliable way to know they aren't. Believing them is a best guess the receiver makes after the mail has already arrived — which is what spam filters are for, and why phishing works at all.</p>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);"><strong style="color:var(--text-strong);">DMCNP does what SMTP cannot.</strong> It moves a message from one person to another with verifiable proof of who sent it, because the address is bound to a key. <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code> names one specific public key, published by <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> and signed so anyone can check it. A message either verifies against that key or it doesn't.</p>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Everything else follows from that. If the address is a key, mail can be sealed to it before it leaves your device — so the servers in between carry bytes they cannot read, and authenticity stops being something anyone has to guess at.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Your address, say <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code>, points to a public key that <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> publishes and signs. Every message you send is signed with your key, so whoever receives it can check it really came from you. It's also encrypted on your device to their key, so the servers that carry it can't read it.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Finding someone works the way email already does, through DNS. There's no central directory, and no single company every message has to pass through.</p>
   </div>
 
   <!-- The concrete walk-through: what actually happens when you hit send. -->
@@ -38,66 +42,20 @@
     {{ end }}
   </div>
 
-  <p style="margin:28px 0 0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Two names, because they mean different things.</strong> <strong style="color:var(--text-strong);">DMCN</strong> is the network — the deployments that actually exchange mail. <strong style="color:var(--text-strong);">DMCNP</strong> is the protocol they speak, and that is what this site specifies. You can implement it under any name you like.</p>
+  <p style="margin:28px 0 0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Two names, because they mean different things.</strong> <strong style="color:var(--text-strong);">DMCN</strong> is the network, meaning the deployments that actually exchange mail. <strong style="color:var(--text-strong);">DMCNP</strong> is the protocol they speak, and that is what this site specifies. You can implement it under any name you like.</p>
 </section>
 
-<!-- ---------- Resolution teaser: the one record that makes a domain reachable ---------- -->
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <div style="padding:22px clamp(18px,3vw,28px);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-    <div style="font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-subtle);font-weight:600;margin-bottom:12px;">A domain joins by publishing one DNS record</div>
-    <pre style="margin:0;overflow-x:auto;font-family:var(--font-mono);font-size:13px;line-height:1.6;color:var(--text-body);">_dmcn.example.com  TXT  "dmcn-verification=v1; fp=&lt;40-hex&gt;; seed=/ip4/&hellip;/tcp/7400/p2p/&lt;peerID&gt;"</pre>
-    <p style="margin:14px 0 0;font-size:13.5px;line-height:1.6;color:var(--text-muted);max-width:76ch;"><code style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-strong);">fp=</code> is the trust anchor. <code style="font-family:var(--font-mono);font-size:12.5px;color:var(--text-strong);">seed=</code> is where to dial. Records sign themselves, so a hostile server can refuse to answer you — it can't lie to you.</p>
-  </div>
+<!-- ---------- Where it's up to ---------- -->
+<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(48px,7vw,72px);">
+  <p style="margin:0;max-width:70ch;font-size:15px;line-height:1.7;color:var(--text-muted);"><strong style="color:var(--text-body);">Where it's up to.</strong> DMCNP works today, but it's a snapshot rather than a frozen standard. <a href="/protocol#status" class="hov-link" style="color:var(--brand-text);font-weight:600;">What that means</a></p>
 </section>
-
-<!-- ---------- The layered stack ---------- -->
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What you'd implement</h2>
-  <p style="margin:0 0 28px;max-width:64ch;font-size:15px;line-height:1.6;color:var(--text-muted);">Seven layers. Speak all of them and you interoperate with the network.</p>
-
-  <div style="display:flex;flex-direction:column;border:1px solid var(--border-subtle);border-radius:var(--radius-md);overflow:hidden;background:var(--surface-card);">
-    {{ range .Layers }}
-    <div style="display:flex;gap:clamp(12px,3vw,28px);flex-wrap:wrap;padding:16px clamp(16px,3vw,24px);border-bottom:1px solid var(--border-subtle);">
-      <div style="flex:none;width:150px;min-width:120px;font-family:var(--font-mono);font-size:12px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brand);font-weight:600;padding-top:2px;">{{ .Name }}</div>
-      <div style="flex:1;min-width:240px;font-size:14.5px;line-height:1.6;color:var(--text-body);">{{ .Detail }}</div>
-    </div>
-    {{ end }}
-  </div>
-</section>
-
-<!-- ---------- Core vs extensions ---------- -->
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
-    <div style="padding:24px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-      {{ icon "shield-check" "font-size:22px;color:var(--brand);" }}
-      <h3 style="margin:14px 0 8px;font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:-0.3px;">What's in the core</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">What you need to interoperate: resolve an address, verify an identity, send mail, receive mail. Plus two optional capabilities — onion routing and an SMTP bridge — that you can skip entirely.</p>
-    </div>
-    <div style="padding:24px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-      {{ icon "git-fork" "font-size:22px;color:var(--brand);" }}
-      <h3 style="margin:14px 0 8px;font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:-0.3px;">What's left out</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">Anything an operator wants but the network doesn't need: fleet admin, hosting permits, entitlements, quotas. Those are <strong style="color:var(--text-body);">extensions</strong>, and they attach through surfaces the core designs for them — never through new core fields.</p>
-    </div>
-    <div style="padding:24px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-      {{ icon "check-check" "font-size:22px;color:var(--brand);" }}
-      <h3 style="margin:14px 0 8px;font-size:17px;font-weight:600;color:var(--text-strong);letter-spacing:-0.3px;">Ignore every extension and you're fine</h3>
-      <p style="margin:0;font-size:14px;line-height:1.65;color:var(--text-muted);">That's the rule the split protects. An extension can give an operator new powers. It can never make your implementation stop interoperating. Retired field numbers stay <code style="font-family:var(--font-mono);font-size:12.5px;">reserved</code> forever.</p>
-    </div>
-  </div>
-</section>
-
-{{ if .Body }}
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(48px,7vw,80px);">
-  <article class="prose">{{ .Body }}</article>
-</section>
-{{ end }}
 
 <!-- ---------- Closing: the reference implementation, framed as secondary ---------- -->
 <section style="border-top:1px solid var(--border-subtle);background:var(--surface-sunken);">
   <div style="max-width:1120px;margin:0 auto;padding:clamp(40px,6vw,64px) clamp(18px,5vw,40px);display:flex;gap:28px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
     <div style="flex:1;min-width:280px;">
       <h2 style="margin:0 0 8px;font-size:clamp(20px,3vw,26px);letter-spacing:-0.6px;font-weight:600;color:var(--text-strong);">Want to see it running first?</h2>
-      <p style="margin:0;max-width:56ch;font-size:15px;line-height:1.6;color:var(--text-muted);"><code style="font-family:var(--font-mono);font-size:13.5px;color:var(--text-strong);">dmcnd</code> is a small reference server — one domain, one process, webmail included. It's there to read alongside the spec and to check your own implementation against. It isn't the protocol.</p>
+      <p style="margin:0;max-width:56ch;font-size:15px;line-height:1.6;color:var(--text-muted);"><code style="font-family:var(--font-mono);font-size:13.5px;color:var(--text-strong);">dmcnd</code> is a small reference server: one domain, one process, webmail included. It's there to read alongside the spec and to check your own implementation against. It isn't the protocol.</p>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <a href="/quickstart" class="hov-brand" style="display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 22px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:15px;font-weight:600;text-decoration:none;transition:background 120ms;">Try it {{ icon "arrow-right" "font-size:16px;" }}</a>

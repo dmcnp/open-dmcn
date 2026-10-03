@@ -1,0 +1,145 @@
+{{/* /protocol/ renders through doc.html; this file fills its "after-body" hook with the reference
+     half, generated from the schema (protocol.go). Each section's prose is hand-written; every
+     table marked as generated comes from the protobuf descriptors. Headings come from
+     referenceSections, which also feeds the table of contents. */}}
+{{ define "after-body" }}{{ with .Protocol }}
+  <!-- identity -->
+  <section>
+    {{ refHeading "identity" }}
+    <p>An address such as <code>alice@example.com</code> is a keypair: an Ed25519 signing key and an X25519 key-agreement key, bound in a self-certifying <code>IdentityRecord</code> that any reader can verify on its own. No certificate authority issues it.</p>
+    <p>The record has two ownership zones. The <strong>identity core</strong> (address, keys, validity, tier and revision) is covered by the owner's self-signature, so only the key holder can change it. The <strong>operational side</strong> is mailbox routing. It travels as an operator-signed credential that is deliberately <em>excluded</em> from the self-signature, so a domain operator can re-point or rebalance routing without ever holding the owner's key. That credential verifies against the domain authority instead (see <a href="#trust">Credentials and authority</a>).</p>
+    <p>The owner-signed <code>revision</code> never goes down. Fleets and readers reject any record whose revision is lower than one they've already verified, so a replayed old record can never roll an identity back.</p>
+    {{ template "spec-table" .IdentityFields }}
+    {{ template "spec-table" .Tiers }}
+  </section>
+
+  <!-- resolution -->
+  <section>
+    {{ refHeading "resolution-detail" }}
+    <p>The record format, and what a resolver checks. The design behind it is under <a href="#why-theres-no-global-directory">Why there's no global directory</a>.</p>
+    <pre>_dmcn.&lt;domain&gt;  TXT  "dmcn-verification=v1; fp=&lt;40-hex&gt;[; fleet=&lt;domain&gt;][; seed=&lt;multiaddr&gt;]..."
+
+fp     trust anchor: first 20 bytes of SHA-256(ed25519_pub ‖ x25519_pub), uppercase hex
+fleet  optional deferral to a hosting fleet's domain, for discovery only; spoofing it is DoS, never forgery
+seed   bootstrap multiaddrs; each ends /p2p/&lt;peerID&gt;, so the transport handshake authenticates the endpoint</pre>
+    <pre>$ dig +short TXT _dmcn.example.com
+"dmcn-verification=v1; fp=9F2A…C41E; seed=/dns4/id1.example.com/tcp/4001/p2p/12D3Koo…"</pre>
+    <p>A resolver dials a seed, fetches the domain authority record and the identity record, and verifies them in this order:</p>
+    <ol>
+      <li>the domain authority record's root self-signature is valid;</li>
+      <li>the authority's fingerprint equals the DNS <code>fp=</code> anchor (fail-closed);</li>
+      <li>if the authority declares a fleet domain, it matches the DNS <code>fleet=</code> deferral (opt-in pinning);</li>
+      <li>the identity record's owner self-signature is valid;</li>
+      <li>the address credential chains to the domain authority (<a href="#trust">Credentials and authority</a>);</li>
+      <li>neither key is blocked and the address is not tombstoned.</li>
+    </ol>
+    <p>Failures are strict on purpose. No <code>_dmcn</code> record means the address doesn't exist, and a transient DNS failure fails closed rather than downgrading trust.</p>
+  </section>
+
+  <!-- messages -->
+  <section>
+    {{ refHeading "messages" }}
+    <p>A message is written in plaintext, signed with the sender's key, then sealed once with a fresh per-message key that's wrapped separately for each recipient. That makes three layers: <code>PlaintextMessage → SignedMessage → EncryptedEnvelope</code>.</p>
+    <p>Envelope version 2 seals the content in two parts. The <strong>header</strong> is small and listable: sender, subject, snippet, recipient lists, and signed commitments to the body. The <strong>body</strong> holds the content and attachments and is fetched separately, so a mailbox can list mail without pulling bodies. The bcc list appears only on the sender's own Sent copy. Recipient copies carry an empty one.</p>
+    <pre>cek = random 32 bytes                              # one per message
+for each recipient device:
+    eph         = fresh X25519 keypair
+    shared      = X25519(eph_priv, recipient_pub)
+    kwk         = HKDF-SHA256(shared, salt="", info=&lt;context&gt;)
+    wrapped_cek = AES-256-GCM(kwk, cek)            # nonce 12, tag 16
+content = AES-256-GCM(cek, plaintext, aad)         # header and body sealed separately in v2
+
+# each wrap declares its own derivation in recipient_record.kdf; absent means 1
+kdf=1: info = "dmcn-cek-wrap-v1"                              # bare label, binds nothing
+kdf=2: info = "dmcn-cek-wrap-v2" &#8214; eph_pub &#8214; recipient_pub    # RFC 9180 §4.1 kem_context
+
+# header and body share one CEK, so each seal binds a label to keep them apart.
+# the labels are selected by the same kdf value, so blobs and wraps cannot disagree.
+kdf=1: aad = none
+kdf=2: aad = "dmcn-aad-hdr-v1\0"  |  "dmcn-aad-body-v1\0"</pre>
+    <p>A reader dispatches on the declared value and never tries derivations in turn. The field sits on the recipient record rather than the envelope because the record is what survives storage. A mailbox keeps per-recipient entries and drops the envelope's version, message id and timestamp.</p>
+    <p>A reader must also check that the sender addressed the message to the mailbox reading it, meaning some address in the signed audience (<code>recipient_address</code>, <code>to</code>, <code>cc</code>) resolves to the key the envelope was sealed to. That check, not the encryption, is what catches a message re-targeted at someone it wasn't addressed to. A legitimate recipient holds the message key, so it can re-seal the same signed header to a third party, but it can't change the audience the sender signed. The comparison is on the key rather than the address text, so several addresses sharing one mailbox need no special case.</p>
+    <p>Sealed blobs are padded into standard size buckets so ciphertext length gives away as little as possible. The padded layout is <code>[4-byte BE length][payload][zero padding]</code>. The body blob also carries a cleartext content address that any relay can verify without a key:</p>
+    <pre>body_content_address = 0x01 0x55 0x12 0x20 ‖ SHA-256(body_nonce ‖ encrypted_body ‖ body_tag)
+                       CIDv1(raw, sha2-256), 36 bytes; the signed copy inside the header is authoritative</pre>
+    <p>v1 gives at-rest and in-transit confidentiality with per-message keys, but not full forward secrecy. The <code>ratchet_pub_key</code> field is reserved for a double-ratchet upgrade and is zero today.</p>
+    {{ template "spec-table" .EnvelopeFields }}
+    {{ template "spec-table" .SizeClasses }}
+  </section>
+
+  <!-- wire -->
+  <section>
+    {{ refHeading "wire" }}
+    <p>Every DMCN conversation is a libp2p stream, an authenticated and encrypted transport whose handshake proves the peer's identity. A peer ID can't be spoofed without its key.</p>
+    <p>Three protocol IDs carry the core. Device pairing has no protocol of its own, on purpose. The pairing exchange uses the ordinary relay mailbox path, under a synthetic <code>pairing.local</code> domain.</p>
+    {{ template "spec-table" .WireProtos }}
+  </section>
+
+  <!-- relay ops -->
+  <section>
+    {{ refHeading "relay-ops" }}
+    <p>One protocol carries all relay work. Every core operation authorizes in one of three ways, and none of them is a password.</p>
+    <p><strong>Message-authenticated</strong> ops carry their proof in the message itself. A store is valid because the sender signed the envelope, and a fetch is valid because the client answers the relay's nonce challenge with a signature from the account key. <strong>Connection-gated</strong> ops need the calling peer to have presented a valid credential at the join handshake. <strong>Public reads</strong> return signed records the reader verifies for itself. The one public write, <code>put_record</code>, re-verifies every record on ingest, so a record that doesn't verify can't be stored.</p>
+    <p>The operator surface (fleet administration and operator-attached entitlements) uses separate extension protocols, <code>/dmcn/operate</code> and <code>/dmcn/mailbox-ext</code>, outside the core. The arm numbers it once used here are reserved, and the table marks them.</p>
+    {{ template "spec-table" .RelayOps }}
+  </section>
+
+  <!-- trust -->
+  <section>
+    {{ refHeading "trust" }}
+    <p>Trust is anchored in the domain and spelled out in credentials. A credential's <em>roles</em> say what a key is and its <em>grants</em> say what it may do. No key can sign anything its grants don't cover.</p>
+    <p>Every credential chain leads back to the domain's root key, the one the DNS fingerprint anchors (<a href="#resolution-detail">Resolving an address</a>). Delegation is monotone: an issuer can never grant more than it holds, scope can only narrow (a subdomain scope covers its children, never its parents), and chains are capped at depth 8. By convention the powerful grants stay on offline keys, and the busy online services carry only what they need to run.</p>
+    <p>The <strong>domain authority record</strong> is the domain's administrative root. It holds the issuer set, reserved local-parts, key-rotation history and policy flags. Administrative authority over an address is separate from cryptographic ownership of it. A domain authority can provision, attest and revoke bindings in its namespace, but it never holds private keys and can never read mail. How a domain owner lets a fleet operator host it is an operator extension, outside this core reference.</p>
+    {{ template "spec-table" .CredFields }}
+    {{ template "spec-table" .RotationFields }}
+    {{ template "spec-table" .HistoryFields }}
+    {{ template "spec-table" .CredRoles }}
+    {{ template "spec-table" .CredGrants }}
+    {{ template "spec-table" .DarPolicy }}
+  </section>
+
+  <!-- signing -->
+  <section>
+    {{ refHeading "signing" }}
+    <p>Every signature in DMCN follows one rule.</p>
+    <pre>sig = Ed25519(priv, ctx ‖ deterministic_protobuf(message_without_signature))</pre>
+    <p>The canonical form is deterministic protobuf serialization (stable map ordering) of the message with its signature field cleared. <code>ctx</code> is a per-type, NUL-terminated domain-separation tag, so a signature over one record type can never be replayed as another. There's one deliberate exception. The whole-message <code>SignedMessage</code> signature is computed over the canonical plaintext with no context tag.</p>
+    {{ template "spec-table" .CtxTags }}
+  </section>
+
+  <!-- onion -->
+  <section>
+    {{ refHeading "onion" }}
+    <p>An optional delivery mode that hides who is talking to whom from the relays in between. The packet format below is implemented and the design default is multi-hop, but today's deployments run single-hop, so don't count on the metadata privacy described here yet.</p>
+    <p>A route is 3 hops by default, ending at the recipient's home relay. Hops must sit in distinct /24 networks <em>and</em> distinct domains, so no two hops share an operator, and an optional stable guard can be the entry. Each relay publishes a <code>RelayDescriptor</code> with its onion key and addresses, signed by its own libp2p key. That key can be recovered from the relay's peer ID, so a descriptor verifies without trusting whoever served it.</p>
+    <pre>OnionPacket { version, ephemeral_pub (32), nonce (12), tag (16), encrypted_layer }
+OnionLayer  { next_hop | "DELIVER", ttl_unix, inner_packet | delivery }
+
+each relay: derive layer key from ephemeral_pub + own X25519 key → peel → forward (or deliver)</pre>
+    <p>Only the innermost delivery layer is padded to its own bucket classes (up to 36 MB, matching the message ceiling). Forwarding layers add routing overhead only. A mailbox sets <code>require_onion</code> (or its domain sets the <code>REQUIRE_ONION</code> policy) to make the relay reject direct stores with <code>ONION_REQUIRED</code>.</p>
+  </section>
+
+{{ end }}{{ end }}
+
+{{ define "spec-table" }}
+<details data-ref>
+  <summary>
+    {{ icon "list-checks" "font-size:15px;color:var(--brand);flex:none;" }}
+    <span>{{ .Ref }}</span>
+    <span class="ref-chev">{{ icon "chevron-down" "font-size:16px;color:var(--text-muted);" }}</span>
+  </summary>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>{{ range .Cols }}<th>{{ . }}</th>{{ end }}</tr>
+      </thead>
+      <tbody>
+        {{ $mono := .Mono }}
+        {{ range .Rows }}
+        <tr>{{ range $i, $c := . }}{{ if lt $i $mono }}<td class="mono">{{ $c }}</td>{{ else }}<td>{{ $c }}</td>{{ end }}{{ end }}</tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+</details>
+{{ end }}
