@@ -98,9 +98,14 @@ func TestLandingIsIntroductory(t *testing.T) {
 		}
 	}
 	// Both sections are markdown (content/index.md), so they share the site's heading style and
-	// each gets a # permalink, like every other page's h2.
-	for _, id := range []string{"why-it-exists", "what-it-is"} {
-		if !regexp.MustCompile(`<h2 id="` + id + `">[^<]+<a class="hash" href="#` + id + `"`).MatchString(home) {
+	// each heading gets a # permalink, like every other page's. The "Why not ...?" answers are
+	// linked from replies to those objections, so their ids have to keep working.
+	for _, id := range []string{
+		"why-it-exists", "what-it-is",
+		"why-not-pgp", "why-not-smime", "why-not-spf-dkim-and-dmarc",
+		"why-not-tls-between-mail-servers", "why-not-use-an-encrypted-email-service",
+	} {
+		if !regexp.MustCompile(`<h[23] id="` + id + `">[^<]+<a class="hash" href="#` + id + `"`).MatchString(home) {
 			t.Errorf("the landing has no %q heading with its # permalink", id)
 		}
 	}

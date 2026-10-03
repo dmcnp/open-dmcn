@@ -59,6 +59,26 @@ sealed envelope — for mail that starts in the old world, they're the best sign
 daemon ships a `stub` auth mode for offline development that skips the checks; it is not the
 default, and it must never be used where real mail arrives.)
 
+## What doesn't a signature prove?
+
+A valid signature proves the message was signed with the key that belongs to the address it came
+from. That's all, and it's worth being clear about what it leaves out.
+
+**It doesn't prove the person meant to send it.** If someone takes over your friend's device or
+key, anything they send will check out. What DMCNP adds is that a key can't be replaced quietly: a
+new key leaves a signed record anyone can look up.
+
+**It doesn't stop lookalike domains.** `paypa1.com` can publish its own keys and sign its own mail
+perfectly. The signature tells you exactly which address sent it. Noticing that it's the wrong
+address is still up to you, or your mail app.
+
+**It doesn't make the content safe.** A real company can still send you a message carrying text an
+attacker put there, such as a notification that repeats what someone typed into a form. It arrives
+correctly signed.
+
+DMCNP settles one question: did this really come from the address it shows? Judging what's in the
+message is still your call.
+
 ## How does mail reach ordinary email addresses?
 
 Through a bridge. A domain can run an SMTP bridge alongside its nodes. Mail you send to an
@@ -68,6 +88,18 @@ its SPF, DKIM and DMARC checks at the bridge, as described above, before it's se
 
 Either way the bridge reads the message, so that mail is not end-to-end encrypted. The
 [quickstart](/quickstart#the-smtp-bridge) covers setting one up.
+
+## Why switch if nobody I email uses it?
+
+You don't have to wait for them. A domain that runs a bridge can still send to and receive from
+every ordinary email address, so switching doesn't cut anyone off. Mail between two DMCNP addresses
+gets the full guarantee. Mail through the bridge gets the same checks email gets today and isn't
+end-to-end encrypted.
+
+So it starts paying off inside one organisation, where mail between its own people is signed and
+sealed from day one, and it gets better with every domain that switches.
+
+Getting everyone else on board is still the hardest part. SMTP wasn't everywhere on day one either.
 
 ## Is there a blockchain, a DHT, or a global directory?
 
@@ -80,6 +112,15 @@ meant to replace email, that's disqualifying.
 Resolution is per-domain and DNS-seeded now: read `_dmcn.<domain>`, dial the nodes that record
 names, check what comes back against the fingerprint from DNS. A domain is served by the nodes it
 chooses — its own, or a host it delegates to — never by a shared pool it has no say in.
+
+## Does every mailbox need its own DNS record?
+
+No. DNS holds one TXT record per domain, at `_dmcn.<domain>`: the domain's key fingerprint and
+where to find the nodes that serve it. That stays the same however many mailboxes the domain has.
+Each mailbox's own record is served by those nodes, not by DNS.
+
+The record goes in at whatever DNS provider the domain already uses, like a DKIM key. You don't
+need to run your own DNS server.
 
 ## What if a domain's server lies about a record?
 
@@ -129,6 +170,27 @@ traffic analysis, and onion routing is there for senders who need the path hidde
 is inherited transport that stays inert until a mesh has at least three relays, so a single
 self-hosted node gets the padding but not the path hiding.
 
+## What happens if I lose my key or my device?
+
+The protocol gives an address three ways to get a new key.
+
+**Rotation.** If the domain allows it, an address can switch to a new key itself. The handover is
+signed by the old key, accepted by the new one and confirmed by one of the owner's enrolled
+devices, and it goes into the address's history, which only ever grows. A stolen key alone can't
+do it, because device keys never leave their device. A domain can also require a device to have
+been enrolled for a while first. Rotation is off unless the domain turns it on, because it's a
+trade-off: someone who steals both a key and a device could rotate first.
+
+**A recovery key.** An address's record can name a recovery key, kept apart from the one used day
+to day. It can sign the handover in place of a key that's been lost.
+
+**The domain.** The domain's root key can retire an address's key and free the address for a new
+one, the way an admin resets an account today. On your own domain, that root key is yours.
+
+Removing a lost device from your account is up to your mail app. The protocol's part is the key.
+If you lose every key, including the domain's, there's nothing left to prove who you are, and
+nobody has a good answer to that yet.
+
 ## What's core and what's an extension?
 
 Core is what you need to interoperate. Everything else — fleet administration, hosting
@@ -175,6 +237,26 @@ attacker who owns the box can deny you service, but cannot mint or re-point addr
 
 The goal isn't a world with no operators. It's that picking one hands them as little as possible,
 and leaving costs you a routing change and nothing else.
+
+## What isn't designed yet?
+
+Some things email does today don't have a DMCNP answer yet.
+
+**Third-party senders.** Services that send as your domain, like a newsletter platform or a
+ticketing system, don't have a design yet. The likely shape is that each gets its own address and
+key, which the domain can revoke on its own. Until then, their mail reaches DMCNP users through a
+bridge, with the same domain-level checks it gets today.
+
+**Mailing lists.** A signature covers who the message was addressed to, so a list can't pass the
+original on unchanged. It has to receive the message and send it on as itself. One option is for
+the list to carry the author's signed original inside its own message, so members can check both.
+Security gateways that add a footer or rewrite links have the same problem: they can't change a
+sealed message, so that checking has to move into the reader's app.
+
+**Mail kept after a domain lapses.** Old messages still verify against the key that signed them,
+but the link back to the domain breaks once its DNS points somewhere else. The likely answer is for
+the mail app to record that everything checked out when the message arrived, and show it as
+verified at that time.
 
 ## Is it production ready?
 
