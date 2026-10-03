@@ -90,7 +90,6 @@
 </section>
 
 
-
 <section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
   <article class="prose" style="max-width:70ch;"><h2 id="why-it-exists">Why it exists<a class="hash" href="#why-it-exists" aria-label="Link to this section">#</a></h2>
 <p>When an email arrives today, the name in the From line is a claim. Your provider checks what it
@@ -103,17 +102,14 @@ supports.</p>
 <p>DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
 still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.</p>
+<h2 id="what-it-is">What it is<a class="hash" href="#what-it-is" aria-label="Link to this section">#</a></h2>
+<p>Your address, say <code>alice@example.com</code>, points to a public key that <code>example.com</code> publishes and
+signs. Every message you send is signed with your key, so whoever receives it can check it really
+came from you. It's also encrypted on your device to their key, so the servers that carry it can't
+read it.</p>
+<p>Finding someone works the way email already does, through DNS. There's no central directory, and
+no single company that a message has to pass through.</p>
 </article>
-</section>
-
-
-
-<section style="max-width:1120px;margin:0 auto;padding:0 clamp(18px,5vw,40px) clamp(40px,6vw,64px);">
-  <div style="max-width:70ch;">
-    <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What it is</h2>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Your address, say <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code>, points to a public key that <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> publishes and signs. Every message you send is signed with your key, so whoever receives it can check it really came from you. It's also encrypted on your device to their key, so the servers that carry it can't read it.</p>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Finding someone works the way email already does, through DNS. There's no central directory, and no single company that a message has to pass through.</p>
-  </div>
 
   
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:36px;">

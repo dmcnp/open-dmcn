@@ -69,7 +69,7 @@ type protocolData struct {
 // referenceSections are the reference half's headings, in page order.
 var referenceSections = []protoSection{
 	{ID: "identity", Title: "Identity and addressing"},
-	{ID: "resolution-detail", Title: "Resolving an address"},
+	{ID: "resolution", Title: "Resolving an address"},
 	{ID: "messages", Title: "Messages and encryption"},
 	{ID: "wire", Title: "Wire protocols (libp2p)"},
 	{ID: "relay-ops", Title: "Relay operations"},
@@ -482,7 +482,7 @@ var ctxTags = specTable{
 		{"dmcn-credential-v1\\0", "every Credential"},
 		{"dmcn-subauthority-request-v1\\0", "a requester's self-signed sub-authority request"},
 		{"dmcn-address-removal-v1\\0", "AddressRemovalRecord (root-signed tombstone)"},
-		{"dmcn-key-compromise-v1\\0", "KeyCompromiseRecord"},
+		{"dmcn-key-compromise-v1\\0", "CredentialBlockList (the domain's blocklist; the tag is named for the key-compromise entries it carries)"},
 		{"dmcn-fleet-roster-v1\\0", "FleetRoster"},
 		{"dmcn-msg-header-v1\\0", "SignedHeader (the split-format message header)"},
 		{"(extensions)", "further tags sign operator-surface records and are not part of the core"},

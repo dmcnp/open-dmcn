@@ -79,7 +79,7 @@
       On this page <svg class="lucide lucide-chevron-down" style="font-size:16px;color:var(--text-muted);" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </summary>
     <div class="toc-list" style="padding:8px;margin-bottom:20px;background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);">
-      <a href="#overview">Overview</a><a href="#why-theres-no-global-directory">Why there&#39;s no global directory</a><a href="#core-and-extensions">Core and extensions</a><a href="#status">Status</a><a href="#licence">Licence</a><a href="#identity">Identity and addressing</a><a href="#resolution-detail">Resolving an address</a><a href="#messages">Messages and encryption</a><a href="#wire">Wire protocols (libp2p)</a><a href="#relay-ops">Relay operations</a><a href="#trust">Credentials and authority</a><a href="#signing">Signing convention</a><a href="#onion">Onion routing (optional)</a>
+      <a href="#overview">Overview</a><a href="#why-theres-no-global-directory">Why there&#39;s no global directory</a><a href="#core-and-extensions">Core and extensions</a><a href="#status">Status</a><a href="#licence">Licence</a><a href="#identity">Identity and addressing</a><a href="#resolution">Resolving an address</a><a href="#messages">Messages and encryption</a><a href="#wire">Wire protocols (libp2p)</a><a href="#relay-ops">Relay operations</a><a href="#trust">Credentials and authority</a><a href="#signing">Signing convention</a><a href="#onion">Onion routing (optional)</a>
     </div>
   </details>
   
@@ -89,7 +89,7 @@
       
       <div class="toc-label">On this page</div>
       <nav class="toc-list">
-        <a href="#overview">Overview</a><a href="#why-theres-no-global-directory">Why there&#39;s no global directory</a><a href="#core-and-extensions">Core and extensions</a><a href="#status">Status</a><a href="#licence">Licence</a><a href="#identity">Identity and addressing</a><a href="#resolution-detail">Resolving an address</a><a href="#messages">Messages and encryption</a><a href="#wire">Wire protocols (libp2p)</a><a href="#relay-ops">Relay operations</a><a href="#trust">Credentials and authority</a><a href="#signing">Signing convention</a><a href="#onion">Onion routing (optional)</a>
+        <a href="#overview">Overview</a><a href="#why-theres-no-global-directory">Why there&#39;s no global directory</a><a href="#core-and-extensions">Core and extensions</a><a href="#status">Status</a><a href="#licence">Licence</a><a href="#identity">Identity and addressing</a><a href="#resolution">Resolving an address</a><a href="#messages">Messages and encryption</a><a href="#wire">Wire protocols (libp2p)</a><a href="#relay-ops">Relay operations</a><a href="#trust">Credentials and authority</a><a href="#signing">Signing convention</a><a href="#onion">Onion routing (optional)</a>
       </nav>
       
     </aside>
@@ -267,7 +267,7 @@ it really conforms. The <a href="/faq#what-does-the-license-allow">FAQ</a> has t
 
   
   <section>
-    <h2 id="resolution-detail">Resolving an address<a class="hash" href="#resolution-detail" aria-label="Link to this section">#</a></h2>
+    <h2 id="resolution">Resolving an address<a class="hash" href="#resolution" aria-label="Link to this section">#</a></h2>
     <p>The record format, and what a resolver checks. The design behind it is under <a href="#why-theres-no-global-directory">Why there's no global directory</a>.</p>
     <pre>_dmcn.&lt;domain&gt;  TXT  "dmcn-verification=v1; fp=&lt;40-hex&gt;[; fleet=&lt;domain&gt;][; seed=&lt;multiaddr&gt;]..."
 
@@ -510,7 +510,7 @@ kdf=2: aad = "dmcn-aad-hdr-v1\0"  |  "dmcn-aad-body-v1\0"</pre>
   <section>
     <h2 id="trust">Credentials and authority<a class="hash" href="#trust" aria-label="Link to this section">#</a></h2>
     <p>Trust is anchored in the domain and spelled out in credentials. A credential's <em>roles</em> say what a key is and its <em>grants</em> say what it may do. No key can sign anything its grants don't cover.</p>
-    <p>Every credential chain leads back to the domain's root key, the one the DNS fingerprint anchors (<a href="#resolution-detail">Resolving an address</a>). Delegation is monotone: an issuer can never grant more than it holds, scope can only narrow (a subdomain scope covers its children, never its parents), and chains are capped at depth 8. By convention the powerful grants stay on offline keys, and the busy online services carry only what they need to run.</p>
+    <p>Every credential chain leads back to the domain's root key, the one the DNS fingerprint anchors (<a href="#resolution">Resolving an address</a>). Delegation is monotone: an issuer can never grant more than it holds, scope can only narrow (a subdomain scope covers its children, never its parents), and chains are capped at depth 8. By convention the powerful grants stay on offline keys, and the busy online services carry only what they need to run.</p>
     <p>The <strong>domain authority record</strong> is the domain's administrative root. It holds the issuer set, reserved local-parts, key-rotation history and policy flags. Administrative authority over an address is separate from cryptographic ownership of it. A domain authority can provision, attest and revoke bindings in its namespace, but it never holds private keys and can never read mail. How a domain owner lets a fleet operator host it is an operator extension, outside this core reference.</p>
     
 <details data-ref>
@@ -775,7 +775,7 @@ kdf=2: aad = "dmcn-aad-hdr-v1\0"  |  "dmcn-aad-body-v1\0"</pre>
         
         <tr><td class="mono">dmcn-address-removal-v1\0</td><td>AddressRemovalRecord (root-signed tombstone)</td></tr>
         
-        <tr><td class="mono">dmcn-key-compromise-v1\0</td><td>KeyCompromiseRecord</td></tr>
+        <tr><td class="mono">dmcn-key-compromise-v1\0</td><td>CredentialBlockList (the domain&#39;s blocklist; the tag is named for the key-compromise entries it carries)</td></tr>
         
         <tr><td class="mono">dmcn-fleet-roster-v1\0</td><td>FleetRoster</td></tr>
         

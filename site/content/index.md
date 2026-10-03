@@ -18,3 +18,13 @@ supports.
 DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
 still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.
+
+## What it is
+
+Your address, say `alice@example.com`, points to a public key that `example.com` publishes and
+signs. Every message you send is signed with your key, so whoever receives it can check it really
+came from you. It's also encrypted on your device to their key, so the servers that carry it can't
+read it.
+
+Finding someone works the way email already does, through DNS. There's no central directory, and
+no single company that a message has to pass through.

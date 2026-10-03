@@ -45,6 +45,13 @@ func TestProtocolReference(t *testing.T) {
 	if !strings.Contains(article, `id="onion"`) {
 		t.Error("the last reference section is outside <article class=\"prose\">")
 	}
+	// get.dmcnmail.com/protocol used to host this reference and now 301s here; browsers carry the
+	// #fragment across the redirect, so every section id it had must still exist.
+	for _, id := range []string{"status", "identity", "resolution", "messages", "wire", "relay-ops", "trust", "signing", "onion"} {
+		if !strings.Contains(page, `id="`+id+`"`) {
+			t.Errorf("/protocol/ lost #%s, which old get.dmcnmail.com/protocol links still point at", id)
+		}
+	}
 	// Every table of contents link lands on a heading on the page.
 	for _, m := range regexp.MustCompile(`href="#([a-z0-9-]+)"`).FindAllStringSubmatch(page, -1) {
 		if !strings.Contains(page, `id="`+m[1]+`"`) {
@@ -90,8 +97,12 @@ func TestLandingIsIntroductory(t *testing.T) {
 			t.Errorf("the landing page does not link %s", link)
 		}
 	}
-	if !strings.Contains(home, "Why it exists") {
-		t.Error("the landing page no longer says why the protocol exists")
+	// Both sections are markdown (content/index.md), so they share the site's heading style and
+	// each gets a # permalink, like every other page's h2.
+	for _, id := range []string{"why-it-exists", "what-it-is"} {
+		if !regexp.MustCompile(`<h2 id="` + id + `">[^<]+<a class="hash" href="#` + id + `"`).MatchString(home) {
+			t.Errorf("the landing has no %q heading with its # permalink", id)
+		}
 	}
 }
 
