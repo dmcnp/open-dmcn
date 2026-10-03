@@ -17,7 +17,9 @@ whatever the weakest server on the route supports.
 
 DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
-still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.
+still reach people on ordinary email through a bridge. Between you and the bridge, mail is signed
+and encrypted like any other DMCNP message. On the other side of the bridge it's ordinary email, so
+it isn't end-to-end encrypted.
 
 ### Why not SPF, DKIM and DMARC?
 

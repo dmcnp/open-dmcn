@@ -101,7 +101,9 @@ check fails. A check only helps when both ends take part, so in practice mail fa
 whatever the weakest server on the route supports.</p>
 <p>DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
-still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.</p>
+still reach people on ordinary email through a bridge. Between you and the bridge, mail is signed
+and encrypted like any other DMCNP message. On the other side of the bridge it's ordinary email, so
+it isn't end-to-end encrypted.</p>
 <h3 id="why-not-spf-dkim-and-dmarc">Why not SPF, DKIM and DMARC?<a class="hash" href="#why-not-spf-dkim-and-dmarc" aria-label="Link to this section">#</a></h3>
 <p>SPF, DKIM and DMARC check which domain a message came from, not which person sent it. The provider
 decides who may send as which address, and the receiver has to take its word for it. Gmail may stop
