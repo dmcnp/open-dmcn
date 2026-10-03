@@ -1,7 +1,7 @@
 ---
 title: The DMCN Protocol
 description: DMCNP is an open protocol for email that requires every message to be signed by its sender and encrypted to its recipient, with no exceptions. Apache-2.0 spec and schema.
-tagline: DMCNP is for email. Your address is tied to a key your domain publishes, so anyone can check who sent a message, and only the person it's sent to can read it.
+tagline: DMCNP is an open protocol for email. Your address is tied to a key your domain publishes, so anyone can check who sent a message, and only the person it's sent to can read it.
 ---
 
 ## Why it exists
@@ -17,5 +17,4 @@ supports.
 
 DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
-still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted,
-and the protocol is upfront about it.
+still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.

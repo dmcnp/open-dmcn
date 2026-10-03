@@ -35,11 +35,13 @@ var steps = []step{
 	{"search", "Look them up",
 		"Your mail app reads a DNS record for the recipient's domain and fetches their key from the servers that record names. The key is signed, so a server can't hand you a fake one."},
 	{"lock", "Seal it",
-		"The message is signed with your key and encrypted on your device, to theirs. It leaves your device already sealed."},
+		"Your device signs the message with your key and encrypts it with theirs. It's already sealed before it leaves."},
 	// Careful with this one: "proving they hold their key" must not read as handing the key over.
-	// It never leaves their device: the relay sends a challenge and their app signs it.
+	// The relay sends a challenge and their app signs it, so the server never receives the key.
+	// Don't say the key never leaves their device: pairing copies it to a new one. Nor that the
+	// recipient chose the server: the domain operator assigns the mailbox.
 	{"inbox", "Deliver it",
-		"The sealed message waits at a server the recipient chose. They collect it by signing a challenge with their key, which never leaves their device, and only they can open it."},
+		"The sealed message waits at the server that holds the recipient's mailbox. They collect it by signing a challenge with their key, and only they can open it."},
 }
 
 // pageSpec declares one output page.

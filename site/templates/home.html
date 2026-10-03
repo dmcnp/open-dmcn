@@ -5,7 +5,7 @@
   <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 12px;margin-bottom:24px;border:1px solid var(--border-subtle);border-radius:var(--radius-pill);background:var(--surface-card);font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);">
     {{ icon "git-fork" "font-size:13px;color:var(--brand);" }} DMCNP · an open protocol · Apache-2.0
   </div>
-  <h1 style="margin:0;max-width:24ch;font-size:clamp(32px,5.4vw,54px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">An open protocol that requires every message on it to be signed and encrypted, with no exceptions.</h1>
+  <h1 style="margin:0;max-width:24ch;font-size:clamp(32px,5.4vw,54px);line-height:1.05;letter-spacing:-2px;font-weight:600;color:var(--text-strong);">Every message must be signed and encrypted, with no exceptions.</h1>
   <p style="margin:24px 0 0;max-width:62ch;font-size:clamp(16px,2vw,18.5px);line-height:1.6;color:var(--text-muted);">{{ .Tagline }}</p>
 
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:34px;">
@@ -28,7 +28,7 @@
   <div style="max-width:70ch;">
     <h2 style="margin:0 0 6px;font-size:clamp(22px,3vw,30px);letter-spacing:-0.8px;font-weight:600;color:var(--text-strong);">What it is</h2>
     <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Your address, say <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">alice@example.com</code>, points to a public key that <code style="font-family:var(--font-mono);font-size:14px;color:var(--text-strong);">example.com</code> publishes and signs. Every message you send is signed with your key, so whoever receives it can check it really came from you. It's also encrypted on your device to their key, so the servers that carry it can't read it.</p>
-    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Finding someone works the way email already does, through DNS. There's no central directory, and no single company every message has to pass through.</p>
+    <p style="margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--text-body);">Finding someone works the way email already does, through DNS. There's no central directory, and no single company that a message has to pass through.</p>
   </div>
 
   <!-- The concrete walk-through: what actually happens when you hit send. -->
