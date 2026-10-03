@@ -102,6 +102,12 @@ whatever the weakest server on the route supports.</p>
 <p>DMCNP starts from the other end. Signing and encryption aren't extras a server can skip. If a
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
 still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.</p>
+<h3 id="why-not-spf-dkim-and-dmarc">Why not SPF, DKIM and DMARC?<a class="hash" href="#why-not-spf-dkim-and-dmarc" aria-label="Link to this section">#</a></h3>
+<p>SPF, DKIM and DMARC check which domain a message came from, not which person sent it. The provider
+decides who may send as which address, and the receiver has to take its word for it. Gmail may stop
+its users sending as each other. A less careful provider might not, and the mail passes the same
+checks. It's also up to the receiving server whether to act on a failed check, and none of the
+three encrypts anything. <a href="/faq#what-about-dkim-spf-and-dmarc">More in the FAQ</a>.</p>
 <h3 id="why-not-pgp">Why not PGP?<a class="hash" href="#why-not-pgp" aria-label="Link to this section">#</a></h3>
 <p>PGP signs and encrypts the body of a message. The subject line and the addresses usually still
 travel in the clear, and both people have to make keys and swap them before either can use it. WKD
@@ -116,12 +122,6 @@ that authority before a signature means anything to them. SMIMEA lets a domain p
 certificates in DNS, which solves finding them, but it's an experimental standard and still
 optional, for the domain and for the mail app. You can only encrypt to someone whose certificate
 you already have, and the subject line and the addresses still travel in the clear.</p>
-<h3 id="why-not-spf-dkim-and-dmarc">Why not SPF, DKIM and DMARC?<a class="hash" href="#why-not-spf-dkim-and-dmarc" aria-label="Link to this section">#</a></h3>
-<p>SPF, DKIM and DMARC check which domain a message came from, not which person sent it. The provider
-decides who may send as which address, and the receiver has to take its word for it. Gmail may stop
-its users sending as each other. A less careful provider might not, and the mail passes the same
-checks. It's also up to the receiving server whether to act on a failed check, and none of the
-three encrypts anything. <a href="/faq#what-about-dkim-spf-and-dmarc">More in the FAQ</a>.</p>
 <h3 id="why-not-tls-between-mail-servers">Why not TLS between mail servers?<a class="hash" href="#why-not-tls-between-mail-servers" aria-label="Link to this section">#</a></h3>
 <p>TLS encrypts the connection between two mail servers. That protects each hop, but every server
 along the way can still read the message. On most routes it's also opportunistic: if the next

@@ -19,6 +19,14 @@ DMCNP starts from the other end. Signing and encryption aren't extras a server c
 message isn't signed by its sender and sealed to its recipient, it isn't a DMCNP message. You can
 still reach people on ordinary email through a bridge, but that mail isn't end-to-end encrypted.
 
+### Why not SPF, DKIM and DMARC?
+
+SPF, DKIM and DMARC check which domain a message came from, not which person sent it. The provider
+decides who may send as which address, and the receiver has to take its word for it. Gmail may stop
+its users sending as each other. A less careful provider might not, and the mail passes the same
+checks. It's also up to the receiving server whether to act on a failed check, and none of the
+three encrypts anything. [More in the FAQ](/faq#what-about-dkim-spf-and-dmarc).
+
 ### Why not PGP?
 
 PGP signs and encrypts the body of a message. The subject line and the addresses usually still
@@ -36,14 +44,6 @@ that authority before a signature means anything to them. SMIMEA lets a domain p
 certificates in DNS, which solves finding them, but it's an experimental standard and still
 optional, for the domain and for the mail app. You can only encrypt to someone whose certificate
 you already have, and the subject line and the addresses still travel in the clear.
-
-### Why not SPF, DKIM and DMARC?
-
-SPF, DKIM and DMARC check which domain a message came from, not which person sent it. The provider
-decides who may send as which address, and the receiver has to take its word for it. Gmail may stop
-its users sending as each other. A less careful provider might not, and the mail passes the same
-checks. It's also up to the receiving server whether to act on a failed check, and none of the
-three encrypts anything. [More in the FAQ](/faq#what-about-dkim-spf-and-dmarc).
 
 ### Why not TLS between mail servers?
 
