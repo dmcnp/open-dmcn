@@ -29,6 +29,10 @@ export interface AppSettings {
   // is a decision about correspondents, which is account data: a device that has never seen
   // this setting should not quietly re-block a sender the owner already decided about.
   remoteImagesForTrusted?: boolean;
+  // The owner put Getting started away (deployment.gettingStarted). Account data, so it stays
+  // away on every device rather than reappearing on each new one; undefined for every existing
+  // account, which reads as "still showing".
+  gettingStartedHidden?: boolean;
 }
 
 export const SETTINGS_KEY = 'settings/app';

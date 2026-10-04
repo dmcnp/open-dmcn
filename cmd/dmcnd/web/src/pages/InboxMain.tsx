@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useMessages, type Preview } from '../lib/hooks/useMessages';
 import { useSent, isSentStoreHash } from '../lib/hooks/useSent';
 import { useFlags } from '../lib/hooks/useFlags';
@@ -13,12 +13,14 @@ import { categorizeSender } from '../lib/trust/category';
 import { isReceivedForMe, previewText, recipientsOf } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
 import { usePullToRefresh, PULL_THRESHOLD, type PullState } from '../lib/hooks/usePullToRefresh';
-import { IconButton } from '../ds';
+import { Button, IconButton } from '../ds';
 import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
 import { senderLabel } from '../lib/trust/displayName';
 import { InboxNotices } from '../components/InboxNotices';
+import { isFirstRun } from '../lib/firstRun';
+import { useGettingStarted } from '../lib/hooks/useGettingStarted';
 import { MessageReader } from '../components/MessageReader';
 import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
@@ -295,11 +297,13 @@ function PullIndicator({ distance, armed, refreshing, dragging }: PullState) {
 
 /** The mail content (list + reader) that fills the app shell's main column. */
 export function InboxMain() {
-  const { messages, error, accessState, refresh, deleteMessage } = useMessages();
-  const { sent, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
+  const { messages, loaded: mailLoaded, error, accessState, refresh, deleteMessage } = useMessages();
+  const { sent, loaded: sentLoaded, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
   const { ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
   const { ready: labelsReady, knownFolderIds, labelById, folderById } = useLabels();
   const { address } = useAuth();
+  const gettingStarted = useGettingStarted();
+  const navigate = useNavigate();
   const { contactByAddress, nameFor } = useContacts();
   const { filter: mailFilter, ready: filterReady } = useMailFilter();
   const isMobile = useIsMobile();
@@ -434,6 +438,13 @@ export function InboxMain() {
   // shell's own error would only say the same thing again above it, without one.
   const noticeSpeaks = !!AccountNotice && accessState === 'suspended' && folder === 'inbox' && !q;
   const listError = folder === 'sent' ? sentError : noticeSpeaks ? null : error;
+  // A mailbox that has never had mail in either direction says "nothing here yet" and points at
+  // Getting started while that is still showing, rather than "all caught up", which is true and
+  // useless on a first visit.
+  const firstRun = gettingStarted.visible && folder === 'inbox' && !q && isFirstRun({
+    mailLoaded, sentLoaded, mailCount: mail.length, sentCount: sent.length,
+    explained: locked || pending || accessState === 'unapproved-device' || !!error,
+  });
   const doRefresh = () => Promise.all([refresh(), refreshSent()]);
   // Pull-to-refresh, on the phone list only: the reader is not a list, and a pointer has the
   // header's Refresh button.
@@ -528,7 +539,15 @@ export function InboxMain() {
               {folder === 'inbox' && !q && AccountNotice && address && <AccountNotice address={address} access={accessState} />}
               {folder === 'inbox' && !q && <InboxNotices />}
 
-              {sorting || (locked && rows.length === 0) ? null : rows.length === 0 ? (
+              {firstRun ? (
+                <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Icon name="inbox" size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
+                  <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
+                    Nothing here yet. Getting started shows how to try it with an email account you already have.
+                  </p>
+                  <Button size="sm" variant="secondary" onClick={() => navigate('/getting-started')}>Open Getting started</Button>
+                </div>
+              ) : sorting || (locked && rows.length === 0) ? null : rows.length === 0 ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
                   <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>

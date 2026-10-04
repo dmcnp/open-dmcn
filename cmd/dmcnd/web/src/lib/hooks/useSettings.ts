@@ -11,6 +11,10 @@ import { useAuth } from './useAuth';
 
 interface SettingsContextValue {
   settings: AppSettings;
+  // True once the account's own document has been read. Before then `settings` is the empty
+  // default, which is indistinguishable from an account that never set anything, so a decision
+  // that must not be undone a moment later (showing, then hiding, a rail row) waits for this.
+  loaded: boolean;
   refreshSettings: () => void;
   updateSettings: (patch: Partial<Omit<AppSettings, 'v'>>) => Promise<void>;
 }
@@ -21,6 +25,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { keys } = useKeys();
   const { sessionToken, isAuthenticated } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(emptySettings());
+  const [loaded, setLoaded] = useState(false);
   const storeRef = useRef<SettingsStore | null>(null);
   const syncRef = useRef<() => void>(() => {});
 
@@ -33,7 +38,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const doSync = () => {
       store.get()
-        .then(({ settings }) => { if (!cancelled) setSettings(settings); })
+        .then(({ settings }) => { if (!cancelled) { setSettings(settings); setLoaded(true); } })
         .catch(() => { /* transient; keep last good */ });
     };
     syncRef.current = doSync;
@@ -54,6 +59,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       storeRef.current = null;
       syncRef.current = () => {};
       setSettings(emptySettings());
+      setLoaded(false);
     };
   }, [keys, sessionToken, isAuthenticated]);
 
@@ -82,7 +88,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     SettingsContext.Provider,
-    { value: { settings, refreshSettings, updateSettings } },
+    { value: { settings, loaded, refreshSettings, updateSettings } },
     children
   );
 }

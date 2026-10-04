@@ -148,6 +148,13 @@ export interface Deployment {
   // with one exception: when `access` is 'suspended' it MUST render, because the shell then
   // leaves the explaining to it rather than stack its own error above the same news.
   accountNotice?: ComponentType<{ address: string; access: AccessState }>;
+  // The body of a "Getting started" page: a rail row above Inbox, and where the shell lands an
+  // account that has never received or sent anything (lib/firstRun.ts). The shell owns the row,
+  // the route, the landing and putting it away, which only the owner does; the deployment owns
+  // what the page says. The product shows how to try it with mail the owner already has, which
+  // needs a bridge to reach the address from ordinary email; absent ⇒ no page and no row, which
+  // is the honest answer where that path may not exist.
+  gettingStarted?: ComponentType<{ address: string }>;
   // Extra addresses on the same account, if this deployment can mint them. Rendered as its own
   // card in Settings; absent ⇒ no card, which is the honest answer on a deployment whose
   // addresses are assigned out of band (the reference daemon answers petitions from an offline

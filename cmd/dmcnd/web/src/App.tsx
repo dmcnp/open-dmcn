@@ -14,6 +14,7 @@ import { Login } from './pages/Login';
 import { InboxMain } from './pages/InboxMain';
 import { Contacts } from './pages/Contacts';
 import { Settings } from './pages/Settings';
+import { GettingStarted } from './pages/GettingStarted';
 import { AppLayout } from './components/AppLayout';
 import { SessionRenewer } from './components/SessionRenewer';
 import { PushIntentRouter } from './components/PushIntentRouter';
@@ -64,6 +65,7 @@ export function App() {
               <Route path="/inbox" element={<InboxMain />} />
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/settings" element={<Settings />} />
+              {deployment.gettingStarted && <Route path="/getting-started" element={<GettingStarted />} />}
               {deployment.appRoutes.map(r => <Route key={r.path} path={r.path} element={r.element} />)}
             </Route>
             <Route path="*" element={<Navigate to="/inbox" replace />} />

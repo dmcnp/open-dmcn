@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { NotificationSettings } from '../components/NotificationSettings';
 import { useKeys } from '../lib/hooks/useKeys';
+import { useGettingStarted } from '../lib/hooks/useGettingStarted';
 import { useIsMobile } from '../lib/useIsMobile';
 import { logout as apiLogout, lookupIdentity } from '../lib/api/client';
 import { toHex } from '../lib/crypto/keys';
@@ -405,6 +406,19 @@ export function Settings() {
     }
   };
 
+  // Getting started: put away from its own page, brought back here. Written on toggle, like the
+  // other switches on tabs without a Save button.
+  const gettingStarted = useGettingStarted();
+  const [gettingStartedErr, setGettingStartedErr] = useState('');
+  const applyGettingStarted = async (show: boolean) => {
+    setGettingStartedErr('');
+    try {
+      await gettingStarted.setShown(show);
+    } catch (e) {
+      setGettingStartedErr(e instanceof Error ? e.message : 'Could not save that setting.');
+    }
+  };
+
   const saveProfile = async () => {
     setProfileBusy(true);
     setProfileMsg('');
@@ -657,6 +671,19 @@ export function Settings() {
 
         {section === 'appearance' && (
           <div style={{ marginTop: 'var(--space-4)' }}>
+            {gettingStarted.available && (
+              <>
+                <Row
+                  title="Show Getting started"
+                  desc="Keep the Getting started page in the menu, above Inbox. Synced across your devices."
+                >
+                  <Switch id="show-getting-started" checked={gettingStarted.visible} disabled={!gettingStarted.loaded} onChange={v => void applyGettingStarted(v)} />
+                </Row>
+                {gettingStartedErr && (
+                  <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{gettingStartedErr}</div>
+                )}
+              </>
+            )}
             <Row title="Theme" desc="Light, dark, or follow your system setting.">
               <div style={{ display: 'flex' }}>
                 <SegOption active={themePref === 'light'} onClick={() => applyTheme('light')}>Light</SegOption>

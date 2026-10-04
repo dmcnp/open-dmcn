@@ -1,6 +1,11 @@
 /* Switch: interaction-state CSS (hover/active/focus/disabled cannot be expressed inline).
    All visuals reference DMCN tokens. */
-.dmcn-switch{display:inline-flex;align-items:center;gap:var(--space-3);font-family:var(--font-sans);cursor:pointer;user-select:none;}
+/* position:relative makes the label the hidden input's containing block. Without it the input is
+   placed against some positioned ancestor OUTSIDE the scrolling pane, so it does not scroll with the
+   switch it belongs to: a switch further down a scrolled page has its input sitting below the
+   window, and focusing it on click made the browser scroll the app shell itself (100dvh,
+   overflow:hidden, no scrollbar) to reveal it, shifting the whole app up with no way back. */
+.dmcn-switch{position:relative;display:inline-flex;align-items:center;gap:var(--space-3);font-family:var(--font-sans);cursor:pointer;user-select:none;}
 .dmcn-switch[aria-disabled="true"]{cursor:not-allowed;opacity:0.5;}
 .dmcn-switch__track{
   position:relative;flex:none;width:40px;height:22px;border-radius:var(--radius-pill);
@@ -13,6 +18,6 @@
 }
 .dmcn-switch--on .dmcn-switch__track{background:var(--brand);}
 .dmcn-switch--on .dmcn-switch__thumb{transform:translateX(18px);}
-.dmcn-switch__native{position:absolute;opacity:0;width:1px;height:1px;}
+.dmcn-switch__native{position:absolute;top:0;left:0;margin:0;opacity:0;width:1px;height:1px;}
 .dmcn-switch__native:focus-visible + .dmcn-switch__track{box-shadow:var(--focus-ring);}
 .dmcn-switch__label{font-size:var(--text-md);color:var(--text-body);}

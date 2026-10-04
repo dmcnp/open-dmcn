@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useMessages } from '../lib/hooks/useMessages';
@@ -21,6 +21,8 @@ import { loadLocalKeystore } from '../lib/crypto/localKeystore';
 import { AccountMenu } from './AccountMenu';
 import { NavRow } from './NavRow';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
+import { useGettingStarted } from '../lib/hooks/useGettingStarted';
+import { isFirstRun } from '../lib/firstRun';
 import { deployment } from '@deployment';
 
 import { Button, IconButton, Input } from '../ds';
@@ -31,7 +33,7 @@ import type { ComposeReplyTo } from '../lib/compose';
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
 type Folder = 'inbox' | 'sent' | 'archive' | 'starred' | `label:${string}` | `folder:${string}`;
-type Section = 'mail' | 'contacts' | 'settings';
+type Section = 'mail' | 'contacts' | 'settings' | 'getting-started';
 
 // Shared state the shell hands to the active section via react-router's outlet
 // context. InboxMain consumes folder/filter/openCompose; Settings consumes
@@ -46,6 +48,7 @@ export interface MailOutletContext {
 function sectionFromPath(p: string): Section {
   if (p.startsWith('/contacts')) return 'contacts';
   if (p.startsWith('/settings')) return 'settings';
+  if (p.startsWith('/getting-started')) return 'getting-started';
   return 'mail';
 }
 
@@ -68,8 +71,9 @@ function GroupLabel({ children, collapsed }: { children: ReactNode; collapsed: b
  * Devices / Settings / Admin) render standalone (full screen) instead.
  */
 export function AppLayout() {
-  const { messages, refresh } = useMessages();
-  const { refreshSent } = useSent();
+  const { messages, loaded: mailLoaded, error: mailError, accessState, refresh } = useMessages();
+  const { sent, loaded: sentLoaded, refreshSent } = useSent();
+  const gettingStarted = useGettingStarted();
   const { flags, ready: flagsReady } = useFlags();
   const { labels, folders } = useLabels();
   const { filter: mailFilter, ready: filterReady } = useMailFilter();
@@ -88,6 +92,11 @@ export function AppLayout() {
   const [compact, setCompact] = useState(() => readDensity() === 'compact');
   const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
   const [compose, setCompose] = useState<{ replyTo: ComposeReplyTo | null } | null>(null);
+  // Getting started is where an account lands while it has never received or sent anything, and
+  // only on the landing itself: decided once per account per shell, as soon as the mailbox, Sent
+  // and the account's settings have all answered. A click on Inbox afterwards goes to the Inbox,
+  // and someone who has already moved elsewhere is not pulled back.
+  const landingDecidedFor = useRef<string | null>(null);
   // Lock the whole context if this app is left in the background long enough.
   useAppLock();
   // Published outside the shell so a tapped notification for another account does not switch out
@@ -118,6 +127,20 @@ export function AppLayout() {
     void loadLocalKeystore(address).then(ks => { if (!cancelled) setEphemeral(ks === null); });
     return () => { cancelled = true; };
   }, [address]);
+
+  useEffect(() => {
+    if (!address || landingDecidedFor.current === address) return;
+    if (!gettingStarted.available) { landingDecidedFor.current = address; return; }
+    if (!gettingStarted.loaded || !mailLoaded || !sentLoaded) return;
+    landingDecidedFor.current = address;
+    const control = new Set(deployment.controlSubjects);
+    const empty = isFirstRun({
+      mailLoaded, sentLoaded, sentCount: sent.length,
+      mailCount: messages.filter(m => !control.has(m.subject)).length,
+      explained: accessState !== 'ok' || !!mailError,
+    });
+    if (empty && gettingStarted.visible && location.pathname === '/inbox') navigate('/getting-started', { replace: true });
+  }, [address, gettingStarted.available, gettingStarted.loaded, gettingStarted.visible, mailLoaded, sentLoaded, sent.length, messages, accessState, mailError, location.pathname, navigate]);
 
   useEffect(() => { writeThemePref(themePref); }, [themePref]);
   useEffect(() => { writeDensity(compact ? 'compact' : 'comfortable'); }, [compact]);
@@ -249,6 +272,10 @@ export function AppLayout() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
+          {/* Above the mail, and only until the owner puts it away from the page itself. */}
+          {gettingStarted.visible && (
+            <NavRow icon="info" label="Getting started" active={section === 'getting-started'} collapsed={railCollapsed} onClick={() => goto('/getting-started')} />
+          )}
           <NavRow icon="inbox" label="Inbox" active={section === 'mail' && folder === 'inbox'} count={unreadCount || undefined} collapsed={railCollapsed} onClick={() => selectFolder('inbox')} />
           <NavRow icon="star" label="Starred" active={section === 'mail' && folder === 'starred'} collapsed={railCollapsed} onClick={() => selectFolder('starred')} />
           <NavRow icon="send" label="Sent" active={section === 'mail' && folder === 'sent'} collapsed={railCollapsed} onClick={() => selectFolder('sent')} />
