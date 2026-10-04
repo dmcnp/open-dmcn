@@ -140,6 +140,11 @@ export interface Deployment {
   // Storage card in Settings; absent ⇒ the card just reports usage, which is the honest
   // answer on a deployment that sells nothing.
   storageUpgrade?: ComponentType<{ usage: StorageUsage | null; onChanged: () => void }>;
+  // Something the deployment has to say about the account itself, shown as the first row of the
+  // inbox: the product's trial ending, or reading locked until a plan is chosen. Absent ⇒ no row,
+  // which is the honest answer on a deployment that sells nothing and so has no trial to end.
+  // The component decides for itself whether it has anything to say, and renders nothing if not.
+  accountNotice?: ComponentType<{ address: string }>;
   // Extra addresses on the same account, if this deployment can mint them. Rendered as its own
   // card in Settings; absent ⇒ no card, which is the honest answer on a deployment whose
   // addresses are assigned out of band (the reference daemon answers petitions from an offline

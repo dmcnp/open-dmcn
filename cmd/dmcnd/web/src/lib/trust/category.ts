@@ -8,6 +8,7 @@
 import { fromBase64, toHex } from '../crypto/keys';
 import type { ContactRecord } from '../api/contactStore';
 import type { FilterList } from '../api/filterList';
+import type { SenderTrust } from '../crypto/senderTrust';
 
 export type SenderCategory = 'allowlisted' | 'pending' | 'blocked';
 
@@ -58,4 +59,27 @@ export function categorizeSender(
     return 'allowlisted';
   }
   return 'pending';
+}
+
+// blockKey is the key Block adds to the unconditional key blocklist, or undefined to block by
+// address alone. It pins a key only when the directory has just confirmed that the key which
+// signed this message is the one it publishes for the sender. Bridged mail is signed by the
+// BRIDGE, so key-blocking it hides every bridged message from then on, whoever sent it — and
+// "is this bridged?" cannot be read off the attestation, because one that is missing or failed
+// to verify (a transient verifier error fails closed) looks exactly like native mail there. The
+// directory can tell: it never publishes a bridge key as anyone's identity, so an unconfirmed
+// key (directory_missing, key_mismatch, identity_unverifiable, or no verdict yet) blocks the
+// address only.
+export function blockKey(trust: SenderTrust | null, senderKeyHex: string): string | undefined {
+  if (!senderKeyHex || !trust) return undefined;
+  switch (trust.kind) {
+    case 'allowlisted':
+    case 'domain_verified':
+    case 'unknown_pending':
+    case 'record_changed':
+    case 'key_changed': // the header key IS the directory's; it only differs from our pin
+      return senderKeyHex;
+    default:
+      return undefined;
+  }
 }

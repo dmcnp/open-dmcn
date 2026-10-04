@@ -26,7 +26,7 @@ import { loadKeyChange, type KeyChange } from '../lib/trust/lineage';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { useSettings } from '../lib/hooks/useSettings';
-import { categorizeSender } from '../lib/trust/category';
+import { blockKey, categorizeSender } from '../lib/trust/category';
 import { contactFacts, directoryFacts } from '../lib/trust/pinnedKey';
 import { senderLabel, sanitizeDisplayName } from '../lib/trust/displayName';
 import { fromHex } from '../lib/crypto/keys';
@@ -611,10 +611,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const handleBlock = async () => {
     setActioning(true);
     try {
-      // For bridged legacy mail, block by ADDRESS only: msg.senderPublicKey is the shared bridge
-      // key, so key-blocking it would block ALL bridged mail. (Relay-side key blocking can't apply
-      // to a legacy sender anyway — the relay only ever sees the bridge; this hides it locally.)
-      await blockSender(msg.senderAddress, bridgedLegacy ? undefined : msg.senderPublicKey);
+      // The key is blocked only when the directory confirms it is the sender's own (blockKey):
+      // bridged mail is signed by the shared bridge key, and key-blocking that would hide ALL
+      // bridged mail. Bridged mail therefore blocks by address and is hidden locally.
+      await blockSender(msg.senderAddress, bridgedLegacy ? undefined : blockKey(nativeTrust, msg.senderPublicKey));
       if (onDeleteOverride) await onDeleteOverride();
       else { await deleteMessage(msg.hash); await removeFlags(msg.hash); } // GC flag record
     } catch { /* ignore; close regardless */ }
