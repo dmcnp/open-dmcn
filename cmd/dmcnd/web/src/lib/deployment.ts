@@ -18,6 +18,7 @@ import type { StorageUsage } from './api/personalStore';
 import type { WorkingKeys } from './crypto/workingKeys';
 import type { RotatedSibling } from './crypto/rotation';
 import type { ChangeFeed } from './sync/changes';
+import type { AccessState } from './hooks/useMessages';
 
 // InboxNotice is one kind of request-shaped control message, surfaced as a row at the top of
 // the inbox. The shell owns the row and the dialog it opens; the deployment owns which kinds
@@ -143,8 +144,10 @@ export interface Deployment {
   // Something the deployment has to say about the account itself, shown as the first row of the
   // inbox: the product's trial ending, or reading locked until a plan is chosen. Absent ⇒ no row,
   // which is the honest answer on a deployment that sells nothing and so has no trial to end.
-  // The component decides for itself whether it has anything to say, and renders nothing if not.
-  accountNotice?: ComponentType<{ address: string }>;
+  // The component decides for itself whether it has anything to say, and renders nothing if not,
+  // with one exception: when `access` is 'suspended' it MUST render, because the shell then
+  // leaves the explaining to it rather than stack its own error above the same news.
+  accountNotice?: ComponentType<{ address: string; access: AccessState }>;
   // Extra addresses on the same account, if this deployment can mint them. Rendered as its own
   // card in Settings; absent ⇒ no card, which is the honest answer on a deployment whose
   // addresses are assigned out of band (the reference daemon answers petitions from an offline

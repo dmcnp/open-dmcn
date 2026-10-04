@@ -427,7 +427,13 @@ export function InboxMain() {
   };
 
   const pending = !!error && error.includes('POLICY_PENDING');
-  const listError = folder === 'sent' ? sentError : error;
+  // Reading is locked at the relay: an empty list then says nothing about the mailbox, so the
+  // list stops claiming a count or an empty inbox it cannot see.
+  const locked = accessState === 'suspended' || accessState === 'closed';
+  // In the Inbox, a deployment's account notice explains a suspension with a way out, so the
+  // shell's own error would only say the same thing again above it, without one.
+  const noticeSpeaks = !!AccountNotice && accessState === 'suspended' && folder === 'inbox' && !q;
+  const listError = folder === 'sent' ? sentError : noticeSpeaks ? null : error;
   const doRefresh = () => Promise.all([refresh(), refreshSent()]);
   // Pull-to-refresh, on the phone list only: the reader is not a list, and a pointer has the
   // header's Refresh button.
@@ -472,9 +478,11 @@ export function InboxMain() {
               <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>
                 {q ? 'Filter results' : folderTitle}
               </span>
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                {rows.length} {rows.length === 1 ? 'message' : 'messages'}
-              </span>
+              {!(locked && rows.length === 0) && (
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                  {rows.length} {rows.length === 1 ? 'message' : 'messages'}
+                </span>
+              )}
             </div>
             <IconButton size="sm" aria-label="Refresh" onClick={doRefresh}><Icon name="refresh" size={16} /></IconButton>
           </div>
@@ -517,10 +525,10 @@ export function InboxMain() {
               {/* Pending requests announce themselves above the mail, in the Inbox only: they
                   are things asking to happen to this account, not things to find in Archive,
                   and a filter result is a search for mail, not for them. */}
-              {folder === 'inbox' && !q && AccountNotice && address && <AccountNotice address={address} />}
+              {folder === 'inbox' && !q && AccountNotice && address && <AccountNotice address={address} access={accessState} />}
               {folder === 'inbox' && !q && <InboxNotices />}
 
-              {sorting ? null : rows.length === 0 ? (
+              {sorting || (locked && rows.length === 0) ? null : rows.length === 0 ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
                   <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
                   <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>

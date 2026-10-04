@@ -69,7 +69,7 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
           // distinct account state (not a transient sync error) so the UI can explain it.
           if (err instanceof ApiError && err.status === 403 && err.code === 'access_suspended') {
             setAccessState('suspended');
-            setError('Your account access is suspended — new mail is still delivered, but reading is locked until you reactivate.');
+            setError('Reading is paused on this account. New mail is still being delivered, and you can read it again once access is restored.');
             return;
           }
           if (err instanceof ApiError && err.status === 403 && err.code === 'access_closed') {
