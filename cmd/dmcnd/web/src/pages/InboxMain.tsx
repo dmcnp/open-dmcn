@@ -33,6 +33,7 @@ import { useSearch, useSearchHits } from '../lib/search/useSearchIndex';
 // A function, not a module-level Set: `deployment` imports screens that import this module,
 // and a value read during module evaluation would depend on which side of that cycle ran first.
 const controlSubjects = () => new Set<string>(deployment.controlSubjects);
+const AccountNotice = deployment.accountNotice;
 
 // A displayed row: one Preview plus every mailbox hash it stands for. Normally one
 // hash, but Sent rows fold all copies sharing a messageId together (a defensive
@@ -516,6 +517,7 @@ export function InboxMain() {
               {/* Pending requests announce themselves above the mail, in the Inbox only: they
                   are things asking to happen to this account, not things to find in Archive,
                   and a filter result is a search for mail, not for them. */}
+              {folder === 'inbox' && !q && AccountNotice && address && <AccountNotice address={address} />}
               {folder === 'inbox' && !q && <InboxNotices />}
 
               {sorting ? null : rows.length === 0 ? (

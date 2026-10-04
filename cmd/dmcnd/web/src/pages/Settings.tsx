@@ -38,6 +38,14 @@ import { Icon } from '../components/Icon';
 import { formatBytes } from '../lib/format';
 
 type Section = 'profile' | 'privacy' | 'appearance' | 'organise' | 'account';
+const SECTIONS: readonly Section[] = ['profile', 'privacy', 'appearance', 'organise', 'account'];
+
+// The tab to open on: ?section= when a link elsewhere names one (the trial notice links to the
+// plans on 'account'), the first tab otherwise.
+function initialSection(): Section {
+  const asked = new URLSearchParams(window.location.search).get('section');
+  return SECTIONS.find(s => s === asked) ?? 'profile';
+}
 
 // StorageCard surfaces the owner's personal-storage usage (Sent, contacts,
 // settings, flags) against their effective quota. An unbounded quota (0) shows the
@@ -223,7 +231,7 @@ export function Settings() {
   const { onAppearanceChange } = useOutletContext<MailOutletContext>();
 
   const { settings, updateSettings } = useSettings();
-  const [section, setSection] = useState<Section>('profile');
+  const [section, setSection] = useState<Section>(initialSection);
   // Profile form (synced account settings). Seeded from the loaded settings doc.
   const [signature, setSignature] = useState('');
   const [composePlainText, setComposePlainText] = useState(false);
