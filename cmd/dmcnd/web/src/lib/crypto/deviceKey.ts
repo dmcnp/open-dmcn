@@ -15,6 +15,7 @@
 // second account on the same browser enrols separately, as it should.
 import { DEVICE_STORE, idbDelete, idbGet, idbPut } from './idb';
 import { bufferSource } from './bytes';
+import { toBase64 } from './keys';
 
 /** This browser's signing key for one mailbox. The private half never leaves the platform. */
 export interface DeviceKey {
@@ -136,6 +137,7 @@ export async function forgetDeviceKey(address: string): Promise<void> {
 const DEVICE_APPROVE_CTX = 'dmcn-device-approve-v1\0';
 const DEVICE_RETIRE_CTX = 'dmcn-device-retire-v1\0';
 const DEVICE_CHALLENGE_CTX = 'dmcn-device-challenge-v1\0';
+const DEVICE_SEND_CTX = 'dmcn-device-send-v1\0';
 
 /**
  * Build the bytes an enrolled device signs to act on another device.
@@ -197,4 +199,36 @@ export function deviceChallengeBytes(nonce: Uint8Array): Uint8Array {
   out.set(tag, 0);
   out.set(nonce, tag.length);
   return out;
+}
+
+/**
+ * The bytes this device signs to send one message: its tag and the envelope hash the account's
+ * own signature covers. Must match Go's identity.DeviceSendBytes.
+ *
+ * The sender's home relay requires it once the account has enrolled devices, so a removed device,
+ * or the account key alone, can no longer send. Tagged apart from the challenge answer because the
+ * hash is chosen by the sender rather than served by a relay, and the two must never be the same
+ * message.
+ */
+export function deviceSendBytes(envHash: Uint8Array): Uint8Array {
+  const tag = new TextEncoder().encode(DEVICE_SEND_CTX);
+  const out = new Uint8Array(tag.length + envHash.length);
+  out.set(tag, 0);
+  out.set(envHash, tag.length);
+  return out;
+}
+
+/**
+ * This browser's device proof for one send, as the send request carries it: empty where the
+ * account has no device key here yet (an account that never enrolled sends on its key alone, and
+ * the relay agrees). `accountAddress` is the account's own address, also when sending as an alias:
+ * the device belongs to the account.
+ */
+export async function deviceSendProof(accountAddress: string, envHash: Uint8Array): Promise<{ device_public?: string; device_signature?: string }> {
+  const device = await loadDeviceKey(accountAddress);
+  if (!device) return {};
+  return {
+    device_public: toBase64(device.publicKey),
+    device_signature: toBase64(await device.sign(deviceSendBytes(envHash))),
+  };
 }

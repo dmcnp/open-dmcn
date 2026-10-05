@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyEnrolment, describeBrowser, deviceStanding, isUnapprovedDevice, MAX_DEVICE_LABEL, openDeviceLabel, sealDeviceLabel } from './deviceRegistry';
+import { classifyEnrolment, classifyRecovery, describeBrowser, deviceStanding, forgetRecovery, isUnapprovedDevice, MAX_DEVICE_LABEL, openDeviceLabel, rememberedRecovery, rememberRecovery, sealDeviceLabel, waitingDevices, type DeviceRecord } from './deviceRegistry';
 import { toBase64 } from '../crypto/keys';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
@@ -91,5 +91,60 @@ describe('describeBrowser', () => {
     expect(describeBrowser('Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0')).toBe('Firefox on Linux');
     expect(describeBrowser('Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36')).toBe('Chrome on Android');
     expect(describeBrowser('curl/8')).toBe('Web browser');
+  });
+});
+
+// A recovery request has four answers, and the browser shows four different things. Each match is
+// on the relay's own sentence (pinned on the Go side by TestDeviceErrorPhrasesTheBrowserMatches),
+// as the mailbox proxy forwards it.
+describe('classifyRecovery', () => {
+  it('tells a domain that refuses recovery apart from a removed browser', () => {
+    expect(classifyRecovery(new Error('device enrol failed: relay: this domain does not let a device join without approval'))).toEqual({ state: 'disabled' });
+    expect(classifyRecovery(new Error('device enrol failed: relay: enrolment needs approval from a device already on this mailbox'))).toEqual({ state: 'cancelled' });
+  });
+  it('reads asking again as the earlier request standing', () => {
+    expect(classifyRecovery(new Error('device enrol failed: relay: mailbox-ext: INVALID_REQUEST: this device is already enrolled'))).toEqual({ state: 'already-asked' });
+  });
+  it('keeps anything else as an outage', () => {
+    expect(classifyRecovery(new Error('network down')).state).toBe('unavailable');
+  });
+  it('does not let the disabled answer read as an enrolment refusal', () => {
+    // The disabled sentence must not be mistaken for "needs approval" by the enrolment probe.
+    expect(classifyEnrolment(new Error('device enrol failed: relay: this domain does not let a device join without approval')).state).toBe('unavailable');
+  });
+});
+
+describe('the remembered recovery date', () => {
+  it('round-trips per address, and tolerates no storage at all', () => {
+    const store = new Map<string, string>();
+    const g = globalThis as unknown as { localStorage?: unknown };
+    const prev = g.localStorage;
+    g.localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v); },
+      removeItem: (k: string) => { store.delete(k); },
+    };
+    try {
+      expect(rememberedRecovery('a@x')).toBeNull();
+      rememberRecovery('a@x', 1_800_000_000);
+      expect(rememberedRecovery('a@x')).toBe(1_800_000_000);
+      expect(rememberedRecovery('b@x')).toBeNull();
+      forgetRecovery('a@x');
+      expect(rememberedRecovery('a@x')).toBeNull();
+    } finally {
+      g.localStorage = prev;
+    }
+    // In node there is no localStorage: nothing throws, nothing is remembered.
+    expect(() => rememberRecovery('a@x', 5)).not.toThrow();
+    expect(rememberedRecovery('a@x')).toBeNull();
+  });
+});
+
+describe('waitingDevices', () => {
+  it('keeps only recovery requests still inside their wait', () => {
+    const now = 1_800_000_000;
+    const d = (over: Partial<DeviceRecord>): DeviceRecord => ({ public: 'k', enrolled_at: now - 100, ...over });
+    const list = [d({ public: 'active' }), d({ public: 'waiting', eligible_at: now + 3600 }), d({ public: 'done', eligible_at: now - 1 }), d({ public: 'gone', retired_at: now - 5, eligible_at: now + 3600 })];
+    expect(waitingDevices(list, now).map(x => x.public)).toEqual(['waiting']);
   });
 });

@@ -433,7 +433,8 @@ export function InboxMain() {
   const pending = !!error && error.includes('POLICY_PENDING');
   // Reading is locked at the relay: an empty list then says nothing about the mailbox, so the
   // list stops claiming a count or an empty inbox it cannot see.
-  const locked = accessState === 'suspended' || accessState === 'closed';
+  // A browser that is not an approved device sees nothing of the mailbox either, so the same holds.
+  const locked = accessState === 'suspended' || accessState === 'closed' || accessState === 'unapproved-device';
   // In the Inbox, a deployment's account notice explains a suspension with a way out, so the
   // shell's own error would only say the same thing again above it, without one.
   const noticeSpeaks = !!AccountNotice && accessState === 'suspended' && folder === 'inbox' && !q;
@@ -443,7 +444,7 @@ export function InboxMain() {
   // useless on a first visit.
   const firstRun = gettingStarted.visible && folder === 'inbox' && !q && isFirstRun({
     mailLoaded, sentLoaded, mailCount: mail.length, sentCount: sent.length,
-    explained: locked || pending || accessState === 'unapproved-device' || !!error,
+    explained: locked || pending || !!error, // locked covers an unapproved browser too
   });
   const doRefresh = () => Promise.all([refresh(), refreshSent()]);
   // Pull-to-refresh, on the phone list only: the reader is not a list, and a pointer has the

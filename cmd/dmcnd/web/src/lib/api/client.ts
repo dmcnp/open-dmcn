@@ -290,6 +290,10 @@ export interface SendMessageRequest {
    *  recipient. Send-cap enforcement counts a multi-recipient compose as one
    *  message but N recipients; empty ⇒ each POST is its own message. */
   message_id?: string;
+  /** This browser's device proof over the envelope hash (deviceSendProof). The sender's home relay
+   *  requires it once the account has enrolled devices. */
+  device_public?: string;
+  device_signature?: string;
 }
 
 export interface SendMessageResponse {

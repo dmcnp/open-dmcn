@@ -541,8 +541,9 @@ export function Settings() {
                 <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Backup &amp; recovery</span>
               </div>
               <p style={{ margin: '0 0 var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-                Because the server keeps no copy of your keys, losing every device means losing this identity. Download an
-                encrypted backup file and keep it somewhere safe — it can restore your identity on a new device.
+                Because the server keeps no copy of your keys, losing every device without a backup means losing this identity.
+                Download an encrypted backup file and keep it somewhere safe. It brings your keys back on a new device, which may
+                still need approval before it opens your mail.
               </p>
 
               {persisted === false && (

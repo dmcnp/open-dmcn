@@ -12,6 +12,7 @@ import { encryptSplit, type SplitEnvelope, type AttachmentInput } from '../lib/c
 import { encodeSplitEnvelope } from '../lib/crypto/protobuf';
 import { signWithKey } from '../lib/crypto/sign';
 import { toBase64, fromBase64, toHex, fromHex } from '../lib/crypto/keys';
+import { deviceSendProof } from '../lib/crypto/deviceKey';
 import { SentStore } from '../lib/api/sentStore';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useContacts, type Contact } from '../lib/hooks/useContacts';
@@ -439,6 +440,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         // Shared across every recipient copy of this compose, so send-cap enforcement
         // counts one message with N recipients rather than N separate messages.
         message_id: toHex(messageId),
+        // The device belongs to the ACCOUNT, also when this goes out as an alias.
+        ...(await deviceSendProof(address, envHash)),
       });
       return res.envelope_hash;
     };

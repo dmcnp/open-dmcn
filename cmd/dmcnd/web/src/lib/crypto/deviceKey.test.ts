@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { bufferSource } from './bytes';
-import { deviceApprovalBytes, deviceRetirementBytes, deviceChallengeBytes } from './deviceKey';
+import { deviceApprovalBytes, deviceRetirementBytes, deviceChallengeBytes, deviceSendBytes } from './deviceKey';
 
 // Known-answer vectors for the bytes an enrolled device signs to act on another device. The Go
 // half is TestParityVectorDeviceActions in internal/core/identity/deviceparity_test.go, with the
@@ -16,6 +16,7 @@ const VEC = {
   approve: '646d636e2d6465766963652d617070726f76652d763100766563746f72407061726974792e6578616d706c6521212121212121212121212121212121212121212121212121212121212121212222222222222222222222222222222222222222222222222222222222222222000000006553f100',
   retire: '646d636e2d6465766963652d7265746972652d763100766563746f72407061726974792e6578616d706c6521212121212121212121212121212121212121212121212121212121212121212222222222222222222222222222222222222222222222222222222222222222',
   challenge: '646d636e2d6465766963652d6368616c6c656e67652d7631002222222222222222222222222222222222222222222222222222222222222222',
+  send: '646d636e2d6465766963652d73656e642d7631002222222222222222222222222222222222222222222222222222222222222222',
 };
 
 const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
@@ -38,6 +39,13 @@ describe('device action signing bytes (Go identity.deviceActionBytes)', () => {
     // The relay already knows which mailbox it asked about, so there is nothing else to name.
     // What the tag buys is that this can never also be an approval, whatever nonce is served.
     expect(hex(deviceChallengeBytes(NONCE))).toBe(VEC.challenge);
+  });
+
+  it('send: the tag and the envelope hash, apart from the challenge', () => {
+    // Here the envelope hash is the same 32 bytes as the nonce, which is the point: same input,
+    // different message, so a send proof can never be served back as a challenge answer.
+    expect(hex(deviceSendBytes(NONCE))).toBe(VEC.send);
+    expect(hex(deviceSendBytes(NONCE))).not.toBe(VEC.challenge);
   });
 
   it('an absent time contributes nothing rather than a zero', () => {

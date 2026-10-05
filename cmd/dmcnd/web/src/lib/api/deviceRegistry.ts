@@ -231,6 +231,89 @@ export async function ensureDeviceEnrolled(account: AccountSigner, sealedLabel?:
 }
 
 /**
+ * What a recovery request came back with. `waiting` is the ordinary answer: this browser is on the
+ * mailbox and can act from `eligibleAt` (unix seconds) unless a device still on the account
+ * removes it first. `already-asked` means this browser's earlier request (or a finished one)
+ * stands; `cancelled` that it was removed from another device, which no second request can undo;
+ * `disabled` that the account's domain does not allow joining without approval.
+ */
+export type RecoveryState =
+  | { state: 'waiting'; eligibleAt: number }
+  | { state: 'already-asked' }
+  | { state: 'cancelled' }
+  | { state: 'disabled' }
+  | { state: 'unavailable'; error: unknown };
+
+/**
+ * Ask for this browser to join the account WITHOUT an approving device, on the domain's recovery
+ * delay. This is the way back for someone whose every other device is gone: the request waits in
+ * the open, every device still on the account sees it, and any of them can cancel it by removing
+ * it. Never started on its own (see ensureDeviceEnrolled): only when the owner asks.
+ */
+export async function requestRecovery(account: AccountSigner, sealedLabel?: Uint8Array): Promise<RecoveryState> {
+  try {
+    const device = await getOrCreateDeviceKey(account.address);
+    const attested = await attestDevice(account.address, device.publicKey);
+    const res = await deviceOp<{ device: DeviceRecord }>(account, {
+      op: 'device_enroll',
+      device_public: toBase64(device.publicKey),
+      recovery: true,
+      ...(sealedLabel ? { device_label: toBase64(sealedLabel) } : {}),
+      ...(attested ? { device_credential: toBase64(attested.credential) } : {}),
+    }, undefined, attested?.issuedAt);
+    const eligibleAt = res.device?.eligible_at ?? 0;
+    rememberRecovery(account.address, eligibleAt);
+    return { state: 'waiting', eligibleAt };
+  } catch (err) {
+    const state = classifyRecovery(err);
+    if (state.state === 'cancelled' || state.state === 'disabled') forgetRecovery(account.address);
+    return state;
+  }
+}
+
+/**
+ * Turn a failed recovery request into what it means. On a recovery request the relay can only
+ * answer "needs approval" for a browser that was removed (a cancelled request, or an older device
+ * of the owner's), because a domain that refuses recovery says so in its own words.
+ */
+export function classifyRecovery(err: unknown): RecoveryState {
+  if (err instanceof Error) {
+    if (err.message.includes('does not let a device join without approval')) return { state: 'disabled' };
+    if (err.message.includes('this device is already enrolled')) return { state: 'already-asked' };
+    if (err.message.includes('needs approval from a device')) return { state: 'cancelled' };
+  }
+  return { state: 'unavailable', error: err };
+}
+
+// A waiting browser cannot list the registry (listing needs an active device), so the date it
+// was given is kept here to show it again after a reload. Per address, a convenience only: the
+// relay is what decides, and losing this just means the date is asked for again.
+const recoveryKey = (address: string) => `dmcn.recovery.eligibleAt.${address}`;
+
+export function rememberRecovery(address: string, eligibleAt: number): void {
+  try { localStorage.setItem(recoveryKey(address), String(eligibleAt)); } catch { /* shown again on the next request */ }
+}
+
+/** The date (unix seconds) this browser's recovery request said it can act from, or null. */
+export function rememberedRecovery(address: string): number | null {
+  try {
+    const n = Number(localStorage.getItem(recoveryKey(address)));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetRecovery(address: string): void {
+  try { localStorage.removeItem(recoveryKey(address)); } catch { /* nothing to clear */ }
+}
+
+/** Devices that joined through recovery and are still inside their wait: the owner's to veto. */
+export function waitingDevices(devices: DeviceRecord[], nowSec: number): DeviceRecord[] {
+  return devices.filter(d => deviceStanding(d, nowSec) === 'waiting');
+}
+
+/**
  * Turn a failed enrolment into the state it actually represents.
  *
  * Two of the relay's answers are states rather than failures, and reading either wrongly is
