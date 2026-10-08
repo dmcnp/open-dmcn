@@ -26,6 +26,7 @@ import { readTheme, readThemePref, readDensity, writeThemePref, writeDensity, ty
 import { APP_VERSION } from '../lib/config';
 import { PageShell } from '../components/PageShell';
 import { BlockedSenders } from '../components/BlockedSenders';
+import { MailboxExport } from '../components/MailboxExport';
 import { CopyButton } from '../components/CopyButton';
 import { SectionHeading, SettingsCard as Card } from '../components/SettingsSection';
 import type { MailOutletContext } from '../components/AppLayout';
@@ -736,6 +737,9 @@ export function Settings() {
                 domain's policy, on the fleet, and on this device's own standing. */}
             {RotateKey && keys && address && <RotateKey address={address} keys={keys} />}
         {address && lasting && <DeviceUnlockSettings address={address} />}
+
+            {/* Above Mailbox, beside storage: it is the mail itself, as files to take anywhere. */}
+            <MailboxExport />
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />

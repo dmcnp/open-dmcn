@@ -25,6 +25,13 @@ export interface FullBody {
   // analog). Absent for plain-only mail. The reader renders it sanitized + sandboxed.
   htmlBody?: string;
   attachments: DecryptedAttachment[];
+  // Hex of the header's reply_to_id ('' when it names nothing), from the header this open
+  // verified. The list row does not carry it; the export needs it to thread replies.
+  replyToId?: string;
+  // The row as the header this open verified says it is. A row drawn from this device is
+  // corrected to match before this resolves, so a caller holding an older copy of the row (the
+  // export, which keeps the list it started from) writes what the relay's signed header says.
+  row?: Preview;
 }
 
 export interface Preview {
@@ -62,6 +69,9 @@ export interface Preview {
 
 // A header field the bundle may leave unset renders as an empty id.
 const hexOrEmpty = (b: Uint8Array | undefined): string => (b ? toHex(b) : '');
+
+// reply_to_id, where an all-zero id means "not a reply" just as an absent one does.
+export const replyIdHex = (b: Uint8Array | undefined): string => (b && b.some(x => x !== 0) ? toHex(b) : '');
 
 interface OpenedEntry {
   entry: MailboxEntryLike;
@@ -485,7 +495,10 @@ export class MailboxSync {
     const res = await this.complete<BodyResp>(ch.correlation_id, ch.nonce);
     const bodyProto = (await decodeMailboxBody(fromBase64(res.body))) as unknown as MailboxBodyLike;
     const content = await decryptBody(entry, bodyProto, header, keys.x25519Derive, keys.x25519Public);
-    return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
+    return {
+      bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments,
+      replyToId: replyIdHex(header.replyToId), row: cached.preview,
+    };
   }
 
   // deleteMessage removes a message from the mailbox (hold-until-deleted) and

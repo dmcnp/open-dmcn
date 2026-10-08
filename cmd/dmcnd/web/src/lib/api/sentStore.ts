@@ -7,7 +7,7 @@
 // the body and are lazy-loaded, and the Sent list only ever handles headers.
 
 import { PersonalStore } from './personalStore';
-import type { Preview, FullBody } from './mailboxRest';
+import { replyIdHex, type Preview, type FullBody } from './mailboxRest';
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { decryptHeader, decryptBody, type MailboxEntryLike, type MailboxBodyLike, type SplitEnvelope } from '../crypto/split';
 import { asDecryptOnly, retiredKeys } from '../crypto/retiredKeys';
@@ -322,7 +322,10 @@ export class SentStore {
     const b = await this.store.get<StoredBody>(sentBodyKey(mid));
     if (!b) throw new Error('sent body not found');
     const content = await this.openBody(row.opened.entry, toBody(b.value), row.opened.header);
-    return { bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments };
+    return {
+      bodyText: content.bodyText, htmlBody: content.htmlBody, attachments: content.attachments,
+      replyToId: replyIdHex(row.opened.header.replyToId), row: row.preview,
+    };
   }
 
   async delete(messageIdHex: string): Promise<void> {

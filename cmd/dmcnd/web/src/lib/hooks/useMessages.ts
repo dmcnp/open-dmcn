@@ -15,8 +15,11 @@ import { ChangeFeedUnavailable } from '../sync/changes';
 export type { Preview } from '../api/mailboxRest';
 
 // AccessState reflects the account's node-enforced access entitlement, learned from the
-// mailbox-sync response: 'ok' (reads allowed), 'suspended' (lapsed/grace — reads locked,
-// inbound still delivered), or 'closed' (terminal). The UI shows a banner for the latter two.
+// mailbox-sync response: 'ok' (reads allowed), 'suspended' (reads locked, inbound still
+// delivered), or 'closed' (terminal). The UI shows a banner for the latter two. A current relay
+// never reports 'suspended': grace leaves reads open (so the owner can export) and locks only
+// sending, so it is reported by a relay from before that change alone. Grace itself is not
+// visible here; a deployment that needs to say so reads it from its own account service.
 // 'unapproved-device' is this BROWSER rather than the account: the account has enrolled devices
 // and this is not one of them (never paired, or removed from another device), so the way back
 // is pairing it, which the inbox offers.
@@ -67,6 +70,9 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           // A node-enforced access lock is a 403 with a machine code — surface it as a
           // distinct account state (not a transient sync error) so the UI can explain it.
+          // A current relay locks only a closed mailbox (a suspended account can still read and
+          // export its mail); access_suspended comes from a relay that predates that, and is
+          // kept for as long as relays of both ages may answer (grace-open shim: remove once every relay runs grace-open; TODO P3).
           if (err instanceof ApiError && err.status === 403 && err.code === 'access_suspended') {
             setAccessState('suspended');
             setError('Reading is paused on this account. New mail is still being delivered, and you can read it again once access is restored.');

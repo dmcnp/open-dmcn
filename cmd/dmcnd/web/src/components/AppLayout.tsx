@@ -139,7 +139,10 @@ export function AppLayout() {
       mailCount: messages.filter(m => !control.has(m.subject)).length,
       explained: accessState !== 'ok' || !!mailError,
     });
-    if (empty && gettingStarted.visible && location.pathname === '/inbox') navigate('/getting-started', { replace: true });
+    // The URL the browser is at, not the router's location: a navigation is applied as a
+    // transition, so a render the mailbox's arrival triggers can still see /inbox after a click on
+    // Settings has already left it, and replacing that entry would pull the person back.
+    if (empty && gettingStarted.visible && window.location.pathname === '/inbox') navigate('/getting-started', { replace: true });
   }, [address, gettingStarted.available, gettingStarted.loaded, gettingStarted.visible, mailLoaded, sentLoaded, sent.length, messages, accessState, mailError, location.pathname, navigate]);
 
   useEffect(() => { writeThemePref(themePref); }, [themePref]);
