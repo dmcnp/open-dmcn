@@ -46,7 +46,7 @@ beside the protocol on their own libp2p protocols (§7).
         │
  relay service        /dmcn/relay/1.0.0: STORE / FETCH + mailbox ops / resolve
         │
- trust                Credential PKI (DNS-anchored DAR)
+ trust                Credential PKI (DNS-anchored DomainAuthorityRecord)
         │
  transport            libp2p streams (no DHT; discovery is DNS-seeded)
 ```
@@ -64,9 +64,9 @@ beside the protocol on their own libp2p protocols (§7).
   it did not exist: a node MUST refuse to store it and MUST NOT serve it, and a reader MUST NOT
   verify it. Zero means the record never expires. Long-lived records, such as an ordinary
   account's, leave it at zero, because only the owner's key can renew it and an owner who lost
-  their devices would lose the address. It is meant for records made to be temporary, such as the
-  short-lived record a new device uses while it pairs. An operator that wants an address to lapse
-  sets `not_after` on the credentials it issues (§2) instead. The record survives, and the
+  their devices would lose the address. It is meant for records made to be temporary, such as
+  the short-lived record a new device uses while it pairs. An operator that wants an address to
+  lapse sets `not_after` on the credentials it issues (§2) instead. The record survives, and the
   domain's attestation of it ends.
 - **Resolution is DNS-seeded and per-domain, with no global directory.** A resolver reads the
   mailbox domain's `_dmcn.<domain>` DNS TXT record:
@@ -79,19 +79,20 @@ beside the protocol on their own libp2p protocols (§7).
   domain's root key, in uppercase hex. `fleet=` optionally defers hosting to another domain's
   nodes. It is used for discovery only, so spoofing it is DoS, never forgery. `seed=` lists
   bootstrap multiaddrs, each ending `/p2p/<peerID>` so the transport handshake authenticates the
-  endpoint. The resolver dials a seed, fetches the domain's DAR and the `IdentityRecord` (plus
-  removal/blocklist companions), and verifies everything against the mailbox `fp=`. Records are
-  self-certifying, so a wrong or hostile fleet can deny service but cannot forge anything. A
-  domain is served only by its own fleet, and no global overlay exists that a foreign majority
-  could censor. NXDOMAIN / no `_dmcn` record means the address does not exist; transient DNS
-  failure fails closed.
-- **The DAR's signed `fleet_domain`.** A DAR may declare the fleet its domain defers to. When it
-  does, a resolver MUST refuse a DNS `fleet=` that names a different one. A DAR that declares
-  none follows the DNS `fleet=` as discovery only. This matters to a client that pins `fp=` but
-  re-reads `fleet=` and `seed=`; in plain DNS, whoever can move `fleet=` can move `fp=` too.
+  endpoint. The resolver dials a seed, fetches the domain's `DomainAuthorityRecord` (§2) and the
+  `IdentityRecord` (plus removal/blocklist companions), and verifies everything against the
+  mailbox `fp=`. Records are self-certifying, so a wrong or hostile fleet can deny service but
+  cannot forge anything. A domain is served only by its own fleet, and no global overlay exists
+  that a foreign majority could censor. NXDOMAIN / no `_dmcn` record means the address does not
+  exist; transient DNS failure fails closed.
+- **The signed `fleet_domain`.** A `DomainAuthorityRecord` may declare the fleet its domain
+  defers to. When it does, a resolver MUST refuse a DNS `fleet=` that names a different one. One
+  that declares none follows the DNS `fleet=` as discovery only. This matters to a client that
+  pins `fp=` but re-reads `fleet=` and `seed=`; in plain DNS, whoever can move `fleet=` can move
+  `fp=` too.
 - **Retiring an address: `AddressRemovalRecord`.** An address is taken out of service by an
-  append-only, per-address removal record, keyed on `SHA-256(address)`, listing the `(key, removedAt)`
-  bindings it tombstones. A tombstone does two jobs, and they have different
+  append-only, per-address removal record, keyed on `SHA-256(address)`, listing the
+  `(key, removedAt)` bindings it tombstones. A tombstone does two jobs, and they have different
   signers:
 
   1. **Suppression.** A tombstoned binding stops verifying: readers MUST drop it to
@@ -125,11 +126,11 @@ beside the protocol on their own libp2p protocols (§7).
 
 ## 2. Trust: the Credential PKI
 
-Trust is anchored in the domain, not in each message. Each domain has a **DomainAuthorityRecord
-(DAR)**, served by the domain's fleet and anchored by its `_dmcn` DNS record. The root delegates
-to issuers (carried in the DAR) under a monotone grants calculus: an issuer cannot delegate more
-than it holds, scope only narrows, and issuing a grant-bearing credential requires the `grant`
-capability.
+Trust is anchored in the domain, not in each message. Each domain has a
+**`DomainAuthorityRecord`**, served by the domain's fleet and anchored by its `_dmcn` DNS
+record. The root delegates to issuers (carried in the same record) under a monotone grants
+calculus: an issuer cannot delegate more than it holds, scope only narrows, and issuing a
+grant-bearing credential requires the `grant` capability.
 
 A **`Credential`** binds a subject key to a domain along two independent axes: **roles** (what
 the credential *is*) and **grants** (actions it *may perform*).
@@ -141,13 +142,13 @@ binding), `routing` (the operator-owned `RelayHints` for an address). Core grant
 ([`SPEC_EXT_BRIDGE.md`](SPEC_EXT_BRIDGE.md)) and `device`
 ([`SPEC_EXT_ROTATION.md`](SPEC_EXT_ROTATION.md)). Operators may define more (§7).
 
-**Issuance is authorised by grants, not by a role**: any DAR-enrolled credential whose grants
-cover a leaf's roles may issue it; an issued credential is not valid until signed. Credentials
-verify by chaining to the DNS-anchored root (max depth 8). Revocation is a root-signed
-**`CredentialBlockList`** companion record, which covers both timestamped and key-compromise
-revocation. The `address` and `routing` credentials are embedded *inside* the `IdentityRecord`
-and excluded from the owner self-signature, so the operator can (re)issue them (to re-point
-routing, for example) without the mailbox owner's key.
+**Issuance is authorised by grants, not by a role**: any credential enrolled in the domain's
+`DomainAuthorityRecord` whose grants cover a leaf's roles may issue it; an issued credential is
+not valid until signed. Credentials verify by chaining to the DNS-anchored root (max depth 8).
+Revocation is a root-signed **`CredentialBlockList`** companion record, which covers both
+timestamped and key-compromise revocation. The `address` and `routing` credentials are embedded
+*inside* the `IdentityRecord` and excluded from the owner self-signature, so the operator can
+(re)issue them (to re-point routing, for example) without the mailbox owner's key.
 
 **Signing convention (records and credentials):**
 
@@ -301,7 +302,7 @@ All cryptography is **client-side**; relays only ever handle sealed envelopes.
   without the mailbox owner's key.
 - **A sender MUST check the hints before using them**: they are excluded from the owner
   self-signature, so they count only when backed by a `routing` credential that verifies against
-  the recipient domain's DAR.
+  the recipient domain's `DomainAuthorityRecord`.
 - **Send.** Look up the recipient's record and STORE to the first reachable hint, failing over
   to the next. A domain may ask senders to STORE to every reachable hint instead
   (`REPLICATE_MAILBOX`, [`SPEC_EXT_FLEET.md`](SPEC_EXT_FLEET.md)); a core sender that stores to
@@ -388,15 +389,15 @@ none ignores them. The device credential is defined in
 [`SPEC_EXT_ROTATION.md`](SPEC_EXT_ROTATION.md); how devices are enrolled and removed is not part
 of the open protocol.
 
-**`REQUIRE_COUNTERSIGN` (DAR policy bit 0) and reserved local-parts.** On a domain that sets the
-bit, an address is not usable until it carries a valid `address` credential from the domain. The
-same applies, on any domain, to an address whose local-part is in the DAR's
-`reserved_local_parts` list (compared case-insensitively). A relay answers FETCH for such an
-address with `POLICY_PENDING`, still accepts mail addressed to it, and releases that mail once
-the address is countersigned. A relay refuses STORE from a sender that is not usable under its
-own domain's policy (`SENDER_NOT_VOUCHED`). The reference implementation makes one exception: a
-pending sender may write to its own domain's countersign inbox, which is how it asks for the
-credential.
+**`REQUIRE_COUNTERSIGN` (`DomainAuthorityRecord` policy bit 0) and reserved local-parts.** On a
+domain that sets the bit, an address is not usable until it carries a valid `address` credential
+from the domain. The same applies, on any domain, to an address whose local-part is in the
+`reserved_local_parts` list of the domain's `DomainAuthorityRecord` (compared
+case-insensitively). A relay answers FETCH for such an address with `POLICY_PENDING`, still
+accepts mail addressed to it, and releases that mail once the address is countersigned. A relay
+refuses STORE from a sender that is not usable under its own domain's policy
+(`SENDER_NOT_VOUCHED`). The reference implementation makes one exception: a pending sender may
+write to its own domain's countersign inbox, which is how it asks for the credential.
 
 ### Ping
 
@@ -473,7 +474,7 @@ The core does not define extensions. It defines the places where they attach:
 - **Separate libp2p protocol IDs.** Operator and product surfaces run their own protocols beside
   the core (`/dmcn/relay` never carries them). Reserved core numbers mark where earlier drafts
   carried them.
-- **DAR `policy_flags`.** All the documents share one bit field:
+- **`DomainAuthorityRecord.policy_flags`.** All the documents share one bit field:
 
   | Bit | Flag | Defined in |
   |---|---|---|
