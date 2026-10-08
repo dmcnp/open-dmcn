@@ -330,6 +330,16 @@ func (r *IdentityRecord) IssueRoutingCredential(issuer *IdentityKeyPair, hints [
 	return nil
 }
 
+// Expired reports whether the record's owner-signed expiry has passed at now. A record with no
+// ExpiresAt never expires, which is every registered account: only records minted to be
+// temporary (pairing records) carry one.
+//
+// Past its expiry a record is treated as absent everywhere (refused on the way in, not served,
+// not verified), because the owner signed that it stops being true then. See SPEC_CORE.md §1.
+func (r *IdentityRecord) Expired(now time.Time) bool {
+	return !r.ExpiresAt.IsZero() && !now.Before(r.ExpiresAt)
+}
+
 // signableBytes returns the canonical protobuf serialisation of the record
 // with all fields except SelfSignature. This is the byte sequence over
 // which the signature is computed.

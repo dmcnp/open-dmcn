@@ -353,3 +353,20 @@ func TestVerificationTierValues(t *testing.T) {
 		t.Errorf("TierDANE = %d, want 3", TierDANE)
 	}
 }
+
+// TestRecordExpired pins the boundary: a zero ExpiresAt never expires (every registered account),
+// and a record is expired from the instant its ExpiresAt is reached, not a second later.
+func TestRecordExpired(t *testing.T) {
+	at := time.Unix(1_800_000_000, 0)
+	rec := &IdentityRecord{}
+	if rec.Expired(at.AddDate(1000, 0, 0)) {
+		t.Fatal("a record with no ExpiresAt expired")
+	}
+	rec.ExpiresAt = at
+	if rec.Expired(at.Add(-time.Nanosecond)) {
+		t.Fatal("expired before ExpiresAt")
+	}
+	if !rec.Expired(at) {
+		t.Fatal("not expired at ExpiresAt")
+	}
+}

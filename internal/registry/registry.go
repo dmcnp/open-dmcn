@@ -92,12 +92,21 @@ func New(opts ...Option) *Registry {
 }
 
 // Lookup returns an address's IdentityRecord from the source (self-signature already verified by the
-// source), or ErrNotFound when no source is installed or the record is absent.
+// source), or ErrNotFound when no source is installed, the record is absent, or its owner-signed
+// expiry has passed: an expired record is one its owner declared over, and a node still holding
+// it must not bring it back to life for a reader.
 func (r *Registry) Lookup(ctx context.Context, address string) (*identity.IdentityRecord, error) {
 	if r.source == nil || r.source.Identity == nil {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, address)
 	}
-	return r.source.Identity(ctx, address)
+	rec, err := r.source.Identity(ctx, address)
+	if err != nil {
+		return nil, err
+	}
+	if rec != nil && rec.Expired(time.Now()) {
+		return nil, fmt.Errorf("%w: %s (expired %s)", ErrNotFound, address, rec.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	return rec, nil
 }
 
 // LookupDomainAuthority returns a domain's DAR from the source. Only a definitive "no DAR" maps to
@@ -165,6 +174,11 @@ func (r *Registry) LookupRelayDescriptor(ctx context.Context, peerID string) (*i
 func (r *Registry) VerifyManagedIdentity(ctx context.Context, rec *identity.IdentityRecord) (identity.VerificationTier, error) {
 	if err := rec.Verify(); err != nil {
 		return identity.TierUnverified, fmt.Errorf("registry: self-signature: %w", err)
+	}
+	// Checked here as well as in Lookup because a record also reaches a verifier by other routes
+	// (embedded in a message, handed over by a peer), and an expired one is not a binding at all.
+	if rec.Expired(time.Now()) {
+		return identity.TierUnverified, fmt.Errorf("registry: record for %s expired at %s", rec.Address, rec.ExpiresAt.UTC().Format(time.RFC3339))
 	}
 	domain := domainverify.DomainOf(rec.Address)
 

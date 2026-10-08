@@ -78,6 +78,11 @@ func (r *Relay) acceptIdentity(ctx context.Context, data []byte) (bool, string) 
 	if err := rec.Verify(); err != nil {
 		return false, "identity self-signature invalid"
 	}
+	// The owner signed that this record stops being true at ExpiresAt; storing it afterwards would
+	// serve a binding its own owner has declared over.
+	if rec.Expired(time.Now()) {
+		return false, fmt.Sprintf("identity record expired at %s", rec.ExpiresAt.UTC().Format(time.RFC3339))
+	}
 
 	// Ephemeral device-pairing records live on the reserved, non-routable pairing.local domain.
 	// They have no DAR, confer no power, expire in ~15 minutes, and can only overwrite another

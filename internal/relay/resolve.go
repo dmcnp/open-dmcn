@@ -18,7 +18,7 @@ import (
 // network round-trip for the relay's own accounts.
 func (r *Relay) resolveIdentity(ctx context.Context, address string) (*identity.IdentityRecord, error) {
 	if r.records != nil {
-		if rec, err := r.records.GetIdentity(ctx, address); err == nil && rec != nil {
+		if rec, err := r.records.GetIdentity(ctx, address); err == nil && rec != nil && !rec.Expired(time.Now()) {
 			return rec, nil
 		}
 	}
@@ -52,7 +52,16 @@ func (r *Relay) lookupRecordBytes(get func(context.Context) ([]byte, error)) []b
 
 func (r *Relay) handleGetIdentity(req *dmcnpb.GetIdentityRequest) *dmcnpb.RelayResponse {
 	data := r.lookupRecordBytes(func(ctx context.Context) ([]byte, error) {
-		return r.records.GetIdentityBytes(ctx, req.GetAddress())
+		data, err := r.records.GetIdentityBytes(ctx, req.GetAddress())
+		if err != nil || data == nil {
+			return data, err
+		}
+		// Do not serve a record whose owner-signed expiry has passed, even to a reader who would
+		// check it themselves: the node still holding it is not a reason for it to exist.
+		if rec, perr := identity.IdentityRecordFromProtoBytes(data); perr == nil && rec.Expired(time.Now()) {
+			return nil, nil
+		}
+		return data, nil
 	})
 	return &dmcnpb.RelayResponse{Response: &dmcnpb.RelayResponse_GetIdentity{
 		GetIdentity: &dmcnpb.GetIdentityResponse{Found: data != nil, Record: data},
