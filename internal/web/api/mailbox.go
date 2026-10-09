@@ -37,6 +37,9 @@ var (
 	// rejected for being over its total-storage cap. The relay adapter maps the relay's
 	// ErrMailboxFull onto it so the send handler returns 507 rather than a generic 502.
 	ErrMailboxFull = errors.New("recipient mailbox full")
+	// ErrRecipientClosed: the recipient's account is closed and its relay refused the copy. Like
+	// ErrMailboxFull it is the account's verdict, so the send answers 410 without failing over.
+	ErrRecipientClosed = errors.New("recipient account closed")
 	// ErrAccessSuspended / ErrAccessClosed: the account's node-enforced access entitlement
 	// blocks reads. The relay adapter maps the relay's sentinels onto these so the mailbox
 	// challenge returns 403 with a machine code the client shows as an account state.

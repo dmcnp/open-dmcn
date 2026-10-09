@@ -285,8 +285,15 @@ type IdentityRecord struct {
 	// key stops being terminal. Covered by the owner self-signature. 32 bytes, or empty when the
 	// owner has enrolled none.
 	RecoveryEd25519PublicKey []byte `protobuf:"bytes,30,opt,name=recovery_ed25519_public_key,json=recoveryEd25519PublicKey,proto3" json:"recovery_ed25519_public_key,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// forward_to: an address, DMCN or ordinary email, that also receives this address's mail, and
+	// receives all of it once the mailbox closes. Covered by the owner self-signature, so only the
+	// owner sets or clears it; empty means no forward. A sender resolves it when sending: a target
+	// with a DMCN identity gets its own end-to-end sealed copy, any other target gets the copy as
+	// ordinary email through a bridge. One hop only: a target's own forward_to is never followed.
+	// See SPEC_CORE.md §1.
+	ForwardTo     string `protobuf:"bytes,31,opt,name=forward_to,json=forwardTo,proto3" json:"forward_to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IdentityRecord) Reset() {
@@ -436,6 +443,13 @@ func (x *IdentityRecord) GetRecoveryEd25519PublicKey() []byte {
 		return x.RecoveryEd25519PublicKey
 	}
 	return nil
+}
+
+func (x *IdentityRecord) GetForwardTo() string {
+	if x != nil {
+		return x.ForwardTo
+	}
+	return ""
 }
 
 // AuthorityKey is one entry in a domain root authority's key timeline.
@@ -2060,7 +2074,7 @@ const file_identity_proto_rawDesc = "" +
 	"attestedAt\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\a \x01(\x03R\texpiresAt\x12\x1c\n" +
-	"\tsignature\x18\b \x01(\fR\tsignature\"\xde\b\n" +
+	"\tsignature\x18\b \x01(\fR\tsignature\"\xfd\b\n" +
 	"\x0eIdentityRecord\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12,\n" +
@@ -2082,7 +2096,9 @@ const file_identity_proto_rawDesc = "" +
 	"\brevision\x18\x1a \x01(\x04R\brevision\x12L\n" +
 	"\x14operator_credentials\x18\x1c \x03(\v2\x19.dmcn.identity.CredentialR\x13operatorCredentials\x12C\n" +
 	"\x0erotation_chain\x18\x1d \x03(\v2\x1c.dmcn.identity.RotationEntryR\rrotationChain\x12=\n" +
-	"\x1brecovery_ed25519_public_key\x18\x1e \x01(\fR\x18recoveryEd25519PublicKeyJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17J\x04\b\x1b\x10\x1cR\x06claimsR\rclaim_recordsR\x06policyR\fpolicy_flagsR\x0fguardian_policyR\x11bridge_capabilityR\x17domain_countersignatureR\x17domain_countersigned_atR\x1bdomain_countersigner_pubkeyR\x0frate_credential\"\xb8\x01\n" +
+	"\x1brecovery_ed25519_public_key\x18\x1e \x01(\fR\x18recoveryEd25519PublicKey\x12\x1d\n" +
+	"\n" +
+	"forward_to\x18\x1f \x01(\tR\tforwardToJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17J\x04\b\x1b\x10\x1cR\x06claimsR\rclaim_recordsR\x06policyR\fpolicy_flagsR\x0fguardian_policyR\x11bridge_capabilityR\x17domain_countersignatureR\x17domain_countersigned_atR\x1bdomain_countersigner_pubkeyR\x0frate_credential\"\xb8\x01\n" +
 	"\fAuthorityKey\x12,\n" +
 	"\x12ed25519_public_key\x18\x01 \x01(\fR\x10ed25519PublicKey\x12*\n" +
 	"\x11x25519_public_key\x18\x02 \x01(\fR\x0fx25519PublicKey\x12%\n" +

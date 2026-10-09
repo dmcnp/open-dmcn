@@ -4,7 +4,7 @@
 //
 // Three things the browser encodes on its own and Go verifies byte-for-byte: the identity
 // record's self-signed bytes (which fields the signature excludes, how proto3 defaults vanish,
-// the field numbers of require_onion and revision), the body's content address, and the
+// the field numbers of require_onion, revision and forward_to), the body's content address, and the
 // header snippet. Change either side and one suite goes red.
 //
 // Fixed inputs: Ed25519 public = 32x0x07, X25519 public = 32x0x08, created 1700000000,
@@ -20,6 +20,7 @@ import { bodyContentAddress, snippetOf } from './split';
 
 const VEC = {
   identityFull: '08011215766563746f72407061726974792e6578616d706c651a200707070707070707070707070707070707070707070707070707070707070707222008080808080808080808080808080808080808080808080808080808080808082880e2cfaa063080a4a7da064002b80101d00103',
+  identityForward: '08011215766563746f72407061726974792e6578616d706c651a200707070707070707070707070707070707070707070707070707070707070707222008080808080808080808080808080808080808080808080808080808080808082880e2cfaa06fa0118766563746f7240656c736577686572652e6578616d706c65',
   identityMinimal: '08011215766563746f72407061726974792e6578616d706c651a200707070707070707070707070707070707070707070707070707070707070707222008080808080808080808080808080808080808080808080808080808080808082880e2cfaa06',
   bodyCID: '015512203946fa8f9480c933c7f5efb0a06254d612940e924ecdebd2e041e2425802d306',
   removalSignable: '0801120e7061726974792e6578616d706c651a15766563746f72407061726974792e6578616d706c6522280a2007070707070707070707070707070707070707070707070707070707070707071080e2cfaa0628033081e2cfaa06',
@@ -53,6 +54,29 @@ describe('identity record signable bytes (Go identity.signableBytes)', () => {
       relayHints: [], verificationTier: 0,
     });
     expect(hex(b)).toBe(VEC.identityMinimal);
+  });
+
+  it('forward_to: field 31 is signed, with its two-byte tag, as in Go', async () => {
+    const b = await encodeIdentitySignableBytes({
+      version: 1, address: 'vector@parity.example',
+      ed25519PublicKey: fill(32, 0x07), x25519PublicKey: fill(32, 0x08),
+      createdAt: 1_700_000_000, expiresAt: 0,
+      relayHints: [], verificationTier: 0, forwardTo: 'vector@elsewhere.example',
+    });
+    expect(hex(b)).toBe(VEC.identityForward);
+  });
+
+  it('forward_to survives the wire: a decoded record re-encodes to the bytes it was signed over', async () => {
+    const wire = await encodeIdentityRecord({
+      version: 1, address: 'vector@parity.example',
+      ed25519PublicKey: fill(32, 0x07), x25519PublicKey: fill(32, 0x08),
+      createdAt: 1_700_000_000, expiresAt: 0,
+      relayHints: ['/dns4/relay.parity.example/tcp/7400'], verificationTier: 0,
+      forwardTo: 'vector@elsewhere.example', selfSignature: fill(64, 0x05),
+    });
+    const decoded = await decodeIdentityRecord(wire);
+    expect(decoded.forwardTo).toBe('vector@elsewhere.example');
+    expect(hex(await encodeIdentitySignableBytes(decoded))).toBe(VEC.identityForward);
   });
 });
 

@@ -212,6 +212,11 @@ type IdentityRecord struct {
 	// active key stops being terminal. Covered by the owner SelfSignature. Nil when the owner
 	// has enrolled none.
 	RecoveryEd25519Public ed25519.PublicKey
+
+	// ForwardTo is an address, DMCN or ordinary email, that also receives this address's mail
+	// and receives all of it once the mailbox closes. Covered by the owner SelfSignature, so
+	// only the owner sets or clears it. Empty when there is no forward. See forward.go.
+	ForwardTo string
 }
 
 // HasAddressCredential reports whether a Credential-PKI address attestation is present.
@@ -361,6 +366,7 @@ func (r *IdentityRecord) signableBytes() ([]byte, error) {
 		// presents and to the recovery key that may replace it.
 		RotationChain:            r.rotationChainProto(),
 		RecoveryEd25519PublicKey: r.RecoveryEd25519Public,
+		ForwardTo:                r.ForwardTo, // owner-owned: only the owner points their mail elsewhere
 		// SelfSignature intentionally omitted — this is what we sign over
 	}
 
@@ -398,6 +404,7 @@ func (r *IdentityRecord) ToProto() *dmcnpb.IdentityRecord {
 		// Owner-signed, like the fields above and unlike the credentials below.
 		RotationChain:            r.rotationChainProto(),
 		RecoveryEd25519PublicKey: r.RecoveryEd25519Public,
+		ForwardTo:                r.ForwardTo,
 	}
 	if r.AddressCredential != nil {
 		pb.AddressCredential = r.AddressCredential.ToProto()
@@ -432,6 +439,12 @@ func IdentityRecordFromProto(pb *dmcnpb.IdentityRecord) (*IdentityRecord, error)
 		return nil, fmt.Errorf("identity: recovery key is %d bytes, want %d", n, ed25519.PublicKeySize)
 	}
 
+	// A malformed forward is refused at parse for the same reason: the signature covers it, so
+	// it would verify, and every sender would then trip over it on its own.
+	if err := ValidateForwardTo(pb.Address, pb.ForwardTo); err != nil {
+		return nil, err
+	}
+
 	var selfSig [64]byte
 	copy(selfSig[:], pb.SelfSignature)
 
@@ -453,6 +466,7 @@ func IdentityRecordFromProto(pb *dmcnpb.IdentityRecord) (*IdentityRecord, error)
 		Revision:              pb.Revision,
 		SelfSignature:         selfSig,
 		RecoveryEd25519Public: pb.RecoveryEd25519PublicKey,
+		ForwardTo:             pb.ForwardTo,
 	}
 	chain, err := rotationChainFromProto(pb.RotationChain)
 	if err != nil {

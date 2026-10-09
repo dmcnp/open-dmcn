@@ -23,6 +23,8 @@ import (
 type fakeRelayRouter struct {
 	storeCalls int
 	onionCalls int
+	// storeErr, when set, is what every STORE answers.
+	storeErr error
 	// lastHints records the relay hints a STORE was routed to, so a test can assert WHERE mail
 	// went and not merely that it went somewhere.
 	lastHints []string
@@ -33,7 +35,7 @@ func (f *fakeRelayRouter) ConnectPeer(string) error { return nil }
 func (f *fakeRelayRouter) StorePreSignedOnPeer(_ context.Context, hint, _ string, _ []byte, _ *message.EncryptedEnvelope) ([32]byte, error) {
 	f.storeCalls++
 	f.lastHints = append(f.lastHints, hint)
-	return [32]byte{}, nil
+	return [32]byte{}, f.storeErr
 }
 
 func (f *fakeRelayRouter) SendOnionPreSigned(_ context.Context, _ string, _ []byte, _ *identity.IdentityRecord, _ *message.EncryptedEnvelope) ([32]byte, error) {
@@ -238,6 +240,35 @@ func sendStore(t *testing.T, replicate func(context.Context, string) bool) int {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	return router.storeCalls
+}
+
+// A closed recipient account (a fleet that closes accounts answers RECIPIENT_CLOSED) is a 410,
+// without trying the next hint; a full mailbox stays a 507.
+func TestHandleSend_ClosedRecipientIsGone(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{api.ErrRecipientClosed, http.StatusGone},
+		{api.ErrMailboxFull, http.StatusInsufficientStorage},
+	} {
+		ss, _ := webcore.NewSessionStore([]byte("test-session-signing-secret-32by"), time.Hour, "")
+		lookup := func(_ context.Context, addr string) (*identity.IdentityRecord, error) {
+			return &identity.IdentityRecord{Address: addr, RelayHints: []string{"/ip4/127.0.0.1/tcp/1", "/ip4/127.0.0.1/tcp/2"}}, nil
+		}
+		router := &fakeRelayRouter{storeErr: tc.err}
+		h := api.NewMessageHandler(nil, lookup, router, nil, nil, logr.With(logr.M("test", true)))
+		body := fmt.Sprintf(`{"sender_address":"alice@dmcn.me","sender_signature":"AAAA","envelope":%q,"recipient_address":"bob@dmcn.me"}`, validEnvelopeB64(t))
+		req, _ := authedRequest(t, "POST", "/api/v1/messages/send", body, ss, "alice@dmcn.me")
+		rr := httptest.NewRecorder()
+		h.HandleSend(rr, req)
+		if rr.Code != tc.want {
+			t.Fatalf("%v: status %d, want %d: %s", tc.err, rr.Code, tc.want, rr.Body.String())
+		}
+		if router.storeCalls != 1 {
+			t.Fatalf("%v: stored on %d hints, want 1 (no failover on the account's verdict)", tc.err, router.storeCalls)
+		}
+	}
 }
 
 func TestHandleSend_ReplicatesToAllHints(t *testing.T) {

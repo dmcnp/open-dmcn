@@ -65,6 +65,11 @@ var (
 	// account's total-storage cap. It is retryable in the SMTP sense (the Phase 2 bridge maps
 	// it to a 452 tempfail): the sender should back off while the recipient frees space.
 	ErrMailboxFull = errors.New("relay: recipient mailbox full")
+	// ErrRecipientClosed is what a STORE answers (RECIPIENT_CLOSED) when every hosted recipient's
+	// account is closed. This relay closes no accounts itself; a fleet that does (an operator's
+	// access entitlement) refuses the copy rather than storing it where nobody can read it, and
+	// a sender talking to one maps the answer here.
+	ErrRecipientClosed = errors.New("relay: recipient account is closed")
 	// ErrAccessSuspended / ErrAccessClosed are returned by a FETCH when the account's access
 	// entitlement puts it in the suspended (reads locked, inbound still accepted) or closed
 	// (terminal) mode. The web surfaces these distinctly so the user sees why mail won't load.
@@ -1351,6 +1356,8 @@ func storeRespError(resp *dmcnpb.RelayResponse) error {
 		return ErrRateLimited
 	case "MAILBOX_FULL":
 		return ErrMailboxFull
+	case "RECIPIENT_CLOSED":
+		return ErrRecipientClosed
 	default:
 		return fmt.Errorf("relay: store: %s: %s", errResp.Code, errResp.Message)
 	}

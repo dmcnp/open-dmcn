@@ -131,6 +131,14 @@ message IdentityRecord {
   // key stops being terminal. Covered by the owner self-signature. 32 bytes, or empty when the
   // owner has enrolled none.
   bytes recovery_ed25519_public_key = 30;
+
+  // forward_to: an address, DMCN or ordinary email, that also receives this address's mail, and
+  // receives all of it once the mailbox closes. Covered by the owner self-signature, so only the
+  // owner sets or clears it; empty means no forward. A sender resolves it when sending: a target
+  // with a DMCN identity gets its own end-to-end sealed copy, any other target gets the copy as
+  // ordinary email through a bridge. One hop only: a target's own forward_to is never followed.
+  // See SPEC_CORE.md §1.
+  string forward_to = 31;
 }
 
 // AuthorityKey is one entry in a domain root authority's key timeline.

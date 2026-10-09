@@ -162,6 +162,9 @@ export interface RecordState {
   requireOnion?: boolean;
   rotationChain: RotationEntryWire[];
   recoveryEd25519PublicKey?: Uint8Array;
+  // Where the owner has asked their mail to go as well. Signed, so a rotation that dropped it
+  // would quietly stop the forward.
+  forwardTo?: string;
 }
 
 /** One sibling address's current state, enough to build its own next record. */
@@ -282,6 +285,7 @@ export async function signRotation(inputs: RotationInputs): Promise<RotatedRecor
       revision: nextRevision,
       rotationChain: chain,
       recoveryEd25519PublicKey: state.recoveryEd25519PublicKey,
+      forwardTo: state.forwardTo,
     };
     const selfSignature = await signSelfSignature(next.ed25519Private.slice(0, 32), await encodeIdentitySignableBytes(base));
     return { entry, selfSignature, record: await encodeIdentityRecord({ ...base, selfSignature }) };

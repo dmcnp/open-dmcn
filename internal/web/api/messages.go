@@ -195,6 +195,12 @@ func (h *MessageHandler) HandleSend(w http.ResponseWriter, r *http.Request) {
 						writeError(w, http.StatusInsufficientStorage, "recipient mailbox is full")
 						return
 					}
+					// A closed account is the same kind of verdict; 410 lets the client say so.
+					if errors.Is(serr, ErrRecipientClosed) && stored == 0 {
+						h.log.Info("recipient account closed", logr.M("recipient", req.RecipientAddress))
+						writeError(w, http.StatusGone, "recipient account is closed")
+						return
+					}
 					lastErr = serr
 					continue
 				}

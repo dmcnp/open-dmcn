@@ -25,6 +25,7 @@ import { toPlainText } from '../lib/html/toPlainText';
 import { fromPlainText } from '../lib/html/fromPlainText';
 import { bufferSource } from '../lib/crypto/bytes';
 import { formatBytes } from '../lib/format';
+import { isRecipientClosed, lookupFailureKind, recipientClosedMessage } from '../lib/recipientLookup';
 
 
 // Total attachment cap per message (body + all attachments ride inline in one sealed
@@ -54,7 +55,8 @@ function newUuid(): Uint8Array {
 //  - trusted: in the owner's contact list (allowlisted)     → blue shield
 //  - dmcn:    a DMCN identity, not (yet) a contact           → green shield
 //  - legacy:  no DMCN identity (legacy email via a bridge)   → amber warning, NOT E2E
-type RecipientKind = 'trusted' | 'dmcn' | 'legacy';
+//  - unchecked: the directory could not be asked just now      → muted, no claim either way
+type RecipientKind = 'trusted' | 'dmcn' | 'legacy' | 'unchecked';
 
 function recipientChip(kind: RecipientKind | undefined): {
   icon: 'shield-check' | 'shield' | 'alert-triangle';
@@ -65,6 +67,7 @@ function recipientChip(kind: RecipientKind | undefined): {
     case 'trusted': return { icon: 'shield-check', color: 'var(--trust-contact)', title: 'Trusted contact' };
     case 'dmcn':    return { icon: 'shield-check', color: 'var(--trust-dmcn)', title: 'DMCN recipient — end-to-end encrypted' };
     case 'legacy':  return { icon: 'alert-triangle', color: 'var(--warning)', title: 'Legacy email — cannot be end-to-end encrypted' };
+    case 'unchecked': return { icon: 'shield', color: 'var(--text-muted)', title: "We couldn't check this address just now." };
     default:        return { icon: 'shield', color: 'var(--text-muted)', title: 'Checking recipient…' };
   }
 }
@@ -215,15 +218,19 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         // detectable. pinKey is a no-op if this device already holds a pin for them.
         void pinKey(addr, facts);
       }
-    } catch {
-      // Not resolvable in the DMCN directory → a legacy address reachable only via a
-      // bridge, which cannot be end-to-end encrypted. handleSend surfaces send errors.
+    } catch (e) {
+      // Only a 404 says "no DMCN identity here": a legacy address reachable only via a bridge,
+      // which cannot be end-to-end encrypted. Record that ABSENCE as an observation rather than
+      // leaving it blank: for a contact we have already pinned, "the directory now offers no
+      // identity" is a change to compare, and a blank leaves checkPin with nothing to say
+      // precisely when it matters most.
       //
-      // Record the ABSENCE as an observation rather than leaving it blank: for a contact we
-      // have already pinned, "the directory now offers no identity" is a change to compare,
-      // and a blank leaves checkPin with nothing to say precisely when it matters most.
-      setRecipientInfo(m => ({ ...m, [key]: 'legacy' }));
-      setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
+      // Any other failure means the directory could not be asked, which says nothing about the
+      // address, so it records no facts (an outage must not read as "their identity is gone").
+      // handleSend looks again and surfaces its own error.
+      const kind = lookupFailureKind(e);
+      setRecipientInfo(m => ({ ...m, [key]: kind }));
+      if (kind === 'legacy') setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
     }
   };
 
@@ -572,16 +579,23 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         // (onion-routed when requested or required by their record). Bcc is EMPTY on
         // every recipient copy — a Bcc recipient is never revealed, and a reply-all
         // can't leak the Bcc list.
-        await storeEnvelope(
-          await encryptSplit({
-            ...common,
-            recipientAddress: rcpt,
-            bcc: [],
-            recipients: [{ deviceId: new Uint8Array(16), x25519Pub: recipientX25519 }],
-          }),
-          rcpt,
-          onion,
-        );
+        try {
+          await storeEnvelope(
+            await encryptSplit({
+              ...common,
+              recipientAddress: rcpt,
+              bcc: [],
+              recipients: [{ deviceId: new Uint8Array(16), x25519Pub: recipientX25519 }],
+            }),
+            rcpt,
+            onion,
+          );
+        } catch (e) {
+          // The recipient's relay refused the copy because their account is closed: say that,
+          // in their name, rather than a delivery error.
+          if (isRecipientClosed(e)) throw new Error(recipientClosedMessage(rcpt), { cause: e });
+          throw e;
+        }
       }
 
       // Sent self-copy: seal the SAME composed message to our OWN X25519 key and store
@@ -1015,7 +1029,7 @@ function RecipientField({ label, values, onRemove, pending, setPending, onKey, o
         const isContact = contacts.some(c => c.address.trim().toLowerCase() === key);
         // Legacy always wins (can't be E2E); otherwise a known contact is "trusted"
         // (blue), a resolvable non-contact is "dmcn" (green), unresolved is pending.
-        const kind: RecipientKind | undefined = info === 'legacy' ? 'legacy' : isContact ? 'trusted' : info;
+        const kind: RecipientKind | undefined = info === 'legacy' || info === 'unchecked' ? info : isContact ? 'trusted' : info;
         const chip = recipientChip(kind);
         return (
           <Tag key={r} onRemove={() => onRemove(r)}>

@@ -461,10 +461,13 @@ describe('what the new record inherits', () => {
         verificationTier: 2,
         requireOnion: true,
         rotationChain: [],
+        forwardTo: 'alice@example.org',
       },
     });
     const rec = await decodeIdentityRecord(signed.record);
     expect(rec.requireOnion).toBe(true);
+    // A forward the owner set keeps working across a new key.
+    expect(rec.forwardTo).toBe('alice@example.org');
     expect(Number(rec.expiresAt)).toBe(1_900_000_000);
     expect(rec.verificationTier).toBe(2);
     expect(Number(rec.createdAt)).toBe(1_600_000_000);

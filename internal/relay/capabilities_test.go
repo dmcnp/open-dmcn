@@ -15,6 +15,9 @@ func TestCapabilitiesAdvertised(t *testing.T) {
 	if !slices.Contains(caps, CapRotation) {
 		t.Fatalf("capabilities %v omit %q — this build enforces the owner-rotation arm", caps, CapRotation)
 	}
+	if !slices.Contains(caps, CapForwardSchema) {
+		t.Fatalf("capabilities %v omit %q — this build parses forward_to, so it must say so", caps, CapForwardSchema)
+	}
 	// Enforcing the arm implies understanding the schema, so a build claiming the first while
 	// withholding the second would be describing a state that cannot exist.
 	if slices.Contains(caps, CapRotation) && !slices.Contains(caps, CapRotationSchema) {

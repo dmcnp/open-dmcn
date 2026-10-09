@@ -192,5 +192,8 @@ func mapStoreErr(err error) error {
 	if errors.Is(err, relay.ErrMailboxFull) {
 		return webapi.ErrMailboxFull
 	}
+	if errors.Is(err, relay.ErrRecipientClosed) {
+		return webapi.ErrRecipientClosed
+	}
 	return err
 }

@@ -566,6 +566,7 @@ export const dmcn = $root.dmcn = (() => {
              * @property {Array.<dmcn.identity.ICredential>|null} [operatorCredentials] IdentityRecord operatorCredentials
              * @property {Array.<dmcn.identity.IRotationEntry>|null} [rotationChain] IdentityRecord rotationChain
              * @property {Uint8Array|null} [recoveryEd25519PublicKey] IdentityRecord recoveryEd25519PublicKey
+             * @property {string|null} [forwardTo] IdentityRecord forwardTo
              */
 
             /**
@@ -724,6 +725,14 @@ export const dmcn = $root.dmcn = (() => {
             IdentityRecord.prototype.recoveryEd25519PublicKey = $util.newBuffer([]);
 
             /**
+             * IdentityRecord forwardTo.
+             * @member {string} forwardTo
+             * @memberof dmcn.identity.IdentityRecord
+             * @instance
+             */
+            IdentityRecord.prototype.forwardTo = "";
+
+            /**
              * Creates a new IdentityRecord instance using the specified properties.
              * @function create
              * @memberof dmcn.identity.IdentityRecord
@@ -789,6 +798,8 @@ export const dmcn = $root.dmcn = (() => {
                         $root.dmcn.identity.RotationEntry.encode(message.rotationChain[i], writer.uint32(/* id 29, wireType 2 =*/234).fork(), q + 1).ldelim();
                 if (message.recoveryEd25519PublicKey != null && Object.hasOwnProperty.call(message, "recoveryEd25519PublicKey"))
                     writer.uint32(/* id 30, wireType 2 =*/242).bytes(message.recoveryEd25519PublicKey);
+                if (message.forwardTo != null && Object.hasOwnProperty.call(message, "forwardTo"))
+                    writer.uint32(/* id 31, wireType 2 =*/250).string(message.forwardTo);
                 return writer;
             };
 
@@ -903,6 +914,10 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 30: {
                             message.recoveryEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 31: {
+                            message.forwardTo = reader.string();
                             break;
                         }
                     default:
@@ -1027,6 +1042,9 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.recoveryEd25519PublicKey != null && Object.hasOwnProperty.call(message, "recoveryEd25519PublicKey"))
                     if (!(message.recoveryEd25519PublicKey && typeof message.recoveryEd25519PublicKey.length === "number" || $util.isString(message.recoveryEd25519PublicKey)))
                         return "recoveryEd25519PublicKey: buffer expected";
+                if (message.forwardTo != null && Object.hasOwnProperty.call(message, "forwardTo"))
+                    if (!$util.isString(message.forwardTo))
+                        return "forwardTo: string expected";
                 return null;
             };
 
@@ -1168,6 +1186,8 @@ export const dmcn = $root.dmcn = (() => {
                         $util.base64.decode(object.recoveryEd25519PublicKey, message.recoveryEd25519PublicKey = $util.newBuffer($util.base64.length(object.recoveryEd25519PublicKey)), 0);
                     else if (object.recoveryEd25519PublicKey.length >= 0)
                         message.recoveryEd25519PublicKey = object.recoveryEd25519PublicKey;
+                if (object.forwardTo != null)
+                    message.forwardTo = String(object.forwardTo);
                 return message;
             };
 
@@ -1244,6 +1264,7 @@ export const dmcn = $root.dmcn = (() => {
                         if (options.bytes !== Array)
                             object.recoveryEd25519PublicKey = $util.newBuffer(object.recoveryEd25519PublicKey);
                     }
+                    object.forwardTo = "";
                 }
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     object.version = message.version;
@@ -1306,6 +1327,8 @@ export const dmcn = $root.dmcn = (() => {
                 }
                 if (message.recoveryEd25519PublicKey != null && Object.hasOwnProperty.call(message, "recoveryEd25519PublicKey"))
                     object.recoveryEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.recoveryEd25519PublicKey, 0, message.recoveryEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.recoveryEd25519PublicKey) : message.recoveryEd25519PublicKey;
+                if (message.forwardTo != null && Object.hasOwnProperty.call(message, "forwardTo"))
+                    object.forwardTo = message.forwardTo;
                 return object;
             };
 

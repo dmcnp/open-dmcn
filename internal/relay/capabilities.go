@@ -30,6 +30,12 @@ const (
 	// that merely parses the chain would still refuse the rebind, after the client had already
 	// re-wrapped its keystore.
 	CapRotation = "rotation"
+
+	// CapForwardSchema: this build parses and re-marshals IdentityRecord.forward_to, so a record
+	// carrying a forward verifies here instead of being refused as a bad self-signature. The
+	// deploy-ordering signal for forwarding: an owner's client publishes a forward only once
+	// every relay that will serve the record says this.
+	CapForwardSchema = "forward-schema"
 )
 
 // capabilities returns the tokens this build advertises, newest last.
@@ -37,5 +43,5 @@ const (
 // Deliberately a function over a package-level slice: a caller that mutated a shared slice
 // would change what every future Ping claims.
 func capabilities() []string {
-	return []string{CapRotationSchema, CapRotation}
+	return []string{CapRotationSchema, CapRotation, CapForwardSchema}
 }

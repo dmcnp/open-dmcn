@@ -230,6 +230,8 @@ it really conforms. The <a href="/faq#what-does-the-license-allow">FAQ</a> has t
         
         <tr><td class="mono">30</td><td class="mono">recovery_ed25519_public_key</td><td class="mono">bytes</td><td>owner-held key, kept apart from the active one, that may authorize the next rotation when the active key is lost; covered by the self-signature; empty when none is enrolled</td></tr>
         
+        <tr><td class="mono">31</td><td class="mono">forward_to</td><td class="mono">string</td><td>an address (DMCN or ordinary email) that also receives this address&#39;s mail, and all of it once the mailbox closes; senders send it its own copy, sealed to it when it has a DMCN identity; one hop only; covered by the self-signature; empty when there is no forward</td></tr>
+        
       </tbody>
     </table>
   </div>

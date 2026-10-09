@@ -57,7 +57,8 @@ beside the protocol on their own libp2p protocols (§7).
   `local@domain`.
 - It is a self-signed **`IdentityRecord`** carrying a monotonic owner-signed `revision`. The
   owner self-signature covers the *identity core* (address, keys, created/expires, verification
-  tier, onion flag, revision). It does not cover `RelayHints`, which the operator owns (§4), or
+  tier, onion flag, revision, forward target, and the rotation fields of
+  [`SPEC_EXT_ROTATION.md`](SPEC_EXT_ROTATION.md)). It does not cover `RelayHints`, which the operator owns (§4), or
   the embedded operator credentials.
 - **Expiry.** `expires_at` is set by the owner and covered by the owner self-signature, so no
   relay or operator can extend it or remove it. Once it has passed, the record is treated as if
@@ -68,6 +69,30 @@ beside the protocol on their own libp2p protocols (§7).
   the short-lived record a new device uses while it pairs. An operator that wants an address to
   lapse sets `not_after` on the credentials it issues (§2) instead. The record survives, and the
   domain's attestation of it ends.
+- **Forwarding: `forward_to`.** The owner may name one other address, DMCN or ordinary email,
+  that also receives the address's mail. It is covered by the owner self-signature, so no relay or
+  operator can set, change or remove it; empty means no forward. It is in the clear: anyone who
+  resolves the address can read it. It adds a copy and takes nothing away: while the mailbox is
+  open, mail goes to both, and once the recipient's account is closed (a STORE answers
+  `RECIPIENT_CLOSED`, §5) the forward copy is the only one delivered.
+
+  A sender writing to an address whose verified record carries `forward_to` MUST also send the
+  message to the target, unless the target is already one of the message's recipients or is the
+  sender. The sender resolves the target itself, when it sends:
+
+  - A target with a DMCN identity gets its own copy, sealed end-to-end to it like any other
+    recipient's. It is built the way a Bcc copy is (§3): `recipient_address` names the target, so
+    the reader's audience check passes, and the signed To/Cc are the message's own, so the target
+    sees who the mail was written to.
+  - Any other target gets the copy as ordinary email through a bridge. That copy is not
+    end-to-end encrypted, and the client MUST say so to the sender before sending.
+
+  One hop only: a sender MUST NOT follow the target's own `forward_to`. A target that gains a DMCN
+  identity later starts receiving sealed copies without the owner doing anything, because every
+  send resolves it again. Nothing can make a sender honour the forward; one that does not still
+  delivers to the mailbox while it is open. A reader that predates this field rejects every record
+  carrying it (the signature is checked over re-marshaled fields), so an implementation MUST read
+  `forward_to` before any record it serves carries one.
 - **Resolution is DNS-seeded and per-domain, with no global directory.** A resolver reads the
   mailbox domain's `_dmcn.<domain>` DNS TXT record:
 
@@ -429,7 +454,9 @@ implementation can meet these codes:
 | `UNSUPPORTED` | an optional feature this relay does not offer |
 | `STORAGE_FAILED`, `INTERNAL_ERROR` | the relay failed; retry or try the next hint |
 
-Extensions add their own codes (`ONION_*`, `CONFLICT`, `QUOTA_EXCEEDED`).
+Extensions add their own codes (`ONION_*`, `CONFLICT`, `QUOTA_EXCEEDED`). A fleet that closes
+accounts answers a STORE that stored nothing because every recipient's account is closed with
+`RECIPIENT_CLOSED`; it is the account's answer, so a sender does not retry it on another hint.
 
 ## 6. Relay descriptors
 

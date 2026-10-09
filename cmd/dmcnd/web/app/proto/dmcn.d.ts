@@ -214,6 +214,9 @@ export namespace dmcn {
 
             /** IdentityRecord recoveryEd25519PublicKey */
             recoveryEd25519PublicKey?: (Uint8Array|null);
+
+            /** IdentityRecord forwardTo */
+            forwardTo?: (string|null);
         }
 
         /** Represents an IdentityRecord. */
@@ -275,6 +278,9 @@ export namespace dmcn {
 
             /** IdentityRecord recoveryEd25519PublicKey. */
             public recoveryEd25519PublicKey: Uint8Array;
+
+            /** IdentityRecord forwardTo. */
+            public forwardTo: string;
 
             /**
              * Creates a new IdentityRecord instance using the specified properties.

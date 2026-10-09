@@ -322,6 +322,7 @@ var identityRecordNotes = map[string]string{
 	"operator_credentials":        "generic operator extension point: operator-attached credentials beyond routing (semantics by role/attributes); excluded from the self-signature; anti-rollback tiebreaks on the newest issued_at across 25 and these",
 	"rotation_chain":              "the address's own key-change history: one owner-authorized transition per entry, each signed BOTH by the key it retires and by the key taking over; covered by the self-signature; capped, with the complete history in the address's AddressHistoryRecord",
 	"recovery_ed25519_public_key": "owner-held key, kept apart from the active one, that may authorize the next rotation when the active key is lost; covered by the self-signature; empty when none is enrolled",
+	"forward_to":                  "an address (DMCN or ordinary email) that also receives this address's mail, and all of it once the mailbox closes; senders send it its own copy, sealed to it when it has a DMCN identity; one hop only; covered by the self-signature; empty when there is no forward",
 }
 
 var rotationEntryNotes = map[string]string{

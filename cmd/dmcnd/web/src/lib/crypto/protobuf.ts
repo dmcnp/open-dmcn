@@ -154,6 +154,9 @@ export async function encodeIdentityRecord(record: {
   // transition. Both are OWNER-signed, so they belong in the signable bytes below as well.
   rotationChain?: RotationEntryWire[];
   recoveryEd25519PublicKey?: Uint8Array;
+  // An address that also receives this address's mail. OWNER-signed, so it is in the signable
+  // bytes below; empty (no forward) adds no bytes, so records without one sign as before.
+  forwardTo?: string;
   selfSignature?: Uint8Array;
 }): Promise<Uint8Array> {
   const root = await getRoot();
@@ -191,6 +194,9 @@ export async function encodeIdentitySignableBytes(record: {
   // the network — which is why the reader ships before any producer does.
   rotationChain?: RotationEntryWire[];
   recoveryEd25519PublicKey?: Uint8Array;
+  // Owner-signed like the two above: a client that left it out would reject every record that
+  // carries a forward, which is why this reader ships before anything emits one.
+  forwardTo?: string;
   // Anything else a record carries is ignored here, deliberately — see below.
   [other: string]: unknown;
 }): Promise<Uint8Array> {
@@ -211,6 +217,7 @@ export async function encodeIdentitySignableBytes(record: {
 const IDENTITY_SIGNED_FIELDS = [
   'version', 'address', 'ed25519PublicKey', 'x25519PublicKey', 'createdAt', 'expiresAt',
   'verificationTier', 'requireOnion', 'revision', 'rotationChain', 'recoveryEd25519PublicKey',
+  'forwardTo',
 ] as const;
 
 /**
