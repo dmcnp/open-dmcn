@@ -146,7 +146,7 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		requireOnion = h.requiresOnion(r.Context(), rec)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"address":               rec.Address,
 		"ed25519_pub":           base64.StdEncoding.EncodeToString(rec.Ed25519Public),
 		"x25519_pub":            base64.StdEncoding.EncodeToString(rec.X25519Public[:]),
@@ -155,7 +155,12 @@ func (h *IdentityHandler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		"verified_tier":         verifiedTier,
 		"identity_unverifiable": unverifiable,
 		"require_onion":         requireOnion,
-	})
+	}
+	// The owner-signed forward (SPEC_CORE §1): the composer also sends this address's mail there.
+	if rec.ForwardTo != "" {
+		resp["forward_to"] = rec.ForwardTo
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // legacyLookup answers a lookup for an address that is not a DMCN identity, by pointing the client

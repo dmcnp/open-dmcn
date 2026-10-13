@@ -186,6 +186,10 @@ export interface IdentityLookupResponse {
   // True when the address's domain declares admin key custody (DAR policy): the
   // domain admin holds the account keys — shown as the managed-account badge.
   admin_key_custody?: boolean;
+  // The owner-signed forwarding address (SPEC_CORE §1), absent when there is none. A sender also
+  // sends this address its own copy: sealed to it when it is a DMCN address, as ordinary email
+  // otherwise. See lib/forwarding.ts.
+  forward_to?: string;
 }
 
 export function lookupIdentity(address: string): Promise<IdentityLookupResponse> {
@@ -236,9 +240,20 @@ export interface RotationCapability {
   min_device_age_days: number;
 }
 
+export interface ForwardCapability {
+  /** Every relay homing this mailbox reads forward_to, so a record carrying one is accepted. */
+  fleet_ready: boolean;
+  /** The operator forwards for this account (it has been paid for). Needed to set a forward. */
+  eligible: boolean;
+  /** The forward the account's record carries now, if any. */
+  forward_to?: string;
+}
+
 export interface CapabilitiesResponse {
   address: string;
   rotation: RotationCapability;
+  /** Absent on a backend without forwarding (the reference daemon's). */
+  forward?: ForwardCapability;
 }
 
 /**

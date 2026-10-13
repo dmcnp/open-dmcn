@@ -224,6 +224,7 @@ export function Settings() {
   const CustomDomain = deployment.customDomain;
   const RotateKey = deployment.rotateKey;
   const Devices = deployment.devices;
+  const ForwardingPanel = deployment.forwarding;
   // False on a deployment whose accounts end on their own (deployment.expiring).
   const lasting = !deployment.expiring;
   const navigate = useNavigate();
@@ -740,6 +741,10 @@ export function Settings() {
 
             {/* Above Mailbox, beside storage: it is the mail itself, as files to take anywhere. */}
             <MailboxExport />
+
+            {/* Beside export, and for the same reason: where your mail goes if you leave. Frames
+                itself, since whether it is offered depends on the fleet and the account. */}
+            {ForwardingPanel && keys && address && <ForwardingPanel address={address} keys={keys} />}
 
             <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <SectionHeading title="Mailbox" />

@@ -198,6 +198,17 @@ export interface Deployment {
    */
   rotateKey?: ComponentType<{ address: string; keys: WorkingKeys }>;
   /**
+   * The Settings panel that sets or stops a forwarding address: another address that also gets
+   * this account's mail (SPEC_CORE §1). Frames itself, since whether it is offered depends on the
+   * fleet and on whether the operator forwards for the account.
+   *
+   * Deployment-specific because the owner-signed record is checked and published through this
+   * deployment's backend, which re-attaches the operator-owned credentials, and because only a
+   * deployment with a bridge can forward ordinary email that arrives. Absent ⇒ no panel; senders'
+   * clients honour forwards everywhere regardless (the composer does that, not this panel).
+   */
+  forwarding?: ComponentType<{ address: string; keys: WorkingKeys }>;
+  /**
    * The Settings panel listing the devices that may open this mailbox, and removing them.
    *
    * Deployment-specific because the device registry is: it lives on the product's relays, and a

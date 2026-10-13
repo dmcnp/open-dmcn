@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { CSSProperties, ReactNode, KeyboardEvent } from 'react';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useKeys } from '../lib/hooks/useKeys';
-import { lookupIdentity, sendMessage, ApiError } from '../lib/api/client';
+import { lookupIdentity, sendMessage, ApiError, type IdentityLookupResponse } from '../lib/api/client';
 import { absentIdentityFacts, checkPin, changedFacts, contactFacts, directoryFacts, pinnedIdentityGoneWarning, pinnedKeyWarning, type PinnedFacts } from '../lib/trust/pinnedKey';
 import { loadKeyChange, type KeyChange } from '../lib/trust/lineage';
 import { encryptSplit, type SplitEnvelope, type AttachmentInput } from '../lib/crypto/split';
@@ -26,6 +26,10 @@ import { fromPlainText } from '../lib/html/fromPlainText';
 import { bufferSource } from '../lib/crypto/bytes';
 import { formatBytes } from '../lib/format';
 import { isRecipientClosed, lookupFailureKind, recipientClosedMessage } from '../lib/recipientLookup';
+import {
+  forwardFailedMessage, forwardNotice, forwardOnlyFailedMessage, forwardUnsendableNotice, forwardedOnlyMessage,
+  planForwardCopies, type ForwardTargetKind,
+} from '../lib/forwarding';
 
 
 // Total attachment cap per message (body + all attachments ride inline in one sealed
@@ -186,6 +190,41 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   const [recipientKeys, setRecipientKeys] = useState<Record<string, PinnedFacts>>({});
   // What the directory can prove about a changed key, per recipient (trust/lineage.ts).
   const [keyChanges, setKeyChanges] = useState<Record<string, KeyChange>>({});
+  // Each recipient's owner-signed forwarding address, and what it turned out to be, so the notice
+  // above Send can say whether that copy stays end-to-end encrypted (lib/forwarding.ts).
+  const [forwardInfo, setForwardInfo] = useState<Record<string, { target: string; kind: ForwardTargetKind; unsendable?: boolean }>>({});
+  // What happened that the sender should know once the message is sent (a recipient reached only
+  // through their forward, a forward copy that did not go). Set ⇒ the dialog stays open on a
+  // report instead of closing, and cannot send again.
+  const [sentReport, setSentReport] = useState<SentReportItem[] | null>(null);
+  const [savedContacts, setSavedContacts] = useState<Record<string, boolean>>({});
+
+  // inspectForward records a recipient's forwarding address and looks it up, as a sender's client
+  // will at Send: a DMCN identity gets an end-to-end copy, anything else an ordinary-email one.
+  const inspectForward = async (key: string, target?: string) => {
+    if (!target) {
+      setForwardInfo(m => {
+        if (!(key in m)) return m;
+        const next = { ...m };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    setForwardInfo(m => ({ ...m, [key]: { target, kind: 'unknown' } }));
+    let kind: ForwardTargetKind = 'unknown';
+    // Ordinary email goes out the way any legacy recipient's does: a directory that names its
+    // bridge (legacy:true) is sealed to that bridge, and a 404 needs this deployment's own path.
+    let unsendable = false;
+    try {
+      const t = await lookupIdentity(target);
+      kind = t.legacy ? 'email' : 'dmcn';
+    } catch (e) {
+      kind = lookupFailureKind(e) === 'legacy' ? 'email' : 'unknown';
+      unsendable = kind === 'email' && !deployment.sendToLegacy;
+    }
+    setForwardInfo(m => (m[key]?.target === target ? { ...m, [key]: { target, kind, unsendable } } : m));
+  };
 
   // inspectRecipient resolves a recipient once: records whether it's a DMCN identity
   // or a legacy (non-DMCN) address, and turns on onion delivery when the record or its
@@ -205,8 +244,10 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       setRecipientInfo(m => ({ ...m, [key]: rec.legacy ? 'legacy' : 'dmcn' }));
       if (rec.legacy) {
         setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
+        void inspectForward(key, undefined);
         return; // a bridge, not a correspondent — nothing to pin
       }
+      void inspectForward(key, rec.forward_to);
 
       // Record the facts while the recipient is being typed, so the warning can appear before the
       // message is written rather than after it is composed and the user is committed to sending.
@@ -231,6 +272,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       const kind = lookupFailureKind(e);
       setRecipientInfo(m => ({ ...m, [key]: kind }));
       if (kind === 'legacy') setRecipientKeys(m => ({ ...m, [key]: absentIdentityFacts() }));
+      void inspectForward(key, undefined);
     }
   };
 
@@ -533,6 +575,60 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       // Sealing the same split envelope as everyone else fixes it at the source, and leaves one
       // sealing path for every recipient, legacy or not.
 
+      const sendViaBridge = (rcpt: string) => deployment.sendToLegacy!({
+        recipient: rcpt,
+        senderAddress: selfAddress,
+        seal: async x25519Pub => encodeSplitEnvelope(await encryptSplit({
+          ...common,
+          recipientAddress: rcpt,
+          bcc: [],
+          recipients: [{ deviceId: new Uint8Array(16), x25519Pub }],
+        })),
+        sign: bytes => signWithKey(k.ed25519Sign, bytes),
+      });
+
+      // A forward copy (lib/forwarding.ts): the forwarding address is resolved now, as every send
+      // does, so one that has gained a DMCN identity since the forward was set gets an end-to-end
+      // copy. Built like a Bcc copy — its own recipient_address, the message's own To/Cc — so the
+      // target's reader passes its audience check. Its own forward is never followed. A failure is
+      // reported after the send rather than failing it: the recipient's own copy is what they asked
+      // for, the forward is theirs to arrange. Returns the target's record when it is a DMCN one.
+      const sendForwardCopy = async (target: string): Promise<{ ok: boolean; rec?: IdentityLookupResponse }> => {
+        try {
+          let trec: IdentityLookupResponse | undefined;
+          try {
+            trec = await lookupIdentity(target);
+          } catch (e) {
+            if (lookupFailureKind(e) !== 'legacy') throw e;
+          }
+          if (!trec) {
+            if (!deployment.sendToLegacy) return { ok: false };
+            await sendViaBridge(target);
+            return { ok: true };
+          }
+          // A DMCN identity, or a directory's legacy:true answer naming the bridge to seal to (the
+          // reference daemon's): either way sealed to the key the lookup gave, as the recipient
+          // loop below does. Only a real identity is offered as a contact afterwards.
+          await storeEnvelope(
+            await encryptSplit({
+              ...common,
+              recipientAddress: target,
+              bcc: [],
+              recipients: [{ deviceId: new Uint8Array(16), x25519Pub: fromBase64(trec.x25519_pub) }],
+            }),
+            target,
+            onion || !!trec.require_onion,
+          );
+          return { ok: true, rec: trec.legacy ? undefined : trec };
+        } catch (e) {
+          console.warn('forward copy not sent:', e);
+          return { ok: false };
+        }
+      };
+      const reports: SentReportItem[] = [];
+      // Addresses that get this message anyway, so no forward copy duplicates one.
+      const reached = new Set([...allRecipients, selfAddress].map(a => a.trim().toLowerCase()));
+
       // Deliver a copy to each recipient (DMCN natively, or via the legacy bridge on 404).
       for (const rcpt of allRecipients) {
         let recipient;
@@ -547,17 +643,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             // service after it, and a fleet withholding one record produces exactly this signal.
             // Disclosed in the composer (pinnedIdentityGoneWarning) and NOT refused here — see
             // the note on the changed-key case below.
-            await deployment.sendToLegacy({
-              recipient: rcpt,
-              senderAddress: selfAddress,
-              seal: async x25519Pub => encodeSplitEnvelope(await encryptSplit({
-                ...common,
-                recipientAddress: rcpt,
-                bcc: [],
-                recipients: [{ deviceId: new Uint8Array(16), x25519Pub }],
-              })),
-              sign: bytes => signWithKey(k.ed25519Sign, bytes),
-            });
+            await sendViaBridge(rcpt);
             continue;
           }
           throw e;
@@ -579,6 +665,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         // (onion-routed when requested or required by their record). Bcc is EMPTY on
         // every recipient copy — a Bcc recipient is never revealed, and a reply-all
         // can't leak the Bcc list.
+        const forwardTo = recipient.forward_to?.trim();
+        let closed = false;
         try {
           await storeEnvelope(
             await encryptSplit({
@@ -591,10 +679,34 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
             onion,
           );
         } catch (e) {
-          // The recipient's relay refused the copy because their account is closed: say that,
-          // in their name, rather than a delivery error.
-          if (isRecipientClosed(e)) throw new Error(recipientClosedMessage(rcpt), { cause: e });
-          throw e;
+          // The recipient's relay refused the copy because their account is closed. With a
+          // forward, that address is where their mail goes now; without one, say so in their
+          // name rather than as a delivery error.
+          if (!isRecipientClosed(e)) throw e;
+          if (!forwardTo) throw new Error(recipientClosedMessage(rcpt), { cause: e });
+          closed = true;
+        }
+
+        if (forwardTo) {
+          const key = forwardTo.toLowerCase();
+          if (!reached.has(key)) {
+            reached.add(key);
+            const { ok, rec: trec } = await sendForwardCopy(forwardTo);
+            if (closed && ok) {
+              reports.push({
+                text: forwardedOnlyMessage(rcpt, forwardTo),
+                // Their mail lives there now; a DMCN forwarding address can be saved as a contact.
+                ...(trec && !contactByAddress(forwardTo) ? { saveContact: { address: forwardTo, name: contactByAddress(rcpt)?.name ?? '', rec: trec } } : {}),
+              });
+            } else if (closed) {
+              reports.push({ text: forwardOnlyFailedMessage(rcpt, forwardTo) });
+            } else if (!ok) {
+              reports.push({ text: forwardFailedMessage(rcpt, forwardTo) });
+            }
+          } else if (closed) {
+            // The forwarding address gets this message anyway, as a recipient in its own right.
+            reports.push({ text: forwardedOnlyMessage(rcpt, forwardTo) });
+          }
         }
       }
 
@@ -621,6 +733,10 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       }
 
       onSent?.();
+      if (reports.length > 0) {
+        setSentReport(reports);
+        return;
+      }
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
@@ -630,6 +746,33 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   };
 
   const inputReset = { border: 'none', outline: 'none', background: 'transparent', font: 'inherit' } as const;
+
+  // The forward copies this message will make, and what each one is, for the notice above Send.
+  const everyone = [...to, ...cc, ...bcc].map(a => a.trim()).filter(Boolean);
+  const forwardCopies = planForwardCopies(
+    everyone.map(a => ({ address: a, forwardTo: forwardInfo[a.toLowerCase()]?.target })),
+    everyone, from || address || '',
+  ).map(c => {
+    const info = forwardInfo[c.forAddr.toLowerCase()];
+    return { ...c, kind: info?.kind ?? 'unknown' as ForwardTargetKind, unsendable: !!info?.unsendable };
+  });
+  const forwardLeavesE2E = forwardCopies.some(c => c.kind === 'email');
+
+  const saveForwardContact = async (item: SentReportItem) => {
+    const save = item.saveContact;
+    if (!save) return;
+    const facts = directoryFacts(save.rec);
+    await allowlist({
+      address: save.address,
+      name: save.name,
+      fingerprint: save.rec.fingerprint,
+      provenance: 'user_approved',
+      ed25519Pub: facts.ed25519Pub,
+      x25519Pub: facts.x25519Pub,
+      adminKeyCustody: facts.adminKeyCustody,
+    });
+    setSavedContacts(m => ({ ...m, [save.address.toLowerCase()]: true }));
+  };
 
   // Any legacy (non-DMCN) recipient means the message can't be end-to-end encrypted
   // for everyone — surfaced as a warning above the footer.
@@ -874,6 +1017,29 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         <div style={{ padding: 'var(--space-2) var(--space-4)', color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{error}</div>
       )}
 
+      {/* After sending, what the sender should know about where it went. Replaces the send
+          controls below, so the same message cannot be sent twice from here. */}
+      {sentReport && (
+        <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--brand-subtle)', color: 'var(--text-body)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontWeight: 600 }}>
+            <Icon name="check" size={15} style={{ color: 'var(--brand)' }} />
+            Sent.
+          </div>
+          {sentReport.map(item => (
+            <div key={item.text} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', paddingLeft: 23 }}>
+              <span>{item.text}</span>
+              {item.saveContact && (savedContacts[item.saveContact.address.toLowerCase()]
+                ? <span style={{ color: 'var(--text-muted)' }}>Added to your contacts.</span>
+                : (
+                  <Button size="sm" variant="secondary" onClick={() => { void saveForwardContact(item); }}>
+                    Add {item.saveContact.address} to contacts
+                  </Button>
+                ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Changed-key warning. Ranked ABOVE the legacy and encryption banners because it is the
           most serious thing on the screen, and because "end-to-end encrypted" sitting alone under
           a swapped key would be technically true and dangerously misleading. */}
@@ -920,6 +1086,24 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         </div>
       )}
 
+      {/* Forwarding: a recipient's mail also goes to an address they chose. Said before Send, in
+          their name and the address's, and whether that copy stays end-to-end encrypted. Never
+          blocks the send: forwarding is the recipient's arrangement, not a risk to confirm. */}
+      {forwardCopies.length > 0 && !sentReport && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: forwardLeavesE2E ? 'var(--warning-subtle)' : 'var(--brand-subtle)', color: 'var(--text-body)' }}>
+          <Icon name={forwardLeavesE2E ? 'alert-triangle' : 'shield-check'} size={15} style={{ color: forwardLeavesE2E ? 'var(--warning)' : 'var(--brand)', flex: 'none', marginTop: 2 }} />
+          <span>
+            {forwardCopies.map(c => (
+              <span key={c.target}>
+                {c.unsendable
+                  ? forwardUnsendableNotice(c.forAddr, c.target)
+                  : forwardNotice(c.forAddr, c.target, c.kind)}{' '}
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
+
       {/* Legacy-recipient warning: some recipients can't receive E2E-encrypted mail. */}
       {hasLegacy && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--warning-subtle)', color: 'var(--text-body)' }}>
@@ -937,6 +1121,11 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       )}
 
       {/* Footer */}
+      {sentReport ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)' }}>
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      ) : (
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)' }}>
         <Button leftIcon={<Icon name="send" size={16} />} onClick={handleSend} disabled={loading}>
           {loading ? 'Sending…' : 'Send'}
@@ -956,11 +1145,18 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         <div style={{ flex: 1 }} />
         <IconButton aria-label="Discard" onClick={onClose}><Icon name="trash" /></IconButton>
       </div>
+      )}
     </div>
   );
 }
 
 const fieldInputReset = { border: 'none', outline: 'none', background: 'transparent', font: 'inherit' } as const;
+
+// One line of the after-send report, optionally offering to save a recipient's new DMCN address.
+interface SentReportItem {
+  text: string;
+  saveContact?: { address: string; name: string; rec: IdentityLookupResponse };
+}
 
 interface RecipientFieldProps {
   label: string;

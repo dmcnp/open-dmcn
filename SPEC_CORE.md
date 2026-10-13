@@ -87,6 +87,9 @@ beside the protocol on their own libp2p protocols (§7).
   - Any other target gets the copy as ordinary email through a bridge. That copy is not
     end-to-end encrypted, and the client MUST say so to the sender before sending.
 
+  Ordinary email arriving for the address is forwarded by the bridge that receives it
+  ([`SPEC_EXT_BRIDGE.md`](SPEC_EXT_BRIDGE.md)), where the operator forwards for the account.
+
   One hop only: a sender MUST NOT follow the target's own `forward_to`. A target that gains a DMCN
   identity later starts receiving sealed copies without the owner doing anything, because every
   send resolves it again. Nothing can make a sender honour the forward; one that does not still
