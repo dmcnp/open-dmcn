@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { useAccountSwitch } from '../lib/hooks/useAccountSwitch';
+import type { DeviceAccount } from '../lib/accounts';
 import { isInstalledApp } from '../lib/appContext';
 import { AccountMonogram } from '../components/AccountMonogram';
 import { AuthShell } from '../components/AuthShell';
 import { deployment } from '@deployment';
-import { Button, IconButton, Input } from '../ds';
+import { Button, Dialog, IconButton, Input } from '../ds';
 import { Icon } from '../components/Icon';
 import { accountForScope } from '../lib/push/whichAccount';
 import { takeIntent } from '../lib/push/intent';
@@ -39,6 +40,9 @@ export function Login() {
   // account is locked, which for a closed app is most of the time — so say which one it was,
   // instead of showing an undifferentiated list and making the person guess.
   const [woke, setWoke] = useState('');
+  // Removal deletes the only copy of the keys this device holds, and the trash can sits where a
+  // sign-out button would. So it asks first, and says plainly that this is not signing out.
+  const [removing, setRemoving] = useState<DeviceAccount | null>(null);
   const wokeRow = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -158,7 +162,7 @@ export function Login() {
                     ? <Button size="sm" disabled={busy} onClick={() => void switchTo(account)}>Continue</Button>
                     : <Button size="sm" disabled={busy} leftIcon={<Icon name="key" size={14} />} onClick={() => { setPassphrase(''); beginUnlock(account); }}>Unlock</Button>
                 )}
-                <IconButton variant="ghost" size="sm" aria-label="Remove from this device" disabled={busy} onClick={() => void forget(account)}>
+                <IconButton variant="ghost" size="sm" aria-label="Remove from this device" disabled={busy} onClick={() => setRemoving(account)}>
                   <Icon name="trash" size={16} />
                 </IconButton>
               </div>
@@ -175,6 +179,36 @@ export function Login() {
           );
         })}
       </div>
+
+      <Dialog
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title="Remove this account from this device?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRemoving(null)}>Keep it</Button>
+            <Button variant="danger" disabled={busy}
+              onClick={() => { const a = removing; setRemoving(null); if (a) void forget(a); }}>
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
+          <p style={{ margin: 0 }}>
+            This is not signing out. It deletes the keys for{' '}
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-strong)', wordBreak: 'break-all' }}>{removing?.address}</span>{' '}
+            from {isInstalledApp() ? 'this app' : 'this browser'}.
+          </p>
+          <p style={{ margin: 0 }}>
+            We keep no copy of your keys. If you have no backup file and the account is not on another
+            device, you lose the account and its mail for good, and we cannot get it back for you.
+          </p>
+          <p style={{ margin: 0 }}>
+            To keep it, unlock it and download a backup from Settings, under Backup &amp; recovery, first.
+          </p>
+        </div>
+      </Dialog>
     </AuthShell>
   );
 }
