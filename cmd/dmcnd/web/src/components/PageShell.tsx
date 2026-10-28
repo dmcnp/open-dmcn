@@ -11,6 +11,12 @@ export interface PageShellProps {
   count?: string;
   /** Optional actions rendered on the right of the header. */
   actions?: ReactNode;
+  /**
+   * Standalone only: shown in place of the back button and title, across the header up to the
+   * actions — a search field that has opened over it. The actions stay where they were, so a
+   * press on one that also closes this (by blurring the field) still lands.
+   */
+  headerContent?: ReactNode;
   /** Override the persisted theme (e.g. Settings' live appearance preview). Standalone only. */
   theme?: 'light' | 'dark';
   /** Override the persisted density. Standalone only. */
@@ -24,12 +30,16 @@ export interface PageShellProps {
   children: ReactNode;
 }
 
+const titleBlock = (title: string, count?: string) => (
+  <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+    <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>{title}</span>
+    {count != null && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{count}</span>}
+  </div>
+);
+
 const headerInner = (title: string, count?: string, actions?: ReactNode) => (
   <>
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-      <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>{title}</span>
-      {count != null && <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{count}</span>}
-    </div>
+    {titleBlock(title, count)}
     <div style={{ flex: 1 }} />
     {actions}
   </>
@@ -41,7 +51,7 @@ const headerInner = (title: string, count?: string, actions?: ReactNode) => (
  * Embedded (desktop, inside the app shell) drops the themed root + back button and
  * renders just an in-column header + body, so the section lives in the inbox layout.
  */
-export function PageShell({ title, count, actions, theme, density, embedded, children }: PageShellProps) {
+export function PageShell({ title, count, actions, headerContent, theme, density, embedded, children }: PageShellProps) {
   const navigate = useNavigate();
 
   if (embedded) {
@@ -73,8 +83,11 @@ export function PageShell({ title, count, actions, theme, density, embedded, chi
         height: 'calc(60px + env(safe-area-inset-top))', flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
         padding: 'env(safe-area-inset-top) var(--space-4) 0', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-default)',
       }}>
-        <IconButton aria-label="Back to inbox" onClick={() => navigate('/inbox')}><Icon name="chevron-left" /></IconButton>
-        {headerInner(title, count, actions)}
+        {headerContent
+          ? <div style={{ flex: 1, minWidth: 0 }}>{headerContent}</div>
+          : <><IconButton aria-label="Back to inbox" onClick={() => navigate('/inbox')}><Icon name="chevron-left" /></IconButton>{titleBlock(title, count)}</>}
+        {!headerContent && <div style={{ flex: 1 }} />}
+        {actions}
       </header>
       <div style={{ flex: 1, overflowY: 'auto' }}>{children}</div>
     </div>

@@ -5,8 +5,9 @@ import './ConfirmTrashButton.css';
 
 // A trash button that asks once, in place. The first click turns it red and points a note at it;
 // a second click on it confirms. A press anywhere else, or focus leaving it, puts it back; that
-// press then does whatever it would have done. Used where a draft is thrown away, which cannot be
-// undone, without stopping the writer with a dialog.
+// press then does whatever it would have done. Used where something that cannot be undone is
+// thrown away from a list or the composer (a draft, a contact), without stopping anyone with a
+// dialog.
 
 export interface ConfirmTrashButtonProps extends Omit<IconButtonProps, 'onClick' | 'children'> {
   'aria-label': string;

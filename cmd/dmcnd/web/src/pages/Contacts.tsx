@@ -9,6 +9,7 @@ import { emailInputProps } from '../lib/emailInput';
 import { Button, Dialog, IconButton, Input } from '../ds';
 import { Icon } from '../components/Icon';
 import { KindIcon } from '../components/KindIcon';
+import { ConfirmTrashButton } from '../components/ConfirmTrashButton';
 import { hasPinnedKey } from '../lib/trust/pinnedKey';
 import { contactKind } from '../lib/trust/senderKind';
 
@@ -23,6 +24,8 @@ export function Contacts() {
   const isMobile = useIsMobile();
   const embedded = !isMobile;
   const [q, setQ] = useState('');
+  // Phone only: the search field is open over the header.
+  const [searching, setSearching] = useState(false);
   const [mode, setMode] = useState<Mode>(null);
   const [address, setAddress] = useState('');
   const [name, setName] = useState('');
@@ -39,7 +42,15 @@ export function Contacts() {
   const close = () => { setMode(null); reset(); };
   const canSave = mode?.kind === 'edit' ? true : address.trim().length > 0;
 
-  const openAdd = () => { reset(); setMode({ kind: 'add' }); };
+  // Whatever was typed into the search starts the new contact: an address if it looks like one,
+  // otherwise the name.
+  const openAdd = () => {
+    reset();
+    const typed = q.trim();
+    if (typed.includes('@')) setAddress(typed);
+    else setName(typed);
+    setMode({ kind: 'add' });
+  };
   const openEdit = (rec: ContactRecord) => {
     reset();
     setAddress(rec.address);
@@ -102,21 +113,44 @@ export function Contacts() {
 
   const editing = mode?.kind === 'edit' ? contactByAddress(mode.address) : undefined;
 
+  const people = (n: number) => (n === 1 ? 'person' : 'people');
+
   return (
     <PageShell
       embedded={embedded}
       title="Contacts"
-      count={`${contacts.length} ${contacts.length === 1 ? 'person' : 'people'}`}
-      actions={
+      count={q.trim() ? `${filtered.length} of ${contacts.length} ${people(contacts.length)}` : `${contacts.length} ${people(contacts.length)}`}
+      // A phone's header has room for the title and two icons. Search opens a field across the
+      // header that closes again when it loses focus; a search still in force shows as the icon
+      // lit and the count as "n of m". The plus stays, so what was typed can become the contact; it
+      // is solid brand, as Add contact and Compose are on the desktop.
+      headerContent={isMobile && searching ? (
+        <Input
+          autoFocus
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          onBlur={() => setSearching(false)}
+          onKeyDown={e => { if (e.key === 'Escape') { setQ(''); setSearching(false); } }}
+          leadingIcon={<Icon name="search" size={16} />}
+          placeholder="Search contacts"
+          aria-label="Search contacts"
+        />
+      ) : undefined}
+      actions={isMobile ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+          {!searching && <IconButton aria-label="Search" active={!!q.trim()} onClick={() => setSearching(true)}><Icon name="search" /></IconButton>}
+          <IconButton variant="solid" aria-label="Add contact" onClick={openAdd}><Icon name="plus" /></IconButton>
+        </div>
+      ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
           <div style={{ width: 240 }}>
             <Input value={q} onChange={e => setQ(e.target.value)} leadingIcon={<Icon name="search" size={16} />} placeholder="Search contacts" aria-label="Search contacts" />
           </div>
           <Button leftIcon={<Icon name="plus" size={16} />} onClick={openAdd}>Add contact</Button>
         </div>
-      }
+      )}
     >
-      <div style={{ padding: 'var(--space-6)' }}>
+      <div style={{ padding: isMobile ? 'var(--space-4)' : 'var(--space-6)' }}>
         {filtered.length === 0 ? (
           <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
             <Icon name="users" size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
@@ -190,7 +224,7 @@ export function Contacts() {
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', flex: 'none' }}>
                     <IconButton size="sm" aria-label={`Edit ${label}`} onClick={() => rec && openEdit(rec)}><Icon name="pencil" size={16} /></IconButton>
-                    <IconButton size="sm" aria-label={`Remove ${label}`} onClick={() => void removeContact(c.address)}><Icon name="trash" size={16} /></IconButton>
+                    <ConfirmTrashButton size="sm" aria-label={`Remove ${label}`} onConfirm={() => void removeContact(c.address)} />
                   </div>
                 </div>
               );
