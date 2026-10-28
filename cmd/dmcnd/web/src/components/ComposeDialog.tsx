@@ -14,6 +14,10 @@ import { signWithKey } from '../lib/crypto/sign';
 import { toBase64, fromBase64, toHex, fromHex } from '../lib/crypto/keys';
 import { deviceSendProof } from '../lib/crypto/deviceKey';
 import { SentStore } from '../lib/api/sentStore';
+import { DraftConflictError, NEW_DRAFT_BASE, draftHasContent, inlinePreviews, newDraftId, replySubject, type DraftBase, type DraftContent, type LoadedDraft } from '../lib/api/draftStore';
+import { useDrafts } from '../lib/hooks/useDrafts';
+import { SaveScheduler } from '../lib/draftAutosave';
+import { setDraftPutAway } from '../lib/draftOpen';
 import { useSettings } from '../lib/hooks/useSettings';
 import { useContacts, type Contact } from '../lib/hooks/useContacts';
 import { DEFAULT_DOMAIN } from '../lib/config';
@@ -36,6 +40,17 @@ import {
 // blob). ~25 MB: works with the existing size-class padding (rounds to whole MB above
 // 1 MB) and stays reasonable for browser memory + the relay's in-memory store.
 const MAX_TOTAL_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+// How long putting a draft away waits for the relay to take it before settling for the device copy.
+const PUT_AWAY_WAIT_MS = 8000;
+
+// within resolves true if p settles successfully inside ms, false if it fails or takes longer.
+function within(p: Promise<void>, ms: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const timer = window.setTimeout(() => resolve(false), ms);
+    p.then(() => { window.clearTimeout(timer); resolve(true); }, () => { window.clearTimeout(timer); resolve(false); });
+  });
+}
 
 // truncateFilename shortens a long name in the MIDDLE so the chip fits the compose
 // box while keeping the start and the extension (the full name is in the title tip).
@@ -84,6 +99,10 @@ export interface ComposeDialogProps {
   onSent?: () => void;
   /** Full-screen sheet on mobile instead of the floating desktop window. */
   mobile?: boolean;
+  /** A saved draft to carry on with. Its reply context arrives as replyTo, as for a fresh reply. */
+  draft?: LoadedDraft | null;
+  /** Open the other device's copy of this draft in place of this one (after a save conflict). */
+  onReopenDraft?: (id: string) => void;
 }
 
 /**
@@ -91,25 +110,27 @@ export interface ComposeDialogProps {
  * the inbox main column rather than as a standalone route. All crypto happens here
  * in the browser; the private key never leaves it.
  */
-export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false }: ComposeDialogProps) {
+export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false, draft = null, onReopenDraft }: ComposeDialogProps) {
   const { address } = useAuth();
   const { keys } = useKeys();
   const { settings } = useSettings();
   const { contacts, nameFor, contactByAddress, pinKey, allowlist } = useContacts();
-
+  // A saved draft, when this composer carries one on; everything below starts from it instead of
+  // the reply or the account's defaults.
+  const d = draft?.content;
 
   // Three recipient classes with standard email semantics. To/Cc are visible to
   // everyone; Bcc is only recorded on the sender's own Sent copy (see handleSend).
-  const [to, setTo] = useState<string[]>(replyTo?.to ?? []);
-  const [cc, setCc] = useState<string[]>(replyTo?.cc ?? []);
-  const [bcc, setBcc] = useState<string[]>([]);
+  const [to, setTo] = useState<string[]>(d?.to ?? replyTo?.to ?? []);
+  const [cc, setCc] = useState<string[]>(d?.cc ?? replyTo?.cc ?? []);
+  const [bcc, setBcc] = useState<string[]>(d?.bcc ?? []);
 
   // Which of our addresses this goes out as. Only a choice on a deployment with aliases (see
   // deployment.senderAddresses); otherwise it is the signed-in address and no row is shown. A
   // reply goes out as the alias the other side wrote to, and that alias is not kept as a
   // recipient: the reader could only strip the signed-in address, since it does not know the rest.
   const [senders, setSenders] = useState<AccountIdentity[]>([]);
-  const [from, setFrom] = useState<string>(address ?? '');
+  const [from, setFrom] = useState<string>(d?.from || address || '');
   useEffect(() => {
     if (!deployment.identities || !address || !keys) return;
     let cancelled = false;
@@ -120,7 +141,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       setSenders(list.filter(a => !a.retiredAt));
       const ours = new Set(list.map(a => a.address.toLowerCase()));
       const reached = (replyTo?.sentTo ?? []).map(a => a.toLowerCase()).find(a => ours.has(a));
-      if (reached) {
+      // A draft already went through this when it was a fresh reply, and its From is the one chosen.
+      if (reached && !d) {
         setFrom(reached);
         setTo(prev => prev.filter(a => !ours.has(a.toLowerCase())));
         setCc(prev => prev.filter(a => !ours.has(a.toLowerCase())));
@@ -129,12 +151,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- replyTo is fixed for the dialog's life
   }, [address, keys]);
-  const [pendingTo, setPendingTo] = useState('');
-  const [pendingCc, setPendingCc] = useState('');
-  const [pendingBcc, setPendingBcc] = useState('');
+  const [pendingTo, setPendingTo] = useState(d?.pending.to ?? '');
+  const [pendingCc, setPendingCc] = useState(d?.pending.cc ?? '');
+  const [pendingBcc, setPendingBcc] = useState(d?.pending.bcc ?? '');
   // Reveal Cc/Bcc up front when a Reply All prefilled Cc recipients.
-  const [showCcBcc, setShowCcBcc] = useState(!!replyTo?.cc?.length);
-  const [subject, setSubject] = useState(replyTo?.subject ? `Re: ${replyTo.subject.replace(/^Re:\s*/i, '')}` : '');
+  const [showCcBcc, setShowCcBcc] = useState(d ? d.showCcBcc : !!replyTo?.cc?.length);
+  const [subject, setSubject] = useState(d ? d.subject : replySubject(replyTo?.subject ?? ''));
 
   // A reply prefills the composer with the quoted original, signature ABOVE the quote
   // (top-posted). Both renderings are built the same way so switching modes keeps the
@@ -155,21 +177,25 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
   // Rich (HTML) is the system default for every compose; the account setting may flip the
   // STARTING mode, and the footer toggle overrides it for this message only.
-  const [richMode, setRichMode] = useState(() => settings.composePlainText !== true);
-  const [body, setBody] = useState(() => plainScaffold(settings.signature ?? ''));
+  const [richMode, setRichMode] = useState(() => (d ? d.rich : settings.composePlainText !== true));
+  const [body, setBody] = useState(() => (d ? d.text : plainScaffold(settings.signature ?? '')));
   const editorRef = useRef<RichTextEditorHandle>(null);
   // The editor is uncontrolled and reads this only when it mounts, so it doubles as the
-  // seed for a plain → rich switch (which is exactly when it mounts).
-  const richInitial = useRef(htmlScaffold(settings.signature ?? ''));
+  // seed for a plain → rich switch (which is exactly when it mounts). A draft's HTML is the
+  // owner's own, but it comes back from storage, so it passes the same sanitizer as a paste before
+  // it reaches the editor's DOM; its inline images are then put back on screen from their bytes.
+  const richInitial = useRef(d
+    ? (d.rich ? inlinePreviews(sanitizeOutgoing(d.html).html, d.attachments) : '')
+    : htmlScaffold(settings.signature ?? ''));
   // Set once the user edits either body, so a late-loading settings doc never clobbers it.
-  const dirtyRef = useRef(false);
+  const dirtyRef = useRef(!!d);
 
   // Attachments ride inline in the sealed body blob (one CEK). Read fully into memory
   // here; the crypto layer already round-trips AttachmentInput end-to-end. The ref is
   // authoritative because images are inserted from async handlers that would otherwise
   // read a stale `attachments` closure mid-batch.
-  const [attachments, setAttachments] = useState<AttachmentInput[]>([]);
-  const attachmentsRef = useRef<AttachmentInput[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentInput[]>(d?.attachments ?? []);
+  const attachmentsRef = useRef<AttachmentInput[]>(d?.attachments ?? []);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Onion routing is no longer user-selectable (not enough peers yet), but if a
   // recipient's record or domain REQUIRES onion delivery the server enforces it, so
@@ -280,12 +306,14 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   useEffect(() => {
     to.forEach(r => void inspectRecipient(r));
     cc.forEach(r => void inspectRecipient(r));
+    bcc.forEach(r => void inspectRecipient(r));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot on open: only the pre-filled recipients; later additions are inspected as they are entered
   }, []);
 
-  // On a reply, drop the caret at the very top so the user types ABOVE the signature/quote.
+  // On a reply, drop the caret at the very top so the user types ABOVE the signature/quote. A draft
+  // was already under way, and the top is not where it was left.
   useEffect(() => {
-    if (!replyTo) return;
+    if (!replyTo || d) return;
     if (richMode) { editorRef.current?.focus(true); return; }
     const el = bodyRef.current;
     if (el) { el.focus(); el.setSelectionRange(0, 0); }
@@ -297,7 +325,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   // overwrite what the user has already typed.
 
   // Starting mode from the account preference (system default is rich).
-  const modeApplied = useRef(false);
+  const modeApplied = useRef(!!d);
   useEffect(() => {
     if (modeApplied.current || settings.composePlainText === undefined) return;
     modeApplied.current = true;
@@ -306,11 +334,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
 
   // Prefill the composing signature. For a NEW message the signature goes at the top of an
   // empty body; for a REPLY it's spliced ABOVE the quoted original (top-posted).
-  const sigApplied = useRef(false);
+  const sigApplied = useRef(!!d);
   useEffect(() => {
     if (sigApplied.current || !settings.signature) return;
     sigApplied.current = true;
     if (dirtyRef.current) return;
+    scaffold.current = { plain: plainScaffold(settings.signature), html: htmlScaffold(settings.signature) };
     setBody(plainScaffold(settings.signature));
     richInitial.current = htmlScaffold(settings.signature);
     editorRef.current?.setHTML(richInitial.current);
@@ -322,6 +351,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   // once it has been, the edited text wins and the formatting is genuinely gone.
   const stashedHtml = useRef<string | null>(null);
   const toggleMode = () => {
+    markEdited();
     dirtyRef.current = true;
     if (richMode) {
       const html = editorRef.current?.getHTML() ?? '';
@@ -362,6 +392,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
     const r = value.trim();
     setPending('');
     if (!r || values.includes(r)) return;
+    markEdited();
     setValues([...values, r]);
     void inspectRecipient(r);
   };
@@ -374,6 +405,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   ) => (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitPending(values, setValues, pending, setPending); }
     else if (e.key === 'Backspace' && pending === '' && values.length > 0) {
+      markEdited();
       setValues(values.slice(0, -1));
     }
   };
@@ -447,9 +479,238 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
   };
 
   const removeAttachment = (att: AttachmentInput) => {
+    markEdited();
     attachmentsRef.current = attachmentsRef.current.filter(a => a !== att);
     setAttachments(attachmentsRef.current);
   };
+
+  // --- Drafts ---------------------------------------------------------------------------------
+  //
+  // The message is saved as a draft while it is written (api/draftStore.ts): to this device about
+  // half a second after each change, and to the owner's personal store on the relay a few seconds
+  // after typing pauses (and at least every 15 s while it does not), sealed to the owner so the same
+  // draft opens on their other devices. Nothing is saved until someone changes something, and a new
+  // message is not saved until it holds something worth keeping, so opening the composer and
+  // closing it again leaves nothing behind. Sending removes the draft; Discard deletes it; closing
+  // keeps it.
+  const { store: draftsStore, refreshDrafts, setOpen: setDraftOpenId } = useDrafts();
+  // The store of the account this composer was opened on, kept even if the provider moves on.
+  const draftStoreRef = useRef(draftsStore);
+  if (!draftStoreRef.current && draftsStore) draftStoreRef.current = draftsStore;
+  const draftIdRef = useRef<string | null>(draft?.id ?? null);
+  const baseRef = useRef<DraftBase>(draft?.base ?? NEW_DRAFT_BASE);
+  // Set once the person changes anything. Prefills arriving on their own (a signature, the From
+  // a reply resolves to) are not a reason to save.
+  const editedRef = useRef(false);
+  // Set once this composer is finished with its draft: sent, discarded, or handed to another copy.
+  const doneRef = useRef(false);
+  // A save found another device's newer copy; saving waits for the person to choose.
+  const conflictRef = useRef(false);
+  // What the body is before anyone types: a new draft that still says only this is not kept.
+  const scaffold = useRef(d ? { plain: '', html: '' } : { plain: plainScaffold(settings.signature ?? ''), html: htmlScaffold(settings.signature ?? '') });
+  // The editor's last HTML, for a save made after the editor itself has gone (the shell closed).
+  const lastHtml = useRef(d?.html ?? '');
+  type SaveState = 'idle' | 'saving' | 'saved' | 'device' | 'failed' | 'full' | 'conflict' | 'gone';
+  const [saveState, setSaveState] = useState<SaveState>(draft ? 'saved' : 'idle');
+  // Saves run from timers, after the render that scheduled them: they read the message from here.
+  const latest = useRef({ to, cc, bcc, from, subject, body, richMode, pendingTo, pendingCc, pendingBcc, showCcBcc });
+  latest.current = { to, cc, bcc, from, subject, body, richMode, pendingTo, pendingCc, pendingBcc, showCcBcc };
+
+  const currentContent = (): DraftContent => {
+    const l = latest.current;
+    let text = l.body;
+    let html = '';
+    if (l.richMode) {
+      const live = editorRef.current?.getHTML();
+      if (live !== undefined) lastHtml.current = live;
+      html = lastHtml.current;
+      text = toPlainText(html);
+    }
+    return {
+      from: l.from || address || '', to: l.to, cc: l.cc, bcc: l.bcc,
+      pending: { to: l.pendingTo, cc: l.pendingCc, bcc: l.pendingBcc }, showCcBcc: l.showCcBcc,
+      subject: l.subject, rich: l.richMode, text, html,
+      // The quote is already in the body; what is kept is what threading and From need.
+      replyTo: replyTo ? { ...replyTo, quote: undefined, quoteHtml: undefined } : null,
+      attachments: attachmentsRef.current,
+    };
+  };
+  const untouchedText = () => (latest.current.richMode ? toPlainText(scaffold.current.html) : scaffold.current.plain);
+
+  // What to save now, or null when there is nothing to save. The draft gets its id here, the first
+  // time it holds something.
+  const snapshot = (): { id: string; content: DraftContent; at: number } | null => {
+    if (!editedRef.current || doneRef.current) return null;
+    const content = currentContent();
+    if (!draftIdRef.current) {
+      if (!draftHasContent(content, untouchedText())) return null;
+      draftIdRef.current = newDraftId();
+      setDraftOpenId(draftIdRef.current, true);
+    }
+    return { id: draftIdRef.current, content, at: Date.now() };
+  };
+
+  const [deviceSaver] = useState(() => new SaveScheduler(async () => {
+    const st = draftStoreRef.current;
+    const snap = snapshot();
+    if (!st || !snap) return;
+    await st.saveLocal(snap.id, snap.content, baseRef.current, snap.at);
+  }, 500, 2000));
+
+  const [relaySaver] = useState(() => new SaveScheduler(async () => {
+    const st = draftStoreRef.current;
+    if (!st || conflictRef.current) return;
+    const snap = snapshot();
+    if (!snap) return;
+    const created = baseRef.current.head === 0;
+    setSaveState('saving');
+    try {
+      baseRef.current = await st.save(snap.id, snap.content, baseRef.current, snap.at);
+      await st.clearLocal(snap.id, snap.at).catch(() => undefined);
+      setSaveState('saved');
+      if (created) void refreshDrafts();
+    } catch (err) {
+      if (err instanceof DraftConflictError) {
+        conflictRef.current = true;
+        setSaveState((await st.isStored(snap.id).catch(() => true)) ? 'conflict' : 'gone');
+        return;
+      }
+      setSaveState(err instanceof ApiError && err.status === 507 ? 'full' : st.keepsLocal ? 'device' : 'failed');
+      throw err;
+    }
+  }, 3000, 15000));
+
+  const markEdited = () => {
+    editedRef.current = true;
+    deviceSaver.touch();
+    relaySaver.touch();
+  };
+
+  // Any change to the message, once someone has started changing it. The rich body has no state
+  // here; its keystrokes reach markEdited through the input events the composer captures.
+  useEffect(() => {
+    if (!editedRef.current) return;
+    deviceSaver.touch();
+    relaySaver.touch();
+  }, [deviceSaver, relaySaver, to, cc, bcc, from, subject, body, richMode, pendingTo, pendingCc, pendingBcc, showCcBcc, attachments]);
+
+  // Leaving the page, or the app going to the background, saves at once rather than on the timer,
+  // which may not get to run. So does the composer going away without being put away (the shell
+  // closed it: signed out, locked).
+  useEffect(() => {
+    const saveAll = () => {
+      deviceSaver.flush().catch(() => undefined);
+      relaySaver.flush().catch(() => undefined);
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') saveAll(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', saveAll);
+    if (draftIdRef.current) setDraftOpenId(draftIdRef.current, true);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', saveAll);
+      saveAll();
+      if (draftIdRef.current) setDraftOpenId(draftIdRef.current, false);
+    };
+  }, [deviceSaver, relaySaver, setDraftOpenId]);
+
+  // Close and remove the draft: discarded, or sent. Saves already under way finish first, so none
+  // of them lands after the delete and brings it back.
+  const removeDraft = async () => {
+    doneRef.current = true;
+    await Promise.all([deviceSaver.abandon(), relaySaver.abandon()]);
+    const id = draftIdRef.current;
+    const st = draftStoreRef.current;
+    if (!id || !st) return;
+    setDraftOpenId(id, false);
+    try {
+      await st.delete(id);
+    } catch (err) {
+      console.warn('Draft could not be deleted:', err);
+    }
+    void refreshDrafts();
+  };
+
+  const handleDiscard = () => {
+    onClose();
+    void removeDraft();
+  };
+
+  // Save and close. True when the message was kept somewhere it will survive (or held nothing worth
+  // keeping), false when it could not be: the composer then stays open and says so.
+  //
+  // With a device copy the window closes as soon as that is written, and the relay save is then
+  // waited for (briefly) before this resolves, because what usually follows is an account switch:
+  // a save still running after it would sign in as one account and present the other's session.
+  // After that the timers stop; whatever did not reach the relay is in the device copy, which the
+  // Drafts list uploads the next time this account is open (DraftStore.settleLocal).
+  const putAway = async (): Promise<boolean> => {
+    // Nothing changed since it was opened (or it is already sent): nothing to save.
+    if (doneRef.current || !editedRef.current) { onClose(); return true; }
+    if (!draftHasContent(currentContent(), untouchedText())) {
+      // Emptied out, or never held anything: not a draft worth keeping.
+      handleDiscard();
+      return true;
+    }
+    let kept = false;
+    if (draftStoreRef.current?.keepsLocal) {
+      try {
+        await deviceSaver.flush();
+        kept = true;
+        onClose();
+      } catch { /* this device could not keep it: the relay is all there is */ }
+    }
+    const reached = await within(relaySaver.flush(), PUT_AWAY_WAIT_MS) && !conflictRef.current;
+    if (!kept && !reached) {
+      setError("This draft couldn't be saved. Check your connection and try again, or discard it.");
+      return false;
+    }
+    deviceSaver.dispose();
+    relaySaver.dispose();
+    if (!kept) onClose();
+    void refreshDrafts();
+    return true;
+  };
+  const putAwayRef = useRef(putAway);
+  putAwayRef.current = putAway;
+  useEffect(() => {
+    setDraftPutAway(() => putAwayRef.current());
+    return () => setDraftPutAway(null);
+  }, []);
+
+  // After a conflict: overwrite the other copy with this one (or bring this one back, if the other
+  // was sent or deleted), or open the other copy instead of this one.
+  const keepThisCopy = async () => {
+    const st = draftStoreRef.current;
+    conflictRef.current = false;
+    const snap = snapshot();
+    if (!st || !snap) return;
+    setSaveState('saving');
+    try {
+      baseRef.current = await st.save(snap.id, snap.content, NEW_DRAFT_BASE, snap.at, true);
+      await st.clearLocal(snap.id, snap.at).catch(() => undefined);
+      setSaveState('saved');
+      void refreshDrafts();
+    } catch {
+      setSaveState(st.keepsLocal ? 'device' : 'failed');
+      relaySaver.touch();
+    }
+  };
+  const openOtherCopy = async () => {
+    const id = draftIdRef.current;
+    if (!id || !onReopenDraft) return;
+    doneRef.current = true;
+    await Promise.all([deviceSaver.abandon(), relaySaver.abandon()]);
+    await draftStoreRef.current?.clearLocal(id).catch(() => undefined);
+    onReopenDraft(id);
+  };
+
+  const saveLabel = saveState === 'saving' ? 'Saving…'
+    : saveState === 'saved' ? 'Draft saved'
+    : saveState === 'device' ? 'Saved on this device'
+    : saveState === 'failed' ? 'Not saved'
+    : saveState === 'full' ? 'Not saved: your storage is full'
+    : '';
 
   const handleSend = async () => {
     if (!keys || !address) return;
@@ -732,6 +993,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         console.warn('Sent copy could not be saved (message delivered):', copyErr);
       }
 
+      // Sent, so no longer a draft. Not awaited: the message is out, and the send is done.
+      void removeDraft();
       onSent?.();
       if (reports.length > 0) {
         setSentReport(reports);
@@ -870,11 +1133,14 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       };
 
   return (
-    <div style={shell}>
+    // Every input event inside the composer is an edit: the fields, the rich body (typing, pasting,
+    // the toolbar), the From choice, the file picker. Clicks that change the message call markEdited
+    // themselves.
+    <div style={shell} onInputCapture={markEdited}>
       {/* Title bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-3) var(--space-4)', background: 'var(--neutral-900)', color: 'var(--neutral-25)' }}>
         <span style={{ fontSize: 'var(--text-md)', fontWeight: 600 }}>{replyTo ? 'Reply' : 'New message'}</span>
-        <button aria-label="Close" onClick={onClose} style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', display: 'flex' }}>
+        <button aria-label="Close" onClick={() => { void putAway(); }} style={{ border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', display: 'flex' }}>
           <Icon name="x" size={18} />
         </button>
       </div>
@@ -899,7 +1165,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
       <RecipientField
         label="To"
         values={to}
-        onRemove={r => setTo(to.filter(x => x !== r))}
+        onRemove={r => { markEdited(); setTo(to.filter(x => x !== r)); }}
         pending={pendingTo}
         setPending={setPendingTo}
         onKey={fieldKeyHandler(to, setTo, pendingTo, setPendingTo)}
@@ -926,7 +1192,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           <RecipientField
             label="Cc"
             values={cc}
-            onRemove={r => setCc(cc.filter(x => x !== r))}
+            onRemove={r => { markEdited(); setCc(cc.filter(x => x !== r)); }}
             pending={pendingCc}
             setPending={setPendingCc}
             onKey={fieldKeyHandler(cc, setCc, pendingCc, setPendingCc)}
@@ -941,7 +1207,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           <RecipientField
             label="Bcc"
             values={bcc}
-            onRemove={r => setBcc(bcc.filter(x => x !== r))}
+            onRemove={r => { markEdited(); setBcc(bcc.filter(x => x !== r)); }}
             pending={pendingBcc}
             setPending={setPendingBcc}
             onKey={fieldKeyHandler(bcc, setBcc, pendingBcc, setPendingBcc)}
@@ -1120,6 +1386,28 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
         </div>
       )}
 
+      {/* Two copies of this draft: the person decides which one stays. Saving waits until they do. */}
+      {(saveState === 'conflict' || saveState === 'gone') && !sentReport && (
+        <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-4)', borderTop: '1px solid var(--border-subtle)', fontSize: 'var(--text-sm)', background: 'var(--warning-subtle)', color: 'var(--text-body)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
+            <Icon name="alert-triangle" size={15} style={{ color: 'var(--warning)', flex: 'none', marginTop: 2 }} />
+            <span>
+              {saveState === 'gone'
+                ? 'This draft was sent or deleted on another device. Your changes here are not saved yet.'
+                : 'This draft was changed on another device. Your changes here are not saved yet.'}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', paddingLeft: 23 }}>
+            <Button size="sm" variant="secondary" onClick={() => { void keepThisCopy(); }}>
+              {saveState === 'gone' ? 'Keep it as a draft' : 'Keep this version'}
+            </Button>
+            {saveState === 'conflict' && onReopenDraft && (
+              <Button size="sm" variant="secondary" onClick={() => { void openOtherCopy(); }}>Open the other version</Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       {sentReport ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-3) var(--space-4)', borderTop: '1px solid var(--border-subtle)' }}>
@@ -1143,7 +1431,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false 
           <Icon name={richMode ? 'file' : 'pencil'} />
         </IconButton>
         <div style={{ flex: 1 }} />
-        <IconButton aria-label="Discard" onClick={onClose}><Icon name="trash" /></IconButton>
+        {saveLabel && (
+          <span aria-live="polite" style={{ fontSize: 'var(--text-xs)', color: saveState === 'failed' || saveState === 'full' ? 'var(--danger)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            {saveLabel}
+          </span>
+        )}
+        <IconButton aria-label="Discard" onClick={handleDiscard}><Icon name="trash" /></IconButton>
       </div>
       )}
     </div>

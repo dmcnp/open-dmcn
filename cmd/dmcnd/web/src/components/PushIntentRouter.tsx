@@ -12,9 +12,10 @@
 //   - locked, or signed out: the unlock screen, with that account picked out. The intent is left
 //     in place for Login to consume, because only Login can show it.
 //
-// With one thing held back: an unsent message. Switching accounts discards a draft, so a tap must
-// never do it silently. The intent stays parked and is honoured the moment the compose window
-// closes, which is the one reading that loses nobody's work.
+// With one thing held back: an unsent message. Switching accounts closes the composer, so the
+// message is saved as a draft first. Only if it cannot be saved anywhere does the intent stay
+// parked, to be honoured the moment the compose window closes, which is the one reading that loses
+// nobody's work.
 //
 // What it deliberately does NOT do is unlock anything by itself. A passkey prompt needs a real
 // user gesture, and a service worker's activation does not carry into a fresh document — Safari
@@ -27,7 +28,7 @@ import { useKeys } from '../lib/hooks/useKeys';
 import { useAccountSwitch } from '../lib/hooks/useAccountSwitch';
 import { accountForScope } from '../lib/push/whichAccount';
 import { peekIntent, takeIntent, setIntent } from '../lib/push/intent';
-import { isDraftOpen, onDraftOpenChange } from '../lib/draftOpen';
+import { isDraftOpen, onDraftOpenChange, putAwayDraft } from '../lib/draftOpen';
 
 export function PushIntentRouter() {
   const { address } = useAuth();
@@ -53,8 +54,9 @@ export function PushIntentRouter() {
           return;
         }
         if (account.unlocked) {
-          // Wait rather than discard. handle() runs again when the draft closes.
-          if (isDraftOpen()) return;
+          // Save it as a draft; if that fails, wait rather than discard. handle() runs again when
+          // the draft closes.
+          if (isDraftOpen() && !(await putAwayDraft())) return;
           takeIntent();
           await switchTo(account);
           return;

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './lib/hooks/useAuth';
 import { KeysProvider, useKeys } from './lib/hooks/useKeys';
 import { MessagesProvider } from './lib/hooks/useMessages';
 import { SentProvider } from './lib/hooks/useSent';
+import { DraftsProvider } from './lib/hooks/useDrafts';
 import { FlagsProvider } from './lib/hooks/useFlags';
 import { LabelsProvider } from './lib/hooks/useLabels';
 import { SettingsProvider } from './lib/hooks/useSettings';
@@ -40,6 +41,7 @@ export function App() {
         <SyncProvider>
         <MessagesProvider>
         <SentProvider>
+        <DraftsProvider>
         <FlagsProvider>
         <LabelsProvider>
         <SettingsProvider>
@@ -77,6 +79,7 @@ export function App() {
         </SettingsProvider>
         </LabelsProvider>
         </FlagsProvider>
+        </DraftsProvider>
         </SentProvider>
         </MessagesProvider>
         </SyncProvider>

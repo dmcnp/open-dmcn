@@ -8,7 +8,9 @@ import { useKeys } from '../lib/hooks/useKeys';
 import { DeviceEnroller } from './DeviceEnroller';
 import { PushRegistrar } from './PushRegistrar';
 import { NotificationOffer } from './NotificationOffer';
-import { setDraftOpen } from '../lib/draftOpen';
+import { putAwayDraft, setDraftOpen } from '../lib/draftOpen';
+import { useDrafts } from '../lib/hooks/useDrafts';
+import type { LoadedDraft } from '../lib/api/draftStore';
 import { useAppLock } from '../lib/hooks/useAppLock';
 import { useIsMobile } from '../lib/useIsMobile';
 import { readThemePref, resolveTheme, readDensity, writeThemePref, writeDensity, type ThemePref } from '../lib/theme';
@@ -32,7 +34,7 @@ import type { ComposeReplyTo } from '../lib/compose';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
-type Folder = 'inbox' | 'sent' | 'archive' | 'starred' | `label:${string}` | `folder:${string}`;
+type Folder = 'inbox' | 'sent' | 'drafts' | 'archive' | 'starred' | `label:${string}` | `folder:${string}`;
 type Section = 'mail' | 'contacts' | 'settings' | 'getting-started';
 
 // Shared state the shell hands to the active section via react-router's outlet
@@ -42,6 +44,10 @@ export interface MailOutletContext {
   folder: Folder;
   filter: string;
   openCompose: (replyTo: ComposeReplyTo | null) => void;
+  /** Carry on with a saved draft in the composer. */
+  openDraft: (id: string) => void;
+  /** The saved draft the composer has open, if it was opened from Drafts. */
+  openDraftId: string | null;
   onAppearanceChange: () => void;
 }
 
@@ -91,7 +97,9 @@ export function AppLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [compact, setCompact] = useState(() => readDensity() === 'compact');
   const [themePref, setThemePref] = useState<ThemePref>(readThemePref);
-  const [compose, setCompose] = useState<{ replyTo: ComposeReplyTo | null } | null>(null);
+  // `key` remounts the composer when a draft is opened in place of whatever it held.
+  const [compose, setCompose] = useState<{ replyTo: ComposeReplyTo | null; draft?: LoadedDraft; key: number } | null>(null);
+  const { drafts, loaded: draftsLoaded, store: draftStore, refreshDrafts } = useDrafts();
   // Getting started is where an account lands while it has never received or sent anything, and
   // only on the landing itself: decided once per account per shell, as soon as the mailbox, Sent
   // and the account's settings have all answered. A click on Inbox afterwards goes to the Inbox,
@@ -99,9 +107,9 @@ export function AppLayout() {
   const landingDecidedFor = useRef<string | null>(null);
   // Lock the whole context if this app is left in the background long enough.
   useAppLock();
-  // Published outside the shell so a tapped notification for another account does not switch out
-  // from under an unsent message — the switch discards it (see handleSwitched below), which is the
-  // same reason the account switcher confirms first.
+  // Published outside the shell so a tapped notification for another account, or the account
+  // switcher, saves an unsent message as a draft before switching out from under it (the switch
+  // closes the composer, see handleSwitched below).
   useEffect(() => {
     setDraftOpen(compose !== null);
     return () => setDraftOpen(false);
@@ -152,8 +160,14 @@ export function AppLayout() {
   useEffect(() => { if (section !== 'mail') { setSearchOpen(false); setFilter(''); } }, [section]);
   // Honor the ?compose=1 PWA shortcut on first load.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('compose')) setCompose({ replyTo: null });
+    if (new URLSearchParams(window.location.search).get('compose')) setCompose({ replyTo: null, key: Date.now() });
   }, []);
+  // Drafts is in the rail only while there are drafts. The last one sent or discarded from the
+  // Drafts view (here, or on another device) takes the view with it, back to the Inbox.
+  const hasDrafts = draftsLoaded && drafts.length > 0;
+  useEffect(() => {
+    if (folder === 'drafts' && draftsLoaded && drafts.length === 0) setFolder('inbox');
+  }, [folder, draftsLoaded, drafts.length]);
 
   // One combined inbox: every unread received message except blocked senders (trust is
   // decided at read time by the reader's gate, not by list placement). The rule lives in
@@ -165,6 +179,7 @@ export function AppLayout() {
   // the world to stop reaching you — mail still arrives, and being told so is still useful. The
   // only off switch is the one in Settings that turned them on.
   const handleSignOut = async () => {
+    await putAwayDraft();
     try { await apiLogout(); } catch { /* ignore */ }
     await clearKeys(); // drop the working handle (locks the account; removes a temp handle)
     clearSession();
@@ -174,6 +189,7 @@ export function AppLayout() {
   // Leaving a shared machine: lock every account this tab holds, not just the one
   // in front of us. The others stay listed on the picker, they just need unlocking.
   const handleSignOutAll = async () => {
+    await putAwayDraft();
     try { await apiLogout(); } catch { /* ignore */ }
     await clearAllKeys();
     clearSession();
@@ -195,12 +211,32 @@ export function AppLayout() {
     if (section !== 'mail') navigate('/inbox');
   };
   const goto = (path: string) => { setDrawerOpen(false); navigate(path); };
-  const openCompose = (replyTo: ComposeReplyTo | null) => { setCompose({ replyTo }); setDrawerOpen(false); };
+  const openCompose = (replyTo: ComposeReplyTo | null) => { setCompose({ replyTo, key: Date.now() }); setDrawerOpen(false); };
+  // Opening a draft puts away what the composer holds first (saved, like closing it), so the copy
+  // loaded next is the newest one even when it is the same draft.
+  const openDraft = async (id: string) => {
+    setDrawerOpen(false);
+    if (compose?.draft?.id === id) return;
+    if (!(await putAwayDraft())) return;
+    const loaded = await draftStore?.load(id).catch(() => null);
+    if (!loaded) { void refreshDrafts(); return; }
+    setCompose({ replyTo: loaded.content.replyTo, draft: loaded, key: Date.now() });
+  };
+  // After a save conflict: the other device's copy, in place of this one.
+  const reopenDraft = async (id: string) => {
+    setCompose(null);
+    const loaded = await draftStore?.load(id).catch(() => null);
+    if (loaded) setCompose({ replyTo: loaded.content.replyTo, draft: loaded, key: Date.now() });
+    void refreshDrafts();
+  };
   const onMenu = () => { if (isMobile) setDrawerOpen(o => !o); else setCollapsed(c => !c); };
   // Re-read appearance after Settings writes it, so the shell re-themes live.
   const onAppearanceChange = () => { setThemePref(readThemePref()); setCompact(readDensity() === 'compact'); };
 
-  const outletCtx: MailOutletContext = { folder, filter, openCompose, onAppearanceChange };
+  const outletCtx: MailOutletContext = {
+    folder, filter, openCompose, onAppearanceChange,
+    openDraft: id => { void openDraft(id); }, openDraftId: compose?.draft?.id ?? null,
+  };
 
   // Mobile account sections render standalone (no shell chrome); the page provides
   // its own PageShell. Mail (and all of desktop) gets the full shell.
@@ -282,6 +318,9 @@ export function AppLayout() {
           <NavRow icon="inbox" label="Inbox" active={section === 'mail' && folder === 'inbox'} count={unreadCount || undefined} collapsed={railCollapsed} onClick={() => selectFolder('inbox')} />
           <NavRow icon="star" label="Starred" active={section === 'mail' && folder === 'starred'} collapsed={railCollapsed} onClick={() => selectFolder('starred')} />
           <NavRow icon="send" label="Sent" active={section === 'mail' && folder === 'sent'} collapsed={railCollapsed} onClick={() => selectFolder('sent')} />
+          {hasDrafts && (
+            <NavRow icon="file-pen" label="Drafts" active={section === 'mail' && folder === 'drafts'} count={drafts.length} collapsed={railCollapsed} onClick={() => selectFolder('drafts')} />
+          )}
           <NavRow icon="archive" label="Archive" active={section === 'mail' && folder === 'archive'} collapsed={railCollapsed} onClick={() => selectFolder('archive')} />
 
           {folders.length > 0 && (
@@ -422,7 +461,6 @@ export function AppLayout() {
               onSignOut={handleSignOut}
               onSignOutAll={handleSignOutAll}
               onSwitched={handleSwitched}
-              draftOpen={compose !== null}
             />
           </header>
         )}
@@ -461,6 +499,9 @@ export function AppLayout() {
 
         {compose && (
           <ComposeDialog
+            key={compose.key}
+            draft={compose.draft}
+            onReopenDraft={id => { void reopenDraft(id); }}
             replyTo={compose.replyTo}
             onClose={() => setCompose(null)}
             onSent={() => { refresh(); refreshSent(); }}

@@ -6,6 +6,7 @@ import { loginWithKeys, logoutToken, AccountRekeyedError } from '../api/client';
 import { unlockKeystore, PasswordRequiredError } from '../crypto/reauth';
 import { DevicePasswordRequiredError, attachedAddresses, loadDeviceKeystore, unlockDevice } from '../crypto/deviceKeystore';
 import type { AuthMethod } from '../crypto/localKeystore';
+import { isDraftOpen, putAwayDraft } from '../draftOpen';
 import { importWorkingKeys, type WorkingKeys } from '../crypto/workingKeys';
 import {
   canKeepUnlocked,
@@ -168,6 +169,16 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
       // inert, and a failure leaves the outgoing account untouched and still signed in.
       const token = await loginWithKeys(account.address, wk.ed25519Sign, wk.ed25519Public);
 
+      // An unsent message is saved as a draft while the outgoing account's session is still the one
+      // installed: after the adoption below its writes would carry the wrong account's bearer. Here,
+      // not before the unlock, because waiting on the network ahead of a passkey prompt costs it its
+      // user activation. If it cannot be kept anywhere the switch stops, and the composer says so.
+      if (isDraftOpen() && !(await putAwayDraft())) {
+        void logoutToken(token).catch(() => { /* best effort; it expires anyway */ });
+        setError("Your unsent message couldn't be saved as a draft. Send or discard it, then switch.");
+        return false;
+      }
+
       try {
         await persistWorkingKeys(wk);
       } catch {
@@ -238,6 +249,11 @@ export function useAccountSwitch(opts?: { onSwitched?: (address: string) => void
       const target = await chooseTarget(unlocked, o?.prefer);
       // Mint the incoming session before adopting anything, for the same reason switchTo does.
       const token = await loginWithKeys(target.address, target.ed25519Sign, target.ed25519Public);
+      if (isDraftOpen() && !(await putAwayDraft())) {
+        void logoutToken(token).catch(() => { /* best effort; it expires anyway */ });
+        setError("Your unsent message couldn't be saved as a draft. Send or discard it, then switch.");
+        return false;
+      }
       adoptKeys(target);
       setSession(target.address, token);
       setNeedsDevicePassword(false);

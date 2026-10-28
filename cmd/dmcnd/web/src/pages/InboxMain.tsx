@@ -22,6 +22,7 @@ import { InboxNotices } from '../components/InboxNotices';
 import { isFirstRun } from '../lib/firstRun';
 import { useGettingStarted } from '../lib/hooks/useGettingStarted';
 import { MessageReader } from '../components/MessageReader';
+import { DraftList } from '../components/DraftList';
 import type { ComposeReplyTo } from '../lib/compose';
 import type { MailOutletContext } from '../components/AppLayout';
 import { deployment } from '@deployment';
@@ -296,7 +297,14 @@ function PullIndicator({ distance, armed, refreshing, dragging }: PullState) {
 }
 
 /** The mail content (list + reader) that fills the app shell's main column. */
+// The mail column. Drafts are not mail (no sender, no signature, nothing received), so their folder
+// is a list of its own.
 export function InboxMain() {
+  const { folder } = useOutletContext<MailOutletContext>();
+  return folder === 'drafts' ? <DraftList /> : <MailList />;
+}
+
+function MailList() {
   const { messages, loaded: mailLoaded, error, accessState, refresh, deleteMessage } = useMessages();
   const { sent, loaded: sentLoaded, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
   const { ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();

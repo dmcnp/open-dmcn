@@ -29,9 +29,6 @@ interface AccountMenuProps {
   // Called after the app has re-homed to another account, so the shell can drop
   // state belonging to the previous one.
   onSwitched?: () => void;
-  // An unsent compose is open: switching would silently re-home it to the new
-  // identity, so confirm first.
-  draftOpen?: boolean;
 }
 
 type Action = 'add' | 'settings' | 'signout' | 'signout-all';
@@ -56,13 +53,11 @@ const rowStyle: CSSProperties = {
   color: 'var(--text-body)', cursor: 'pointer',
 };
 
-export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAll, onSwitched, draftOpen }: AccountMenuProps) {
+export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAll, onSwitched }: AccountMenuProps) {
   const { address } = useAuth();
   const navigate = useNavigate();
   const [activeIdx, setActiveIdx] = useState(-1);
   const [passphrase, setPassphrase] = useState('');
-  // The account a draft-discard confirmation is pending for.
-  const [pendingSwitch, setPendingSwitch] = useState<DeviceAccount | null>(null);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -82,7 +77,6 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
   const closeMenu = () => {
     onOpenChange(false);
     setActiveIdx(-1);
-    setPendingSwitch(null);
     if (needsPassword) cancelUnlock();
   };
   closeRef.current = closeMenu;
@@ -117,7 +111,7 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
   // added, removed or unlocked one since it was last rendered.
   useEffect(() => {
     if (open) { void refresh(); void refreshUnread(); }
-    else { setActiveIdx(-1); setPendingSwitch(null); setPassphrase(''); }
+    else { setActiveIdx(-1); setPassphrase(''); }
   }, [open, refresh, refreshUnread]);
 
   // Escape backs out one step: an in-progress unlock first, then the menu.
@@ -129,7 +123,6 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
       if (unlockTarget) { cancelUnlock(); return; }
       onOpenChange(false);
       setActiveIdx(-1);
-      setPendingSwitch(null);
       triggerRef.current?.focus();
     };
     document.addEventListener('keydown', onKey);
@@ -152,10 +145,8 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
     else beginUnlock(account); // passkey prompts now; password expands the form
   };
 
-  const onAccountClick = (account: DeviceAccount) => {
-    if (draftOpen) { setPendingSwitch(account); return; }
-    startSwitch(account);
-  };
+  // An open draft is saved and closed by the switch itself (useAccountSwitch), so nothing to ask here.
+  const onAccountClick = (account: DeviceAccount) => startSwitch(account);
 
   const runAction = (action: Action) => {
     switch (action) {
@@ -167,7 +158,7 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
   };
 
   const onPanelKeyDown = (e: ReactKeyboardEvent) => {
-    if (unlockTarget || pendingSwitch) return; // a form owns the keyboard
+    if (unlockTarget) return; // a form owns the keyboard
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => (i + 1) % itemCount); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => (i <= 0 ? itemCount - 1 : i - 1)); }
     else if (e.key === 'Home') { e.preventDefault(); setActiveIdx(0); }
@@ -267,8 +258,8 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
             id="dmcn-account-menu"
             ref={panelRef}
             tabIndex={-1}
-            role={unlockTarget || pendingSwitch ? 'dialog' : 'menu'}
-            aria-modal={unlockTarget || pendingSwitch ? false : undefined}
+            role={unlockTarget ? 'dialog' : 'menu'}
+            aria-modal={unlockTarget ? false : undefined}
             aria-label={unlockTarget ? `Unlock ${unlockTarget.address}` : 'Accounts'}
             onKeyDown={onPanelKeyDown}
             style={{ ...panelStyle, outline: 'none' }}
@@ -294,17 +285,6 @@ export function AccountMenu({ open, onOpenChange, mobile, onSignOut, onSignOutAl
                   <Button size="sm" variant="secondary" type="button" disabled={busy} onClick={cancelUnlock}>Cancel</Button>
                 </div>
               </form>
-            ) : pendingSwitch ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)' }}>
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', lineHeight: 'var(--leading-normal)' }}>
-                  You have a message open that hasn't been sent. Switching to{' '}
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{pendingSwitch.address}</span> discards it.
-                </div>
-                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                  <Button size="sm" onClick={() => { const a = pendingSwitch; setPendingSwitch(null); startSwitch(a); }}>Discard and switch</Button>
-                  <Button size="sm" variant="secondary" onClick={() => setPendingSwitch(null)}>Cancel</Button>
-                </div>
-              </div>
             ) : (
               <>
                 {address && (

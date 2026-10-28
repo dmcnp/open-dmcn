@@ -2,7 +2,10 @@
 //   - 'working'  — the unlocked, non-extractable CryptoKey handles (session-scoped)
 //   - 'keystore' — the client-side encrypted blob + unlock metadata (persistent)
 //   - 'personal' — the account's mail state (Sent, flags/labels, contacts, settings) when the
-//                  home relay hosts no personal storage; see api/personalStore.ts
+//                  home relay hosts no personal storage; see api/personalStore.ts. Also, under
+//                  its own 'draft::' prefix, the message being written until the relay has it
+//                  (api/draftStore.ts) — kept here rather than in a store of its own so adding
+//                  it did not need a version bump, which an older tab left open would block
 //   - 'pins'     — the device-local counterparty key pins (persistent, see trust/pinStore.ts)
 //   - 'device'   — what this CONTEXT does with unlocked keys: the lock posture, and the optional
 //                  device secret that opens several accounts at once (see lib/devicePosture.ts,
