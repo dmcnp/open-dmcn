@@ -23,6 +23,7 @@ import { useContacts, type Contact } from '../lib/hooks/useContacts';
 import { DEFAULT_DOMAIN } from '../lib/config';
 import { Button, IconButton, Tag } from '../ds';
 import { Icon } from './Icon';
+import { ConfirmTrashButton } from './ConfirmTrashButton';
 import { RichTextEditor, type RichTextEditorHandle, type InsertedImage } from './RichTextEditor';
 import { sanitizeOutgoing } from '../lib/html/sanitize';
 import { toPlainText } from '../lib/html/toPlainText';
@@ -491,7 +492,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
   // after typing pauses (and at least every 15 s while it does not), sealed to the owner so the same
   // draft opens on their other devices. Nothing is saved until someone changes something, and a new
   // message is not saved until it holds something worth keeping, so opening the composer and
-  // closing it again leaves nothing behind. Sending removes the draft; Discard deletes it; closing
+  // closing it again leaves nothing behind. Sending removes the draft; Discard (clicked twice) deletes it; closing
   // keeps it.
   const { store: draftsStore, refreshDrafts, setOpen: setDraftOpenId } = useDrafts();
   // The store of the account this composer was opened on, kept even if the provider moves on.
@@ -1436,7 +1437,7 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
             {saveLabel}
           </span>
         )}
-        <IconButton aria-label="Discard" onClick={handleDiscard}><Icon name="trash" /></IconButton>
+        <ConfirmTrashButton aria-label="Discard" onConfirm={handleDiscard} />
       </div>
       )}
     </div>

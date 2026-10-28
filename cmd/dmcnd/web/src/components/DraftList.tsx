@@ -8,9 +8,10 @@ import type { DraftSummary } from '../lib/api/draftStore';
 import type { MailOutletContext } from './AppLayout';
 import { IconButton } from '../ds';
 import { Icon } from './Icon';
+import { ConfirmTrashButton } from './ConfirmTrashButton';
 
 // The Drafts folder: messages started and not sent, newest first. A row opens the draft in the
-// composer; deleting one removes it from every device. The rail shows this view only while there
+// composer; deleting one (a second click on the red trash confirms it) removes it from every device. The rail shows this view only while there
 // are drafts (AppLayout), so it has no empty state of its own beyond a filter that matches nothing.
 
 function matches(d: DraftSummary, q: string): boolean {
@@ -24,6 +25,8 @@ export function DraftList() {
   const { filter, openDraft, openDraftId, openCompose } = useOutletContext<MailOutletContext>();
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState<string | null>(null);
+  // The row whose trash is waiting for its confirming click: it stays visible after the pointer leaves.
+  const [armed, setArmed] = useState<string | null>(null);
 
   const q = filter.trim();
   const rows = q ? drafts.filter(d => matches(d, q)) : drafts;
@@ -66,7 +69,7 @@ export function DraftList() {
           const recipients = [...d.to, ...d.cc, ...d.bcc];
           const who = recipients.length ? `To: ${recipients.map(nameFor).join(', ')}` : '(no recipients)';
           const isOpen = d.id === openDraftId;
-          const showActions = isMobile || hovered === d.id;
+          const showActions = isMobile || hovered === d.id || armed === d.id;
           return (
             <div
               key={d.id}
@@ -111,9 +114,13 @@ export function DraftList() {
               )}
               {/* Not for the draft the composer has open: it would only be saved straight back. */}
               <div style={{ flex: 'none', visibility: showActions && !isOpen ? 'visible' : 'hidden' }}>
-                <IconButton size="sm" aria-label="Delete draft" disabled={isOpen} onClick={e => { e.stopPropagation(); void remove(d.id); }}>
-                  <Icon name="trash" size={16} />
-                </IconButton>
+                <ConfirmTrashButton
+                  size="sm"
+                  aria-label="Delete draft"
+                  disabled={isOpen}
+                  onConfirm={() => { void remove(d.id); }}
+                  onArmedChange={on => setArmed(a => (on ? d.id : a === d.id ? null : a))}
+                />
               </div>
             </div>
           );

@@ -1,0 +1,20 @@
+/* ConfirmTrashButton: the armed state and the note's arrow (hover and pseudo-elements cannot be
+   expressed inline). All visuals reference DMCN tokens. The note sits to the button's left: both
+   places it is used put the button at the right edge of something that clips. */
+.confirm-trash{position:relative;display:inline-flex;}
+.dmcn-iconbtn.confirm-trash__btn--armed{background:var(--danger);color:#fff;}
+.dmcn-iconbtn.confirm-trash__btn--armed:hover{background:var(--danger-hover);color:#fff;}
+.confirm-trash__tip{
+  position:absolute;z-index:50;right:calc(100% + 8px);top:50%;translate:0 -50%;pointer-events:none;
+  font-family:var(--font-sans);font-size:var(--text-xs);font-weight:var(--weight-medium);
+  color:var(--neutral-25);background:var(--neutral-900);
+  padding:5px 12px;border-radius:var(--radius-sm);white-space:nowrap;box-shadow:var(--shadow-sm);
+  animation:confirm-trash-in var(--dur-fast) var(--ease-standard);
+}
+.confirm-trash__tip::after{
+  content:'';position:absolute;left:100%;top:50%;translate:0 -50%;
+  border:5px solid transparent;border-left-color:var(--neutral-900);
+}
+[data-theme="dark"] .confirm-trash__tip{background:var(--neutral-700);}
+[data-theme="dark"] .confirm-trash__tip::after{border-left-color:var(--neutral-700);}
+@keyframes confirm-trash-in{from{opacity:0;transform:translateX(2px);}to{opacity:1;transform:none;}}
