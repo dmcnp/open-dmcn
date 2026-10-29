@@ -14,6 +14,9 @@ func TestValidateLocalPart(t *testing.T) {
 	}{
 		// valid
 		{"simple", "me1", nil},
+		{"one-char", "m", nil},
+		{"two-char", "me", nil},
+		{"one-digit", "7", nil},
 		{"alnum", "a1b", nil},
 		{"dot", "john.doe", nil},
 		{"multi-dash", "a-b-c-d", nil},
@@ -23,9 +26,9 @@ func TestValidateLocalPart(t *testing.T) {
 		{"trailing-digit-after-dot", "v1.2.3", nil},
 
 		// format failures
-		{"too-short", "ab", ErrLocalPartFormat},
 		{"empty", "", ErrLocalPartFormat},
 		{"too-long", strings.Repeat("a", 65), ErrLocalPartFormat},
+		{"lone-separator", "-", ErrLocalPartFormat},
 		{"leading-dash", "-abc", ErrLocalPartFormat},
 		{"trailing-dash", "abc-", ErrLocalPartFormat},
 		{"leading-dot", ".abc", ErrLocalPartFormat},
@@ -71,7 +74,7 @@ func TestValidateChosenAddress(t *testing.T) {
 		{"valid", "alice@example.com", false},
 		{"valid-dashes", "a-b-c@example.com", false},
 		{"bad-local", "Alice@example.com", true},
-		{"bad-local-short", "ab@example.com", true},
+		{"short-local", "me@example.me", false},
 		{"pubkey-local", strings.Repeat("ab", 32) + "@example.com", true},
 		{"no-domain", "alice@", true},
 		{"no-at", "alice", true},

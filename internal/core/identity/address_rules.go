@@ -26,8 +26,8 @@ var (
 // localPartRe requires the local-part to start and end with an alphanumeric and to
 // sandwich every separator (-, ., _) between alphanumeric runs — so it can never
 // start/end with a separator or use two separators consecutively. A flat class
-// (^[a-z0-9][-._a-z0-9]{2,63}$) cannot express "no adjacent separators", and RE2 has
-// no lookahead, so the 3–64 length bound is checked separately in ValidateLocalPart.
+// (^[a-z0-9][-._a-z0-9]{0,63}$) cannot express "no adjacent separators", and RE2 has
+// no lookahead, so the 1–64 length bound is checked separately in ValidateLocalPart.
 var localPartRe = regexp.MustCompile(`^[a-z0-9]+([-._][a-z0-9]+)*$`)
 
 // hexOnlyRe matches a string composed solely of lowercase hex digits.
@@ -35,8 +35,10 @@ var hexOnlyRe = regexp.MustCompile(`^[0-9a-f]+$`)
 
 const (
 	// localPartMin/Max bound the local-part length. Max matches the RFC 5321 email
-	// local-part limit for bridge/legacy-email interop.
-	localPartMin = 3
+	// local-part limit for bridge/legacy-email interop. One character is a valid
+	// address (me@example.me); a provider that wants short names held back on a
+	// domain it shares between customers enforces that itself.
+	localPartMin = 1
 	localPartMax = 64
 	// A 32-byte Ed25519/X25519 key hex-encodes to 64 chars; the identity fingerprint
 	// (first 20 bytes of SHA-256, see fingerprintOf) hex-encodes to 40 chars. A
@@ -46,7 +48,7 @@ const (
 )
 
 // ValidateLocalPart enforces the address-choice rules on a local-part:
-//   - length 3–64
+//   - length 1–64
 //   - lowercase, starts and ends with [a-z0-9], only [-._a-z0-9] otherwise, no
 //     consecutive separators
 //   - not shaped like a DMCN public key (all-lowercase-hex of length 40 or 64)
