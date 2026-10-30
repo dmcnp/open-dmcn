@@ -15,7 +15,9 @@ import { useAppLock } from '../lib/hooks/useAppLock';
 import { useIsMobile } from '../lib/useIsMobile';
 import { readThemePref, resolveTheme, readDensity, writeThemePref, writeDensity, type ThemePref } from '../lib/theme';
 import { logout as apiLogout } from '../lib/api/client';
-import { countUnread } from '../lib/unread';
+import { controlSubjects, countUnread } from '../lib/unread';
+import { shownInDeleted } from '../lib/trash';
+import { useTrashPurge } from '../lib/hooks/useTrashPurge';
 import { useFlags } from '../lib/hooks/useFlags';
 import { useLabels } from '../lib/hooks/useLabels';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
@@ -34,7 +36,7 @@ import type { ComposeReplyTo } from '../lib/compose';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
 // folder ("folder:<id>"). InboxMain parses the dynamic forms.
-type Folder = 'inbox' | 'sent' | 'drafts' | 'archive' | 'starred' | `label:${string}` | `folder:${string}`;
+type Folder = 'inbox' | 'sent' | 'drafts' | 'archive' | 'starred' | 'deleted' | `label:${string}` | `folder:${string}`;
 type Section = 'mail' | 'contacts' | 'settings' | 'getting-started';
 
 // Shared state the shell hands to the active section via react-router's outlet
@@ -107,6 +109,8 @@ export function AppLayout() {
   const landingDecidedFor = useRef<string | null>(null);
   // Lock the whole context if this app is left in the background long enough.
   useAppLock();
+  // Deleted mail whose time is up goes for good while a client is open (lib/trash.ts).
+  useTrashPurge();
   // Published outside the shell so a tapped notification for another account, or the account
   // switcher, saves an unsent message as a draft before switching out from under it (the switch
   // closes the composer, see handleSwitched below).
@@ -168,6 +172,20 @@ export function AppLayout() {
   useEffect(() => {
     if (folder === 'drafts' && draftsLoaded && drafts.length === 0) setFolder('inbox');
   }, [folder, draftsLoaded, drafts.length]);
+
+  // Deleted is in the rail only while something is waiting there to be removed for good, and, like
+  // Drafts, the last one going (restored, removed, or its time up) takes the view back to the Inbox.
+  // Not decided until the listings, flags and blocklist have all answered, so the row does not
+  // come and go while they load.
+  const deletedKnown = flagsReady && filterReady && mailLoaded && sentLoaded;
+  const hasDeleted = deletedKnown && (() => {
+    const control = controlSubjects();
+    return messages.some(m => shownInDeleted(m, address, flags, mailFilter, control))
+      || sent.some(p => shownInDeleted(p, address, flags, mailFilter, control));
+  })();
+  useEffect(() => {
+    if (folder === 'deleted' && deletedKnown && !hasDeleted) setFolder('inbox');
+  }, [folder, deletedKnown, hasDeleted]);
 
   // One combined inbox: every unread received message except blocked senders (trust is
   // decided at read time by the reader's gate, not by list placement). The rule lives in
@@ -322,6 +340,9 @@ export function AppLayout() {
             <NavRow icon="file-pen" label="Drafts" active={section === 'mail' && folder === 'drafts'} count={drafts.length} collapsed={railCollapsed} onClick={() => selectFolder('drafts')} />
           )}
           <NavRow icon="archive" label="Archive" active={section === 'mail' && folder === 'archive'} collapsed={railCollapsed} onClick={() => selectFolder('archive')} />
+          {hasDeleted && (
+            <NavRow icon="trash" label="Deleted" active={section === 'mail' && folder === 'deleted'} collapsed={railCollapsed} onClick={() => selectFolder('deleted')} />
+          )}
 
           {folders.length > 0 && (
             <>

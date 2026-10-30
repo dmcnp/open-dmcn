@@ -7,8 +7,8 @@ import { usePolling } from './usePolling';
 import { storeKey, useSyncChanges, useSyncLive } from '../sync/useSync';
 
 // useFlags owns the extrinsic per-message metadata (read/unread, archived, starred,
-// labels) from the "flags/" namespace of the personal store. Views (Inbox excludes
-// archived, Archive shows archived, Starred, unread counts) are filters over
+// labels, deleted) from the "flags/" namespace of the personal store. Views (Inbox excludes
+// archived, Archive shows archived, Starred, Deleted, unread counts) are filters over
 // (messages) ∪ (these flags). Toggles apply a delta and write it back, optimistically
 // updating the cache so the UI responds immediately; the next poll reconciles across
 // devices (last-writer-wins per message).
@@ -26,6 +26,13 @@ interface FlagsContextValue {
   isStarred: (messageHash: string) => boolean;
   labelsOf: (messageHash: string) => string[];
   folderOf: (messageHash: string) => string | undefined;
+  /** When the message was deleted (unix ms), or undefined while it is not in Deleted. */
+  trashedAt: (messageHash: string) => number | undefined;
+  isTrashed: (messageHash: string) => boolean;
+  /** Move to Deleted. Nothing is removed; see lib/trash.ts. */
+  trash: (messageHash: string) => Promise<void>;
+  /** Take out of Deleted, back to wherever its other flags put it. */
+  restore: (messageHash: string) => Promise<void>;
   addLabel: (messageHash: string, labelId: string) => Promise<void>;
   removeLabel: (messageHash: string, labelId: string) => Promise<void>;
   setFolder: (messageHash: string, folderId: string | undefined) => Promise<void>;
@@ -103,6 +110,10 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   const isStarred = useCallback((h: string) => !!flags.get(h)?.starred, [flags]);
   const labelsOf = useCallback((h: string) => flags.get(h)?.labelIds ?? [], [flags]);
   const folderOf = useCallback((h: string) => flags.get(h)?.folderId, [flags]);
+  const trashedAt = useCallback((h: string) => flags.get(h)?.trashedAt, [flags]);
+  const isTrashed = useCallback((h: string) => flags.get(h)?.trashedAt !== undefined, [flags]);
+  const trash = useCallback((h: string) => setFlag(h, { trashedAt: Date.now() }), [setFlag]);
+  const restore = useCallback((h: string) => setFlag(h, { trashedAt: undefined }), [setFlag]);
 
   const addLabel = useCallback(async (h: string, labelId: string) => {
     const cur = flagsRef.current.get(h)?.labelIds ?? [];
@@ -136,7 +147,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     FlagsContext.Provider,
-    { value: { flags, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } },
+    { value: { flags, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
     children
   );
 }

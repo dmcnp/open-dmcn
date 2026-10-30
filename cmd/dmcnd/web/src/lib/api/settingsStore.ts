@@ -33,6 +33,9 @@ export interface AppSettings {
   // away on every device rather than reappearing on each new one; undefined for every existing
   // account, which reads as "still showing".
   gettingStartedHidden?: boolean;
+  // How many days deleted mail waits in Deleted before a client removes it for good (1–7).
+  // Undefined reads as the default (lib/trash.ts), which is what every existing account gets.
+  trashDays?: number;
 }
 
 export const SETTINGS_KEY = 'settings/app';

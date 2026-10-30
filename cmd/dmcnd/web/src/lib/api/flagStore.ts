@@ -16,6 +16,9 @@ export interface FlagRecord {
   starred?: boolean;
   folderId?: string; // forward-compatible; folder assignment UI is a later increment
   labelIds?: string[]; // forward-compatible; label assignment UI is a later increment
+  // Set when the owner deleted the message: unix ms. It sits in Deleted until restored (cleared)
+  // or until the retention in settings has passed, when a client deletes it for good (lib/trash.ts).
+  trashedAt?: number;
   updatedAt: number; // unix ms — recency for merge-on-read
   deviceId: string; // hex — tiebreak for equal updatedAt
 }
@@ -25,7 +28,7 @@ export function flagKey(messageHash: string): string {
 }
 
 // The mutable subset a caller can change in one edit.
-export type FlagDelta = Partial<Pick<FlagRecord, 'read' | 'archived' | 'starred' | 'folderId' | 'labelIds'>>;
+export type FlagDelta = Partial<Pick<FlagRecord, 'read' | 'archived' | 'starred' | 'folderId' | 'labelIds' | 'trashedAt'>>;
 
 export class FlagStore {
   private store: PersonalStore;
@@ -59,6 +62,7 @@ export class FlagStore {
       starred: current?.starred,
       folderId: current?.folderId,
       labelIds: current?.labelIds,
+      trashedAt: current?.trashedAt,
       ...delta,
       updatedAt: Date.now(),
       deviceId: this.deviceHex,

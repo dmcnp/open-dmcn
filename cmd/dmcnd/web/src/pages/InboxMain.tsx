@@ -15,6 +15,7 @@ import { useIsMobile } from '../lib/useIsMobile';
 import { usePullToRefresh, PULL_THRESHOLD, type PullState } from '../lib/hooks/usePullToRefresh';
 import { Button, IconButton } from '../ds';
 import { Icon } from '../components/Icon';
+import { ConfirmTrashButton } from '../components/ConfirmTrashButton';
 import { KindIcon } from '../components/KindIcon';
 import { useCounterpartyKind } from '../lib/hooks/useCounterpartyKind';
 import { senderLabel } from '../lib/trust/displayName';
@@ -29,6 +30,8 @@ import { deployment } from '@deployment';
 import { formatWhen } from '../lib/format';
 import { matches, parseQuery, type MatchContext } from '../lib/search/query';
 import { useSearch, useSearchHits } from '../lib/search/useSearchIndex';
+import { useSettings } from '../lib/hooks/useSettings';
+import { purgeWhen, shownInDeleted, trashDays } from '../lib/trash';
 
 // Control messages this deployment carries (device pairing, countersign requests) are
 // surfaced in their own panels, not the normal mail folders. Empty on a deployment whose
@@ -71,11 +74,14 @@ function groupSent(previews: Preview[]): Row[] {
 
 const SWIPE_W = 176; // px revealed by swiping a row left on mobile (Archive + Delete)
 
-function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover }: {
+function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore }: {
   msg: Preview; sent: boolean; unknownSender?: boolean; trustedSender?: boolean; mobile: boolean; hovered: boolean;
   read: boolean; starred: boolean; inArchive: boolean; nameFor: (address: string) => string;
   onOpen: () => void; onDelete: () => void; onArchive: () => void; onToggleStar: () => void; onHover: (h: boolean) => void;
+  /** Set in Deleted: the row offers Restore, and its delete is for good, so it asks a second time. */
+  onRestore?: () => void;
 }) {
+  const inDeleted = !!onRestore;
   // Unread applies to received mail only (you don't "read" your own Sent copy).
   const unread = !sent && !read;
   // Informational hint: this sender isn't in your contacts/allowlist yet. Purely a glanceable cue
@@ -123,6 +129,9 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
     </span>
   ) : null;
   const [dx, setDx] = useState(0);
+  // Deleting for good from Deleted takes a second press on the same button, as the drafts and
+  // contacts trash buttons do. Moving mail to Deleted never asks: it can be restored.
+  const [armed, setArmed] = useState(false);
   const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false });
 
   if (mobile) {
@@ -144,13 +153,25 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
       // cancels these pointers once it takes the gesture over to scroll, and at the top of
       // the list there is nothing left for it to scroll.
       if (d.decided === 'v') return;
-      if (d.decided !== 'h' && !d.moved) { if (dx < 0) setDx(0); else onOpen(); return; }
-      if (d.decided === 'h') setDx(dx <= -SWIPE_W / 2 ? -SWIPE_W : 0);
+      if (d.decided !== 'h' && !d.moved) { if (dx < 0) { setDx(0); setArmed(false); } else onOpen(); return; }
+      if (d.decided === 'h') { const open = dx <= -SWIPE_W / 2; setDx(open ? -SWIPE_W : 0); if (!open) setArmed(false); }
     };
     return (
       <div style={{ position: 'relative', borderBottom: '1px solid var(--border-subtle)', overflow: 'hidden', background: 'var(--surface-page)' }}>
         {/* action layer revealed by swiping left */}
         <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: SWIPE_W, display: 'flex' }}>
+          {inDeleted ? (
+            <>
+              <button aria-label="Restore" onClick={() => { setDx(0); setArmed(false); onRestore?.(); }}
+                style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--surface-hover)', color: 'var(--text-strong)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
+                <Icon name="undo" size={20} /> Restore
+              </button>
+              <button aria-label={armed ? 'Tap again to delete forever' : 'Delete forever'} onClick={() => { if (armed) { setDx(0); setArmed(false); onDelete(); } else setArmed(true); }}
+                style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--danger)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
+                <Icon name="trash" size={20} /> {armed ? 'Tap again' : 'Delete forever'}
+              </button>
+            </>
+          ) : (<>
           {!sent && (
             <button aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={() => { setDx(0); onArchive(); }}
               style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--surface-hover)', color: 'var(--text-strong)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
@@ -161,6 +182,7 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
             style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--danger)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
             <Icon name="trash" size={20} /> Delete
           </button>
+          </>)}
         </div>
         <div
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
@@ -248,11 +270,20 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
             when hidden (visibility, not unmounting) — so hovering changes colours,
             never geometry. */}
         <span style={{ flex: 1, textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatWhen(msg.sentAt)}</span>
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, visibility: hovered ? 'visible' : 'hidden' }}>
-          {!sent && (
-            <IconButton size="sm" aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={e => { e.stopPropagation(); onArchive(); }}><Icon name="archive" size={16} /></IconButton>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, visibility: hovered || armed ? 'visible' : 'hidden' }}>
+          {inDeleted ? (
+            <>
+              <IconButton size="sm" aria-label="Restore" title="Restore" onClick={e => { e.stopPropagation(); onRestore?.(); }}><Icon name="undo" size={16} /></IconButton>
+              <ConfirmTrashButton size="sm" aria-label="Delete forever" onConfirm={onDelete} onArmedChange={setArmed} />
+            </>
+          ) : (
+            <>
+              {!sent && (
+                <IconButton size="sm" aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={e => { e.stopPropagation(); onArchive(); }}><Icon name="archive" size={16} /></IconButton>
+              )}
+              <IconButton size="sm" aria-label="Delete" onClick={e => { e.stopPropagation(); onDelete(); }}><Icon name="trash" size={16} /></IconButton>
+            </>
           )}
-          <IconButton size="sm" aria-label="Delete" onClick={e => { e.stopPropagation(); onDelete(); }}><Icon name="trash" size={16} /></IconButton>
         </div>
       </div>
     </div>
@@ -307,7 +338,9 @@ export function InboxMain() {
 function MailList() {
   const { messages, loaded: mailLoaded, error, accessState, refresh, deleteMessage } = useMessages();
   const { sent, loaded: sentLoaded, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
-  const { ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags } = useFlags();
+  const { flags, ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags, isTrashed, trashedAt, trash, restore } = useFlags();
+  const { settings } = useSettings();
+  const keepDays = trashDays(settings.trashDays);
   const { ready: labelsReady, knownFolderIds, labelById, folderById } = useLabels();
   const { address } = useAuth();
   const gettingStarted = useGettingStarted();
@@ -334,6 +367,10 @@ function MailList() {
   const catOf = (m: Preview): 'allowlisted' | 'pending' | 'blocked' =>
     isSent(m.senderAddress) ? 'allowlisted' : categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
 
+  const inDeleted = folder === 'deleted';
+  // Which rows read as Sent: the whole Sent folder, and in Deleted the messages that came from it.
+  const isSentRow = (m: Preview) => folder === 'sent' || (inDeleted && (isSentStoreHash(m.hash) || !isReceivedForMe(m, address)));
+
   // Whether the row's shield turns blue: the counterparty is in the owner's contacts.
   // For received mail that is the key-checked `allowlisted` category — categorizeSender
   // demotes a contact whose signing key no longer matches the pinned one back to pending —
@@ -344,7 +381,7 @@ function MailList() {
   // either. Like the "New" tag this is a glanceable hint, not an access decision — the
   // reader still runs the full check when the message is opened.
   const trustedOf = (m: Preview): boolean =>
-    folder === 'sent'
+    isSentRow(m)
       ? !!contactByAddress(recipientsOf(m)[0])
       : !isSent(m.senderAddress) && catOf(m) === 'allowlisted';
 
@@ -370,7 +407,8 @@ function MailList() {
   // folder definitions and the blocklist, each loaded from the personal store after the kept
   // rows are already drawn. Until all three have answered a view shows nothing, rather than every
   // message followed a moment later by the archived, filed and blocked ones disappearing.
-  const sorting = folder !== 'sent' && !(flagsReady && labelsReady && filterReady);
+  // Sent waits for the flags too: a message deleted from it is still in the store, marked.
+  const sorting = !flagsReady || (folder !== 'sent' && !(labelsReady && filterReady));
 
   let rows: Row[];
   if (sorting) {
@@ -379,10 +417,17 @@ function MailList() {
     // Sent reads from the personal store; also fold in any legacy self-copies still
     // in the mailbox (deduped by messageId) so nothing is lost on upgrade.
     const storeMsgIds = new Set(sent.map(p => p.messageId));
-    const legacySent = mail.filter(m => isSent(m.senderAddress) && (!m.messageId || !storeMsgIds.has(m.messageId)));
-    const storeRows: Row[] = sent.filter(matchesQ).map(p => ({ msg: p, hashes: [p.hash] }));
+    const legacySent = mail.filter(m => isSent(m.senderAddress) && !isTrashed(m.hash) && (!m.messageId || !storeMsgIds.has(m.messageId)));
+    const storeRows: Row[] = sent.filter(p => !isTrashed(p.hash)).filter(matchesQ).map(p => ({ msg: p, hashes: [p.hash] }));
     const legacyRows = groupSent(legacySent.filter(matchesQ));
     rows = [...storeRows, ...legacyRows].sort((a, b) => b.msg.sentAt - a.msg.sentAt);
+  } else if (folder === 'deleted') {
+    // Everything deleted and still waiting, received and sent together, most recently deleted
+    // first: the one you are most likely to want back is the one you just threw away.
+    const shown = (m: Preview) => shownInDeleted(m, address, flags, mailFilter, control);
+    rows = [...mail.filter(shown), ...sent.filter(shown)].filter(matchesQ)
+      .map(m => ({ msg: m, hashes: [m.hash] }))
+      .sort((a, b) => (trashedAt(b.msg.hash) ?? 0) - (trashedAt(a.msg.hash) ?? 0));
   } else {
     // Received mail, split by flag/label/folder. Inbox = not archived and not filed
     // into a known folder; Archive/Starred are flag views; label:/folder: are the
@@ -396,6 +441,8 @@ function MailList() {
       // A message I sent is a Sent item, hidden from received views — unless I'm also
       // a recipient (I mailed myself), where this mailbox copy is genuine received mail.
       if (!isReceivedForMe(m, address)) return false;
+      // Deleted mail is in Deleted and nowhere else, whatever else it is filed under.
+      if (isTrashed(m.hash)) return false;
       if (labelSel) return labelsOf(m.hash).includes(labelSel);
       if (folderSel) return folderOf(m.hash) === folderSel;
       if (folder === 'archive') return isArchived(m.hash);
@@ -408,16 +455,30 @@ function MailList() {
     rows = mail.filter(inFolder).filter(matchesQ).map(m => ({ msg: m, hashes: [m.hash] }));
   }
 
-  // Delete routes each hash to its source: a "sent:" hash is a personal-store record,
-  // everything else is a mailbox message.
+  // Delete moves to Deleted, which asks nothing because it can be undone: the message stays where
+  // it is, marked (lib/trash.ts). From Deleted, delete is for good.
   const doDelete = async (hashes: string[]) => {
+    for (const hash of hashes) {
+      try { await trash(hash); } catch { /* ignore */ }
+    }
+  };
+  const doRestore = async (hashes: string[]) => {
+    for (const hash of hashes) {
+      try { await restore(hash); } catch { /* ignore */ }
+    }
+  };
+  // Removal for good routes each hash to its source: a "sent:" hash is a personal-store record,
+  // everything else is a mailbox message. The flag record goes with it.
+  const deleteForever = async (hashes: string[]) => {
     for (const hash of hashes) {
       try {
         if (isSentStoreHash(hash)) await deleteSent(hash);
-        else { await deleteMessage(hash); await removeFlags(hash); } // GC the message's flag record
+        else await deleteMessage(hash);
+        await removeFlags(hash);
       } catch { /* ignore */ }
     }
   };
+
 
   // The open message is resolved against the full source (mailbox or Sent store) so
   // it survives filter changes while the reader is open.
@@ -463,12 +524,14 @@ function MailList() {
   const folderTitle = folder.startsWith('label:') ? (labelById(folder.slice(6))?.name ?? 'Label')
     : folder.startsWith('folder:') ? (folderById(folder.slice(7))?.name ?? 'Folder')
     : folder === 'sent' ? 'Sent' : folder === 'archive' ? 'Archive' : folder === 'starred' ? 'Starred'
+    : inDeleted ? 'Deleted'
     : 'Inbox';
   const emptyText = folder === 'sent' ? 'Nothing sent yet.'
     : folder === 'archive' ? 'Nothing archived.'
     : folder === 'starred' ? 'No starred messages.'
     : folder.startsWith('label:') ? 'No messages with this label.'
     : folder.startsWith('folder:') ? 'This folder is empty.'
+    : inDeleted ? 'Nothing waiting to be deleted.'
     : "You're all caught up. Nothing else to read.";
 
   return (
@@ -476,16 +539,20 @@ function MailList() {
       {openMsg ? (
         <MessageReader
           msg={openMsg}
-          sentView={folder === 'sent'}
+          sentView={isSentRow(openMsg)}
           onBack={() => setOpenHash(null)}
           onReply={handleReply}
           mobile={isMobile}
           openFull={isSentStoreHash(openMsg.hash) ? fetchSentFull : undefined}
-          onDeleteOverride={isSentStoreHash(openMsg.hash) ? () => deleteSent(openMsg.hash) : undefined}
+          onDelete={() => (isTrashed(openMsg.hash) ? deleteForever([openMsg.hash]) : doDelete([openMsg.hash]))}
+          deleted={isTrashed(openMsg.hash) ? {
+            when: purgeWhen(trashedAt(openMsg.hash)!, keepDays, Date.now()),
+            onRestore: () => { void doRestore([openMsg.hash]); setOpenHash(null); },
+          } : undefined}
           starred={isStarred(openMsg.hash)}
           archived={isArchived(openMsg.hash)}
           onToggleStar={() => toggleStar(openMsg)}
-          onArchive={folder !== 'sent' && isReceivedForMe(openMsg, address) ? () => { void toggleArchive(openMsg); setOpenHash(null); } : undefined}
+          onArchive={folder !== 'sent' && !inDeleted && isReceivedForMe(openMsg, address) ? () => { void toggleArchive(openMsg); setOpenHash(null); } : undefined}
         />
       ) : (
         <>
@@ -506,6 +573,14 @@ function MailList() {
             </div>
             <IconButton size="sm" aria-label="Refresh" onClick={doRefresh}><Icon name="refresh" size={16} /></IconButton>
           </div>
+          {inDeleted && (
+            <div style={{
+              padding: 'var(--space-2) var(--space-4)', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-subtle)',
+              fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
+            }}>
+              Messages here are deleted for good {keepDays === 1 ? 'a day' : `${keepDays} days`} after you delete them. Restore one to keep it.
+            </div>
+          )}
           {indexCatchingUp && indexProgress && (
             <div role="status" style={{
               padding: 'var(--space-2) var(--space-4)', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-subtle)',
@@ -558,7 +633,7 @@ function MailList() {
                 </div>
               ) : sorting || (locked && rows.length === 0) ? null : rows.length === 0 ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
+                  <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : inDeleted ? 'trash' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
                   <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
                     {q ? 'No messages match your filter.' : emptyText}
                   </p>
@@ -568,8 +643,8 @@ function MailList() {
                   <MailRow
                     key={msg.hash}
                     msg={msg}
-                    sent={folder === 'sent'}
-                    unknownSender={folder !== 'sent' && catOf(msg) === 'pending'}
+                    sent={isSentRow(msg)}
+                    unknownSender={!isSentRow(msg) && catOf(msg) === 'pending'}
                     trustedSender={trustedOf(msg)}
                     mobile={isMobile}
                     hovered={hovered === msg.hash}
@@ -578,7 +653,8 @@ function MailList() {
                     inArchive={folder === 'archive'}
                     nameFor={nameFor}
                     onOpen={() => openRow(msg)}
-                    onDelete={() => doDelete(hashes)}
+                    onDelete={() => (inDeleted ? deleteForever(hashes) : doDelete(hashes))}
+                    onRestore={inDeleted ? () => { void doRestore(hashes); } : undefined}
                     onArchive={() => toggleArchive(msg)}
                     onToggleStar={() => toggleStar(msg)}
                     onHover={h => setHovered(h ? msg.hash : null)}

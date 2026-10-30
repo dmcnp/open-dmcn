@@ -9,6 +9,7 @@ import type { LabelDef } from '../lib/api/labelStore';
 import { useAuth } from '../lib/hooks/useAuth';
 import { Button, IconButton, Input, Tag } from '../ds';
 import { Icon } from './Icon';
+import { ConfirmTrashButton } from './ConfirmTrashButton';
 import { ColorSwatches } from './ColorSwatches';
 import { lookupIdentity } from '../lib/api/client';
 import { verifyBridgeAttestation, bridgeOriginalIndex, BridgeTrustTier, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
@@ -175,8 +176,10 @@ export interface MessageReaderProps {
    *  self-sealed envelope from the personal store instead of the mailbox. Same
    *  FullBody shape, so the render path (body, attachments, HTML) is identical. */
   openFull?: (hash: string) => Promise<FullBody>;
-  /** Overrides the default mailbox delete (e.g. delete a Sent record from the store). */
-  onDeleteOverride?: () => Promise<void>;
+  /** Deletes the message: to Deleted, or for good when it is already there. The list decides. */
+  onDelete: () => Promise<void>;
+  /** Set while the message waits in Deleted: when it goes for good, and how to take it back. */
+  deleted?: { when: string; onRestore: () => void };
   /** Flag state + toggles (extrinsic metadata). onArchive omitted ⇒ archive hidden. */
   starred?: boolean;
   archived?: boolean;
@@ -188,9 +191,9 @@ export interface MessageReaderProps {
  * In-page email detail view. Renders in place of the message list (the design's
  * Reader pattern) rather than as a standalone route, so the inbox shell stays put.
  */
-export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, openFull, onDeleteOverride, starred, archived, onToggleStar, onArchive }: MessageReaderProps) {
-  const { openMessageFull, deleteMessage } = useMessages();
-  const { labelsOf, folderOf, addLabel, removeLabel, setFolder, removeFlags } = useFlags();
+export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, openFull, onDelete, deleted, starred, archived, onToggleStar, onArchive }: MessageReaderProps) {
+  const { openMessageFull } = useMessages();
+  const { labelsOf, folderOf, addLabel, removeLabel, setFolder } = useFlags();
   const { labels, folders, labelById, createLabel, createFolder } = useLabels();
   const { address } = useAuth();
   const { contactByAddress, nameFor, allowlist, pinKey, ready: contactsReady } = useContacts();
@@ -615,16 +618,16 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       // bridged mail is signed by the shared bridge key, and key-blocking that would hide ALL
       // bridged mail. Bridged mail therefore blocks by address and is hidden locally.
       await blockSender(msg.senderAddress, bridgedLegacy ? undefined : blockKey(nativeTrust, msg.senderPublicKey));
-      if (onDeleteOverride) await onDeleteOverride();
-      else { await deleteMessage(msg.hash); await removeFlags(msg.hash); } // GC flag record
+      // Into Deleted, so a block made in haste can still be walked back with the message intact.
+      // One already there stays there: deleting it for good is its own decision.
+      if (!deleted) await onDelete();
     } catch { /* ignore; close regardless */ }
     onBack();
   };
 
   const handleDelete = async () => {
     try {
-      if (onDeleteOverride) await onDeleteOverride();
-      else { await deleteMessage(msg.hash); await removeFlags(msg.hash); } // GC flag record
+      await onDelete();
     } catch { /* ignore; close regardless */ }
     onBack();
   };
@@ -697,7 +700,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       {/* On a phone the row wraps, so Delete and Block take a line of their own rather than
           whichever of them happens to fit beside the decision. */}
       <div style={mobile ? { flexBasis: '100%', height: 0 } : { flex: 1, minWidth: 'var(--space-4)' }} />
-      <Button variant="secondary" leftIcon={<Icon name="trash" size={16} />} onClick={handleDelete} disabled={actioning}>Delete</Button>
+      {/* In Deleted the toolbar's delete is for good and asks twice; a second, unasking one here
+          would be the easier of the two to hit. */}
+      {!deleted && <Button variant="secondary" leftIcon={<Icon name="trash" size={16} />} onClick={handleDelete} disabled={actioning}>Delete</Button>}
       {gateReason !== 'blocked' && (
         <Button variant="secondary" leftIcon={<Icon name="alert-octagon" size={16} />} onClick={handleBlock} disabled={actioning} style={dangerOutline}>Block sender</Button>
       )}
@@ -710,6 +715,12 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       <div style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', gap: 2, padding: mobile ? '0 var(--space-2)' : '0 var(--space-4) 0 var(--space-3)', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-default)' }}>
         <Button variant="ghost" size="sm" aria-label="Back to inbox" leftIcon={<Icon name="chevron-left" size={16} />} onClick={onBack}>Back</Button>
         <div style={{ flex: 1 }} />
+        {deleted ? (
+          <>
+            <Button variant="ghost" size="sm" leftIcon={<Icon name="undo" size={16} />} onClick={deleted.onRestore}>Restore</Button>
+            <ConfirmTrashButton aria-label="Delete forever" title="Delete forever" onConfirm={() => { void handleDelete(); }} />
+          </>
+        ) : (<>
         {creating === null && (
           <>
             <PickerButton
@@ -750,7 +761,18 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
           <IconButton aria-label={archived ? 'Unarchive' : 'Archive'} title={archived ? 'Unarchive' : 'Archive'} onClick={onArchive}><Icon name="archive" /></IconButton>
         )}
         <IconButton aria-label="Delete" title="Delete" onClick={handleDelete}><Icon name="trash" /></IconButton>
+        </>)}
       </div>
+      {deleted && (
+        <div role="status" style={{
+          flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          padding: 'var(--space-2) var(--space-4)', background: 'var(--surface-sunken)',
+          borderBottom: '1px solid var(--border-default)', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
+        }}>
+          <Icon name="trash" size={15} style={{ color: 'var(--text-muted)', flex: 'none' }} />
+          <span>This message is in Deleted and will be deleted for good {deleted.when}. Restore it to keep it.</span>
+        </div>
+      )}
 
       <div style={{ overflowY: 'auto', flex: 1, padding: mobile ? 'var(--space-4)' : 'var(--space-8) var(--space-8) var(--space-10)' }}>
         <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: mobile ? 'var(--space-5)' : 'var(--space-6)' }}>

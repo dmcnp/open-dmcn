@@ -20,7 +20,7 @@ import { deployment } from '@deployment';
 // same set, which is how a subject ends up filtered out of one list and not another.
 export const controlSubjects = () => new Set<string>(deployment.controlSubjects);
 
-// countUnread counts received, non-control, non-archived, unread mail, excluding
+// countUnread counts received, non-control, non-archived, unread mail not in Deleted, excluding
 // blocked senders. Trust is decided at read time rather than by list placement, so
 // pending (unknown) senders DO count — only the personal blocklist suppresses.
 // Mail from the account to itself is inherently trusted and always counts.
@@ -35,7 +35,7 @@ export function countUnread(
     if (!isReceivedForMe(m, address)) continue;
     if (controlSubjects().has(m.subject)) continue;
     const f = flags.get(m.hash);
-    if (f?.archived || f?.read) continue;
+    if (f?.archived || f?.read || f?.trashedAt !== undefined) continue;
     const self = address != null && m.senderAddress.toLowerCase() === address.toLowerCase();
     if (!self && filterBlocks(filter, m.senderAddress, m.senderPublicKey)) continue;
     n++;

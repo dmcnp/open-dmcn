@@ -38,6 +38,7 @@ import { useSearch } from '../lib/search/useSearchIndex';
 import { deployment } from '@deployment';
 import { Icon } from '../components/Icon';
 import { formatBytes } from '../lib/format';
+import { trashDays, TRASH_DAYS_MAX, TRASH_DAYS_MIN } from '../lib/trash';
 
 type Section = 'profile' | 'privacy' | 'appearance' | 'organise' | 'account';
 const SECTIONS: readonly Section[] = ['profile', 'privacy', 'appearance', 'organise', 'account'];
@@ -233,7 +234,7 @@ export function Settings() {
   // the whole desktop shell live. (Standalone/mobile uses its own PageShell preview.)
   const { onAppearanceChange } = useOutletContext<MailOutletContext>();
 
-  const { settings, updateSettings } = useSettings();
+  const { settings, loaded: settingsLoaded, updateSettings } = useSettings();
   const [section, setSection] = useState<Section>(initialSection);
   // Profile form (synced account settings). Seeded from the loaded settings doc.
   const [signature, setSignature] = useState('');
@@ -405,6 +406,23 @@ export function Settings() {
     } catch (e) {
       setRemoteImages(prev);
       setRemoteImagesErr(e instanceof Error ? e.message : 'Could not save that setting.');
+    }
+  };
+
+  // How long deleted mail waits in Deleted. Written on change, and put back if the write fails, so
+  // the control never shows a retention the account does not have.
+  const [keepDeleted, setKeepDeleted] = useState(() => trashDays(settings.trashDays));
+  const [keepDeletedErr, setKeepDeletedErr] = useState('');
+  useEffect(() => { setKeepDeleted(trashDays(settings.trashDays)); }, [settings.trashDays]);
+  const applyKeepDeleted = async (days: number) => {
+    const prev = keepDeleted;
+    setKeepDeleted(days);
+    setKeepDeletedErr('');
+    try {
+      await updateSettings({ trashDays: days });
+    } catch (e) {
+      setKeepDeleted(prev);
+      setKeepDeletedErr(e instanceof Error ? e.message : 'Could not save that setting.');
     }
   };
 
@@ -769,6 +787,27 @@ export function Settings() {
                     {address && <CopyButton value={address} what="your address" />}
                   </div>
                 </Row>
+                <div>
+                <Row grouped title="Keep deleted mail" desc="Deleted messages wait in Deleted for this long, where you can restore them, and are then deleted for good. Synced across your devices.">
+                  <select
+                    aria-label="Keep deleted mail for"
+                    value={keepDeleted}
+                    disabled={!settingsLoaded}
+                    onChange={e => void applyKeepDeleted(Number(e.target.value))}
+                    style={{
+                      padding: '6px 10px', font: 'inherit', fontSize: 'var(--text-sm)', color: 'var(--text-body)',
+                      background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                    }}
+                  >
+                    {Array.from({ length: TRASH_DAYS_MAX - TRASH_DAYS_MIN + 1 }, (_, i) => TRASH_DAYS_MIN + i).map(d => (
+                      <option key={d} value={d}>{d === 1 ? '1 day' : `${d} days`}</option>
+                    ))}
+                  </select>
+                </Row>
+                {keepDeletedErr && (
+                  <div style={{ margin: '0 var(--space-6) var(--space-4)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{keepDeletedErr}</div>
+                )}
+                </div>
                 {managedDomain ? (
                   <Row grouped title="Managed account" desc="Keys for this account are held by your domain administrator. Account recovery and new devices are set up through them (device pairing)."
                     hint={<>
