@@ -467,19 +467,22 @@ export function AppLayout() {
             padding: 'env(safe-area-inset-top) var(--space-3) 0', background: 'var(--surface-card)', borderBottom: '1px solid var(--border-default)',
           }}>
             <IconButton aria-label="Close search" onClick={() => { setSearchOpen(false); setFilter(''); }}><Icon name="chevron-left" /></IconButton>
-            <div style={{ flex: 1 }}>
-              <Input
-                autoFocus
-                leadingIcon={<Icon name="search" size={16} />}
-                placeholder="Search encrypted mail"
-                aria-label="Search mail"
-                value={filter}
-                onChange={e => changeSearch(e.target.value)}
-                onFocus={focusSearch}
-                trailingAction={filter ? clearSearch : null}
-              />
+            {/* The (i) sits tight against the box it explains, closer than the header's own gap. */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Input
+                  autoFocus
+                  leadingIcon={<Icon name="search" size={16} />}
+                  placeholder="Search encrypted mail"
+                  aria-label="Search mail"
+                  value={filter}
+                  onChange={e => changeSearch(e.target.value)}
+                  onFocus={focusSearch}
+                  trailingAction={filter ? clearSearch : null}
+                />
+              </div>
+              <SearchHelp />
             </div>
-            <SearchHelp />
           </header>
         ) : (
           <header style={{
@@ -490,21 +493,24 @@ export function AppLayout() {
               <Icon name={isMobile ? 'menu' : 'panel-left'} />
             </IconButton>
             {deployment.branding.appMark}
+            {/* 620 for the box, plus the 2px gap and the 38px (i) beside it. */}
             {!isMobile && section === 'mail' && (
-              <div style={{ flex: 1, maxWidth: 620 }}>
-                <Input
-                  leadingIcon={<Icon name="search" size={16} />}
-                  placeholder="Search encrypted mail"
-                  aria-label="Search mail"
-                  value={filter}
-                  onChange={e => changeSearch(e.target.value)}
-                  onFocus={focusSearch}
-                  style={searchStyle}
-                  trailingAction={filter ? clearSearch : null}
-                />
+              <div style={{ flex: 1, maxWidth: 660, display: 'flex', alignItems: 'center', gap: 2 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    leadingIcon={<Icon name="search" size={16} />}
+                    placeholder="Search encrypted mail"
+                    aria-label="Search mail"
+                    value={filter}
+                    onChange={e => changeSearch(e.target.value)}
+                    onFocus={focusSearch}
+                    style={searchStyle}
+                    trailingAction={filter ? clearSearch : null}
+                  />
+                </div>
+                <SearchHelp />
               </div>
             )}
-            {!isMobile && section === 'mail' && <SearchHelp />}
             <div style={{ flex: 1 }} />
             {isMobile && section === 'mail' && (
               <IconButton aria-label="Open search" onClick={() => setSearchOpen(true)}><Icon name="search" /></IconButton>
