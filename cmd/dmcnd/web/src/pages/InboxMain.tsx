@@ -10,7 +10,7 @@ import { UnapprovedDeviceNotice } from '../components/UnapprovedDeviceNotice';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { categorizeSender } from '../lib/trust/category';
-import { isReceivedForMe, previewText, recipientsOf } from '../lib/mailView';
+import { isReceivedForMe, placeOf, previewText, recipientsOf, type Place, type PlaceContext } from '../lib/mailView';
 import { useIsMobile } from '../lib/useIsMobile';
 import { usePullToRefresh, PULL_THRESHOLD, type PullState } from '../lib/hooks/usePullToRefresh';
 import { Button, IconButton } from '../ds';
@@ -74,9 +74,11 @@ function groupSent(previews: Preview[]): Row[] {
 
 const SWIPE_W = 176; // px revealed by swiping a row left on mobile (Archive + Delete)
 
-function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore }: {
+function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, place, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore }: {
   msg: Preview; sent: boolean; unknownSender?: boolean; trustedSender?: boolean; mobile: boolean; hovered: boolean;
   read: boolean; starred: boolean; inArchive: boolean; nameFor: (address: string) => string;
+  /** Set in search results: where the message lives, shown ahead of its subject. */
+  place?: string;
   onOpen: () => void; onDelete: () => void; onArchive: () => void; onToggleStar: () => void; onHover: (h: boolean) => void;
   /** Set in Deleted: the row offers Restore, and its delete is for good, so it asks a second time. */
   onRestore?: () => void;
@@ -93,6 +95,13 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
       textTransform: 'uppercase', color: 'var(--text-muted)', background: 'var(--surface-sunken)',
       border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0 5px', lineHeight: '15px',
     }}>New</span>
+  ) : null;
+  const placeTag = place ? (
+    <span title={`In ${place}`} style={{
+      flex: 'none', fontSize: 'var(--text-2xs)', fontWeight: 500, color: 'var(--text-muted)', background: 'var(--surface-sunken)',
+      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0 5px', lineHeight: '16px',
+      maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    }}>{place}</span>
   ) : null;
   const nameWeight = unread ? 700 : 500;
   // The cleaned preview decides everything about the snippet: whether it renders, and how the
@@ -206,7 +215,10 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
               {starred && <Icon name="star-fill" size={14} style={{ color: 'var(--warning)', flex: 'none' }} />}
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flex: 'none' }}>{formatWhen(msg.sentAt)}</span>
             </div>
-            <div style={{ marginTop: 2, fontSize: 'var(--text-md)', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.subject || '(no subject)'}</div>
+            <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0 }}>
+              {placeTag}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--text-md)', color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.subject || '(no subject)'}</span>
+            </div>
           {/* The snippet is body text — the leading 140 bytes of it (SPEC.md) — so it is
               withheld on exactly the terms the body is. An unknown sender's body is already
               hidden behind the reveal gate at read time; showing their snippet here would put
@@ -252,6 +264,7 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
         {newSenderTag}
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        {placeTag}
         {/* The 45% cap exists to leave room for the snippet beside it. With no snippet there
             is no second column to leave room for, so the subject takes the whole middle and
             truncates only when it genuinely overruns — `0 1 auto` + minWidth:0 so it still
@@ -368,8 +381,11 @@ function MailList() {
     isSent(m.senderAddress) ? 'allowlisted' : categorizeSender(m.senderAddress, m.senderPublicKey, contactByAddress(m.senderAddress), mailFilter);
 
   const inDeleted = folder === 'deleted';
-  // Which rows read as Sent: the whole Sent folder, and in Deleted the messages that came from it.
-  const isSentRow = (m: Preview) => folder === 'sent' || (inDeleted && (isSentStoreHash(m.hash) || !isReceivedForMe(m, address)));
+  const searching = folder === 'search';
+  // Which rows read as Sent: what the account sent, from the Sent store or a legacy mailbox copy,
+  // and everything in the Sent folder. Decided by the message, not the view, so a sent message
+  // found by search or waiting in Deleted still reads as one.
+  const isSentRow = (m: Preview) => folder === 'sent' || isSentStoreHash(m.hash) || !isReceivedForMe(m, address);
 
   // Whether the row's shield turns blue: the counterparty is in the owner's contacts.
   // For received mail that is the key-checked `allowlisted` category — categorizeSender
@@ -385,22 +401,33 @@ function MailList() {
       ? !!contactByAddress(recipientsOf(m)[0])
       : !isSent(m.senderAddress) && catOf(m) === 'allowlisted';
 
-  // Search: operators and header fields answer at once from the previews; words are also looked
-  // up in the on-device index of message text, whose answer arrives a moment later and fills in.
-  const q = filter.trim();
-  const parsed = useMemo(() => parseQuery(filter), [filter]);
+  // Search lists mail from every view at once: Inbox, Archive, folders, Sent and Deleted. The
+  // other views are never narrowed by it; the query waits in the box while they are open.
+  // Operators and header fields answer at once from the previews; words are also looked up in the
+  // on-device index of message text, whose answer arrives a moment later and fills in.
+  const parsed = useMemo(() => parseQuery(searching ? filter : ''), [searching, filter]);
   const hits = useSearchHits(parsed);
   const { progress: indexProgress } = useSearch();
+  const placeCtx: PlaceContext = { address, flags, filter: mailFilter, control, knownFolderIds };
+  // Where each search candidate lives, filled in as the results are built below.
+  const placed = new Map<string, Place>();
+  const placeName = (p: Place) => (p.startsWith('folder:') ? (folderById(p.slice('folder:'.length))?.name ?? 'Folder') : p);
   const matchCtx: MatchContext = {
     nameFor,
     isRead,
     isStarred,
     labelNames: h => labelsOf(h).map(id => labelById(id)?.name ?? '').filter(Boolean),
+    // A filed message that is also archived is listed in both, so in:archive finds it too.
+    placeNames: h => {
+      const p = placed.get(h);
+      if (!p) return [];
+      return p.startsWith('folder:') && isArchived(h) ? [placeName(p), 'archive'] : [placeName(p)];
+    },
   };
-  const matchesQ = (m: Preview) => !q || matches(m, parsed, matchCtx, hits);
+  const matchesQ = (m: Preview) => matches(m, parsed, matchCtx, hits);
   // Said while the index is still catching up, so a search that misses a message's text does not
   // read as "no such message".
-  const indexCatchingUp = q !== '' && (parsed.words.length > 0 || parsed.filenames.length > 0)
+  const indexCatchingUp = searching && (parsed.words.length > 0 || parsed.filenames.length > 0)
     && indexProgress !== null && indexProgress.indexed < indexProgress.total;
 
   // Which received view a message belongs in is decided by flags (archived, starred, labels),
@@ -413,19 +440,36 @@ function MailList() {
   let rows: Row[];
   if (sorting) {
     rows = [];
+  } else if (searching) {
+    // A legacy self-copy of a message the Sent store also holds is the same message twice; the
+    // remaining legacy copies fold together by messageId, as they do in Sent.
+    const storeMsgIds = new Set(sent.map(p => p.messageId));
+    const found: Row[] = [];
+    const legacy: Preview[] = [];
+    for (const m of [...mail, ...sent]) {
+      const p = placeOf(m, placeCtx);
+      if (!p) continue;
+      const legacySent = p === 'sent' && !isSentStoreHash(m.hash);
+      if (legacySent && m.messageId && storeMsgIds.has(m.messageId)) continue;
+      placed.set(m.hash, p);
+      if (!matchesQ(m)) continue;
+      if (legacySent) legacy.push(m);
+      else found.push({ msg: m, hashes: [m.hash] });
+    }
+    rows = [...found, ...groupSent(legacy)].sort((a, b) => b.msg.sentAt - a.msg.sentAt);
   } else if (folder === 'sent') {
     // Sent reads from the personal store; also fold in any legacy self-copies still
     // in the mailbox (deduped by messageId) so nothing is lost on upgrade.
     const storeMsgIds = new Set(sent.map(p => p.messageId));
     const legacySent = mail.filter(m => isSent(m.senderAddress) && !isTrashed(m.hash) && (!m.messageId || !storeMsgIds.has(m.messageId)));
-    const storeRows: Row[] = sent.filter(p => !isTrashed(p.hash)).filter(matchesQ).map(p => ({ msg: p, hashes: [p.hash] }));
-    const legacyRows = groupSent(legacySent.filter(matchesQ));
+    const storeRows: Row[] = sent.filter(p => !isTrashed(p.hash)).map(p => ({ msg: p, hashes: [p.hash] }));
+    const legacyRows = groupSent(legacySent);
     rows = [...storeRows, ...legacyRows].sort((a, b) => b.msg.sentAt - a.msg.sentAt);
   } else if (folder === 'deleted') {
     // Everything deleted and still waiting, received and sent together, most recently deleted
     // first: the one you are most likely to want back is the one you just threw away.
     const shown = (m: Preview) => shownInDeleted(m, address, flags, mailFilter, control);
-    rows = [...mail.filter(shown), ...sent.filter(shown)].filter(matchesQ)
+    rows = [...mail.filter(shown), ...sent.filter(shown)]
       .map(m => ({ msg: m, hashes: [m.hash] }))
       .sort((a, b) => (trashedAt(b.msg.hash) ?? 0) - (trashedAt(a.msg.hash) ?? 0));
   } else {
@@ -452,7 +496,7 @@ function MailList() {
       // the reader's gate, so a spoofed sender can't ride an address match into a "trusted" bucket.
       return catOf(m) !== 'blocked' && !isArchived(m.hash) && !isFiled(m.hash);
     };
-    rows = mail.filter(inFolder).filter(matchesQ).map(m => ({ msg: m, hashes: [m.hash] }));
+    rows = mail.filter(inFolder).map(m => ({ msg: m, hashes: [m.hash] }));
   }
 
   // Delete moves to Deleted, which asks nothing because it can be undone: the message stays where
@@ -491,6 +535,10 @@ function MailList() {
     setOpenHash(m.hash);
     if (!isSentStoreHash(m.hash) && isReceivedForMe(m, address)) void markRead(m.hash);
   };
+  // The tag on a search result: the view's name as the rail shows it, or the folder's own name.
+  const placeLabel = (p: Place | undefined) => (!p ? undefined
+    : p.startsWith('folder:') ? placeName(p)
+    : p === 'inbox' ? 'Inbox' : p === 'archive' ? 'Archive' : p === 'sent' ? 'Sent' : 'Deleted');
   const toggleArchive = (m: Preview) => setFlag(m.hash, { archived: !isArchived(m.hash) });
   const toggleStar = (m: Preview) => setFlag(m.hash, { starred: !isStarred(m.hash) });
 
@@ -506,12 +554,12 @@ function MailList() {
   const locked = accessState === 'suspended' || accessState === 'closed' || accessState === 'unapproved-device';
   // In the Inbox, a deployment's account notice explains a suspension with a way out, so the
   // shell's own error would only say the same thing again above it, without one.
-  const noticeSpeaks = !!AccountNotice && accessState === 'suspended' && folder === 'inbox' && !q;
+  const noticeSpeaks = !!AccountNotice && accessState === 'suspended' && folder === 'inbox';
   const listError = folder === 'sent' ? sentError : noticeSpeaks ? null : error;
   // A mailbox that has never had mail in either direction says "nothing here yet" and points at
   // Getting started while that is still showing, rather than "all caught up", which is true and
   // useless on a first visit.
-  const firstRun = gettingStarted.visible && folder === 'inbox' && !q && isFirstRun({
+  const firstRun = gettingStarted.visible && folder === 'inbox' && isFirstRun({
     mailLoaded, sentLoaded, mailCount: mail.length, sentCount: sent.length,
     explained: locked || pending || !!error, // locked covers an unapproved browser too
   });
@@ -525,6 +573,7 @@ function MailList() {
     : folder.startsWith('folder:') ? (folderById(folder.slice(7))?.name ?? 'Folder')
     : folder === 'sent' ? 'Sent' : folder === 'archive' ? 'Archive' : folder === 'starred' ? 'Starred'
     : inDeleted ? 'Deleted'
+    : searching ? 'Search results'
     : 'Inbox';
   const emptyText = folder === 'sent' ? 'Nothing sent yet.'
     : folder === 'archive' ? 'Nothing archived.'
@@ -532,6 +581,7 @@ function MailList() {
     : folder.startsWith('label:') ? 'No messages with this label.'
     : folder.startsWith('folder:') ? 'This folder is empty.'
     : inDeleted ? 'Nothing waiting to be deleted.'
+    : searching ? 'No messages match your search.'
     : "You're all caught up. Nothing else to read.";
 
   return (
@@ -552,7 +602,7 @@ function MailList() {
           starred={isStarred(openMsg.hash)}
           archived={isArchived(openMsg.hash)}
           onToggleStar={() => toggleStar(openMsg)}
-          onArchive={folder !== 'sent' && !inDeleted && isReceivedForMe(openMsg, address) ? () => { void toggleArchive(openMsg); setOpenHash(null); } : undefined}
+          onArchive={!isSentRow(openMsg) && !isTrashed(openMsg.hash) ? () => { void toggleArchive(openMsg); setOpenHash(null); } : undefined}
         />
       ) : (
         <>
@@ -563,7 +613,7 @@ function MailList() {
           }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
               <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>
-                {q ? 'Filter results' : folderTitle}
+                {folderTitle}
               </span>
               {!(locked && rows.length === 0) && (
                 <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
@@ -619,9 +669,9 @@ function MailList() {
 
               {/* Pending requests announce themselves above the mail, in the Inbox only: they
                   are things asking to happen to this account, not things to find in Archive,
-                  and a filter result is a search for mail, not for them. */}
-              {folder === 'inbox' && !q && AccountNotice && address && <AccountNotice address={address} access={accessState} />}
-              {folder === 'inbox' && !q && <InboxNotices />}
+                  and a search is a search for mail, not for them. */}
+              {folder === 'inbox' && AccountNotice && address && <AccountNotice address={address} access={accessState} />}
+              {folder === 'inbox' && <InboxNotices />}
 
               {firstRun ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -633,9 +683,9 @@ function MailList() {
                 </div>
               ) : sorting || (locked && rows.length === 0) ? null : rows.length === 0 ? (
                 <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <Icon name={q ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : inDeleted ? 'trash' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
+                  <Icon name={searching ? 'search' : folder === 'archive' ? 'archive' : folder === 'starred' ? 'star' : inDeleted ? 'trash' : 'inbox'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
                   <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
-                    {q ? 'No messages match your filter.' : emptyText}
+                    {emptyText}
                   </p>
                 </div>
               ) : (
@@ -650,11 +700,12 @@ function MailList() {
                     hovered={hovered === msg.hash}
                     read={isRead(msg.hash)}
                     starred={isStarred(msg.hash)}
-                    inArchive={folder === 'archive'}
+                    inArchive={isArchived(msg.hash)}
+                    place={searching ? placeLabel(placed.get(msg.hash)) : undefined}
                     nameFor={nameFor}
                     onOpen={() => openRow(msg)}
-                    onDelete={() => (inDeleted ? deleteForever(hashes) : doDelete(hashes))}
-                    onRestore={inDeleted ? () => { void doRestore(hashes); } : undefined}
+                    onDelete={() => (isTrashed(msg.hash) ? deleteForever(hashes) : doDelete(hashes))}
+                    onRestore={isTrashed(msg.hash) ? () => { void doRestore(hashes); } : undefined}
                     onArchive={() => toggleArchive(msg)}
                     onToggleStar={() => toggleStar(msg)}
                     onHover={h => setHovered(h ? msg.hash : null)}

@@ -24,6 +24,7 @@ import { useMailFilter } from '../lib/hooks/useMailFilter';
 import { loadLocalKeystore } from '../lib/crypto/localKeystore';
 import { AccountMenu } from './AccountMenu';
 import { NavRow } from './NavRow';
+import { SearchHelp } from './SearchHelp';
 import { useStorageMode } from '../lib/hooks/useStorageMode';
 import { useGettingStarted } from '../lib/hooks/useGettingStarted';
 import { isFirstRun } from '../lib/firstRun';
@@ -35,8 +36,9 @@ import { ComposeDialog } from './ComposeDialog';
 import type { ComposeReplyTo } from '../lib/compose';
 
 // System folders plus dynamic selectors for a user label ("label:<id>") or user
-// folder ("folder:<id>"). InboxMain parses the dynamic forms.
-type Folder = 'inbox' | 'sent' | 'drafts' | 'archive' | 'starred' | 'deleted' | `label:${string}` | `folder:${string}`;
+// folder ("folder:<id>"). InboxMain parses the dynamic forms. 'search' is the results of the
+// search box, across every folder; it exists only while the box holds a query.
+type Folder = 'inbox' | 'sent' | 'drafts' | 'archive' | 'starred' | 'deleted' | 'search' | `label:${string}` | `folder:${string}`;
 type Section = 'mail' | 'contacts' | 'settings' | 'getting-started';
 
 // Shared state the shell hands to the active section via react-router's outlet
@@ -94,6 +96,8 @@ export function AppLayout() {
 
   const [folder, setFolder] = useState<Folder>('inbox');
   const [filter, setFilter] = useState('');
+  // The view search was entered from, which clearing the box goes back to.
+  const [searchFrom, setSearchFrom] = useState<Folder>('inbox');
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -160,12 +164,38 @@ export function AppLayout() {
   useEffect(() => { writeThemePref(themePref); }, [themePref]);
   useEffect(() => { writeDensity(compact ? 'compact' : 'comfortable'); }, [compact]);
   useEffect(() => { if (!isMobile) { setDrawerOpen(false); setSearchOpen(false); } }, [isMobile]);
-  // Search/filter only applies to the mail list; reset it when leaving mail.
+  // Search only applies to the mail list; reset it when leaving mail.
   useEffect(() => { if (section !== 'mail') { setSearchOpen(false); setFilter(''); } }, [section]);
   // Honor the ?compose=1 PWA shortcut on first load.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('compose')) setCompose({ replyTo: null, key: Date.now() });
   }, []);
+  // Search is a view of its own, in the rail for as long as the box holds a query. Typing takes the
+  // shell there; choosing another view leaves the query parked in the box, which goes back to the
+  // results when it is focused again. Emptying the box removes the view and returns to where
+  // search was entered from.
+  const hasSearch = filter.trim() !== '';
+  const enterSearch = () => {
+    if (folder === 'search') return;
+    setSearchFrom(folder);
+    setFolder('search');
+  };
+  const changeSearch = (value: string) => {
+    setFilter(value);
+    if (value.trim()) enterSearch();
+  };
+  const focusSearch = () => { if (hasSearch) enterSearch(); };
+  useEffect(() => {
+    if (folder === 'search' && !hasSearch) setFolder(searchFrom);
+  }, [folder, hasSearch, searchFrom]);
+  // The box looks engaged while its results are on screen, and quieter while the query waits.
+  const searchStyle: CSSProperties | undefined = !hasSearch ? undefined
+    : folder === 'search' ? { borderColor: 'var(--border-focus)' }
+    : { color: 'var(--text-muted)', background: 'var(--surface-sunken)' };
+  const clearSearch = (
+    <IconButton size="sm" aria-label="Clear search" onClick={() => setFilter('')}><Icon name="x" size={16} /></IconButton>
+  );
+
   // Drafts is in the rail only while there are drafts. The last one sent or discarded from the
   // Drafts view (here, or on another device) takes the view with it, back to the Inbox.
   const hasDrafts = draftsLoaded && drafts.length > 0;
@@ -224,7 +254,7 @@ export function AppLayout() {
   };
 
   const selectFolder = (f: Folder) => {
-    setFolder(f);
+    if (f === 'search') enterSearch(); else setFolder(f);
     setDrawerOpen(false);
     if (section !== 'mail') navigate('/inbox');
   };
@@ -333,6 +363,9 @@ export function AppLayout() {
           {gettingStarted.visible && (
             <NavRow icon="info" label="Getting started" active={section === 'getting-started'} collapsed={railCollapsed} onClick={() => goto('/getting-started')} />
           )}
+          {hasSearch && (
+            <NavRow icon="search" label="Search" active={section === 'mail' && folder === 'search'} collapsed={railCollapsed} onClick={() => selectFolder('search')} />
+          )}
           <NavRow icon="inbox" label="Inbox" active={section === 'mail' && folder === 'inbox'} count={unreadCount || undefined} collapsed={railCollapsed} onClick={() => selectFolder('inbox')} />
           <NavRow icon="star" label="Starred" active={section === 'mail' && folder === 'starred'} collapsed={railCollapsed} onClick={() => selectFolder('starred')} />
           <NavRow icon="send" label="Sent" active={section === 'mail' && folder === 'sent'} collapsed={railCollapsed} onClick={() => selectFolder('sent')} />
@@ -435,9 +468,18 @@ export function AppLayout() {
           }}>
             <IconButton aria-label="Close search" onClick={() => { setSearchOpen(false); setFilter(''); }}><Icon name="chevron-left" /></IconButton>
             <div style={{ flex: 1 }}>
-              <Input autoFocus leadingIcon={<Icon name="search" size={16} />} placeholder="Filter encrypted mail" aria-label="Filter" value={filter} onChange={e => setFilter(e.target.value)} />
+              <Input
+                autoFocus
+                leadingIcon={<Icon name="search" size={16} />}
+                placeholder="Search encrypted mail"
+                aria-label="Search mail"
+                value={filter}
+                onChange={e => changeSearch(e.target.value)}
+                onFocus={focusSearch}
+                trailingAction={filter ? clearSearch : null}
+              />
             </div>
-            {filter && <IconButton aria-label="Clear" onClick={() => setFilter('')}><Icon name="x" /></IconButton>}
+            <SearchHelp />
           </header>
         ) : (
           <header style={{
@@ -452,16 +494,20 @@ export function AppLayout() {
               <div style={{ flex: 1, maxWidth: 620 }}>
                 <Input
                   leadingIcon={<Icon name="search" size={16} />}
-                  placeholder="Filter encrypted mail"
-                  aria-label="Filter"
+                  placeholder="Search encrypted mail"
+                  aria-label="Search mail"
                   value={filter}
-                  onChange={e => setFilter(e.target.value)}
+                  onChange={e => changeSearch(e.target.value)}
+                  onFocus={focusSearch}
+                  style={searchStyle}
+                  trailingAction={filter ? clearSearch : null}
                 />
               </div>
             )}
+            {!isMobile && section === 'mail' && <SearchHelp />}
             <div style={{ flex: 1 }} />
             {isMobile && section === 'mail' && (
-              <IconButton aria-label="Filter mail" onClick={() => setSearchOpen(true)}><Icon name="search" /></IconButton>
+              <IconButton aria-label="Open search" onClick={() => setSearchOpen(true)}><Icon name="search" /></IconButton>
             )}
             {!isMobile && (
               <IconButton aria-label="Toggle density" active={compact} onClick={() => setCompact(c => !c)}>

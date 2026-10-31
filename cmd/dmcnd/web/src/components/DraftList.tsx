@@ -4,7 +4,6 @@ import { useDrafts } from '../lib/hooks/useDrafts';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useIsMobile } from '../lib/useIsMobile';
 import { formatWhen } from '../lib/format';
-import type { DraftSummary } from '../lib/api/draftStore';
 import type { MailOutletContext } from './AppLayout';
 import { IconButton } from '../ds';
 import { Icon } from './Icon';
@@ -12,24 +11,19 @@ import { ConfirmTrashButton } from './ConfirmTrashButton';
 
 // The Drafts folder: messages started and not sent, newest first. A row opens the draft in the
 // composer; deleting one (a second click on the red trash confirms it) removes it from every device. The rail shows this view only while there
-// are drafts (AppLayout), so it has no empty state of its own beyond a filter that matches nothing.
-
-function matches(d: DraftSummary, q: string): boolean {
-  const needle = q.toLowerCase();
-  return [d.subject, d.snippet, ...d.to, ...d.cc, ...d.bcc].some(f => f.toLowerCase().includes(needle));
-}
+// are drafts (AppLayout), so its empty state is only seen for the moment after the last one goes.
+// Search leaves drafts out: they are not mail, and the search box's results are a view of their own.
 
 export function DraftList() {
   const { drafts, store, refreshDrafts } = useDrafts();
   const { nameFor } = useContacts();
-  const { filter, openDraft, openDraftId, openCompose } = useOutletContext<MailOutletContext>();
+  const { openDraft, openDraftId, openCompose } = useOutletContext<MailOutletContext>();
   const isMobile = useIsMobile();
   const [hovered, setHovered] = useState<string | null>(null);
   // The row whose trash is waiting for its confirming click: it stays visible after the pointer leaves.
   const [armed, setArmed] = useState<string | null>(null);
 
-  const q = filter.trim();
-  const rows = q ? drafts.filter(d => matches(d, q)) : drafts;
+  const rows = drafts;
 
   const remove = async (id: string) => {
     try {
@@ -48,7 +42,7 @@ export function DraftList() {
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
           <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, letterSpacing: 'var(--tracking-tight)', color: 'var(--text-strong)' }}>
-            {q ? 'Filter results' : 'Drafts'}
+            Drafts
           </span>
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
             {rows.length} {rows.length === 1 ? 'draft' : 'drafts'}
@@ -60,9 +54,9 @@ export function DraftList() {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--surface-page)' }}>
         {rows.length === 0 ? (
           <div style={{ padding: 'var(--space-16) var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <Icon name={q ? 'search' : 'file-pen'} size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
+            <Icon name="file-pen" size={28} style={{ color: 'var(--text-subtle)', margin: '0 auto' }} />
             <p style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-base)' }}>
-              {q ? 'No drafts match your filter.' : 'No drafts.'}
+              No drafts.
             </p>
           </div>
         ) : rows.map(d => {

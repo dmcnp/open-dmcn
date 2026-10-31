@@ -10,6 +10,12 @@
 // nav counts (AppLayout) key off, so they never disagree about whether a self-
 // addressed message is shown/counted.
 
+import type { FlagRecord } from './api/flagStore';
+import type { FilterList } from './api/filterList';
+import { isSentStoreHash } from './api/sentStore';
+import { filterBlocks } from './trust/category';
+import { shownInDeleted } from './trash';
+
 export interface Addressed {
   senderAddress: string;
   recipientAddress: string;
@@ -27,6 +33,42 @@ export function isReceivedForMe(m: Addressed, address: string | null): boolean {
   return m.recipientAddress.toLowerCase() === me
     || m.to.some(a => a.toLowerCase() === me)
     || m.cc.some(a => a.toLowerCase() === me);
+}
+
+/** Where a message is listed: a system view, or a user folder ("folder:<id>"). */
+export type Place = 'inbox' | 'archive' | 'sent' | 'deleted' | `folder:${string}`;
+
+export interface PlaceContext {
+  address: string | null;
+  flags: Map<string, FlagRecord>;
+  filter: FilterList | null;
+  control: Set<string>;
+  /** Folders that still exist: a message filed in a deleted folder is back in the Inbox. */
+  knownFolderIds: Set<string>;
+}
+
+// placeOf says where a message lives, for search, which lists mail from every view at once and
+// keeps each row's actions (Archive or Unarchive, Restore, the Sent layout) and its location tag
+// true to that place. null for what search leaves out, which is what the index leaves out too:
+// control messages, and mail from a blocked sender (in Deleted as well, as shownInDeleted says).
+//
+// Deleted wins over everything, since deleted mail is listed nowhere else. A message both filed
+// and archived appears in the folder and in Archive; its place is the folder, the more specific.
+export function placeOf(
+  m: Addressed & { hash: string; subject: string; senderPublicKey: string },
+  ctx: PlaceContext,
+): Place | null {
+  const f = ctx.flags.get(m.hash);
+  if (f?.trashedAt !== undefined) {
+    return shownInDeleted(m, ctx.address, ctx.flags, ctx.filter, ctx.control) ? 'deleted' : null;
+  }
+  if (ctx.control.has(m.subject)) return null;
+  if (isSentStoreHash(m.hash) || !isReceivedForMe(m, ctx.address)) return 'sent';
+  const self = ctx.address != null && m.senderAddress.toLowerCase() === ctx.address.toLowerCase();
+  if (!self && filterBlocks(ctx.filter, m.senderAddress, m.senderPublicKey)) return null;
+  if (f?.folderId && ctx.knownFolderIds.has(f.folderId)) return `folder:${f.folderId}`;
+  if (f?.archived) return 'archive';
+  return 'inbox';
 }
 
 // previewText renders a message's snippet for a one-line list row.

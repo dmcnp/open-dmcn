@@ -21,6 +21,7 @@ const ctx = (over: Partial<MatchContext> = {}): MatchContext => ({
   isRead: () => false,
   isStarred: () => false,
   labelNames: () => [],
+  placeNames: () => ['inbox'],
   ...over,
 });
 
@@ -119,6 +120,21 @@ describe('matches', () => {
     expect(q('is:starred', msg(), ctx({ isStarred: () => true }))).toBe(true);
     expect(q('label:work', msg(), ctx({ labelNames: () => ['Work'] }))).toBe(true);
     expect(q('label:wor', msg(), ctx({ labelNames: () => ['Work'] }))).toBe(false);
+  });
+
+  it('in: reads where the message is listed, a folder by its name', () => {
+    expect(q('in:inbox')).toBe(true);
+    expect(q('in:sent')).toBe(false);
+    expect(q('-in:sent')).toBe(true);
+    const filed = ctx({ placeNames: () => ['Receipts 2026', 'archive'] });
+    expect(q('in:"receipts 2026"', msg(), filed)).toBe(true);
+    expect(q('in:archive', msg(), filed)).toBe(true);
+    expect(q('in:receipts', msg(), filed)).toBe(false);
+  });
+
+  it('in:trash and in:bin mean Deleted', () => {
+    expect(parseQuery('in:trash').clauses).toEqual([{ neg: false, kind: 'in', value: 'deleted' }]);
+    expect(q('in:bin', msg(), ctx({ placeNames: () => ['deleted'] }))).toBe(true);
   });
 
   it('before: is exclusive and after: inclusive of the day named', () => {

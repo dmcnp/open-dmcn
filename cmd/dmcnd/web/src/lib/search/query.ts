@@ -1,12 +1,13 @@
 // The mail search box: what a query means, and whether one message matches it. Pure.
 //
 // Structured operators read the decrypted header every row already holds (sender, recipients,
-// subject, date, attachment count) plus the owner's own flags and labels, so they need nothing
+// subject, date, attachment count) plus the owner's own flags, labels and folders, so they need nothing
 // from the index and apply the moment they are typed. Only two things need the on-device index:
 // bare words, which are also looked for in message text, and filename:, which reads attachment
 // names. Those arrive as `hits`, a little later; until they do, a row matches on its header alone.
 //
 //   from:x  to:x  subject:x  has:attachment  filename:x  is:unread|read|starred  label:x
+//   in:inbox|archive|sent|deleted|<folder name>
 //   before:YYYY-MM-DD  after:YYYY-MM-DD  word  "quoted words"  -anything (negates it)
 //
 // Clauses all have to hold. A value can be quoted (from:"Alice Smith"). Anything that is not a
@@ -16,7 +17,7 @@
 import { fold } from './tokenize';
 
 export type Clause =
-  | { neg: boolean; kind: 'from' | 'to' | 'subject' | 'label' | 'word'; value: string }
+  | { neg: boolean; kind: 'from' | 'to' | 'subject' | 'label' | 'in' | 'word'; value: string }
   | { neg: boolean; kind: 'filename'; value: string; glob: RegExp | null }
   | { neg: boolean; kind: 'has'; value: 'attachment' }
   | { neg: boolean; kind: 'is'; value: 'unread' | 'read' | 'starred' }
@@ -43,6 +44,8 @@ export interface MatchContext {
   isStarred: (hash: string) => boolean;
   /** Names of the labels on a message. */
   labelNames: (hash: string) => string[];
+  /** Names of the views a message is listed in: inbox, archive, sent, deleted, or a folder's name. */
+  placeNames: (hash: string) => string[];
 }
 
 /** The header fields a match reads — a subset of Preview, so tests need not build a whole one. */
@@ -61,7 +64,10 @@ export interface Matchable {
   attachmentCount: number;
 }
 
-const FIELD_OPS = new Set(['from', 'to', 'subject', 'label', 'filename', 'has', 'is', 'before', 'after']);
+const FIELD_OPS = new Set(['from', 'to', 'subject', 'label', 'in', 'filename', 'has', 'is', 'before', 'after']);
+
+// What other mail clients call Deleted, so a habit typed here still finds it.
+const IN_ALIASES: Record<string, string> = { trash: 'deleted', bin: 'deleted' };
 
 /**
  * A filename pattern as a whole-name match, when it has a wildcard: `*` is any run of characters
@@ -91,6 +97,8 @@ function operator(op: string, raw: string, neg: boolean): Clause | null {
   switch (op) {
     case 'from': case 'to': case 'subject': case 'label':
       return { neg, kind: op, value };
+    case 'in':
+      return { neg, kind: 'in', value: IN_ALIASES[value] ?? value };
     case 'filename':
       return { neg, kind: 'filename', value, glob: globToRegExp(value) };
     case 'has':
@@ -181,6 +189,7 @@ function holds(m: Matchable, c: Clause, ctx: MatchContext, hits: Hits | null): b
     case 'to': return anyIncludes(recipientFields(m, ctx), c.value);
     case 'subject': return fold(m.subject).includes(c.value);
     case 'label': return ctx.labelNames(m.hash).some(n => fold(n) === c.value);
+    case 'in': return ctx.placeNames(m.hash).some(n => fold(n) === c.value);
     case 'has': return m.attachmentCount > 0;
     case 'is': return c.value === 'starred' ? ctx.isStarred(m.hash) : (c.value === 'read') === ctx.isRead(m.hash);
     case 'before': return m.sentAt < c.at;
