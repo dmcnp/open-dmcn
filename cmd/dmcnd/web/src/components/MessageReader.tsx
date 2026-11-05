@@ -65,7 +65,7 @@ function gateCopy(
   reason: GateReason,
   who: string,
   first: string,
-  { known, keyChanged, hasHtml }: { known: boolean; keyChanged: boolean; hasHtml: boolean },
+  { known, keyChanged, hasHtml, unconfirmed }: { known: boolean; keyChanged: boolean; hasHtml: boolean; unconfirmed: boolean },
 ): { hiddenTitle: string; hiddenDetail: string; plainTitle: string; plainDetail: string } {
   const links = 'Links show where they really go and cannot be clicked.';
   const checkFirst = `If you are not sure, contact ${first} another way, such as a phone call, before you trust ${keyChanged ? 'the new key' : 'them'}.`;
@@ -98,7 +98,9 @@ function gateCopy(
       // and pointing them at an allowlist they already added them to describes neither.
       return {
         hiddenTitle: 'Message hidden until you decide',
-        hiddenDetail: known
+        hiddenDetail: unconfirmed
+          ? `${who} is in your contacts, but this message could not be checked, so it may not be from them. Nothing in it loads while it is hidden. Reading the plain text is safe if that helps you decide.`
+          : known
           ? `${who} is in your contacts, but this message does not match what you have on file. Nothing in it loads while it is hidden. Reading the plain text is safe if that helps you decide.`
           : `You don’t know this sender yet. Nothing in this message loads while it is hidden, so its formatting, images and attachments cannot reach you. Reading the plain text is safe if that helps you decide.`,
         plainTitle: 'Shown as plain text until you decide',
@@ -338,7 +340,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     // with an empty body.
     const who = senderContact?.name ? `${senderContact.name} <${msg.senderAddress}>` : msg.senderAddress;
     const when = `${formatDate(msg.sentAt)} at ${formatTime(msg.sentAt)}`;
-    const quote = body != null
+    // A record the domain disowns isn't attribution, so nothing is quoted under its address. Tested
+    // here on the verdict itself: this runs before `disowned` below exists.
+    const quotable = body != null && nativeTrust?.kind !== 'identity_unverifiable';
+    const quote = quotable
       ? `On ${when}, ${who} wrote:\n` + body.split('\n').map(l => (l ? `> ${l}` : '>')).join('\n')
       : undefined;
     // The HTML quote re-emits the ORIGINAL sender's markup, so it goes back through the
@@ -346,7 +351,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     // HTML. Inline images are dropped: their cid: references point at the original
     // message's attachments, which this new message doesn't carry.
     let quoteHtml: string | undefined;
-    if (body != null) {
+    if (quotable) {
       const inner = htmlBody ? sanitizeOutgoing(htmlBody).html.replace(/<img\b[^>]*>/gi, '') : fromPlainText(body);
       quoteHtml =
         `<div>On ${escapeHtml(when)}, ${escapeHtml(who)} wrote:</div>` +
@@ -440,6 +445,11 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // could still open if that address happened to sit in the address book.
   const nativeDanger = !bridgedLegacy && nativeTrust !== null
     && (nativeTrust.kind === 'key_mismatch' || nativeTrust.kind === 'key_changed' || nativeTrust.kind === 'identity_unverifiable');
+  // The key matches, but the domain doesn't stand behind the address (revoked, or a chain that
+  // failed to verify, which may pass again later). Its text can be read behind the gate, so a
+  // person's past mail doesn't vanish on a DNS fault, but the address isn't presented as who it is
+  // from: SPEC_CORE §3.
+  const disowned = !bridgedLegacy && nativeTrust?.kind === 'identity_unverifiable';
 
   // Pending-queue category (§14.2). Your own Sent copies are never gated. Blocked/
   // pending senders' bodies stay behind the gate until trusted or revealed.
@@ -456,7 +466,13 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // a header), so it is NOT self-authenticating — the real anti-spoof proof is the bridge's signed
   // SPF/DKIM/DMARC classification. So honor a legacy allowlist entry ONLY for a bridge-AUTHENTICATED
   // message; a claimed-but-unauthenticated legacy address stays gated (possible spoof).
-  const senderIsLegacyContact = !!senderContact && !senderContact.ed25519Pub && !!senderContact.provenance;
+  //
+  // A contact typed in by hand has no key and no provenance, and is held to the same rule whenever
+  // nothing else vouches for the key: bridged mail, an unreachable directory, or an address with no
+  // identity. Only the directory confirming the key that signed this lets it through.
+  const keyVouched = nativeTrust !== null && nativeTrust.kind !== 'directory_missing';
+  const senderIsLegacyContact = !!senderContact && !senderContact.ed25519Pub
+    && (!!senderContact.provenance || bridgedLegacy || !keyVouched);
 
   // trustReady guards a cold load: don't gate (or show the body) until contacts + filter are
   // loaded, so we never flash the wrong state. A native sender the contact list would admit also
@@ -484,6 +500,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       : nativeDanger
         ? 'impersonation'
         : 'unknown';
+  // A contact held at the gate because this message couldn't be checked. Trusting them again would
+  // change nothing, since they are already a contact, so the choice is about this message alone.
+  const unconfirmedContact = category === 'pending' && senderIsLegacyContact && gateReason === 'unknown';
   // A changed key on a native contact: the trust action re-pins rather than introduces, and the
   // panel says so ("Trust new key").
   const keyChanged = !bridgedLegacy && nativeTrust?.kind === 'key_changed';
@@ -493,7 +512,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // gated again. For a blocked sender the filter decides before the allowlist is ever consulted.
   // A button that silently does nothing is what made trusting feel broken on exactly the mail
   // that needs the decision.
-  const trustActionable = gateReason !== 'blocked' && gateReason !== 'unauthenticated';
+  const trustActionable = gateReason !== 'blocked' && gateReason !== 'unauthenticated' && !disowned && !unconfirmedContact;
   // "View HTML anyway": the per-message override, scoped to the open message and expiring with
   // it. It grants exactly what trusting the sender would grant this message (its HTML, attachment
   // downloads) and asserts nothing about the next one; remote images stay off regardless (below).
@@ -502,7 +521,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // 'blocked' (the owner's own standing decision, lifted by unblocking), and not where the
   // directory disowns the signing key outright (key_mismatch, identity_unverifiable): there the
   // plain-text peek stays the only way in.
-  const overrideActionable = !!htmlBody && (gateReason === 'unauthenticated' || (gateReason === 'impersonation' && keyChanged));
+  const overrideActionable = !!htmlBody
+    && (gateReason === 'unauthenticated' || (gateReason === 'impersonation' && keyChanged) || unconfirmedContact);
   const gated = trustReady && category !== 'allowlisted' && !messageTrusted;
   // A message whose checks failed opens straight onto its plain text: the doubt is about its links
   // and formatting, not about whether to read it. Every other gate starts hidden.
@@ -650,8 +670,9 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   // address. The address stays visible alongside either name, so the actual identity is
   // never hidden behind a nickname — or behind a name a sender chose for itself.
   const contactName = nameFor(counterparty);
-  const { primary: counterpartyName, secondary: counterpartyAddress } =
-    senderLabel(counterparty, contactName, sentView ? '' : msg.senderDisplay);
+  const label = senderLabel(counterparty, contactName, sentView || disowned ? '' : msg.senderDisplay);
+  const counterpartyName = disowned ? 'Sender not vouched for' : label.primary;
+  const counterpartyAddress = disowned ? '' : label.secondary;
   const namedCounterparty = counterpartyAddress !== '';
   // The checks strip (lib/trust/checks.ts), held back until every fact it describes has settled so
   // it resolves straight to the right verdict instead of flashing "unknown" — or a native verdict
@@ -661,7 +682,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const checks = checksReady
     ? messageChecks({
         address: msg.senderAddress,
-        name: counterpartyName,
+        name: label.primary,
         recipients: dedupe([...msg.to, ...msg.cc]).length,
         own: ownMessage,
         attestation,
@@ -671,12 +692,14 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
       })
     : null;
   // The gate's copy, resolved once from the reason the gate closed for.
-  const senderFirst = firstName(counterpartyName, counterparty);
-  const gc = gateCopy(gateReason, counterparty, senderFirst, { known: !!senderContact, keyChanged, hasHtml: !!htmlBody });
+  const senderFirst = firstName(label.primary, counterparty);
+  const gc = gateCopy(gateReason, counterparty, senderFirst, { known: !!senderContact, keyChanged, hasHtml: !!htmlBody, unconfirmed: unconfirmedContact });
   const trustLabel = keyChanged ? 'Trust new key' : 'I trust the sender';
   const htmlWarning = gateReason === 'unauthenticated'
     ? 'HTML can hide where links really lead. This message failed its checks. Remote images stay off either way.'
-    : `HTML can hide where links really lead. ${senderFirst === counterparty ? 'The' : `${senderFirst}’s`} new key is still unconfirmed. Remote images stay off either way.`;
+    : unconfirmedContact
+      ? 'HTML can hide where links really lead. This message could not be checked. Remote images stay off either way.'
+      : `HTML can hide where links really lead. ${senderFirst === counterparty ? 'The' : `${senderFirst}’s`} new key is still unconfirmed. Remote images stay off either way.`;
   const showSource = !!attestation?.verified && !!original && (!gated || plainShown);
 
   // The gate panel's actions, shared by its hidden and plain-text states. Delete and Block sit
@@ -787,10 +810,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: mobile ? 'var(--text-sm)' : 'var(--text-base)', fontWeight: 650,
               }}>
-                {initials(counterpartyName)}
+                {initials(disowned ? '?' : counterpartyName)}
               </div>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <div title={sentView ? toList.join(', ') : counterparty} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                <div title={sentView ? toList.join(', ') : disowned ? counterpartyName : counterparty} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
                   {sentView ? (
                     <span style={{ fontSize: 'var(--text-base)', fontWeight: 650, color: 'var(--text-strong)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       To <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{toList.map(nameFor).join(', ')}</span>

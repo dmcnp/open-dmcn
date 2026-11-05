@@ -31,6 +31,7 @@ import { fromPlainText } from '../lib/html/fromPlainText';
 import { bufferSource } from '../lib/crypto/bytes';
 import { formatBytes } from '../lib/format';
 import { isRecipientClosed, lookupFailureKind, recipientClosedMessage } from '../lib/recipientLookup';
+import { partialSendMessage, reachedAudience, retryAudience, type Undelivered } from '../lib/partialSend';
 import {
   forwardFailedMessage, forwardNotice, forwardOnlyFailedMessage, forwardUnsendableNotice, forwardedOnlyMessage,
   planForwardCopies, type ForwardTargetKind,
@@ -224,6 +225,10 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
   // through their forward, a forward copy that did not go). Set ⇒ the dialog stays open on a
   // report instead of closing, and cannot send again.
   const [sentReport, setSentReport] = useState<SentReportItem[] | null>(null);
+  // After a send that reached only some: the retry joins that thread, as its own message. Reusing
+  // the message ID instead would overwrite the Sent copy of what already went.
+  const [retryThreadId, setRetryThreadId] = useState('');
+  const retryThreadRef = useRef('');
   const [savedContacts, setSavedContacts] = useState<Record<string, boolean>>({});
 
   // inspectForward records a recipient's forwarding address and looks it up, as a sender's client
@@ -532,7 +537,9 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
       pending: { to: l.pendingTo, cc: l.pendingCc, bcc: l.pendingBcc }, showCcBcc: l.showCcBcc,
       subject: l.subject, rich: l.richMode, text, html,
       // The quote is already in the body; what is kept is what threading and From need.
-      replyTo: replyTo ? { ...replyTo, quote: undefined, quoteHtml: undefined } : null,
+      replyTo: replyTo
+        ? { ...replyTo, quote: undefined, quoteHtml: undefined, ...(retryThreadRef.current ? { threadId: retryThreadRef.current } : {}) }
+        : retryThreadRef.current ? { to: [], subject: l.subject, threadId: retryThreadRef.current } : null,
       attachments: attachmentsRef.current,
     };
   };
@@ -719,11 +726,12 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
     const toList = pendingTo.trim() ? commitPending(to, setTo, pendingTo, setPendingTo) : to;
     const ccList = pendingCc.trim() ? commitPending(cc, setCc, pendingCc, setPendingCc) : cc;
     const bccList = pendingBcc.trim() ? commitPending(bcc, setBcc, pendingBcc, setPendingBcc) : bcc;
-    if (toList.length === 0) { setError('Add at least one recipient.'); return; }
 
     // Every distinct address gets exactly one delivered copy; a person listed in
     // both To and Cc (etc.) is not sent twice.
     const allRecipients = [...new Set([...toList, ...ccList, ...bccList])];
+    // Any field will do: a retry for a Bcc alone has an empty To, and moving them there would show them.
+    if (allRecipients.length === 0) { setError('Add at least one recipient.'); return; }
 
     // Capture the non-null key handle + own address for the closure below — TS
     // narrowing from the guard above doesn't carry into a nested function.
@@ -767,9 +775,8 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
     // fresh thread. Both ride the signed header (portable to the bridge as
     // In-Reply-To/References later). A pre-feature original has an all-zero threadId hex
     // → treat as absent and start fresh.
-    const threadId = replyTo?.threadId && !/^0*$/.test(replyTo.threadId)
-      ? fromHex(replyTo.threadId)
-      : newUuid();
+    const continuing = retryThreadId || replyTo?.threadId;
+    const threadId = continuing && !/^0*$/.test(continuing) ? fromHex(continuing) : newUuid();
     const replyToId = replyTo?.replyToId ? fromHex(replyTo.replyToId) : undefined;
     const sentAt = Math.floor(Date.now() / 1000);
 
@@ -891,86 +898,103 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
       // Addresses that get this message anyway, so no forward copy duplicates one.
       const reached = new Set([...allRecipients, selfAddress].map(a => a.trim().toLowerCase()));
 
+      // Who got it, and who didn't. Every recipient is tried: one failure stops nobody else.
+      const delivered: string[] = [];
+      const undelivered: Undelivered[] = [];
+      let firstFailure: unknown;
+
       // Deliver a copy to each recipient (DMCN natively, or via the legacy bridge on 404).
       for (const rcpt of allRecipients) {
-        let recipient;
         try {
-          recipient = await lookupIdentity(rcpt);
-        } catch (e) {
-          // No DMCN record for a well-formed email ⇒ a LEGACY recipient, reachable only if this
-          // deployment has a way (see lib/deployment.ts sendToLegacy).
-          if (e instanceof ApiError && e.status === 404 && rcpt.includes('@') && deployment.sendToLegacy) {
-            // A recipient we had verified as a DMCN identity who now resolves to nothing is a
-            // downgrade: the message leaves as ordinary email, readable by the bridge and every
-            // service after it, and a fleet withholding one record produces exactly this signal.
-            // Disclosed in the composer (pinnedIdentityGoneWarning) and NOT refused here — see
-            // the note on the changed-key case below.
-            await sendViaBridge(rcpt);
-            continue;
-          }
-          throw e;
-        }
-        // A changed key is DISCLOSED, never refused. This used to throw, on the reasoning that
-        // sealing a message to a key the recipient may not hold is unrecoverable once sent — true,
-        // and still the reason the banner is red and names every affected address. What it is not
-        // is ours to decide. The same principle that made a rotation stop being applied silently
-        // (whitepaper §14.1.2, amended) says the person who pinned the key chooses what to do
-        // about it; refusing on their behalf tells them their judgement is not wanted, and teaches
-        // them that the warning is an obstacle rather than information.
-        //
-        // So the composer's job is to make the risk and the safe order impossible to miss before
-        // Send is pressed, which is what the banner above the footer does, per recipient, with the
-        // evidence the directory could actually prove.
-        const recipientX25519 = fromBase64(recipient.x25519_pub);
-
-        // Recipient copy: CEK wrapped only for them, STORE'd to their relay
-        // (onion-routed when requested or required by their record). Bcc is EMPTY on
-        // every recipient copy — a Bcc recipient is never revealed, and a reply-all
-        // can't leak the Bcc list.
-        const forwardTo = recipient.forward_to?.trim();
-        let closed = false;
-        try {
-          await storeEnvelope(
-            await encryptSplit({
-              ...common,
-              recipientAddress: rcpt,
-              bcc: [],
-              recipients: [{ deviceId: new Uint8Array(16), x25519Pub: recipientX25519 }],
-            }),
-            rcpt,
-            onion,
-          );
-        } catch (e) {
-          // The recipient's relay refused the copy because their account is closed. With a
-          // forward, that address is where their mail goes now; without one, say so in their
-          // name rather than as a delivery error.
-          if (!isRecipientClosed(e)) throw e;
-          if (!forwardTo) throw new Error(recipientClosedMessage(rcpt), { cause: e });
-          closed = true;
-        }
-
-        if (forwardTo) {
-          const key = forwardTo.toLowerCase();
-          if (!reached.has(key)) {
-            reached.add(key);
-            const { ok, rec: trec } = await sendForwardCopy(forwardTo);
-            if (closed && ok) {
-              reports.push({
-                text: forwardedOnlyMessage(rcpt, forwardTo),
-                // Their mail lives there now; a DMCN forwarding address can be saved as a contact.
-                ...(trec && !contactByAddress(forwardTo) ? { saveContact: { address: forwardTo, name: contactByAddress(rcpt)?.name ?? '', rec: trec } } : {}),
-              });
-            } else if (closed) {
-              reports.push({ text: forwardOnlyFailedMessage(rcpt, forwardTo) });
-            } else if (!ok) {
-              reports.push({ text: forwardFailedMessage(rcpt, forwardTo) });
+          let recipient;
+          try {
+            recipient = await lookupIdentity(rcpt);
+          } catch (e) {
+            // No DMCN record for a well-formed email ⇒ a LEGACY recipient, reachable only if this
+            // deployment has a way (see lib/deployment.ts sendToLegacy).
+            if (e instanceof ApiError && e.status === 404 && rcpt.includes('@') && deployment.sendToLegacy) {
+              // A recipient we had verified as a DMCN identity who now resolves to nothing is a
+              // downgrade: the message leaves as ordinary email, readable by the bridge and every
+              // service after it, and a fleet withholding one record produces exactly this signal.
+              // Disclosed in the composer (pinnedIdentityGoneWarning) and NOT refused here — see
+              // the note on the changed-key case below.
+              await sendViaBridge(rcpt);
+              delivered.push(rcpt);
+              continue;
             }
-          } else if (closed) {
-            // The forwarding address gets this message anyway, as a recipient in its own right.
-            reports.push({ text: forwardedOnlyMessage(rcpt, forwardTo) });
+            throw e;
           }
+          // A changed key is DISCLOSED, never refused. This used to throw, on the reasoning that
+          // sealing a message to a key the recipient may not hold is unrecoverable once sent — true,
+          // and still the reason the banner is red and names every affected address. What it is not
+          // is ours to decide. The same principle that made a rotation stop being applied silently
+          // (whitepaper §14.1.2, amended) says the person who pinned the key chooses what to do
+          // about it; refusing on their behalf tells them their judgement is not wanted, and teaches
+          // them that the warning is an obstacle rather than information.
+          //
+          // So the composer's job is to make the risk and the safe order impossible to miss before
+          // Send is pressed, which is what the banner above the footer does, per recipient, with the
+          // evidence the directory could actually prove.
+          const recipientX25519 = fromBase64(recipient.x25519_pub);
+
+          // Recipient copy: CEK wrapped only for them, STORE'd to their relay
+          // (onion-routed when requested or required by their record). Bcc is EMPTY on
+          // every recipient copy — a Bcc recipient is never revealed, and a reply-all
+          // can't leak the Bcc list.
+          const forwardTo = recipient.forward_to?.trim();
+          let closed = false;
+          try {
+            await storeEnvelope(
+              await encryptSplit({
+                ...common,
+                recipientAddress: rcpt,
+                bcc: [],
+                recipients: [{ deviceId: new Uint8Array(16), x25519Pub: recipientX25519 }],
+              }),
+              rcpt,
+              onion,
+            );
+            delivered.push(rcpt);
+          } catch (e) {
+            // The recipient's relay refused the copy because their account is closed. With a
+            // forward, that address is where their mail goes now; without one, say so in their
+            // name rather than as a delivery error.
+            if (!isRecipientClosed(e)) throw e;
+            if (!forwardTo) throw new Error(recipientClosedMessage(rcpt), { cause: e });
+            closed = true;
+          }
+
+          if (forwardTo) {
+            const key = forwardTo.toLowerCase();
+            if (!reached.has(key)) {
+              reached.add(key);
+              const { ok, rec: trec } = await sendForwardCopy(forwardTo);
+              if (ok) delivered.push(forwardTo);
+              if (closed && ok) {
+                reports.push({
+                  text: forwardedOnlyMessage(rcpt, forwardTo),
+                  // Their mail lives there now; a DMCN forwarding address can be saved as a contact.
+                  ...(trec && !contactByAddress(forwardTo) ? { saveContact: { address: forwardTo, name: contactByAddress(rcpt)?.name ?? '', rec: trec } } : {}),
+                });
+              } else if (closed) {
+                reports.push({ text: forwardOnlyFailedMessage(rcpt, forwardTo) });
+              } else if (!ok) {
+                reports.push({ text: forwardFailedMessage(rcpt, forwardTo) });
+              }
+            } else if (closed) {
+              // The forwarding address gets this message anyway, as a recipient in its own right.
+              reports.push({ text: forwardedOnlyMessage(rcpt, forwardTo) });
+            }
+          }
+        } catch (e) {
+          firstFailure ??= e;
+          const closed = e instanceof Error && isRecipientClosed(e.cause);
+          undelivered.push({ address: rcpt, reason: closed ? e.message : `Your message couldn’t be delivered to ${rcpt}.` });
         }
       }
+
+      // Nobody has it, so this is simply a failed send and the composer stays as it was.
+      if (undelivered.length > 0 && delivered.length === 0) throw firstFailure;
 
       // Sent self-copy: seal the SAME composed message to our OWN X25519 key and store
       // the envelope (a small listed header + a lazy body) in the owner-only personal
@@ -981,17 +1005,33 @@ export function ComposeDialog({ onClose, replyTo = null, onSent, mobile = false,
       // this self-copy only). Best-effort: the message is already delivered, so a Sent-copy
       // failure must not fail the send.
       // Sealed to the ACCOUNT's key whichever identity sent it: Sent is one list, read with
-      // one key, and the header still says which address it went out as.
+      // one key, and the header still says which address it went out as. It lists who this send
+      // reached, so Sent is true: a retry for the others keeps a Sent copy of its own.
+      const listed = reachedAudience({ to: toList, cc: ccList, bcc: bccList }, undelivered);
       try {
         const selfEnvelope = await encryptSplit({
           ...common,
+          to: listed.to,
+          cc: listed.cc,
           recipientAddress: selfAddress,
-          bcc: bccList,
+          bcc: listed.bcc,
           recipients: [{ deviceId: keys.deviceId, x25519Pub: keys.x25519Public }],
         });
         await new SentStore(keys).putEnvelope(toHex(messageId), selfEnvelope);
       } catch (copyErr) {
         console.warn('Sent copy could not be saved (message delivered):', copyErr);
+      }
+
+      // Some have it and some don't: the draft stays, addressed to the others, with Send ready.
+      if (undelivered.length > 0) {
+        const left = retryAudience({ to: toList, cc: ccList, bcc: bccList }, undelivered);
+        setTo(left.to); setCc(left.cc); setBcc(left.bcc);
+        if (left.cc.length > 0 || left.bcc.length > 0) setShowCcBcc(true);
+        retryThreadRef.current = toHex(threadId);
+        setRetryThreadId(toHex(threadId));
+        setError([partialSendMessage(delivered, undelivered), ...reports.map(r => r.text)].join(' '));
+        onSent?.();
+        return;
       }
 
       // Sent, so no longer a draft. Not awaited: the message is out, and the send is done.

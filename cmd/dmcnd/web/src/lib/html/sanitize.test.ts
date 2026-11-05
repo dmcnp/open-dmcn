@@ -9,7 +9,7 @@
 // HtmlMessageBody refuses anything but data: images unless remote images are switched on.
 
 import { describe, it, expect } from 'vitest';
-import { classifyImageSrc } from './sanitize';
+import { classifyImageSrc, hasLongRun } from './sanitize';
 
 describe('classifyImageSrc', () => {
   it('resolves cid: references against the message\'s own attachments', () => {
@@ -61,5 +61,29 @@ describe('classifyImageSrc', () => {
   it('treats a missing source as nothing to report', () => {
     expect(classifyImageSrc('')).toEqual({ kind: 'empty' });
     expect(classifyImageSrc('   ')).toEqual({ kind: 'empty' });
+  });
+});
+
+// A word stays whole in the reader and only a run this long may break, so this decides whether a
+// link in a table cell wraps or holds the whole message wider than the screen.
+describe('hasLongRun', () => {
+  it('leaves words and sentences alone, however long the sentence', () => {
+    expect(hasLongRun('Get started today')).toBe(false);
+    expect(hasLongRun('Rechtsschutzversicherungs')).toBe(false);
+    expect(hasLongRun('short words '.repeat(50))).toBe(false);
+  });
+
+  it('finds a run of thirty, and not twenty-nine', () => {
+    expect(hasLongRun('x'.repeat(29))).toBe(false);
+    expect(hasLongRun('x'.repeat(30))).toBe(true);
+  });
+
+  it('finds one in among ordinary words', () => {
+    expect(hasLongRun('Paste this link: https://links.example.com/ls/click?upn=u001 into your browser')).toBe(true);
+  });
+
+  it('counts what JavaScript counts as a space as ending a run', () => {
+    expect(hasLongRun('x'.repeat(20) + '\u00a0' + 'x'.repeat(20))).toBe(false);
+    expect(hasLongRun('x'.repeat(20) + '\u200b' + 'x'.repeat(20))).toBe(true);
   });
 });

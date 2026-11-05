@@ -91,16 +91,17 @@ export async function evaluateSenderTrust(
     return { kind: 'directory_missing', reason: 'sent from outside DMCN, via a bridge' };
   }
 
-  // A claimed countersignature that failed to verify (revoked/unauthorized) — the
-  // directory actively distrusts this identity. Mirrors bridgeAttest gap #9.
-  if (dir.identity_unverifiable) {
-    return { kind: 'identity_unverifiable', fingerprint: dir.fingerprint, reason: 'identity revoked or unverifiable' };
-  }
-
   // The header sig is already verified, so a header-key ≠ directory-key means the
-  // directory disowns the signing key (impersonation or a stale/forged message).
+  // directory disowns the signing key (impersonation or a stale/forged message). This comes
+  // first: SPEC_CORE §3 forbids showing such a message whatever else the directory says.
   if (!base64Eq(senderPublicKey, dir.ed25519_pub)) {
     return { kind: 'key_mismatch', fingerprint: dir.fingerprint, reason: 'signing key does not match the directory' };
+  }
+
+  // The key matches, but the address credential failed to verify (revoked, unauthorized, or a
+  // broken DAR/DNS chain, which may pass again later). Mirrors bridgeAttest gap #9.
+  if (dir.identity_unverifiable) {
+    return { kind: 'identity_unverifiable', fingerprint: dir.fingerprint, reason: 'identity revoked or unverifiable' };
   }
 
   // Pinned-identity check: the directory agrees with the header, but it may differ from

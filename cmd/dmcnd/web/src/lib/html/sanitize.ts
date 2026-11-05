@@ -88,6 +88,34 @@ function withHook<T>(hook: (node: Element) => void, fn: () => T): T {
   }
 }
 
+// hasLongRun says whether text holds a run of characters with nowhere to wrap that is longer than
+// any word: a URL, a token, a signature. Thirty is past the longest words a label or a sentence
+// uses, and far short of what a link pasted into a message comes to.
+export function hasLongRun(text: string): boolean {
+  return /\S{30,}/.test(text);
+}
+
+// letLongRunsBreak gives text holding a long run leave to break anywhere. The reader keeps words
+// whole, because a table cell is as narrow as its longest word and may not go below it: the rule
+// that lets a button's label wrap between words instead of inside one. A URL in a cell would hold
+// the whole message that wide, so it alone is let go. It works on the tree DOMPurify has finished
+// with, before its one serialization, so nothing is parsed a second time. A <style> is the only
+// element left whose text is not text.
+function letLongRunsBreak(body: HTMLElement): void {
+  const walker = body.ownerDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  while (walker.nextNode()) {
+    const text = walker.currentNode as Text;
+    if (text.parentElement?.tagName !== 'STYLE' && hasLongRun(text.data)) found.push(text);
+  }
+  for (const text of found) {
+    const span = body.ownerDocument.createElement('span');
+    span.setAttribute('style', 'overflow-wrap:anywhere');
+    text.replaceWith(span);
+    span.append(text);
+  }
+}
+
 // sanitizeIncoming cleans RECEIVED HTML and rewrites resource references: cid: images →
 // embedded data: URIs from the message's own inline attachments; remote images → removed by
 // default (no IP leak / tracking pixels) or kept when opts.allowRemoteImages says the reader
@@ -134,10 +162,13 @@ export function sanitizeIncoming(
       node.setAttribute('rel', 'noopener noreferrer nofollow');
     }
   };
-  const html = withHook(hook, () =>
-    String(DOMPurify.sanitize(raw, { FORBID_TAGS, FORBID_ATTR, ALLOW_DATA_ATTR: false, WHOLE_DOCUMENT: false }))
-  );
-  return { html, blockedRemote };
+  // Null for a document with no body, which is what a <frameset> makes, whatever the types say.
+  const body = withHook(hook, () =>
+    DOMPurify.sanitize(raw, { FORBID_TAGS, FORBID_ATTR, ALLOW_DATA_ATTR: false, WHOLE_DOCUMENT: false, RETURN_DOM: true })
+  ) as HTMLElement | null;
+  if (!body) return { html: '', blockedRemote };
+  letLongRunsBreak(body);
+  return { html: body.innerHTML, blockedRemote };
 }
 
 // sanitizeOutgoing cleans HTML we are about to SEND (composer content and pasted markup).

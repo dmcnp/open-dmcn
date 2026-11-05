@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useContacts } from '../lib/hooks/useContacts';
 import type { ContactRecord } from '../lib/api/contactStore';
 import { lookupIdentity } from '../lib/api/client';
+import { directoryFacts } from '../lib/trust/pinnedKey';
 import { PageShell } from '../components/PageShell';
 import { useIsMobile } from '../lib/useIsMobile';
 import { DEFAULT_DOMAIN } from '../lib/config';
@@ -20,7 +21,7 @@ import { contactKind } from '../lib/trust/senderKind';
 type Mode = { kind: 'add' } | { kind: 'edit'; address: string } | null;
 
 export function Contacts() {
-  const { contacts, contactByAddress, nameFor, addContact, updateContact, removeContact, pinAlerts } = useContacts();
+  const { contacts, contactByAddress, nameFor, addContact, updateContact, removeContact, pinAlerts, pinKey } = useContacts();
   const isMobile = useIsMobile();
   const embedded = !isMobile;
   const [q, setQ] = useState('');
@@ -84,6 +85,9 @@ export function Contacts() {
       try {
         const identity = await lookupIdentity(addr);
         await addContact({ address: addr, name: name.trim() || addr, fingerprint: identity.fingerprint });
+        // Pinned now, so a forgery can't arrive as this contact before their first real message
+        // would have pinned it. Nothing to pin on a bridge's answer or a disowned record.
+        if (!identity.legacy && !identity.identity_unverifiable) await pinKey(addr, directoryFacts(identity));
         close();
       } catch {
         setLegacyPrompt(true);

@@ -260,6 +260,13 @@ so an approval cannot be made in advance and spent later.
   Where the address does not resolve, the message is reported as unverified but NOT rejected — a
   directory outage, or an ordinary sender bridged in from legacy mail, must not empty a mailbox.
 
+  Where the directory answers with the same key but says the address's credential failed to
+  verify, the domain does not stand behind the address. That can be a revocation, or a broken
+  chain that will pass again later. A reader MUST NOT present the claimed address as attribution,
+  and MUST NOT render the message's HTML or offer its attachments. It MAY show the body as escaped
+  plain text behind a warning, so that a fault at the sender's domain does not take their earlier
+  mail with it. A key that differs is the case above, whatever the credential says.
+
   A relay cannot perform this check. It sees the transport sender that handed it the envelope,
   which is a different, cleartext field, and it holds no key for the sealed header. The two
   answer different questions — the transport sender governs abuse and quota, the header sender

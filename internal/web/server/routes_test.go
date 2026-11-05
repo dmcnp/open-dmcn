@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,6 +63,39 @@ func TestDevDomainHasNoPetitionRoutes(t *testing.T) {
 	for _, p := range []string{"/api/v1/petition", "/api/v1/admin/petition/get", "/api/v1/admin/challenge"} {
 		if has("POST", p) != http.StatusNotFound {
 			t.Errorf("%s is routed in dev mode, where there is no petition queue", p)
+		}
+	}
+}
+
+// TestSignupModeSaysWhatIsRouted pins the signup answer to the routes it describes. A client that
+// takes it at its word must not offer a form the server has no route for.
+func TestSignupModeSaysWhatIsRouted(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		reg  *api.RegisterHandler
+		pet  *api.PetitionHandler
+		want string
+	}{
+		{"dev", &api.RegisterHandler{}, nil, "register"},
+		{"live", nil, &api.PetitionHandler{}, "petition"},
+		{"neither", nil, nil, "closed"},
+	} {
+		s := &Server{mux: http.NewServeMux()}
+		s.RegisterAPI(nil, nil, nil, nil, c.reg, c.pet,
+			func(h http.HandlerFunc) http.HandlerFunc { return h }, nil, FrontendConfig{})
+		rec := httptest.NewRecorder()
+		s.mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/signup", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d", c.name, rec.Code)
+		}
+		var got struct {
+			Mode string `json:"mode"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got.Mode != c.want {
+			t.Errorf("%s: mode %q, want %q", c.name, got.Mode, c.want)
 		}
 	}
 }

@@ -5,6 +5,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -114,6 +115,23 @@ func (f *filteredErrorWriter) Write(p []byte) (int, error) {
 	return f.w.Write(p)
 }
 
+// signupMode answers how a mailbox is had here: "register" where the domain root is on this
+// machine, "petition" where an admin assigns one, and "closed" where neither is routed. The web
+// client reads this from the page it is served; a native client has no page to read.
+func signupMode(register, petition bool) http.HandlerFunc {
+	mode := "closed"
+	switch {
+	case register:
+		mode = "register"
+	case petition:
+		mode = "petition"
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"mode": mode})
+	}
+}
+
 // RegisterAPI wires API handlers and the embedded frontend into the server's
 // multiplexer. The authMiddleware function wraps handlers that require an
 // authenticated session.
@@ -144,6 +162,9 @@ func (s *Server) RegisterAPI(
 	if reg != nil {
 		s.mux.Handle("POST /api/v1/register", rateLimiter(http.HandlerFunc(reg.HandleRegister)))
 	}
+	// How to get a mailbox here, for a client with no page to read it from. Answered from the same
+	// two handlers that decide the routes above, so it can't say anything they don't do.
+	s.mux.Handle("GET /api/v1/signup", rateLimiter(http.HandlerFunc(signupMode(reg != nil, pet != nil))))
 	if pet != nil {
 		s.mux.Handle("POST /api/v1/petition", rateLimiter(http.HandlerFunc(pet.HandleCreate)))
 		s.mux.Handle("GET /api/v1/petition/status", rateLimiter(http.HandlerFunc(pet.HandleStatus)))

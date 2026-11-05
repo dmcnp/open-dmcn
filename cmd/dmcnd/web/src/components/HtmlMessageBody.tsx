@@ -85,14 +85,16 @@ export function HtmlMessageBody({ html, attachments, allowRemoteImages = false }
       '<meta name="referrer" content="no-referrer">' +
       '<base target="_blank">' +
       // The frame is as wide as the screen and no wider, so nothing inside it may be either:
-      // a code block keeps its whitespace but wraps, a long word breaks, a picture shrinks,
-      // and a table or box that names its own width — legacy mail does, in attributes and
-      // inline styles — is capped at the frame. Content past the right edge of a phone is
-      // not scrolled to, it is lost; and iOS Safari grows an iframe to fit its document, so
-      // an overflowing document there widens the frame itself past the screen.
+      // a code block keeps its whitespace but wraps, a picture shrinks, and a table or box
+      // that names its own width — legacy mail does, in attributes and inline styles — is
+      // capped at the frame. A word stays whole, or a narrow cell splits a button's label
+      // letter by letter; a run far longer than a word breaks, which the sanitizer arranges.
+      // Content past the right edge of a phone is not scrolled to, it is lost; and iOS Safari
+      // grows an iframe to fit its document, so an overflowing document there widens the
+      // frame itself past the screen.
       '<style>' +
       '*,*::before,*::after{box-sizing:border-box}' +
-      'html,body{margin:0;padding:12px;font:14px/1.5 system-ui,-apple-system,sans-serif;color:#111;background:#fff;word-break:break-word;overflow-wrap:anywhere}' +
+      'html,body{margin:0;padding:12px;font:14px/1.5 system-ui,-apple-system,sans-serif;color:#111;background:#fff;overflow-wrap:break-word}' +
       'pre{white-space:pre-wrap;overflow-wrap:anywhere}' +
       'img,video{max-width:100%!important;height:auto}' +
       'table,div,p,blockquote,pre,figure,td,th{max-width:100%!important;min-width:0!important}' +
