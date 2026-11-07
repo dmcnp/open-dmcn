@@ -1,0 +1,3 @@
+# Every path needs the maintainer's review. Later rules override earlier ones, so add
+# narrower paths below this line as more people join.
+* @mertenvg
