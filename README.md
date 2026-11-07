@@ -354,6 +354,37 @@ The daemon is a proof-of-concept — in-memory/embedded stores, dev-oriented def
 a hardened production deployment. `internal/` packages carry no API-stability promise;
 the wire schema in `proto/` is the compatibility contract.
 
+## Contributing
+
+Issues and pull requests are welcome, from critique of the protocol to fixes in `dmcnd`.
+
+- **Bugs and proposals:** open an [issue](https://github.com/dmcnp/open-dmcn/issues). Raise a
+  change to the wire schema or the specification there before you build it, because other
+  implementations depend on both.
+- **Security vulnerabilities:** email security@dmcn.email. Please don't open a public issue.
+- **The Apple client** lives in [open-dmcn-apple](https://github.com/dmcnp/open-dmcn-apple),
+  with its own contributing guide.
+
+Before you open a pull request:
+
+- Run `make test` and `make lint`. Both must pass, and pull requests have no CI yet, so this is
+  the only check.
+- **Changing wire behaviour?** Update `SPEC.md` or the `SPEC_*` document it belongs to in the
+  same pull request.
+- **Changing the schema?** Follow the [schema rules](#schema-rules), run `make proto` and
+  `make proto-web`, and add a note for each new field, op or enum value in `site/protocol.go`.
+  `make site` fails until the page matches the schema.
+- **Changing the site or the schema notes?** Run `make site` and commit `docs/`. `make test`
+  fails while it is out of date.
+- **Changing the web client?** Run `make build-web` and commit `cmd/dmcnd/web/dist`, which is
+  what `go build` embeds. `cmd/dmcnd/web/src` is shared with the hosted product, so anything
+  that has to differ goes through `src/lib/deployment.ts`, and only if both answers are correct.
+- **Keep product machinery out.** This repository holds what an independent implementation
+  needs to interoperate. Extensions ride the extension points and live elsewhere, and anything
+  merged into a public repository stays public.
+
+Contributions are made under the Apache License, Version 2.0 (section 5 of [LICENSE](LICENSE)).
+
 ## License
 
 Licensed under the **Apache License, Version 2.0** — see [LICENSE](LICENSE) and
