@@ -367,8 +367,7 @@ Issues and pull requests are welcome, from critique of the protocol to fixes in 
 
 Before you open a pull request:
 
-- Run `make test` and `make lint`. Both must pass, and pull requests have no CI yet, so this is
-  the only check.
+- Run `make test` and `make lint`. Both must pass, and CI runs them on every pull request.
 - **Changing wire behaviour?** Update `SPEC.md` or the `SPEC_*` document it belongs to in the
   same pull request.
 - **Changing the schema?** Follow the [schema rules](#schema-rules), run `make proto` and

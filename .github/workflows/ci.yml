@@ -1,0 +1,33 @@
+name: ci
+
+# The gate for main: the job id below is the name a ruleset requires. Actions are pinned to full
+# commit SHAs, with the release each one came from beside it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install buf
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/buf \
+            "https://github.com/bufbuild/buf/releases/download/v1.70.0/buf-Linux-$(uname -m)"
+          sudo chmod +x /usr/local/bin/buf
+
+      - run: make lint
+
+      # Includes site-check, which fails if docs/ is not what site/ generates.
+      - run: make test
