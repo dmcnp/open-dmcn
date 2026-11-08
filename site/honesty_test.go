@@ -92,6 +92,25 @@ func TestHonestClaims(t *testing.T) {
 		}
 	})
 
+	t.Run("the trust model diagram keeps its caveats", func(t *testing.T) {
+		// /trust/ is the diagram alone, so its caveats live in the SVG's own text. Read it from
+		// the embedded FS the build copies, so the test checks what is actually published.
+		b, err := siteFS.ReadFile("static/img/trust-model.svg")
+		if err != nil {
+			t.Fatalf("read trust-model.svg: %v", err)
+		}
+		svg := normalise(string(b))
+		for _, pin := range []struct{ phrase, why string }{
+			{"not end-to-end encrypted", "mail crossing the bridge is TLS-in-transit only"},
+			{"issuers that sign new addresses day to day", "not every domain key is offline"},
+			{"no domain can speak for another", "a domain only delegates through its own root"},
+		} {
+			if !strings.Contains(svg, pin.phrase) {
+				t.Errorf("trust-model.svg dropped %q: %s", pin.phrase, pin.why)
+			}
+		}
+	})
+
 	t.Run("production readiness is not overstated", func(t *testing.T) {
 		if !strings.Contains(faq, "Is it production ready?") {
 			t.Error("faq.md dropped the production-readiness question")

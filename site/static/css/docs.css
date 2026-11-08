@@ -146,3 +146,16 @@
   font-size: 14px; line-height: var(--leading-normal); color: var(--text-body);
 }
 .note p:last-child { margin-bottom: 0; }
+
+/* ============================================================
+   Wide pages (templates/wide.html): text stays at reading width,
+   a figure spans the full container.
+   ============================================================ */
+.prose-wide { max-width: none; }
+.prose-wide > :not(figure) { max-width: 74ch; }
+.prose-wide figure { margin: 28px 0 36px; }
+.prose-wide figure img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  background: #ffffff;
+}

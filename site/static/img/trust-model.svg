@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" fill="#0f172a">
+<title>The DMCN trust model: mailbox users, domain operators and fleet operators</title>
+<defs><marker id="m-user" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/></marker><marker id="m-dom" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b45309"/></marker><marker id="m-fleet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4338ca"/></marker><marker id="m-mail" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+  <style>
+    .h1 { font-size: 44px; font-weight: 700; }
+    .sub { font-size: 21px; fill: #475569; }
+    .band { font-size: 18px; font-weight: 700; letter-spacing: 2px; }
+    .band-d { font-size: 16px; fill: #334155; }
+    .disc-t { font-size: 18px; font-weight: 700; }
+    .disc-s { font-size: 14px; fill: #334155; }
+    .disc-b { font-size: 14px; font-weight: 700; fill: #1e293b; }
+    .pill-t { font-size: 18px; font-weight: 700; }
+    .pill-s { font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+    .link-b { font-size: 16px; font-weight: 700; }
+    .link { font-size: 15px; fill: #334155; }
+    .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 6px; stroke-linejoin: round; }
+    .tag { font-size: 11.5px; font-weight: 700; letter-spacing: 1.4px; fill: #ffffff; }
+    .unsigned { font-size: 13px; fill: #64748b; font-style: italic; }
+    .legend { font-size: 15px; fill: #334155; }
+    .foot-h { font-size: 14px; font-weight: 700; letter-spacing: 1.6px; }
+    .foot { font-size: 16px; fill: #1e293b; }
+    .foot-note { font-size: 15px; fill: #475569; }
+  </style>
+</defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<text x="70.0" y="80.0" class="h1" text-anchor="start">The DMCN trust model</text>
+<text x="70.0" y="118.0" class="sub" text-anchor="start">Three kinds of actor, each holding its own keys. Every link between them is signed, and the recipient's</text>
+<text x="70.0" y="146.0" class="sub" text-anchor="start">app checks each one back to a DNS anchor.</text>
+<circle cx="1102.0" cy="52.0" r="12" fill="#ffffff" stroke="#0f766e" stroke-width="2.5"/>
+<path d="M1097.0,52.5 L1100.5,56.0 L1107.5,48.0" fill="none" stroke="#0f766e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1129.0" cy="52.0" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M1124.0,52.5 L1127.5,56.0 L1134.5,48.0" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1156.0" cy="52.0" r="12" fill="#ffffff" stroke="#4338ca" stroke-width="2.5"/>
+<path d="M1151.0,52.5 L1154.5,56.0 L1161.5,48.0" fill="none" stroke="#4338ca" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1182.0" y="57.0" class="legend" text-anchor="start">signed (badge colour = whose key)</text>
+<line x1="1090.0" y1="84.0" x2="1124.0" y2="84.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<line x1="1134.0" y1="84.0" x2="1168.0" y2="84.0" stroke="#4338ca" stroke-width="3" marker-end="url(#m-fleet)"/>
+<text x="1182.0" y="89.0" class="legend" text-anchor="start">vouches for (colour = whose key)</text>
+<line x1="1093.0" y1="116.0" x2="1165.0" y2="116.0" stroke="#b45309" stroke-width="6" stroke-dasharray="0.1 11" stroke-linecap="round"/>
+<text x="1182.0" y="121.0" class="legend" text-anchor="start">hands its hosting to</text>
+<line x1="1500.0" y1="52.0" x2="1550.0" y2="52.0" stroke="#64748b" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#m-mail)"/>
+<text x="1564.0" y="57.0" class="legend" text-anchor="start">mail travels, sealed</text>
+<g stroke="#334155" stroke-width="2" fill="none" stroke-linecap="round"><circle cx="1518.5" cy="84" r="4"/><path d="M1522.5,84 H1533 M1529,84 v4 M1532.5,84 v3.5"/></g>
+<text x="1564.0" y="89.0" class="legend" text-anchor="start">key never held on a server</text>
+<rect x="1473.0" y="104.0" width="104" height="24" rx="12" fill="#334155" stroke="#ffffff" stroke-width="2"/>
+<g stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="1489.5" cy="116" r="4"/><path d="M1493.5,116 H1504 M1500,116 v4 M1503.5,116 v3.5"/></g>
+<text x="1537.0" y="120.5" class="tag" text-anchor="middle">OFFLINE</text>
+<text x="1584.0" y="121.0" class="legend" text-anchor="start">root key, signs offline</text>
+<rect x="50" y="172" width="1820" height="228" rx="16" fill="#f0fdfa"/>
+<rect x="50" y="172" width="8" height="228" rx="4" fill="#0f766e"/>
+<text x="80.0" y="206.0" class="band" text-anchor="start" fill="#0f766e">MAILBOX USERS</text>
+<rect x="50" y="410" width="1820" height="240" rx="16" fill="#fffbeb"/>
+<rect x="50" y="410" width="8" height="240" rx="4" fill="#b45309"/>
+<text x="80.0" y="444.0" class="band" text-anchor="start" fill="#b45309">DOMAIN OPERATORS</text>
+<rect x="50" y="660" width="1820" height="232" rx="16" fill="#eef2ff"/>
+<rect x="50" y="660" width="8" height="232" rx="4" fill="#4338ca"/>
+<text x="80.0" y="694.0" class="band" text-anchor="start" fill="#4338ca">FLEET OPERATORS</text>
+<line x1="618.0" y1="792.0" x2="572.0" y2="792.0" stroke="#4338ca" stroke-width="3" marker-end="url(#m-fleet)"/>
+<rect x="392.0" y="763.0" width="176" height="58" rx="29.0" fill="#e0e7ff" stroke="#4338ca" stroke-width="2"/>
+<text x="480.0" y="790.0" class="pill-t" text-anchor="middle" fill="#4338ca">Bridge</text>
+<text x="480.0" y="809.0" class="pill-s" text-anchor="middle" fill="#4338ca">BRIDGE CREDENTIAL</text>
+<circle cx="595.0" cy="792.0" r="12" fill="#ffffff" stroke="#4338ca" stroke-width="2.5"/>
+<path d="M590.0,792.5 L593.5,796.0 L600.5,788.0" fill="none" stroke="#4338ca" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="782.0" y1="792.0" x2="851.0" y2="792.0" stroke="#4338ca" stroke-width="3" marker-end="url(#m-fleet)"/>
+<rect x="855.0" y="763.0" width="170" height="58" rx="29.0" fill="#e0e7ff" stroke="#4338ca" stroke-width="2"/>
+<text x="940.0" y="790.0" class="pill-t" text-anchor="middle" fill="#4338ca">Relay</text>
+<text x="940.0" y="809.0" class="pill-s" text-anchor="middle" fill="#4338ca">NODE CREDENTIAL</text>
+<circle cx="816.5" cy="792.0" r="12" fill="#ffffff" stroke="#4338ca" stroke-width="2.5"/>
+<path d="M811.5,792.5 L815.0,796.0 L822.0,788.0" fill="none" stroke="#4338ca" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="700" cy="792" r="80" fill="#4338ca"/>
+<circle cx="700" cy="792" r="74" fill="#e0e7ff"/>
+<text x="700.0" y="770.0" class="disc-t" text-anchor="middle" fill="#4338ca">fleet-a.example</text>
+<text x="700.0" y="794.0" class="disc-s" text-anchor="middle">_dmcn DNS record</text>
+<text x="700.0" y="812.0" class="disc-s" text-anchor="middle">↓</text>
+<text x="700.0" y="832.0" class="disc-b" text-anchor="middle">fleet root key</text>
+<rect x="648.0" y="860.0" width="104" height="24" rx="12" fill="#4338ca" stroke="#ffffff" stroke-width="2"/>
+<g stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="664.5" cy="872" r="4"/><path d="M668.5,872 H679 M675,872 v4 M678.5,872 v3.5"/></g>
+<text x="712.0" y="876.5" class="tag" text-anchor="middle">OFFLINE</text>
+<line x1="1368.0" y1="792.0" x2="1299.0" y2="792.0" stroke="#4338ca" stroke-width="3" marker-end="url(#m-fleet)"/>
+<rect x="1125.0" y="763.0" width="170" height="58" rx="29.0" fill="#e0e7ff" stroke="#4338ca" stroke-width="2"/>
+<text x="1210.0" y="790.0" class="pill-t" text-anchor="middle" fill="#4338ca">Relay</text>
+<text x="1210.0" y="809.0" class="pill-s" text-anchor="middle" fill="#4338ca">NODE CREDENTIAL</text>
+<circle cx="1333.5" cy="792.0" r="12" fill="#ffffff" stroke="#4338ca" stroke-width="2.5"/>
+<path d="M1328.5,792.5 L1332.0,796.0 L1339.0,788.0" fill="none" stroke="#4338ca" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="1532.0" y1="792.0" x2="1601.0" y2="792.0" stroke="#4338ca" stroke-width="3" marker-end="url(#m-fleet)"/>
+<rect x="1605.0" y="763.0" width="170" height="58" rx="29.0" fill="#e0e7ff" stroke="#4338ca" stroke-width="2"/>
+<text x="1690.0" y="790.0" class="pill-t" text-anchor="middle" fill="#4338ca">Relay</text>
+<text x="1690.0" y="809.0" class="pill-s" text-anchor="middle" fill="#4338ca">NODE CREDENTIAL</text>
+<circle cx="1566.5" cy="792.0" r="12" fill="#ffffff" stroke="#4338ca" stroke-width="2.5"/>
+<path d="M1561.5,792.5 L1565.0,796.0 L1572.0,788.0" fill="none" stroke="#4338ca" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1450" cy="792" r="80" fill="#4338ca"/>
+<circle cx="1450" cy="792" r="74" fill="#e0e7ff"/>
+<text x="1450.0" y="770.0" class="disc-t" text-anchor="middle" fill="#4338ca">fleet-b.example</text>
+<text x="1450.0" y="794.0" class="disc-s" text-anchor="middle">_dmcn DNS record</text>
+<text x="1450.0" y="812.0" class="disc-s" text-anchor="middle">↓</text>
+<text x="1450.0" y="832.0" class="disc-b" text-anchor="middle">fleet root key</text>
+<rect x="1398.0" y="860.0" width="104" height="24" rx="12" fill="#4338ca" stroke="#ffffff" stroke-width="2"/>
+<g stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="1414.5" cy="872" r="4"/><path d="M1418.5,872 H1429 M1425,872 v4 M1428.5,872 v3.5"/></g>
+<text x="1462.0" y="876.5" class="tag" text-anchor="middle">OFFLINE</text>
+<rect x="70" y="716" width="250" height="152" rx="14" fill="#ffffff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="88.0" y="746.0" class="link-b" text-anchor="start">Ordinary email</text>
+<text x="88.0" y="772.0" class="link" text-anchor="start">No anchor of its own. The</text>
+<text x="88.0" y="792.0" class="link" text-anchor="start">bridge checks SPF, DKIM and</text>
+<text x="88.0" y="812.0" class="link" text-anchor="start">DMARC and signs the result.</text>
+<text x="88.0" y="832.0" class="link" text-anchor="start">Past the bridge: TLS only,</text>
+<text x="88.0" y="852.0" class="link" text-anchor="start">not end-to-end encrypted.</text>
+<line x1="388.0" y1="792.0" x2="324.0" y2="792.0" stroke="#64748b" stroke-width="3" stroke-dasharray="10 7" marker-start="url(#m-mail)" marker-end="url(#m-mail)"/>
+<text x="356.0" y="816.0" class="unsigned" text-anchor="middle">unsigned</text>
+<line x1="518.5" y1="605.2" x2="640.1" y2="730.3" stroke="#b45309" stroke-width="6" stroke-dasharray="0.1 11" stroke-linecap="round"/>
+<circle cx="585.4" cy="674.0" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M580.4,674.5 L583.9,678.0 L590.9,670.0" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="433.1" y1="467.5" x2="385.0" y2="333.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<rect x="313.0" y="271.0" width="144" height="58" rx="29.0" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<text x="385.0" y="298.0" class="pill-t" text-anchor="middle" fill="#0f766e">alice@</text>
+<text x="395.0" y="317.0" class="pill-s" text-anchor="middle" fill="#0f766e">ON DEVICE</text>
+<g stroke="#0f766e" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="339.5" cy="313" r="4"/><path d="M343.5,313 H354 M350,313 v4 M353.5,313 v3.5"/></g>
+<circle cx="409.1" cy="400.3" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M404.1,400.8 L407.6,404.3 L414.6,396.3" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="486.9" y1="467.5" x2="535.0" y2="333.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<rect x="463.0" y="271.0" width="144" height="58" rx="29.0" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<text x="535.0" y="298.0" class="pill-t" text-anchor="middle" fill="#0f766e">bob@</text>
+<text x="545.0" y="317.0" class="pill-s" text-anchor="middle" fill="#0f766e">ON DEVICE</text>
+<g stroke="#0f766e" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="489.5" cy="313" r="4"/><path d="M493.5,313 H504 M500,313 v4 M503.5,313 v3.5"/></g>
+<circle cx="510.9" cy="400.3" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M505.9,400.8 L509.4,404.3 L516.4,396.3" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="460" cy="545" r="80" fill="#b45309"/>
+<circle cx="460" cy="545" r="74" fill="#fef3c7"/>
+<text x="460.0" y="523.0" class="disc-t" text-anchor="middle" fill="#b45309">example.com</text>
+<text x="460.0" y="547.0" class="disc-s" text-anchor="middle">_dmcn DNS record</text>
+<text x="460.0" y="565.0" class="disc-s" text-anchor="middle">↓</text>
+<text x="460.0" y="585.0" class="disc-b" text-anchor="middle">domain root key</text>
+<rect x="408.0" y="613.0" width="104" height="24" rx="12" fill="#b45309" stroke="#ffffff" stroke-width="2"/>
+<g stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="424.5" cy="625" r="4"/><path d="M428.5,625 H439 M435,625 v4 M438.5,625 v3.5"/></g>
+<text x="472.0" y="629.5" class="tag" text-anchor="middle">OFFLINE</text>
+<line x1="847.1" y1="610.3" x2="754.1" y2="725.2" stroke="#b45309" stroke-width="6" stroke-dasharray="0.1 11" stroke-linecap="round"/>
+<circle cx="796.0" cy="673.5" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M791.0,674.0 L794.5,677.5 L801.5,669.5" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="873.1" y1="467.5" x2="825.0" y2="333.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<rect x="753.0" y="271.0" width="144" height="58" rx="29.0" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<text x="825.0" y="298.0" class="pill-t" text-anchor="middle" fill="#0f766e">carol@</text>
+<text x="835.0" y="317.0" class="pill-s" text-anchor="middle" fill="#0f766e">ON DEVICE</text>
+<g stroke="#0f766e" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="779.5" cy="313" r="4"/><path d="M783.5,313 H794 M790,313 v4 M793.5,313 v3.5"/></g>
+<circle cx="849.1" cy="400.3" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M844.1,400.8 L847.6,404.3 L854.6,396.3" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="926.9" y1="467.5" x2="975.0" y2="333.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<rect x="903.0" y="271.0" width="144" height="58" rx="29.0" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<text x="975.0" y="298.0" class="pill-t" text-anchor="middle" fill="#0f766e">dan@</text>
+<text x="985.0" y="317.0" class="pill-s" text-anchor="middle" fill="#0f766e">ON DEVICE</text>
+<g stroke="#0f766e" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="929.5" cy="313" r="4"/><path d="M933.5,313 H944 M940,313 v4 M943.5,313 v3.5"/></g>
+<circle cx="950.9" cy="400.3" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M945.9,400.8 L949.4,404.3 L956.4,396.3" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="900" cy="545" r="80" fill="#b45309"/>
+<circle cx="900" cy="545" r="74" fill="#fef3c7"/>
+<text x="900.0" y="523.0" class="disc-t" text-anchor="middle" fill="#b45309">example.net</text>
+<text x="900.0" y="547.0" class="disc-s" text-anchor="middle">_dmcn DNS record</text>
+<text x="900.0" y="565.0" class="disc-s" text-anchor="middle">↓</text>
+<text x="900.0" y="585.0" class="disc-b" text-anchor="middle">domain root key</text>
+<rect x="848.0" y="613.0" width="104" height="24" rx="12" fill="#b45309" stroke="#ffffff" stroke-width="2"/>
+<g stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="864.5" cy="625" r="4"/><path d="M868.5,625 H879 M875,625 v4 M878.5,625 v3.5"/></g>
+<text x="912.0" y="629.5" class="tag" text-anchor="middle">OFFLINE</text>
+<line x1="1497.1" y1="625.8" x2="1473.4" y2="709.3" stroke="#b45309" stroke-width="6" stroke-dasharray="0.1 11" stroke-linecap="round"/>
+<circle cx="1484.1" cy="671.7" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M1479.1,672.2 L1482.6,675.7 L1489.6,667.7" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="1493.1" y1="467.5" x2="1445.0" y2="333.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<rect x="1373.0" y="271.0" width="144" height="58" rx="29.0" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<text x="1445.0" y="298.0" class="pill-t" text-anchor="middle" fill="#0f766e">erin@</text>
+<text x="1455.0" y="317.0" class="pill-s" text-anchor="middle" fill="#0f766e">ON DEVICE</text>
+<g stroke="#0f766e" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="1399.5" cy="313" r="4"/><path d="M1403.5,313 H1414 M1410,313 v4 M1413.5,313 v3.5"/></g>
+<circle cx="1469.1" cy="400.3" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M1464.1,400.8 L1467.6,404.3 L1474.6,396.3" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="1546.9" y1="467.5" x2="1595.0" y2="333.0" stroke="#b45309" stroke-width="3" marker-end="url(#m-dom)"/>
+<rect x="1523.0" y="271.0" width="144" height="58" rx="29.0" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<text x="1595.0" y="298.0" class="pill-t" text-anchor="middle" fill="#0f766e">finn@</text>
+<text x="1605.0" y="317.0" class="pill-s" text-anchor="middle" fill="#0f766e">ON DEVICE</text>
+<g stroke="#0f766e" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="1549.5" cy="313" r="4"/><path d="M1553.5,313 H1564 M1560,313 v4 M1563.5,313 v3.5"/></g>
+<circle cx="1570.9" cy="400.3" r="12" fill="#ffffff" stroke="#b45309" stroke-width="2.5"/>
+<path d="M1565.9,400.8 L1569.4,404.3 L1576.4,396.3" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="1520" cy="545" r="80" fill="#b45309"/>
+<circle cx="1520" cy="545" r="74" fill="#fef3c7"/>
+<text x="1520.0" y="523.0" class="disc-t" text-anchor="middle" fill="#b45309">example.org</text>
+<text x="1520.0" y="547.0" class="disc-s" text-anchor="middle">_dmcn DNS record</text>
+<text x="1520.0" y="565.0" class="disc-s" text-anchor="middle">↓</text>
+<text x="1520.0" y="585.0" class="disc-b" text-anchor="middle">domain root key</text>
+<rect x="1468.0" y="613.0" width="104" height="24" rx="12" fill="#b45309" stroke="#ffffff" stroke-width="2"/>
+<g stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round"><circle cx="1484.5" cy="625" r="4"/><path d="M1488.5,625 H1499 M1495,625 v4 M1498.5,625 v3.5"/></g>
+<text x="1532.0" y="629.5" class="tag" text-anchor="middle">OFFLINE</text>
+<text x="680.0" y="600.0" class="link-b halo" text-anchor="middle" fill="#b45309">Both hosted by fleet-a.example</text>
+<text x="1598.0" y="612.0" class="link-b halo" text-anchor="start" fill="#b45309">Hosted by fleet-b.example</text>
+<line x1="985.0" y1="334.0" x2="1198.0" y2="758.0" stroke="#64748b" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#m-mail)"/>
+<circle cx="1036.1" cy="435.8" r="12" fill="#ffffff" stroke="#0f766e" stroke-width="2.5"/>
+<path d="M1031.1,436.3 L1034.6,439.8 L1041.6,431.8" fill="none" stroke="#0f766e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="1222.0" y1="758.0" x2="1435.0" y2="334.0" stroke="#64748b" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#m-mail)"/>
+<circle cx="1383.9" cy="435.8" r="12" fill="#ffffff" stroke="#0f766e" stroke-width="2.5"/>
+<path d="M1378.9,436.3 L1382.4,439.8 L1389.4,431.8" fill="none" stroke="#0f766e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1210.0" y="466.0" class="link-b halo" text-anchor="middle">Fleets need no trust between them</text>
+<text x="1210.0" y="489.0" class="link halo" text-anchor="middle">Mail goes straight to the recipient's</text>
+<text x="1210.0" y="509.0" class="link halo" text-anchor="middle">relay, signed with the sender's key.</text>
+<text x="1210.0" y="529.0" class="link halo" text-anchor="middle">Each side checks the other domain's DNS.</text>
+<text x="1210.0" y="557.0" class="unsigned halo" text-anchor="middle">Optional onion routing adds relay hops</text>
+<text x="1210.0" y="576.0" class="unsigned halo" text-anchor="middle">first; each can unwrap only one layer.</text>
+<rect x="70" y="908" width="5" height="96" rx="2.5" fill="#0f766e"/>
+<text x="88.0" y="924.0" class="foot-h" text-anchor="start" fill="#0f766e">A MAILBOX USER</text>
+<text x="88.0" y="950.0" class="foot" text-anchor="start">Has keys made on their own devices, never on a server.</text>
+<text x="88.0" y="973.0" class="foot" text-anchor="start">Holds the only keys that open their mail.</text>
+<text x="88.0" y="996.0" class="foot" text-anchor="start">Can retire their own address without the operator.</text>
+<rect x="680" y="908" width="5" height="96" rx="2.5" fill="#b45309"/>
+<text x="698.0" y="924.0" class="foot-h" text-anchor="start" fill="#b45309">A DOMAIN OPERATOR</text>
+<text x="698.0" y="950.0" class="foot" text-anchor="start">Owns the domain's DNS and an offline root key.</text>
+<text x="698.0" y="973.0" class="foot" text-anchor="start">Can vouch for, revoke or reassign its addresses.</text>
+<text x="698.0" y="996.0" class="foot" text-anchor="start">Cannot decrypt mail or sign with a user's key.</text>
+<rect x="1290" y="908" width="5" height="96" rx="2.5" fill="#4338ca"/>
+<text x="1308.0" y="924.0" class="foot-h" text-anchor="start" fill="#4338ca">A FLEET OPERATOR</text>
+<text x="1308.0" y="950.0" class="foot" text-anchor="start">Runs relays and bridges under an offline root key.</text>
+<text x="1308.0" y="973.0" class="foot" text-anchor="start">Can delay or drop the mail it carries.</text>
+<text x="1308.0" y="996.0" class="foot" text-anchor="start">Cannot read it, alter it, or forge an address.</text>
+<text x="70.0" y="1036.0" class="foot-note" text-anchor="start">The only keys on servers belong to relays, bridges and the issuers that sign new addresses day to day, and each carries only the narrow powers its credential grants.</text>
+<text x="70.0" y="1058.0" class="foot-note" text-anchor="start">One organisation can be both domain and fleet operator by running its own relays. The roles stay separate in the protocol, and no domain can speak for another.</text>
+<text x="1850.0" y="1058.0" class="foot-note" text-anchor="end">© 2026 DMCN LLC</text>
+</svg>

@@ -111,6 +111,7 @@ func TestBuildEmitsEveryPage(t *testing.T) {
 
 	for _, f := range []string{
 		"index.html", "spec/index.html", "protocol/index.html", "quickstart/index.html", "faq/index.html",
+		"trust/index.html", "static/img/trust-model.svg",
 		"open-dmcn/index.html", "404.html",
 		"CNAME", ".nojekyll", "_headers", "robots.txt", "sitemap.xml",
 		"static/css/tokens.css", "static/css/site.css", "static/css/docs.css",

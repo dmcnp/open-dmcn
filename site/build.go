@@ -78,6 +78,8 @@ func sitePages() []pageSpec {
 		{url: "/protocol/", src: "protocol.md", tmpl: "doc.html", toc: true, protocol: true},
 		{url: "/quickstart/", src: "quickstart.md", tmpl: "doc.html", toc: true},
 		{url: "/faq/", src: "faq.md", tmpl: "doc.html", toc: true},
+		// Standalone: reachable by URL (and the sitemap), deliberately not in the nav.
+		{url: "/trust/", src: "trust.md", tmpl: "wide.html"},
 		modulePage,
 		{url: "/404.html", src: "404.md", tmpl: "page.html"},
 	}

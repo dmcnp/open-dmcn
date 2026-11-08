@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>The trust model · dmcn.dev</title>
+  <meta name="description" content="Who DMCNP asks you to trust, and for what. Mailbox users, domain operators and fleet operators each hold their own keys, every link between them is signed, and the recipient&#39;s app checks each one back to a DNS anchor.">
+  <link rel="canonical" href="https://dmcn.dev/trust/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="dmcn.dev">
+  <meta property="og:title" content="The trust model · dmcn.dev">
+  <meta property="og:description" content="Who DMCNP asks you to trust, and for what. Mailbox users, domain operators and fleet operators each hold their own keys, every link between them is signed, and the recipient&#39;s app checks each one back to a DNS anchor.">
+  <meta property="og:url" content="https://dmcn.dev/trust/">
+
+  
+  <meta property="og:image" content="https://dmcn.dev/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="A fragment of identity.proto: the IdentityRecord message, with its address, Ed25519 and X25519 public keys, and owner self-signature.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  
+  <meta name="fediverse:creator" content="@mvg@infosec.exchange">
+
+  
+  <link rel="me" href="https://infosec.exchange/@mvg">
+
+  
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="/static/css/docs.css">
+</head>
+<body>
+  
+  <div data-theme="" style="min-height:100vh;display:flex;flex-direction:column;background:var(--surface-page);color:var(--text-body);font-family:var(--font-sans);">
+    
+<header style="position:sticky;top:0;z-index:30;background:var(--surface-page);border-bottom:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div style="max-width:1120px;margin:0 auto;padding:13px clamp(18px,5vw,40px);display:flex;align-items:center;gap:clamp(14px,3vw,30px);">
+    <a href="/" style="display:inline-flex;align-items:flex-end;gap:8px;text-decoration:none;">
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:23px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:7px;height:7px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">protocol</span>
+    </a>
+    <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
+      <a href="/spec" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Spec</a>
+      <a href="/protocol" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Protocol</a>
+      <a href="/quickstart" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">Try it</a>
+      <a href="/faq" style="font-size:14px;color:var(--text-body);font-weight:500;text-decoration:none;">FAQ</a>
+    </nav>
+    <a data-desk href="https://github.com/dmcnp/open-dmcn" class="hov-link" style="display:inline-flex;align-items:center;gap:5px;font-size:14px;color:var(--text-muted);font-weight:500;text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+    <a data-desk href="/spec" class="hov-brand" style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:4px;background:var(--brand);color:var(--text-onbrand);font-size:14px;font-weight:600;text-decoration:none;transition:background 120ms;">Read the spec</a>
+
+    <details data-mm>
+      <summary aria-label="Menu"><svg class="lucide lucide-menu" style="font-size:22px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /></svg></summary>
+      <div data-mm-panel>
+        <a href="/spec" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Spec</a>
+        <a href="/protocol" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Protocol</a>
+        <a href="/quickstart" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Try it</a>
+        <a href="/faq" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">FAQ</a>
+        <a href="/open-dmcn" class="hov-surface" style="padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-body);text-decoration:none;">Go module</a>
+        <div style="height:1px;background:var(--border-subtle);margin:6px 4px;"></div>
+        <a href="https://github.com/dmcnp/open-dmcn" class="hov-surface" style="display:flex;align-items:center;gap:5px;padding:10px 12px;border-radius:4px;font-size:15px;color:var(--text-muted);text-decoration:none;">GitHub <svg class="lucide lucide-arrow-up-right" style="font-size:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </div>
+    </details>
+  </div>
+</header>
+
+    <main style="flex:1;">
+      <div style="max-width:1600px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(18px,5vw,40px);">
+  <article class="prose prose-wide">
+    <figure>
+  <a href="/static/img/trust-model.svg"><img src="/static/img/trust-model.svg" width="1920" height="1080" alt="The DMCN trust model in three layers. Mailbox users hold their own keys on their own devices. Domain operators each anchor a domain in a _dmcn DNS record and an offline root key, and vouch for their users' addresses. Fleet operators each anchor a fleet the same way and vouch for their relays and bridges. Domains name the fleet that hosts them. Mail from a user on one fleet goes straight to the recipient's relay on another, signed with the sender's key; fleets need no trust between them. Ordinary email is reached only through a bridge, and that link is unsigned."></a>
+</figure>
+
+  </article>
+</div>
+
+    </main>
+    
+
+<footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
+  <div data-foot style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);">
+    <div data-foot-brand>
+      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol. An open mail protocol where the address is a keypair, not a name a server vouches for.</p>
+      <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
+    </div>
+
+    
+    <div data-foot-cols>
+      <nav>
+        <div class="foot-label">Protocol</div>
+        <a href="/spec">Specification</a>
+        <a href="/protocol">Protocol</a>
+        <a href="/quickstart">Try it</a>
+        <a href="/faq">FAQ</a>
+        <a href="/open-dmcn">Go module</a>
+      </nav>
+      <nav>
+        <div class="foot-label">Source</div>
+        <a href="https://github.com/dmcnp/open-dmcn/tree/main/proto">Schema</a>
+        <a href="https://github.com/dmcnp/open-dmcn">Repository</a>
+        <a href="https://github.com/dmcnp/open-dmcn/releases">Releases</a>
+        <a href="https://github.com/dmcnp/open-dmcn/issues">Issues</a>
+        <a href="https://github.com/dmcnp/open-dmcn/blob/main/LICENSE">License</a>
+      </nav>
+      <nav>
+        <div class="foot-label">Built on DMCNP</div>
+        <a href="https://get.dmcn.email">Personal mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+        <a href="https://get.dmcnmail.com">Business mail <svg class="lucide lucide-arrow-up-right" style="font-size:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10" /><path d="M7 17 17 7" /></svg></a>
+      </nav>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border-subtle);padding:20px clamp(18px,5vw,40px);max-width:1120px;margin:0 auto;font-size:12px;line-height:1.6;color:var(--text-subtle);">
+    © 2026 DMCN LLC · dmcn.dev · The Apache-2.0 license covers the code and schema; it does not grant rights to the names <strong style="color:var(--text-muted);font-weight:600;">DMCN</strong> or <strong style="color:var(--text-muted);font-weight:600;">DMCN&nbsp;Protocol</strong>. You may implement the protocol under any name of your own.
+  </div>
+</footer>
+
+  </div>
+</body>
+</html>

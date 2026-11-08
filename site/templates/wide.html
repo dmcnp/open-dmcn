@@ -1,0 +1,10 @@
+{{ define "content" }}
+{{- /* wide.html: a page whose body carries a figure too big for the reading column.
+     The container is wider than page.html's; prose-wide keeps text at reading width
+     and lets a <figure> use the whole container. Used by /trust/. */ -}}
+<div style="max-width:1600px;margin:0 auto;padding:clamp(36px,6vw,64px) clamp(18px,5vw,40px);">
+  <article class="prose prose-wide">
+    {{ .Body }}
+  </article>
+</div>
+{{ end }}
