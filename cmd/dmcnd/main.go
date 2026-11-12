@@ -383,11 +383,7 @@ type config struct {
 	peers           []string
 	allowedPeers    []string
 	seedPassphrase  string
-	// bundlePath is the offline-signed domain bundle a live domain is served from. Empty is a
-	// startup error outside dev mode: without it there is no DAR, and minting one here would
-	// put the domain root back on the node.
-	bundlePath  string
-	petitionTTL time.Duration
+	petitionTTL     time.Duration
 	// transitMaxAge is how long undelivered mail may wait in the in-flight queue, and how long the
 	// bridge retries outbound mail before it tells the sender it gave up.
 	transitMaxAge time.Duration
@@ -427,7 +423,6 @@ func loadConfig() config {
 		peers:            splitList(os.Getenv("DMCND_PEERS")),
 		allowedPeers:     splitList(os.Getenv("DMCND_ALLOWED_PEERS")),
 		seedPassphrase:   envOr("DMCND_SEED_PASSPHRASE", defaultSeedPassphrase),
-		bundlePath:       os.Getenv("DMCND_BUNDLE"),
 		bridgeEnabled:    envBool("DMCND_BRIDGE_ENABLED"),
 		bridgeAuthMode:   envOr("DMCND_BRIDGE_AUTH_MODE", "dns"),
 		bridgeDelivery:   envOr("DMCND_BRIDGE_DELIVERY_MODE", "stub"),
