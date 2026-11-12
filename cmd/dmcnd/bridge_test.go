@@ -63,7 +63,7 @@ func newFoldedBridge(t *testing.T, cfg bridge.Config) *foldedBridge {
 	if err != nil {
 		t.Fatalf("bridge infra keys: %v", err)
 	}
-	bridgeCred, err := bridgeCredential(n, rootKP, config{devMode: true, domain: foldDMCNDomain}, now)
+	bridgeCred, err := bridgeCredential(ctx, n, rootKP, nil, config{devMode: true, domain: foldDMCNDomain}, now)
 	if err != nil {
 		t.Fatalf("bridge credential: %v", err)
 	}

@@ -466,9 +466,11 @@ recipient's client verifies three things without asking any server anything: the
 signed by the key it names, that key holds a <code>bridge</code> credential from the domain root, and the
 credential is <em>for that key</em> — so a real bridge's credential cannot be stapled to someone else's
 attestation.</p>
-<p>Start the bridge without a credential and it still relays mail, but every recipient will treat
-its verdicts as unverified. The daemon says so at startup rather than letting you find out from
-someone else's inbox.</p>
+<p>The daemon checks the credential at startup the way those clients will: it must be for this domain,
+for this node's key, and signed by this domain's root. Without one, or with one that fails any of
+those, the bridge does not start and the log says which and how to issue a good one, rather than
+letting you find out from someone else's inbox. A node moved to a new domain needs a new
+credential; the old domain's does not carry over. DMCN mail is unaffected either way.</p>
 <p>Outbound — your users writing to ordinary email addresses — needs one more thing: a <code>bridge=</code>
 token in your <code>_dmcn</code> record, so a sender can find out which peer carries mail off the network.
 It is the DMCN analogue of an MX record, and usually the same address as your <code>seed=</code>:</p>
@@ -555,7 +557,9 @@ you. Bcc recipients are delivered to and never named, exactly as in ordinary mai
 <p>Outbound, you hear about <strong>failures only</strong>. A non-delivery notice arrives from <code>mailer-daemon@</code>
 your domain with the reason in the body; a successful send produces no mail, the way email has
 always worked. The signed receipt is on the bridge's audit trail either way.</p>
-<p><strong>On the TLS to other mail servers.</strong> Outbound STARTTLS is <em>opportunistic</em>: encrypted where the
+<p><strong>On the TLS to other mail servers.</strong> Inbound, the bridge offers STARTTLS with the webmail's own
+certificate — the one autocert fetched, or <code>DMCND_TLS_CERT</code>/<code>DMCND_TLS_KEY</code> — so mail from any
+server that supports it arrives encrypted, with no extra setup. Outbound STARTTLS is <em>opportunistic</em>: encrypted where the
 receiving server offers it, and the certificate is deliberately not verified. That is what every
 production MTA does, and the reason is that the alternative to unverified TLS is cleartext, not
 verified TLS — SMTP has no trust anchor, and much of the internet's mail infrastructure presents

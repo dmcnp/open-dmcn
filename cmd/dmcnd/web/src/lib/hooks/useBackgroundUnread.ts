@@ -45,8 +45,9 @@ export function useBackgroundUnread(accounts: DeviceAccount[] | null, activeAddr
         const n = await fetchAccountUnread(account.address, wk);
         setCounts(prev => (prev.get(account.address) === n ? prev : new Map(prev).set(account.address, n)));
       } catch {
-        // Offline, an expired session we couldn't re-mint, a suspended account:
-        // leave whatever we last knew and try again next tick.
+        // Offline, or an expired session we couldn't re-mint: leave whatever we last
+        // knew and try again next tick. A closed or suspended account rejects here too,
+        // but without a request: fetchAccountUnread stops asking once the relay says so.
       }
     }
   }, []);

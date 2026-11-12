@@ -19,6 +19,26 @@ import { countUnread } from '../unread';
 
 const tokens = new Map<string, string>();
 
+// Accounts the relay has refused with an access lock (closed, or suspended by a relay from
+// before grace-open). Every read would be refused the same way, so they are not polled again
+// in this tab: without this, one closed account left unlocked here costs four 403s a minute
+// (list, identities, flags, filter), all day, for a badge it can never show. Cleared by
+// forgetAccountUnread — sign-out, or switching to the account, whose own sync explains the lock.
+const locked = new Set<string>();
+
+// AccountLockedError is what fetchAccountUnread rejects with for a locked account, without
+// asking the relay again.
+export class AccountLockedError extends Error {
+  constructor(address: string) {
+    super(`${address}: account access is locked`);
+    this.name = 'AccountLockedError';
+  }
+}
+
+function isAccessLock(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 403 && (e.code === 'access_closed' || e.code === 'access_suspended');
+}
+
 // Kept per account so the header cache survives across polls: an entry is immutable
 // under its hash, so a steady-state poll re-decrypts nothing.
 const syncs = new Map<string, MailboxSync>();
@@ -45,18 +65,28 @@ async function countWithToken(address: string, wk: WorkingKeys, token: string): 
 // fetchAccountUnread returns the unread count for an account this tab holds unlocked
 // but is not currently acting as. Rejects if the account can't be read.
 export async function fetchAccountUnread(address: string, wk: WorkingKeys): Promise<number> {
-  let token = tokens.get(address) ?? await mintToken(address, wk);
+  if (locked.has(address)) throw new AccountLockedError(address);
   try {
-    return await countWithToken(address, wk, token);
+    let token = tokens.get(address) ?? await mintToken(address, wk);
+    try {
+      return await countWithToken(address, wk, token);
+    } catch (e) {
+      // A cached token can outlive its session (expiry, or a sign-out elsewhere).
+      // Explicit-token requests deliberately skip the global renewal handler, so the
+      // one retry belongs here.
+      if (!(e instanceof ApiError) || e.status !== 401) throw e;
+      tokens.delete(address);
+      syncs.delete(address);
+      token = await mintToken(address, wk);
+      return await countWithToken(address, wk, token);
+    }
   } catch (e) {
-    // A cached token can outlive its session (expiry, or a sign-out elsewhere).
-    // Explicit-token requests deliberately skip the global renewal handler, so the
-    // one retry belongs here.
-    if (!(e instanceof ApiError) || e.status !== 401) throw e;
-    tokens.delete(address);
-    syncs.delete(address);
-    token = await mintToken(address, wk);
-    return countWithToken(address, wk, token);
+    if (isAccessLock(e)) {
+      locked.add(address);
+      tokens.delete(address);
+      syncs.delete(address);
+    }
+    throw e;
   }
 }
 
@@ -65,4 +95,5 @@ export async function fetchAccountUnread(address: string, wk: WorkingKeys): Prom
 export function forgetAccountUnread(address: string): void {
   tokens.delete(address);
   syncs.delete(address);
+  locked.delete(address);
 }

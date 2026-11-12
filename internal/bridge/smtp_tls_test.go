@@ -104,4 +104,45 @@ func TestBuildSMTPTLS(t *testing.T) {
 	if _, err := buildSMTPTLS(Config{TLSCertFile: "cert.pem"}); err == nil {
 		t.Fatal("cert without key must error")
 	}
+
+	// A ready-made config (the daemon passes its ACME manager's) is used as-is, and satisfies
+	// require-TLS on its own.
+	tc := selfSignedTLS(t)
+	got, err := buildSMTPTLS(Config{TLSConfig: tc, RequireTLS: true})
+	if err != nil || got == nil || got.config != tc || !got.require {
+		t.Fatalf("TLSConfig should be used as the listener's config: %+v, %v", got, err)
+	}
+	if _, err := buildSMTPTLS(Config{TLSConfig: tc, TLSCertFile: "cert.pem", TLSKeyFile: "key.pem"}); err == nil {
+		t.Fatal("a TLS config AND cert files is ambiguous and must error")
+	}
+}
+
+// A listener built from Config.TLSConfig advertises STARTTLS and completes the upgrade.
+func TestSMTPStartTLSFromConfig(t *testing.T) {
+	opts, err := buildSMTPTLS(Config{TLSConfig: selfSignedTLS(t)})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	addr := startTLSServer(t, opts)
+
+	c, err := smtp.Dial(addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := c.Hello("sender.example"); err != nil {
+		t.Fatalf("ehlo: %v", err)
+	}
+	if ok, _ := c.Extension("STARTTLS"); !ok {
+		t.Fatal("STARTTLS must be advertised when a TLS config is set")
+	}
+	c.Close()
+
+	c2, err := smtp.DialStartTLS(addr, clientTLS())
+	if err != nil {
+		t.Fatalf("dial+starttls: %v", err)
+	}
+	defer c2.Close()
+	if err := c2.Mail("ext@gmail.com", nil); err != nil {
+		t.Fatalf("MAIL after STARTTLS should pass: %v", err)
+	}
 }

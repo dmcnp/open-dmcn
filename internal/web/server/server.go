@@ -306,14 +306,17 @@ func (s *Server) Start(certFile, keyFile string) error {
 	return s.httpServer.ListenAndServe()
 }
 
-// StartAutocert begins listening with automatic TLS certificates from Let's Encrypt via the ACME
-// protocol, for every name in hosts.
+// NewAutocert builds the Let's Encrypt (ACME) certificate manager for every name in hosts, caching
+// certificates in cacheDir. It is separate from StartAutocert so the daemon can hand the SAME
+// manager to its other TLS listener — the SMTP bridge's STARTTLS — rather than running a second
+// ACME account against the same cache.
 //
-// More than one, because the hostname serving the webmail need not be the DMCN domain: addresses
-// can be user@example.com while the client lives at mail.example.com, exactly as ordinary email
-// separates the two. A name that never arrives over SNI costs nothing, so both are whitelisted and
-// whichever the operator actually points at this node works.
-func (s *Server) StartAutocert(hosts []string, cacheDir string) error {
+// More than one name, because the hostname serving the webmail need not be the DMCN domain:
+// addresses can be user@example.com while the client lives at mail.example.com, exactly as
+// ordinary email separates the two. A name that never arrives over SNI costs nothing, so all are
+// whitelisted and whichever the operator actually points at this node works. It returns the
+// normalised whitelist alongside the manager.
+func NewAutocert(hosts []string, cacheDir string) (*autocert.Manager, []string, error) {
 	seen := map[string]bool{}
 	var allow []string
 	for _, h := range hosts {
@@ -323,15 +326,20 @@ func (s *Server) StartAutocert(hosts []string, cacheDir string) error {
 		}
 	}
 	if len(allow) == 0 {
-		return fmt.Errorf("autocert: no hostname to obtain a certificate for")
+		return nil, nil, fmt.Errorf("autocert: no hostname to obtain a certificate for")
 	}
-	m := &autocert.Manager{
+	return &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		HostPolicy: autocert.HostWhitelist(allow...),
 		Cache:      autocert.DirCache(cacheDir),
-	}
+	}, allow, nil
+}
+
+// StartAutocert begins listening with certificates from m (see NewAutocert). It must listen on
+// :443: the manager's TLSConfig answers the TLS-ALPN-01 challenge, which ACME only performs there.
+func (s *Server) StartAutocert(m *autocert.Manager, hosts []string) error {
 	s.httpServer.TLSConfig = m.TLSConfig()
-	s.log.Info("starting HTTPS server with autocert", logr.M("addr", s.httpServer.Addr), logr.M("hosts", strings.Join(allow, ", ")))
+	s.log.Info("starting HTTPS server with autocert", logr.M("addr", s.httpServer.Addr), logr.M("hosts", strings.Join(hosts, ", ")))
 	return s.httpServer.ListenAndServeTLS("", "")
 }
 

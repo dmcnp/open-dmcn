@@ -177,9 +177,15 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
   echo "==> Opening 443/tcp (webmail) and 7400/tcp (libp2p)"
   ufw allow 443/tcp >/dev/null
   ufw allow 7400/tcp >/dev/null
-  if grep -Eq '^DMCND_BRIDGE_ENABLED=(1|true|yes)$' "${ENV_FILE}"; then
+  # On a first install dmcnd.env is still the template, with the bridge commented out, so the
+  # settings alone cannot say whether a bridge is coming. Being handed its files does. The values
+  # are the ones the daemon reads as true, and nothing else.
+  if [[ -n "${CRED_SRC}${DKIM_SRC}${AUDIT_SRC}" ]] \
+     || grep -Eq '^DMCND_BRIDGE_ENABLED=(1|true)$' "${ENV_FILE}"; then
     echo "==> Opening 25/tcp (SMTP bridge)"
     ufw allow 25/tcp >/dev/null
+  else
+    echo "    25/tcp left closed (no bridge yet). With one: sudo ufw allow 25/tcp"
   fi
 else
   echo "==> ufw not active: make sure 443/tcp, 7400/tcp (and 25/tcp with the bridge) are reachable"

@@ -213,9 +213,9 @@ the upgrade; it never touches your settings or data, and never restarts the serv
 | `DMCND_STATIC_DNS` | — | static `_dmcn` pins for peer domains (DNS-free federation / seed-pin) |
 | `DMCND_POLL_INTERVAL` | `10s` | webmail mailbox poll cadence |
 | `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the DEV domain root keystore. A live daemon never creates a keystore, so this applies to dev only |
-| `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge |
-| `DMCND_BRIDGE_SMTP_LISTEN` | `:25` (`:2525` in dev) | bridge SMTP listen address — 25 is the only port sending mail servers try, and needs the same `CAP_NET_BIND_SERVICE` as `:443` |
-| `DMCND_BRIDGE_CREDENTIAL` | — | the bridge's root-signed `bridge` credential (`dmcndcli bridge issue`). Without it the bridge runs but its verdicts are unverifiable |
+| `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge. Only `true` or `1` turn it on; the daemon warns when other bridge settings are present but this is not |
+| `DMCND_BRIDGE_SMTP_LISTEN` | `:25` (`:2525` in dev) | bridge SMTP listen address — 25 is the only port sending mail servers try, and needs the same `CAP_NET_BIND_SERVICE` as `:443`. Offers STARTTLS with the webmail's certificate (autocert or `DMCND_TLS_CERT`/`KEY`); plaintext in dev |
+| `DMCND_BRIDGE_CREDENTIAL` | — | the bridge's root-signed `bridge` credential (`dmcndcli bridge issue`). Required on a live domain, and checked at startup: one for another domain or node, or signed by another root, keeps the bridge off |
 | `DMCND_BRIDGE_DOMAIN` | `<domain>` | the legacy (SMTP) domain the bridge represents |
 | `DMCND_BRIDGE_AUDIT_LOG` | — | append-only JSON audit log path |
 | `DMCND_BRIDGE_AUTH_MODE` | `dns` | inbound verification: `dns` (real SPF/DKIM/DMARC) or `stub` (no checks — offline dev only) |

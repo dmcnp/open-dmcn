@@ -15,7 +15,8 @@ import (
 // installed from it; and a setting missing from the template is one an operator never learns of.
 func TestServiceTemplateCoversSettings(t *testing.T) {
 	read := map[string]bool{}
-	literal := regexp.MustCompile(`"(DMCND_[A-Z0-9_]+)"`)
+	// A name ends in a letter or digit; "DMCND_BRIDGE_" is a prefix being matched on, not a setting.
+	literal := regexp.MustCompile(`"(DMCND_[A-Z0-9_]*[A-Z0-9])"`)
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

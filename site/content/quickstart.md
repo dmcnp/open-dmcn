@@ -342,9 +342,11 @@ signed by the key it names, that key holds a `bridge` credential from the domain
 credential is *for that key* — so a real bridge's credential cannot be stapled to someone else's
 attestation.
 
-Start the bridge without a credential and it still relays mail, but every recipient will treat
-its verdicts as unverified. The daemon says so at startup rather than letting you find out from
-someone else's inbox.
+The daemon checks the credential at startup the way those clients will: it must be for this domain,
+for this node's key, and signed by this domain's root. Without one, or with one that fails any of
+those, the bridge does not start and the log says which and how to issue a good one, rather than
+letting you find out from someone else's inbox. A node moved to a new domain needs a new
+credential; the old domain's does not carry over. DMCN mail is unaffected either way.
 
 Outbound — your users writing to ordinary email addresses — needs one more thing: a `bridge=`
 token in your `_dmcn` record, so a sender can find out which peer carries mail off the network.
@@ -438,7 +440,9 @@ Outbound, you hear about **failures only**. A non-delivery notice arrives from `
 your domain with the reason in the body; a successful send produces no mail, the way email has
 always worked. The signed receipt is on the bridge's audit trail either way.
 
-**On the TLS to other mail servers.** Outbound STARTTLS is *opportunistic*: encrypted where the
+**On the TLS to other mail servers.** Inbound, the bridge offers STARTTLS with the webmail's own
+certificate — the one autocert fetched, or `DMCND_TLS_CERT`/`DMCND_TLS_KEY` — so mail from any
+server that supports it arrives encrypted, with no extra setup. Outbound STARTTLS is *opportunistic*: encrypted where the
 receiving server offers it, and the certificate is deliberately not verified. That is what every
 production MTA does, and the reason is that the alternative to unverified TLS is cleartext, not
 verified TLS — SMTP has no trust anchor, and much of the internet's mail infrastructure presents

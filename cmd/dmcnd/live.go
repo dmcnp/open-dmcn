@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -128,8 +130,9 @@ func rootPubOf(dar *identity.DomainAuthorityRecord) func() ed25519.PublicKey {
 // can produce offline from the peer ID alone (`dmcndcli bridge issue`).
 //
 // Dev signs it in-process with the local root, because dev has one and the whole point of dev is
-// that nothing is a ceremony.
-func bridgeCredential(n *node.Node, rootKP *identity.IdentityKeyPair, cfg config, now time.Time) (*identity.Credential, error) {
+// that nothing is a ceremony. A live domain loads the file and checks it against dar before using
+// it (see checkBridgeCredential).
+func bridgeCredential(ctx context.Context, n *node.Node, rootKP *identity.IdentityKeyPair, dar *identity.DomainAuthorityRecord, cfg config, now time.Time) (*identity.Credential, error) {
 	kp, err := bridgeInfraKeys(n)
 	if err != nil {
 		return nil, err
@@ -162,11 +165,50 @@ func bridgeCredential(n *node.Node, rootKP *identity.IdentityKeyPair, cfg config
 	if cred == nil {
 		return nil, fmt.Errorf("%s does not exist", cfg.bridgeCredential)
 	}
+	var blocks *identity.CredentialBlockList
+	if dar != nil {
+		blocks, _ = n.Registry().LookupCredentialBlockList(ctx, dar.Domain) // fail-open, as readers do
+	}
+	if err := checkBridgeCredential(cred, kp.Ed25519Public, dar, blocks, cfg, now); err != nil {
+		return nil, fmt.Errorf("%s: %w", cfg.bridgeCredential, err)
+	}
 	return cred, nil
 }
 
+// checkBridgeCredential refuses a credential that every recipient would refuse.
+//
+// Recipients verify the credential riding in each bridged message — its root signature, its role,
+// and that its subject is the key that signed the message — so a credential issued for another
+// domain or another peer still lets the bridge start and relay mail, and then every attestation it
+// attaches is rejected in someone's inbox. Nothing on this machine would have said why. The usual
+// way to get here is the obvious one: moving a node to a new domain and copying the old domain's
+// bridge.cred across with everything else. So check what the readers will check, now, against the
+// authority record this daemon already trusts, and name the command that fixes it.
+func checkBridgeCredential(cred *identity.Credential, nodePub ed25519.PublicKey, dar *identity.DomainAuthorityRecord, blocks *identity.CredentialBlockList, cfg config, now time.Time) error {
+	reissue := fmt.Sprintf("\n  Issue one for this node on the machine holding the domain root:\n"+
+		"      dmcndcli bridge issue --domain %s --peer-id <this node's peer ID> --keystore root.enc --out bridge.cred",
+		cfg.domain)
+	if !cred.HasRole(identity.RoleBridge) {
+		return fmt.Errorf("the credential does not carry the %q role%s", identity.RoleBridge, reissue)
+	}
+	if cred.Domain != cfg.domain {
+		return fmt.Errorf("the credential is for domain %q, but this daemon serves %q%s", cred.Domain, cfg.domain, reissue)
+	}
+	if !bytes.Equal(cred.Subject, nodePub) {
+		return fmt.Errorf("the credential was issued to a different node key (subject %x…, this node %x…)%s",
+			cred.Subject[:min(6, len(cred.Subject))], nodePub[:6], reissue)
+	}
+	if dar == nil {
+		return fmt.Errorf("no domain authority record to verify the credential against")
+	}
+	if err := identity.VerifyCredential(cred, dar, blocks, now); err != nil {
+		return fmt.Errorf("the credential does not verify against %s's domain root: %w%s", cfg.domain, err, reissue)
+	}
+	return nil
+}
+
 // startBridge builds and starts the SMTP bridge around an already-provisioned identity.
-func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, cfg config) (*bridge.Bridge, error) {
+func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, cfg config, acmeTLS *tls.Config) (*bridge.Bridge, error) {
 	bridgeKP, err := bridgeInfraKeys(n)
 	if err != nil {
 		return nil, err
@@ -181,6 +223,14 @@ func startBridge(ctx context.Context, n *node.Node, cred *identity.Credential, c
 		AuditLogPath:  os.Getenv("DMCND_BRIDGE_AUDIT_LOG"),
 		// Outbound mail gets the same lifetime as the rest of the node's queue.
 		OutboundMaxAge: cfg.transitMaxAge,
+	}
+	// Inbound STARTTLS offers the webmail's certificate: the MX host and the webmail host are the
+	// same machine, so the same name (see bridgeSMTPTLS). Dev has neither and stays plaintext.
+	switch {
+	case acmeTLS != nil:
+		bcfg.TLSConfig = acmeTLS
+	case cfg.tlsCert != "" && cfg.tlsKey != "":
+		bcfg.TLSCertFile, bcfg.TLSKeyFile = cfg.tlsCert, cfg.tlsKey
 	}
 	signer, err := applyBridgeModes(&bcfg, cfg, log)
 	if err != nil {
@@ -326,5 +376,33 @@ func explainListenError(addr string, err error) error {
 			"  will name it.", addr, addr)
 	default:
 		return fmt.Errorf("cannot bind %s: %w", addr, err)
+	}
+}
+
+// bridgeSMTPTLS is the bridge's STARTTLS config on an autocert deployment: the webmail's own ACME
+// manager, so the SMTP listener shares its certificate and its renewals.
+//
+// Two things differ from HTTPS. Sending mail servers often omit SNI, and autocert refuses a hello
+// without one — so a missing name, or one this node has no certificate for, gets the webmail
+// host's certificate, which is also the MX host's (the bridge's EHLO name defaults to it). Every
+// sending MTA would otherwise fail the handshake and fall back to cleartext, which is the outcome
+// this exists to avoid. Opportunistic TLS does not verify the name anyway; a sender that does
+// (MTA-STS, DANE) will be asking for the MX host, which is this one. And the config carries no
+// ALPN, so autocert's acme-tls/1 challenge path stays on :443 where ACME expects it.
+func bridgeSMTPTLS(getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), hosts []string, fallback string) *tls.Config {
+	known := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		known[strings.ToLower(h)] = true
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if !known[strings.ToLower(strings.TrimSuffix(hello.ServerName, "."))] {
+				h := *hello
+				h.ServerName = fallback
+				hello = &h
+			}
+			return getCert(hello)
+		},
 	}
 }

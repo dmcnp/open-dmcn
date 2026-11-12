@@ -11,12 +11,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io/fs"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"embed"
 
 	"github.com/mertenvg/logr/v2"
+	"golang.org/x/crypto/acme/autocert"
 
 	"dmcn.dev/open-dmcn/internal/bridge"
 	"dmcn.dev/open-dmcn/internal/buildinfo"
@@ -152,14 +155,49 @@ func main() {
 		}
 	}
 
+	// One certificate source for both TLS listeners. On autocert the manager is built here, before
+	// the bridge, so the SMTP listener's STARTTLS shares the webmail's certificate and renewals
+	// instead of staying plaintext.
+	var (
+		acme      *autocert.Manager
+		acmeHosts []string
+		acmeTLS   *tls.Config
+	)
+	if cfg.tlsCert == "" && cfg.tlsKey == "" && !cfg.devMode {
+		// Autocert can only work on :443. StartAutocert installs the manager's TLSConfig, which
+		// answers the TLS-ALPN-01 challenge — and ACME performs that challenge against port 443,
+		// full stop. On the default :8443 the daemon would come up, log "listening with autocert",
+		// and then fail every TLS handshake forever, which reads as a broken binary rather than a
+		// wrong port. Refuse instead, and name all three ways out.
+		if _, port, perr := net.SplitHostPort(cfg.httpListen); perr != nil || port != "443" {
+			fatalf("DMCND_LISTEN is %q, but automatic certificates need port 443 — Let's Encrypt performs "+
+				"its challenge there and nowhere else, so the daemon would start and then fail every TLS "+
+				"handshake.\n"+
+				"  Pick one:\n"+
+				"    DMCND_LISTEN=:443                       let the daemon get its own certificate\n"+
+				"    DMCND_TLS_CERT=… DMCND_TLS_KEY=…        bring your own (any port, e.g. behind a proxy)\n"+
+				"    DMCND_DEV=true                          local testing over plain HTTP",
+				cfg.httpListen)
+		}
+		// Both names: whichever the operator actually points at this node gets a cert.
+		if acme, acmeHosts, err = server.NewAutocert([]string{cfg.webHost, cfg.domain}, filepath.Join(cfg.dataDir, "certs")); err != nil {
+			fatalf("%v", err)
+		}
+		acmeTLS = bridgeSMTPTLS(acme.GetCertificate, acmeHosts, cfg.webHost)
+	}
+
 	// Optional SMTP bridge, folded onto the shared node. It has no identity of its own: it signs
 	// with the node's key and is trusted through a root-signed `bridge` credential, so all the
 	// daemon does here is hand it that credential and let it own the SMTP<->DMCN translation. Inbound auth runs real SPF/DKIM/DMARC by
 	// default; outbound delivery defaults to the in-memory stub so a fresh install never sends live
 	// mail until the operator opts in (DMCND_BRIDGE_DELIVERY_MODE=smtp).
 	bridgeUp := false
-	if cfg.bridgeEnabled {
-		if cred, berr := bridgeCredential(n, rootKP, cfg, now); berr != nil {
+	if !cfg.bridgeEnabled {
+		if why := bridgeOffReason(os.Environ()); why != "" {
+			log.Warn(why)
+		}
+	} else {
+		if cred, berr := bridgeCredential(ctx, n, rootKP, dar, cfg, now); berr != nil {
 			// A bridge whose verdicts nobody can verify is worse than no bridge: it would
 			// relay mail and attach attestations that every recipient rejects. The daemon
 			// still serves DMCN mail, so this degrades rather than refusing to boot.
@@ -178,7 +216,7 @@ func main() {
 			// Degrade rather than exit. DMCN mail keeps working without the bridge, and the
 			// most likely failure here is binding :25 without the capability — which should
 			// not take the whole domain offline.
-			br, serr := startBridge(ctx, n, cred, cfg)
+			br, serr := startBridge(ctx, n, cred, cfg, acmeTLS)
 			if serr != nil {
 				log.Errorf("SMTP bridge NOT started: %v", serr)
 			} else {
@@ -293,24 +331,6 @@ func main() {
 	authMiddleware := webcore.AuthMiddleware(sessionStore)
 	srv.RegisterAPI(authHandler, msgHandler, identHandler, mailboxHandler, regHandler, petHandler, authMiddleware, subFS, frontendConfig)
 
-	// Autocert can only work on :443. StartAutocert installs the manager's TLSConfig, which
-	// answers the TLS-ALPN-01 challenge — and ACME performs that challenge against port 443, full
-	// stop. On the default :8443 the daemon would come up, log "listening with autocert", and then
-	// fail every TLS handshake forever, which reads as a broken binary rather than a wrong port.
-	// Refuse instead, and name all three ways out.
-	if cfg.tlsCert == "" && cfg.tlsKey == "" && !cfg.devMode {
-		if _, port, perr := net.SplitHostPort(cfg.httpListen); perr != nil || port != "443" {
-			fatalf("DMCND_LISTEN is %q, but automatic certificates need port 443 — Let's Encrypt performs "+
-				"its challenge there and nowhere else, so the daemon would start and then fail every TLS "+
-				"handshake.\n"+
-				"  Pick one:\n"+
-				"    DMCND_LISTEN=:443                       let the daemon get its own certificate\n"+
-				"    DMCND_TLS_CERT=… DMCND_TLS_KEY=…        bring your own (any port, e.g. behind a proxy)\n"+
-				"    DMCND_DEV=true                          local testing over plain HTTP",
-				cfg.httpListen)
-		}
-	}
-
 	go func() {
 		var serr error
 		switch {
@@ -320,8 +340,7 @@ func main() {
 			// localhost is a secure context in browsers even over plain HTTP, so WebCrypto works.
 			serr = srv.Start("", "")
 		default:
-			// Both names: whichever the operator actually points at this node gets a cert.
-			serr = srv.StartAutocert([]string{cfg.webHost, cfg.domain}, filepath.Join(cfg.dataDir, "certs"))
+			serr = srv.StartAutocert(acme, acmeHosts)
 		}
 		if serr != nil {
 			log.Errorf("server error: %v", serr)
@@ -490,6 +509,8 @@ func envOr(key, def string) string {
 	return def
 }
 
+// envBool reads a boolean setting. Only "true" and "1" are true; see bridgeOffReason for why the
+// one setting where a typo silently disables a whole subsystem gets a warning.
 func envBool(key string) bool {
 	v := os.Getenv(key)
 	return v == "true" || v == "1"
@@ -645,3 +666,39 @@ func defaultBridgeSMTPListen(devMode bool) string {
 // daemon never creates a keystore at all. This value is dev-only, and dev's root key is a
 // throwaway for a throwaway domain.
 const defaultSeedPassphrase = "dmcnd-dev-seed"
+
+// bridgeOffReason explains why the bridge is off when it looks configured, or returns "" when it
+// is simply not configured. main logs it as a warning.
+//
+// The off state is otherwise silent: the daemon logs nothing about a bridge it was not asked to
+// start, mail to and from ordinary addresses simply never moves, and a compose to one fails as
+// "identity not found". The usual causes are an ENABLED line left commented out of dmcnd.env, a
+// value the daemon does not read as true ("yes", "True", or "true # note", since systemd keeps
+// a trailing comment as part of the value), or settings edited without a restart. The first two
+// are visible from here, so name them.
+func bridgeOffReason(environ []string) string {
+	var set []string
+	enabled, hasEnabled := "", false
+	for _, kv := range environ {
+		k, v, _ := strings.Cut(kv, "=")
+		if !strings.HasPrefix(k, "DMCND_BRIDGE_") || strings.TrimSpace(v) == "" {
+			continue
+		}
+		if k == "DMCND_BRIDGE_ENABLED" {
+			enabled, hasEnabled = v, true
+			continue
+		}
+		set = append(set, k)
+	}
+	switch {
+	case hasEnabled && enabled != "false" && enabled != "0":
+		return fmt.Sprintf("SMTP bridge is OFF: DMCND_BRIDGE_ENABLED=%q is not read as true — only \"true\" "+
+			"or \"1\" are (a trailing \"# comment\" in an env file is part of the value). Legacy email will "+
+			"neither arrive nor leave.", enabled)
+	case !hasEnabled && len(set) > 0:
+		sort.Strings(set)
+		return fmt.Sprintf("SMTP bridge is OFF: %s set but DMCND_BRIDGE_ENABLED is not — legacy email will "+
+			"neither arrive nor leave. Set DMCND_BRIDGE_ENABLED=true to start it.", strings.Join(set, ", "))
+	}
+	return ""
+}
