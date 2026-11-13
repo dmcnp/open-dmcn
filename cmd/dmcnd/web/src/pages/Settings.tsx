@@ -8,10 +8,8 @@ import { useIsMobile } from '../lib/useIsMobile';
 import { logout as apiLogout, lookupIdentity } from '../lib/api/client';
 import { toHex } from '../lib/crypto/keys';
 import { unlockBackupBytes } from '../lib/crypto/reauth';
-import { buildPasswordExport, buildPasskeyExport, triggerDownload, type ExportAuth } from '../lib/crypto/exportFile';
 import { encryptKeys } from '../lib/crypto/keystore';
 import { keyPairToPayloadJSON } from '../lib/crypto/keys';
-import { isPasskeySupported, createPasskeyPRF } from '../lib/crypto/passkey';
 import { makeLocalKeystore, saveLocalKeystore, loadLocalKeystore, type LocalKeystore } from '../lib/crypto/localKeystore';
 import { isStoragePersisted, requestPersistentStorage } from '../lib/crypto/storage';
 import { isInstalledApp } from '../lib/appContext';
@@ -27,6 +25,7 @@ import { APP_VERSION } from '../lib/config';
 import { PageShell } from '../components/PageShell';
 import { BlockedSenders } from '../components/BlockedSenders';
 import { MailboxExport } from '../components/MailboxExport';
+import { KeyExport } from '../components/KeyExport';
 import { CopyButton } from '../components/CopyButton';
 import { SectionHeading, SettingsCard as Card } from '../components/SettingsSection';
 import type { MailOutletContext } from '../components/AppLayout';
@@ -170,6 +169,8 @@ function Row({ title, desc, hint, grouped, children }: { title: string; desc?: s
 }
 
 // Connected segmented control (theme / density choices).
+const deviceAccessRowTitle = { fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-strong)' } as const;
+
 function SegOption({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick} style={{
@@ -248,16 +249,13 @@ export function Settings() {
   const [profileMsg, setProfileMsg] = useState('');
   const [fingerprint, setFingerprint] = useState('');
 
-  // Backup & recovery. The encrypted keystore lives only in this browser, so we
-  // offer a user-held export (passphrase- or passkey-protected) as the total-device-
-  // loss safety net, plus a local password change. Both re-unlock via reauth.
+  // Backup & recovery. The encrypted keystore lives only in this browser, so we offer
+  // the key exported to a user-held file (protected by a generated passcode, see
+  // KeyExport) as the total-device-loss safety net. Device access holds the local
+  // password change. Both re-unlock via reauth.
   const [keystore, setKeystore] = useState<LocalKeystore | null>(null);
   const authMethod = keystore?.authMethod ?? null;
-  const passkeyOk = isPasskeySupported();
-  const [exportMode, setExportMode] = useState<ExportAuth>(passkeyOk ? 'passkey' : 'password');
-  const [exportPw, setExportPw] = useState('');
-  const [exportCurrentPw, setExportCurrentPw] = useState('');
-  const [showExport, setShowExport] = useState(false);
+  const [exportMsg, setExportMsg] = useState('');
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [showChangePw, setShowChangePw] = useState(false);
@@ -286,61 +284,14 @@ export function Settings() {
     return () => { cancelled = true; };
   }, [address]);
 
-  // Backup download button label. Exporting needs the raw key bytes, which the
-  // non-extractable session handles can't yield, so it re-unlocks the at-rest
-  // keystore first — a passkey account taps their passkey, and a password account
-  // choosing a passkey-protected backup enrolls one. Name that gesture up front so
-  // the WebAuthn prompt isn't a surprise.
-  const backupBtnLabel = busy ? 'Preparing…'
-    : authMethod === 'passkey' ? 'Unlock and download'
-    : exportMode === 'passkey' ? 'Create passkey and download'
-    : 'Download backup';
-
   useEffect(() => {
     if (!address) return;
-    loadLocalKeystore(address).then(ks => {
-      setKeystore(ks);
-      // Default the backup protection to match how the account is already secured: a
-      // password account backs up with a passphrase, so exporting never springs a
-      // surprise passkey enrollment. (The user can still switch to a passkey backup.)
-      if (ks?.authMethod === 'password') setExportMode('password');
-      else if (passkeyOk) setExportMode('passkey');
-    });
-  }, [address, passkeyOk]);
+    loadLocalKeystore(address).then(setKeystore);
+  }, [address]);
   useEffect(() => { isStoragePersisted().then(setPersisted); }, []);
 
   const enablePersistence = async () => {
     setPersisted(await requestPersistentStorage());
-  };
-
-  const exportBackup = async () => {
-    if (!address) return;
-    setBusy(true); setErr(''); setMsg('');
-    try {
-      if (exportMode === 'password' && !exportPw) throw new Error('choose a passphrase for the backup file');
-      // Unlock the raw keys (passkey assertion, or the device password).
-      const res = await unlockBackupBytes(address, authMethod === 'password' ? { password: exportCurrentPw } : undefined);
-
-      let exp;
-      if (exportMode === 'passkey') {
-        // Reuse this device's passkey if it's the unlock method (no second prompt);
-        // otherwise enroll a passkey to protect the backup.
-        if (res.passkey) {
-          exp = await buildPasskeyExport(address, res.kp, res.passkey);
-        } else {
-          const enr = await createPasskeyPRF(address);
-          exp = await buildPasskeyExport(address, res.kp, { credentialId: enr.credentialId, prfSalt: enr.prfSalt, aesKey: enr.aesKey });
-        }
-        setMsg('Backup downloaded. It unlocks with your passkey — on any device where that passkey is available (e.g. via your synced keychain or password manager).');
-      } else {
-        exp = await buildPasswordExport(address, res.kp, exportPw);
-        setMsg('Backup downloaded. Store it somewhere safe — it is encrypted with your chosen passphrase.');
-      }
-      triggerDownload(exp);
-      setShowExport(false); setExportPw(''); setExportCurrentPw('');
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'export failed');
-    } finally { setBusy(false); }
   };
 
   const changePassword = async () => {
@@ -561,9 +512,9 @@ export function Settings() {
                 <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Backup &amp; recovery</span>
               </div>
               <p style={{ margin: '0 0 var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-                Because the server keeps no copy of your keys, losing every device without a backup means losing this identity.
-                Download an encrypted backup file and keep it somewhere safe. It brings your keys back on a new device, which may
-                still need approval before it opens your mail.
+                Because the server keeps no copy of your key, losing every device without a copy of it means losing this
+                identity. Export your key to an encrypted file and keep it somewhere safe. It brings your key back on a new
+                device, which may still need approval before it opens your mail.
               </p>
 
               {persisted === false && (
@@ -571,7 +522,7 @@ export function Settings() {
                   <Icon name="alert-triangle" size={15} style={{ marginTop: 1, flex: 'none' }} />
                   <span>
                     This browser hasn't granted persistent storage, so it may evict your keys under disk pressure (or, on
-                    Safari, after ~7 days of not opening the app). <strong>Download a backup below.</strong>{' '}
+                    Safari, after ~7 days of not opening the app). <strong>Export your key below.</strong>{' '}
                     <button type="button" onClick={() => void enablePersistence()} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--text-link)', textDecoration: 'underline', cursor: 'pointer' }}>Try enabling persistent storage</button>.
                   </span>
                 </div>
@@ -582,47 +533,59 @@ export function Settings() {
                   Persistent storage is enabled — your keys won't be evicted by the browser.
                 </div>
               )}
-              {msg && <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{msg}</div>}
-              {err && <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{err}</div>}
+              {exportMsg && <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{exportMsg}</div>}
+              {address && <KeyExport address={address} authMethod={authMethod} onExported={setExportMsg} />}
+            </div>
 
-              {!showExport ? (
-                <Button size="sm" variant="secondary" onClick={() => { setShowExport(true); setShowChangePw(false); setErr(''); setMsg(''); }}>
-                  Export encrypted backup…
-                </Button>
-              ) : (
-                <form onSubmit={e => { e.preventDefault(); void exportBackup(); }} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-                  {passkeyOk && (
-                    <div>
-                      <label style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-body)', display: 'block', marginBottom: 'var(--space-2)' }}>Protect the backup with</label>
-                      <div style={{ display: 'flex' }}>
-                        <SegOption active={exportMode === 'passkey'} onClick={() => setExportMode('passkey')}>Passkey</SegOption>
-                        <SegOption active={exportMode === 'password'} onClick={() => setExportMode('password')}>Passphrase</SegOption>
-                      </div>
+            {/* How THIS device unlocks the key, and how long it stays unlocked. Separate from
+                backup: nothing here touches anything outside this browser, and nothing here helps
+                if the device is lost. A passkey device has no password to change, so it gets only
+                the lock posture. */}
+            <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                <Icon name="lock" size={16} style={{ color: 'var(--brand)' }} />
+                <span style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Device access</span>
+              </div>
+              <p style={{ margin: '0 0 var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
+                How {isInstalledApp() ? 'this app' : 'this browser'} unlocks your key. These settings affect this device only.
+              </p>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={deviceAccessRowTitle}>Lock when I leave</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2, lineHeight: 'var(--leading-normal)' }}>
+                    On (recommended): accounts lock when you close this {isInstalledApp() ? 'app' : 'tab'}, and a couple of
+                    minutes after you leave it for something else — a page refresh never re-prompts, and a quick glance
+                    elsewhere does not lock you out. Off: accounts stay unlocked across restarts for one-click access.
+                  </div>
+                  {!keepsUnlocked && (
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--warning)', marginTop: 'var(--space-2)', lineHeight: 'var(--leading-normal)' }}>
+                      This {isInstalledApp() ? 'app' : 'browser'} cannot keep an account unlocked once it is
+                      closed — it stores the keys and then cannot read them back — so accounts lock on
+                      reload whichever way this is set. Within a session it makes no difference:
+                      unlocking once still opens every account attached to this device.
                     </div>
                   )}
-                  {authMethod === 'password' && (
-                    <Input label="Current device password" type="password" value={exportCurrentPw} onChange={e => setExportCurrentPw(e.target.value)} />
-                  )}
-                  {exportMode === 'password' ? (
-                    <Input label="Backup passphrase" type="password" value={exportPw} onChange={e => setExportPw(e.target.value)} hint="Encrypts the backup file. You'll need it to restore." autoFocus />
-                  ) : (
-                    <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
-                      The backup unlocks with your passkey. It will open on any device where that passkey is available —
-                      with a synced passkey (iCloud Keychain, Google Password Manager, a password manager) that's all your
-                      devices; with a device-bound security key, only that key. Keep a passphrase backup too if you're unsure.
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                    <Button size="sm" type="submit" disabled={busy}>{backupBtnLabel}</Button>
-                    <Button size="sm" variant="secondary" type="button" disabled={busy} onClick={() => { setShowExport(false); setExportPw(''); setExportCurrentPw(''); }}>Cancel</Button>
-                  </div>
-                </form>
-              )}
+                </div>
+                <Switch id="lock-on-leave" checked={lockOnLeave}
+                  onChange={v => {
+                    setLockState(v);
+                    // Record the posture, then move existing handles to the ref it reads from —
+                    // without that second step every open account would instantly read as locked.
+                    void (async () => { await setLockOnLeave(v); await applyLockPosture(); })();
+                  }} />
+              </div>
 
               {authMethod === 'password' && (
-                <div style={{ marginTop: 'var(--space-3)' }}>
+                <div style={{ marginTop: 'var(--space-4)', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--border-default)' }}>
+                  <div style={deviceAccessRowTitle}>Device password</div>
+                  <p style={{ margin: '2px 0 var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 'var(--leading-normal)' }}>
+                    Your key is unlocked here with a password. Changing it does not change it on your other devices.
+                  </p>
+                  {msg && <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--brand-subtle)', color: 'var(--brand-text)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{msg}</div>}
+                  {err && <div style={{ marginBottom: 'var(--space-3)', padding: 'var(--space-3)', background: 'var(--danger-subtle)', color: 'var(--danger)', fontSize: 'var(--text-sm)', borderRadius: 'var(--radius-md)' }}>{err}</div>}
                   {!showChangePw ? (
-                    <Button size="sm" variant="secondary" onClick={() => { setShowChangePw(true); setShowExport(false); setErr(''); setMsg(''); }}>
+                    <Button size="sm" variant="secondary" onClick={() => { setShowChangePw(true); setErr(''); setMsg(''); }}>
                       Change device password…
                     </Button>
                   ) : (
@@ -637,32 +600,6 @@ export function Settings() {
                   )}
                 </div>
               )}
-            </div>
-
-            <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-4)', border: '1px solid var(--border-default)', background: 'var(--surface-card)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-strong)' }}>Lock when I leave</div>
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 2, lineHeight: 'var(--leading-normal)' }}>
-                  On (recommended): accounts lock when you close this {isInstalledApp() ? 'app' : 'tab'}, and a couple of
-                  minutes after you leave it for something else — a page refresh never re-prompts, and a quick glance
-                  elsewhere does not lock you out. Off: accounts stay unlocked across restarts for one-click access.
-                </div>
-                {!keepsUnlocked && (
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--warning)', marginTop: 'var(--space-2)', lineHeight: 'var(--leading-normal)' }}>
-                    This {isInstalledApp() ? 'app' : 'browser'} cannot keep an account unlocked once it is
-                    closed — it stores the keys and then cannot read them back — so accounts lock on
-                    reload whichever way this is set. Within a session it makes no difference:
-                    unlocking once still opens every account attached to this device.
-                  </div>
-                )}
-              </div>
-              <Switch id="lock-on-leave" checked={lockOnLeave}
-                onChange={v => {
-                  setLockState(v);
-                  // Record the posture, then move existing handles to the ref it reads from —
-                  // without that second step every open account would instantly read as locked.
-                  void (async () => { await setLockOnLeave(v); await applyLockPosture(); })();
-                }} />
             </div>
             </>)}
 

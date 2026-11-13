@@ -5,7 +5,7 @@ import { useKeys } from '../../src/lib/hooks/useKeys';
 import { importChallenge, importIdentity } from '../../src/lib/api/client';
 import { encryptKeys, encryptKeysWithKey, type EncryptedBundle } from '../../src/lib/crypto/keystore';
 import { makeLocalKeystore, saveLocalKeystore } from '../../src/lib/crypto/localKeystore';
-import { readExport, EXPORT_FORMAT, type KeystoreExport } from '../../src/lib/crypto/exportFile';
+import { readExport, exportUsername, EXPORT_FORMAT, type KeystoreExport } from '../../src/lib/crypto/exportFile';
 import { isPasskeySupported, createPasskeyPRF } from '../../src/lib/crypto/passkey';
 import { sign } from '../../src/lib/crypto/sign';
 import { toBase64, fromBase64, keyPairToPayloadJSON, type IdentityKeyPair } from '../../src/lib/crypto/keys';
@@ -29,9 +29,13 @@ const nativeControlStyle = {
 export function Import() {
   const [file, setFile] = useState<File | null>(null);
   const [cliPass, setCliPass] = useState('');
-  // True once the chosen file is detected as a passkey-wrapped backup, which needs no
-  // passphrase (it unlocks with a WebAuthn assertion).
-  const [passkeyFile, setPasskeyFile] = useState(false);
+  // What protects the chosen backup, read from the file on selection: a passkey needs no
+  // field at all (it unlocks with a WebAuthn assertion), a passcode gets its own label
+  // and a username a password manager can fill it against. fileAddress is that username's
+  // address. 'other' is a passphrase backup, or a file this page has not parsed.
+  const [fileKind, setFileKind] = useState<'passkey' | 'passcode' | 'other'>('other');
+  const passkeyFile = fileKind === 'passkey';
+  const [fileAddress, setFileAddress] = useState('');
   const [identities, setIdentities] = useState<Record<string, IdentityKeyPair> | null>(null);
   // Passkey material recovered while unlocking a passkey-protected backup. When set, the
   // import re-wraps the local keystore under this SAME credential rather than enrolling
@@ -58,20 +62,22 @@ export function Import() {
   };
 
   const removeFile = () => {
-    setFile(null); setPasskeyFile(false); setSourcePasskey(null); setError('');
+    setFile(null); setFileKind('other'); setFileAddress(''); setSourcePasskey(null); setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Detect a passkey-wrapped DMCN backup on selection so the passphrase field can be
-  // skipped (it unlocks with a WebAuthn assertion instead).
+  // Read what protects a DMCN backup on selection, so the secret field matches it.
   const onFileChange = async (f: File | null) => {
     setFile(f);
-    setPasskeyFile(false);
+    setFileKind('other');
+    setFileAddress('');
     setError('');
     if (!f) return;
     try {
       const parsed = JSON.parse(await f.text());
-      if (parsed?.format === EXPORT_FORMAT && parsed?.authMethod === 'passkey') setPasskeyFile(true);
+      if (parsed?.format !== EXPORT_FORMAT) return;
+      if (parsed.authMethod === 'passkey' || parsed.authMethod === 'passcode') setFileKind(parsed.authMethod);
+      if (typeof parsed.address === 'string') setFileAddress(parsed.address);
     } catch { /* not a JSON export → needs a passphrase */ }
   };
 
@@ -233,14 +239,23 @@ export function Import() {
             </p>
           ) : (
             <div>
-              <label htmlFor="ks-pass" style={fieldLabelStyle}>Keystore passphrase</label>
+              {fileKind === 'passcode' && fileAddress && (
+                // The name the passcode was saved under when the key was exported (exportUsername),
+                // so a password manager can offer it here. Visually hidden, not display:none,
+                // which managers skip.
+                <input type="text" name="username" autoComplete="username" value={exportUsername(fileAddress)} readOnly tabIndex={-1} aria-hidden="true"
+                  style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }} />
+              )}
+              <label htmlFor="ks-pass" style={fieldLabelStyle}>{fileKind === 'passcode' ? 'Passcode' : 'Keystore passphrase'}</label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   id="ks-pass" type={showPass ? 'text' : 'password'} value={cliPass}
-                  onChange={e => setCliPass(e.target.value)} placeholder="Enter your passphrase" autoComplete="off"
+                  onChange={e => setCliPass(e.target.value)}
+                  placeholder={fileKind === 'passcode' ? 'xxxxx-xxxxx-xxxxx-xxxxx-xxxxx' : 'Enter your passphrase'}
+                  name="password" autoComplete={fileKind === 'passcode' ? 'current-password' : 'off'} spellCheck={false}
                   style={{ boxSizing: 'border-box', width: '100%', fontFamily: 'var(--font-sans)', fontSize: 15, color: 'var(--text-strong)', background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', height: 40, padding: '0 40px 0 12px' }}
                 />
-                <button type="button" aria-label={showPass ? 'Hide passphrase' : 'Show passphrase'} onClick={() => setShowPass(s => !s)}
+                <button type="button" aria-label={showPass ? 'Hide' : 'Show'} onClick={() => setShowPass(s => !s)}
                   style={{ position: 'absolute', right: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'var(--text-subtle)', cursor: 'pointer', borderRadius: 'var(--radius-sm)' }}>
                   <Icon name={showPass ? 'eye-off' : 'eye'} size={16} />
                 </button>

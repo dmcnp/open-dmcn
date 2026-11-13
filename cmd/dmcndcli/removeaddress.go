@@ -11,6 +11,7 @@ import (
 
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/node"
 )
 
 // cmdRemoveAddress publishes a root-signed AddressRemovalRecord tombstoning an address's current
@@ -76,31 +77,55 @@ func cmdRemoveAddress(args []string) error {
 		victim = cur.Ed25519Public
 	}
 
-	if !*yes {
-		fmt.Fprintf(os.Stderr, "This tombstones key %s for %s.\nThe key is permanently dead: every device holding it loses access, and stored mail does not migrate.\nContinue? [y/N] ", hex.EncodeToString(victim), *address)
-		var answer string
-		fmt.Scanln(&answer)
-		if !strings.EqualFold(strings.TrimSpace(answer), "y") {
-			return fmt.Errorf("aborted")
-		}
+	if !*yes && !confirmTombstone(*address, victim) {
+		return fmt.Errorf("aborted")
 	}
 
+	rev, accepted, already, err := tombstoneKey(ctx, n, root, *address, victim)
+	if err != nil {
+		return err
+	}
+	if already {
+		fmt.Printf("%s is already tombstoned for %s (revision %d) — nothing to do\n", hex.EncodeToString(victim), *address, rev)
+		return nil
+	}
+	fmt.Printf("tombstoned %s for %s (revision %d, accepted by %d node(s))\n", hex.EncodeToString(victim), *address, rev, accepted)
+	fmt.Println("the address is now free. To re-bind it, have the new holder petition from the web UI\nand run: dmcndcli petition assign --code <their code> --address " + *address)
+	return nil
+}
+
+// confirmTombstone asks the operator to confirm killing victim, the one irreversible step both
+// remove-address and `petition assign --replace` take.
+func confirmTombstone(address string, victim []byte) bool {
+	fmt.Fprintf(os.Stderr, "This tombstones key %s for %s.\nThe key is permanently dead: every device holding it loses access, and stored mail does not migrate.\nContinue? [y/N] ", hex.EncodeToString(victim), address)
+	var answer string
+	fmt.Scanln(&answer)
+	return strings.EqualFold(strings.TrimSpace(answer), "y")
+}
+
+// tombstoneKey root-signs and publishes a removal of victim for address, extending whatever
+// removal record the fleet already holds. already reports that victim was tombstoned before this
+// call, in which case nothing is published and rev is the existing revision.
+//
+// Shared by remove-address and `petition assign --replace`, which must free the address exactly
+// the way remove-address does or the daemon's rebind gate will not recognise it.
+func tombstoneKey(ctx context.Context, n *node.Node, root *identity.IdentityKeyPair, address string, victim []byte) (rev uint64, accepted int, already bool, err error) {
+	domain := domainverify.DomainOf(address)
 	dar, err := n.Registry().LookupDomainAuthority(ctx, domain)
 	if err != nil {
-		return fmt.Errorf("look up the domain authority for %s: %w", domain, err)
+		return 0, 0, false, fmt.Errorf("look up the domain authority for %s: %w", domain, err)
 	}
 	// Rebuild from a verified union across the fleet rather than re-signing a record fetched from
 	// one peer: signing an unverified blob with the domain root would turn this ceremony into a
 	// signature oracle for whatever a hostile peer chose to return.
-	rm, uerr := n.FetchRemovalUnion(ctx, dar, *address)
+	rm, uerr := n.FetchRemovalUnion(ctx, dar, address)
 	if uerr != nil {
-		if rm, err = identity.NewAddressRemovalRecord(domain, *address, time.Now().UTC()); err != nil {
-			return err
+		if rm, err = identity.NewAddressRemovalRecord(domain, address, time.Now().UTC()); err != nil {
+			return 0, 0, false, err
 		}
 	} else {
-		if _, already := rm.Removed(victim); already {
-			fmt.Printf("%s is already tombstoned for %s (revision %d) — nothing to do\n", hex.EncodeToString(victim), *address, rm.Revision)
-			return nil
+		if _, done := rm.Removed(victim); done {
+			return rm.Revision, 0, true, nil
 		}
 		rm.Revision++
 		rm.CreatedAt = time.Now().UTC()
@@ -110,15 +135,13 @@ func cmdRemoveAddress(args []string) error {
 		RemovedAt:     time.Now().UTC(),
 	})
 	if err := rm.Sign(root); err != nil {
-		return fmt.Errorf("sign removal record: %w", err)
+		return 0, 0, false, fmt.Errorf("sign removal record: %w", err)
 	}
-	accepted, err := n.PublishRemoval(ctx, rm)
+	accepted, err = n.PublishRemoval(ctx, rm)
 	if err != nil {
-		return fmt.Errorf("publish removal record: %w", err)
+		return 0, 0, false, fmt.Errorf("publish removal record: %w", err)
 	}
-	fmt.Printf("tombstoned %s for %s (revision %d, accepted by %d node(s))\n", hex.EncodeToString(victim), *address, rm.Revision, accepted)
-	fmt.Println("the address is now free. To re-bind it, have the new holder petition from the web UI\nand run: dmcndcli petition assign --code <their code> --address " + *address)
-	return nil
+	return rm.Revision, accepted, false, nil
 }
 
 func splitCSV(s string) []string {

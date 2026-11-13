@@ -96,8 +96,12 @@ Usage:
         what keeps unwanted petitions from being work.
 
   dmcndcli petition assign --address <local@domain> --url <daemon-url> --code <12 digits>
+                          [--replace --peers <multiaddr>[,...] [--yes]]
         Give a petitioned key an address, signed with the offline root. The petitioner does not
-        choose their address — you do. Their browser picks it up by itself.
+        choose their address — you do. Their browser picks it up by itself. --replace is lost-key
+        recovery in one step: it tombstones the key the address is bound to now (as
+        remove-address does), then assigns. It also finishes a petition already assigned that
+        address whose claim was refused because the old key still held it.
 
   dmcndcli bridge issue --domain <domain> --peer-id <peerID> [--out bridge.cred]
         Sign the credential that lets a node act as an SMTP bridge for the domain. A bridge has

@@ -298,6 +298,12 @@ dmcndcli bridge dkim-keygen --domain mesh.example --host mail.mesh.example \
 # Root-only, and the ONLY recovery path: the daemon refuses any record that re-binds a live
 # address to a different key unless the domain root has tombstoned the incumbent.
 dmcndcli remove-address --address alice@mesh.example --peers /ip4/127.0.0.1/tcp/7400/p2p/<peerID>
+
+# The usual reason to free one: someone lost their key and petitioned for a new mailbox. --replace
+# tombstones the old key and assigns the address to their new petition in one step. Stored mail
+# was encrypted to the lost key and stays unreadable; the address comes back, the old mail does not.
+dmcndcli petition assign --replace --code 0428-9173-5560 --address alice@mesh.example \
+  --url https://mesh.example --peers /ip4/127.0.0.1/tcp/7400/p2p/<peerID> --keystore root.enc
 ```
 
 On the node itself, `dmcnd peer-id` prints its libp2p peer ID (creating the key if missing) —

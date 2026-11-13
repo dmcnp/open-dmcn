@@ -292,7 +292,10 @@ petition requires the private key the browser proved it held, so an overheard co
 eavesdropper nothing.
 
 To free an address later — a lost key, someone leaving — `dmcndcli remove-address` publishes a
-root-signed tombstone, after which the address can be petitioned for again.
+root-signed tombstone, after which the address can be petitioned for again. When the person who
+lost their key is the one petitioning, `dmcndcli petition assign --replace` does both in one step:
+it tombstones the old key and assigns the address to the new petition. Their mail from before was
+encrypted to the lost key, so the address comes back and the old mail does not.
 
 ## Configuration
 
