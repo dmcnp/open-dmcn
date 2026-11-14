@@ -5,7 +5,7 @@ import { useKeys } from '../../src/lib/hooks/useKeys';
 import { importChallenge, importIdentity } from '../../src/lib/api/client';
 import { encryptKeys, encryptKeysWithKey, type EncryptedBundle } from '../../src/lib/crypto/keystore';
 import { makeLocalKeystore, saveLocalKeystore } from '../../src/lib/crypto/localKeystore';
-import { readExport, exportUsername, EXPORT_FORMAT, type KeystoreExport } from '../../src/lib/crypto/exportFile';
+import { readExport, EXPORT_FORMAT, type KeystoreExport } from '../../src/lib/crypto/exportFile';
 import { isPasskeySupported, createPasskeyPRF } from '../../src/lib/crypto/passkey';
 import { sign } from '../../src/lib/crypto/sign';
 import { toBase64, fromBase64, keyPairToPayloadJSON, type IdentityKeyPair } from '../../src/lib/crypto/keys';
@@ -30,12 +30,10 @@ export function Import() {
   const [file, setFile] = useState<File | null>(null);
   const [cliPass, setCliPass] = useState('');
   // What protects the chosen backup, read from the file on selection: a passkey needs no
-  // field at all (it unlocks with a WebAuthn assertion), a passcode gets its own label
-  // and a username a password manager can fill it against. fileAddress is that username's
-  // address. 'other' is a passphrase backup, or a file this page has not parsed.
+  // field at all (it unlocks with a WebAuthn assertion), a passcode gets its own label.
+  // 'other' is a passphrase backup, or a file this page has not parsed.
   const [fileKind, setFileKind] = useState<'passkey' | 'passcode' | 'other'>('other');
   const passkeyFile = fileKind === 'passkey';
-  const [fileAddress, setFileAddress] = useState('');
   const [identities, setIdentities] = useState<Record<string, IdentityKeyPair> | null>(null);
   // Passkey material recovered while unlocking a passkey-protected backup. When set, the
   // import re-wraps the local keystore under this SAME credential rather than enrolling
@@ -62,7 +60,7 @@ export function Import() {
   };
 
   const removeFile = () => {
-    setFile(null); setFileKind('other'); setFileAddress(''); setSourcePasskey(null); setError('');
+    setFile(null); setFileKind('other'); setSourcePasskey(null); setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -70,14 +68,12 @@ export function Import() {
   const onFileChange = async (f: File | null) => {
     setFile(f);
     setFileKind('other');
-    setFileAddress('');
     setError('');
     if (!f) return;
     try {
       const parsed = JSON.parse(await f.text());
       if (parsed?.format !== EXPORT_FORMAT) return;
       if (parsed.authMethod === 'passkey' || parsed.authMethod === 'passcode') setFileKind(parsed.authMethod);
-      if (typeof parsed.address === 'string') setFileAddress(parsed.address);
     } catch { /* not a JSON export → needs a passphrase */ }
   };
 
@@ -239,13 +235,6 @@ export function Import() {
             </p>
           ) : (
             <div>
-              {fileKind === 'passcode' && fileAddress && (
-                // The name the passcode was saved under when the key was exported (exportUsername),
-                // so a password manager can offer it here. Visually hidden, not display:none,
-                // which managers skip.
-                <input type="text" name="username" autoComplete="username" value={exportUsername(fileAddress)} readOnly tabIndex={-1} aria-hidden="true"
-                  style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }} />
-              )}
               <label htmlFor="ks-pass" style={fieldLabelStyle}>{fileKind === 'passcode' ? 'Passcode' : 'Keystore passphrase'}</label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input

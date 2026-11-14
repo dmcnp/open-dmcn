@@ -50,3 +50,39 @@ func TestSPACacheControl(t *testing.T) {
 		}
 	}
 }
+
+// TestSPAServesTheBuildsCompressedCopies: a hashed asset the build compressed goes out as the
+// copy the browser accepts, still immutable; the shell, rendered per request, never does.
+func TestSPAServesTheBuildsCompressedCopies(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html":                {Data: []byte("<!doctype html><html><body>shell</body></html>")},
+		"assets/index-abc123.js":    {Data: []byte("console.log(1)")},
+		"assets/index-abc123.js.br": {Data: []byte("BROTLI")},
+		"assets/index-abc123.js.gz": {Data: []byte("GZIP")},
+	}
+	h := spaHandler(fsys, FrontendConfig{})
+	get := func(path string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		r.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+
+	rec := get("/assets/index-abc123.js")
+	if rec.Header().Get("Content-Encoding") != "br" || rec.Body.String() != "BROTLI" {
+		t.Errorf("asset: Content-Encoding %q, body %q; want the brotli copy", rec.Header().Get("Content-Encoding"), rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Errorf("asset: Cache-Control %q", got)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/javascript; charset=utf-8" {
+		t.Errorf("asset: Content-Type %q", got)
+	}
+
+	for _, path := range []string{"/", "/inbox"} {
+		if rec := get(path); rec.Header().Get("Content-Encoding") != "" {
+			t.Errorf("shell %s was sent with Content-Encoding %q", path, rec.Header().Get("Content-Encoding"))
+		}
+	}
+}

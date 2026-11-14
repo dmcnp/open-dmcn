@@ -89,14 +89,6 @@ export async function readExport(exp: KeystoreExport, opts?: { password?: string
   return { kp: keyPairFromPayloadJSON(bytes) };
 }
 
-// exportUsername is the username a password manager files an export's passcode under.
-// It is deliberately NOT the bare address: on a password-protected account the manager
-// already holds the device password under that address for this site, and saving the
-// passcode under the same name would overwrite it.
-export function exportUsername(address: string): string {
-  return `${address} (key file passcode)`;
-}
-
 // exportFileName is the name the exported file is saved under, so the page can say where it went.
 export function exportFileName(address: string): string {
   return `dmcn-keystore-${address.replace(/[^a-z0-9._@-]/gi, '_')}.json`;

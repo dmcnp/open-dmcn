@@ -217,7 +217,6 @@ type indexData struct {
 // 404, not return HTML. (API paths are normally matched by more specific mux
 // patterns; this is a guard for unmatched subpaths.)
 func spaHandler(fsys fs.FS, cfg FrontendConfig) http.HandlerFunc {
-	fileServer := http.FileServerFS(fsys)
 	var tpl *template.Template
 	if raw, err := fs.ReadFile(fsys, "index.html"); err == nil {
 		tpl, _ = template.New("index.html").Parse(string(raw))
@@ -272,7 +271,8 @@ func spaHandler(fsys fs.FS, cfg FrontendConfig) http.HandlerFunc {
 			// raw index.html through the template instead of the file server).
 			if info, err := fs.Stat(fsys, p); err == nil && !info.IsDir() {
 				setStaticCacheControl(w, p)
-				fileServer.ServeHTTP(w, r)
+				// The build ships brotli and gzip copies of its scripts and styles beside them.
+				webcore.ServeFile(w, r, fsys, p)
 				return
 			}
 		}
