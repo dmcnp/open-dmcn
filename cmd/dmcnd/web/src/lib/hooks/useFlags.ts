@@ -18,6 +18,10 @@ interface FlagsContextValue {
   // ready is false until the first load settles. Until then every message reads as unarchived
   // and unread, so a view built on flags waits for it rather than drawing that and taking it back.
   ready: boolean;
+  // synced is true once a list has actually come back. ready also turns true when the first load
+  // FAILS, leaving an empty map; anything that treats "no flag record" as "never touched" (sender
+  // rules filing new mail) waits for this instead, or it would overwrite every record it can't see.
+  synced: boolean;
   refreshFlags: () => void;
   setFlag: (messageHash: string, delta: FlagDelta) => Promise<void>;
   markRead: (messageHash: string) => Promise<void>;
@@ -46,6 +50,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   const { sessionToken, isAuthenticated } = useAuth();
   const [flags, setFlags] = useState<Map<string, FlagRecord>>(new Map());
   const [ready, setReady] = useState(false);
+  const [synced, setSynced] = useState(false);
   const storeRef = useRef<FlagStore | null>(null);
   const flagsRef = useRef<Map<string, FlagRecord>>(new Map());
   const syncRef = useRef<() => void>(() => {});
@@ -63,6 +68,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           flagsRef.current = map;
           setFlags(map);
+          setSynced(true);
         })
         .catch(() => { /* transient; keep the last good map */ })
         .finally(() => { if (!cancelled) setReady(true); });
@@ -77,6 +83,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
       flagsRef.current = new Map();
       syncRef.current = () => {};
       setReady(false);
+      setSynced(false);
       setFlags(new Map());
     };
   }, [keys, sessionToken, isAuthenticated]);
@@ -147,7 +154,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     FlagsContext.Provider,
-    { value: { flags, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
+    { value: { flags, ready, synced, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
     children
   );
 }

@@ -19,6 +19,7 @@ import { detachAccount, isAttached } from '../lib/crypto/deviceKeystore';
 import { isLockOnLeave, setLockOnLeave } from '../lib/devicePosture';
 import { canKeepUnlocked } from '../lib/accounts';
 import { LabelSettings } from '../components/LabelSettings';
+import { FilingSettings } from '../components/FilingSettings';
 import { InfoHint } from '../components/InfoHint';
 import { applyLockPosture } from '../lib/crypto/workingKeys';
 import { DeviceUnlockSettings } from '../components/DeviceUnlockSettings';
@@ -721,7 +722,7 @@ export function Settings() {
           </div>
         )}
 
-        {section === 'organise' && <LabelSettings />}
+        {section === 'organise' && <><LabelSettings /><FilingSettings /></>}
 
         {section === 'account' && (
           <div style={{ marginTop: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>

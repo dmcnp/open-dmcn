@@ -85,7 +85,7 @@ export function AppLayout() {
   const { sent, loaded: sentLoaded, refreshSent } = useSent();
   const gettingStarted = useGettingStarted();
   const { flags, ready: flagsReady } = useFlags();
-  const { labels, folders } = useLabels();
+  const { labels, folders, knownFolderIds, ready: labelsReady } = useLabels();
   const { filter: mailFilter, ready: filterReady } = useMailFilter();
   const { address, clearSession } = useAuth();
   const { keys, clearKeys, clearAllKeys } = useKeys();
@@ -220,8 +220,9 @@ export function AppLayout() {
   // One combined inbox: every unread received message except blocked senders (trust is
   // decided at read time by the reader's gate, not by list placement). The rule lives in
   // lib/unread so the account switcher's per-account counts mean the same thing. No count until
-  // flags and the blocklist have loaded: before then every message would read as unread.
-  const unreadCount = flagsReady && filterReady ? countUnread(messages, address, flags, mailFilter) : 0;
+  // flags, folders and the blocklist have loaded: before then every message would read as unread,
+  // and filed mail as Inbox mail.
+  const unreadCount = flagsReady && filterReady && labelsReady ? countUnread(messages, address, flags, mailFilter, knownFolderIds) : 0;
 
   // Notifications deliberately survive this. Signing out locks the account, it does not tell
   // the world to stop reaching you — mail still arrives, and being told so is still useful. The

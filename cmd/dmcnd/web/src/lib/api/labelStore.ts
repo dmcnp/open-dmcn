@@ -4,6 +4,8 @@
 // avoid lost updates when two devices edit definitions at once — the provider
 // re-reads and retries on conflict. Per-message assignment lives in the flag records
 // (folderId / labelIds); this doc only names the labels/folders and gives colors.
+// The order of each array is the order the rail and the pickers list them in, which the owner
+// sets in Settings; the Apple client reads and writes the same order.
 
 import { PersonalStore } from './personalStore';
 import type { WorkingKeys } from '../crypto/workingKeys';
@@ -34,8 +36,8 @@ export function emptyLabelsDoc(): LabelsDoc {
 export class LabelStore {
   private store: PersonalStore;
 
-  constructor(keys: WorkingKeys) {
-    this.store = new PersonalStore(keys);
+  constructor(keys: WorkingKeys, explicitToken?: string) {
+    this.store = new PersonalStore(keys, explicitToken);
   }
 
   // get returns the definitions doc + its version (0 when none exists yet).

@@ -17,6 +17,10 @@ interface SettingsContextValue {
   loaded: boolean;
   refreshSettings: () => void;
   updateSettings: (patch: Partial<Omit<AppSettings, 'v'>>) => Promise<void>;
+  // changeSettings is updateSettings for a change that depends on what is there: fn runs on the
+  // freshly read document inside the retry loop, so an edit made meanwhile on another device (a
+  // sender rule added on the phone, say) is built on rather than overwritten.
+  changeSettings: (fn: (cur: AppSettings) => Partial<Omit<AppSettings, 'v'>>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -68,12 +72,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const refreshSettings = useCallback(() => syncRef.current(), []);
 
-  const updateSettings = useCallback(async (patch: Partial<Omit<AppSettings, 'v'>>) => {
+  const changeSettings = useCallback(async (fn: (cur: AppSettings) => Partial<Omit<AppSettings, 'v'>>) => {
     const store = storeRef.current;
     if (!store) return;
     for (let attempt = 0; attempt < 5; attempt++) {
       const { settings: cur, version } = await store.get();
-      const next: AppSettings = { ...cur, ...patch, v: 1 };
+      const next: AppSettings = { ...cur, ...fn(cur), v: 1 };
       try {
         await store.put(next, version);
         setSettings(next);
@@ -86,9 +90,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     throw new Error('settings: too many concurrent edits, please retry');
   }, []);
 
+  const updateSettings = useCallback((patch: Partial<Omit<AppSettings, 'v'>>) => changeSettings(() => patch), [changeSettings]);
+
   return createElement(
     SettingsContext.Provider,
-    { value: { settings, loaded, refreshSettings, updateSettings } },
+    { value: { settings, loaded, refreshSettings, updateSettings, changeSettings } },
     children
   );
 }
