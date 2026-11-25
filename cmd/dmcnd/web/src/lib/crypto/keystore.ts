@@ -11,11 +11,13 @@ import { bufferSource } from './bytes';
 // secret that never leaves the authenticator and needs no KDF here.
 
 export interface EncryptedBundle {
-  salt: string;       // base64 (Argon2id salt for the password path; '' for passkey)
+  salt: string;       // base64 (Argon2id or HKDF salt; '' for passkey)
   nonce: string;      // base64 (12 bytes IV)
   ciphertext: string; // base64
   tag: string;        // base64 (16 bytes)
-  kdf?: 'argon2id';   // present for the password path; absent for the passkey path
+  // argon2id: the password path. hkdf-sha256: an exported key under a generated passcode
+  // (crypto/passcode.ts). Absent: the passkey path.
+  kdf?: 'argon2id' | 'hkdf-sha256';
   kdfParams?: KdfParams;
 }
 
@@ -122,6 +124,7 @@ export async function encryptKeys(keyBytes: Uint8Array, passphrase: string): Pro
 }
 
 export async function decryptKeys(bundle: EncryptedBundle, passphrase: string): Promise<Uint8Array> {
+  if (bundle.kdf && bundle.kdf !== 'argon2id') throw new Error(`this bundle is not passphrase-protected (${bundle.kdf})`);
   const params = bundle.kdfParams ?? ARGON2_PARAMS;
   const aesKey = await derivePassphraseKey(passphrase, fromBase64(bundle.salt), params, ['decrypt']);
 

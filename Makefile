@@ -1,4 +1,4 @@
-.PHONY: build build-web build-daemon build-cli build-release proto proto-web test test-cover lint vet clean tidy \
+.PHONY: build build-web dev-web build-daemon build-cli build-release proto proto-web test test-cover lint vet clean tidy \
         site site-serve site-test site-check
 
 # Version string embedded at build time (best-effort git describe).
@@ -67,6 +67,17 @@ build-release:
 # build-web installs frontend deps and produces cmd/dmcnd/web/dist (embedded by the daemon).
 build-web:
 	cd $(WEB) && npm ci && npm run build
+
+# dev-web runs the web client from source (vite, hot reload) on http://localhost:5173. With SERVER
+# it talks to that live dmcnd and borrows its runtime config (vite.config.ts says how), so a client
+# change can be tried against real accounts without deploying: `make dev-web SERVER=mail.dmcn.dev`.
+# Without SERVER it expects a local dmcnd on https://localhost:8443. The page's origin is localhost,
+# so it starts with none of the live site's browser state: sign in by importing a key file or
+# pairing, and passkeys made on the live site do not work here (a passkey is bound to its site).
+SERVER ?=
+dev-web:
+	@[ -d $(WEB)/node_modules ] || (cd $(WEB) && npm ci)
+	cd $(WEB) && DMCN_SERVER="$(SERVER)" npm run dev
 
 # proto-web regenerates the browser protobuf bundle (dmcn.js). It MUST list every proto in the
 # bundle; a partial run silently drops whole namespaces.

@@ -172,6 +172,27 @@ without Node, and it is what lets `go install` produce a working daemon (the mod
 carries it, so `//go:embed web/dist` resolves for anyone installing from the proxy). Run
 `make build-web` (or `make proto-web`) to regenerate it.
 
+### Run it as a systemd service
+
+`deploy/` holds a hardened unit, a settings template and an installer that puts them in place:
+
+```bash
+make build                        # or go install …, then pass --binary ~/go/bin/dmcnd
+sudo deploy/install.sh            # user, binary, unit, /etc/dmcnd/dmcnd.env; prints the peer ID
+sudoedit /etc/dmcnd/dmcnd.env     # DMCND_DOMAIN and friends: KEY=value, no `export`
+sudo systemctl enable --now dmcnd
+journalctl -u dmcnd -f
+```
+
+The daemon runs as its own `dmcnd` user with state in `/var/lib/dmcnd` and may bind 443 and
+25 without root. Settings and the files you hand it (bridge credential, DKIM key) live in
+`/etc/dmcnd`, which it can read but not write. Already running the daemon by hand? Stop it and
+pass `--data <its data dir>` to carry the whole deployment over, or `--identity <node.key>` to
+keep only the peer ID and start the rest fresh. A running bridge's files come along with
+`--bridge-credential`, `--dkim-key` and `--audit-log`; the service cannot read anything under
+`/home`, so whatever the hand-run daemon used from there has to move. Re-running the installer with a new binary is
+the upgrade; it never touches your settings or data, and never restarts the service for you.
+
 ### Configuration (`DMCND_*` environment)
 
 | Variable | Default | Purpose |
@@ -192,9 +213,9 @@ carries it, so `//go:embed web/dist` resolves for anyone installing from the pro
 | `DMCND_STATIC_DNS` | — | static `_dmcn` pins for peer domains (DNS-free federation / seed-pin) |
 | `DMCND_POLL_INTERVAL` | `10s` | webmail mailbox poll cadence |
 | `DMCND_SEED_PASSPHRASE` | `dmcnd-dev-seed` | encrypts the DEV domain root keystore. A live daemon never creates a keystore, so this applies to dev only |
-| `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge |
-| `DMCND_BRIDGE_SMTP_LISTEN` | `:25` (`:2525` in dev) | bridge SMTP listen address — 25 is the only port sending mail servers try, and needs the same `CAP_NET_BIND_SERVICE` as `:443` |
-| `DMCND_BRIDGE_CREDENTIAL` | — | the bridge's root-signed `bridge` credential (`dmcndcli bridge issue`). Without it the bridge runs but its verdicts are unverifiable |
+| `DMCND_BRIDGE_ENABLED` | `false` | fold in the SMTP bridge. Only `true` or `1` turn it on; the daemon warns when other bridge settings are present but this is not |
+| `DMCND_BRIDGE_SMTP_LISTEN` | `:25` (`:2525` in dev) | bridge SMTP listen address — 25 is the only port sending mail servers try, and needs the same `CAP_NET_BIND_SERVICE` as `:443`. Offers STARTTLS with the webmail's certificate (autocert or `DMCND_TLS_CERT`/`KEY`); plaintext in dev |
+| `DMCND_BRIDGE_CREDENTIAL` | — | the bridge's root-signed `bridge` credential (`dmcndcli bridge issue`). Required on a live domain, and checked at startup: one for another domain or node, or signed by another root, keeps the bridge off |
 | `DMCND_BRIDGE_DOMAIN` | `<domain>` | the legacy (SMTP) domain the bridge represents |
 | `DMCND_BRIDGE_AUDIT_LOG` | — | append-only JSON audit log path |
 | `DMCND_BRIDGE_AUTH_MODE` | `dns` | inbound verification: `dns` (real SPF/DKIM/DMARC) or `stub` (no checks — offline dev only) |
@@ -277,6 +298,12 @@ dmcndcli bridge dkim-keygen --domain mesh.example --host mail.mesh.example \
 # Root-only, and the ONLY recovery path: the daemon refuses any record that re-binds a live
 # address to a different key unless the domain root has tombstoned the incumbent.
 dmcndcli remove-address --address alice@mesh.example --peers /ip4/127.0.0.1/tcp/7400/p2p/<peerID>
+
+# The usual reason to free one: someone lost their key and petitioned for a new mailbox. --replace
+# tombstones the old key and assigns the address to their new petition in one step. Stored mail
+# was encrypted to the lost key and stays unreadable; the address comes back, the old mail does not.
+dmcndcli petition assign --replace --code 0428-9173-5560 --address alice@mesh.example \
+  --url https://mesh.example --peers /ip4/127.0.0.1/tcp/7400/p2p/<peerID> --keystore root.enc
 ```
 
 On the node itself, `dmcnd peer-id` prints its libp2p peer ID (creating the key if missing) —
@@ -286,6 +313,7 @@ that is the only thing you need from the node in order to sign its domain's auth
 
 ```
 cmd/dmcnd/         the single-binary reference daemon (+ embedded web/ SPA)
+deploy/            systemd unit, settings template and installer for dmcnd
 internal/          the reference implementation (no API-stability promise):
   core/{crypto,identity,message,onion,domainverify,mailfilter}
   {node,relay,registry,keystore,peerpolicy,bridge,web,webcore,p2plog}

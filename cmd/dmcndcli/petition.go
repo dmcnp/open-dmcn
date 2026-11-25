@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
+	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -12,6 +16,7 @@ import (
 
 	"dmcn.dev/open-dmcn/internal/core/domainverify"
 	"dmcn.dev/open-dmcn/internal/core/identity"
+	"dmcn.dev/open-dmcn/internal/registry"
 	webapi "dmcn.dev/open-dmcn/internal/web/api"
 )
 
@@ -126,9 +131,17 @@ func cmdPetitionShow(args []string) error {
 // (its mail lives on these relays) — and hands them to the node. The node parks them until the
 // petitioner's browser returns with a self-signed record to attach them to, which it must, because
 // a record's owner signature covers its address and the address did not exist until just now.
+//
+// --replace is the lost-key recovery in one step: it first tombstones whatever key the address is
+// bound to now (exactly as remove-address does), then assigns. It also accepts a petition that was
+// already assigned this same address — the case where an assign went through, the claim was
+// refused because the old key still held the address, and only the tombstone is missing.
 func cmdPetitionAssign(args []string) error {
 	fs := flag.NewFlagSet("petition assign", flag.ExitOnError)
 	address := fs.String("address", "", "the address to assign (local@domain)")
+	replace := fs.Bool("replace", false, "tombstone the key the address is bound to now, then assign it (lost-key recovery)")
+	peers := fs.String("peers", os.Getenv("DMCND_PEERS"), "comma-separated seed multiaddrs of the running daemon (--replace only)")
+	yes := fs.Bool("yes", false, "skip the confirmation prompt (--replace only)")
 	pf := addPetitionFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -138,6 +151,9 @@ func cmdPetitionAssign(args []string) error {
 	}
 	if *address == "" {
 		return fmt.Errorf("--address is required: the petitioner does not choose their address, you do")
+	}
+	if *replace && *peers == "" {
+		return fmt.Errorf("--replace needs --peers (or DMCND_PEERS): the tombstone is pushed over libp2p, like remove-address")
 	}
 	domain := *pf.domain
 	if domain == "" {
@@ -158,8 +174,14 @@ func cmdPetitionAssign(args []string) error {
 	if err != nil {
 		return err
 	}
+	// An assigned petition is spent, except for the one case --replace exists to finish: the same
+	// address, assigned already, waiting on a tombstone before the claim can land.
+	alreadyAssigned := false
 	if v.Assigned {
-		return fmt.Errorf("petition %s was already assigned %s — a code is spent once, so if this is a new request ask for a fresh one", v.Code, v.Address)
+		if !*replace || !strings.EqualFold(v.Address, *address) {
+			return fmt.Errorf("petition %s was already assigned %s — a code is spent once, so if this is a new request ask for a fresh one", v.Code, v.Address)
+		}
+		alreadyAssigned = true
 	}
 	if len(v.RelayHints) == 0 {
 		return fmt.Errorf("the daemon reports no relay hints, so there is nowhere to route %s's mail", *address)
@@ -174,6 +196,20 @@ func cmdPetitionAssign(args []string) error {
 	}
 	var xPub [32]byte
 	copy(xPub[:], xRaw)
+
+	// Tombstone first, assign second — the same order remove-address documents: if the assign
+	// then fails, the lost key is still dead rather than still live.
+	if *replace {
+		if err := replaceIncumbent(*peers, root, *address, edPub, *yes); err != nil {
+			return err
+		}
+	}
+	if alreadyAssigned {
+		fmt.Printf("petition %s already carries %s — nothing more to sign\n", v.Code, *address)
+		fmt.Fprintf(os.Stderr, "Ask the petitioner to press the claim button again in the browser they started from.\n"+
+			"The petition expires %s; after that they need a new one.\n", v.ExpiresAt)
+		return nil
+	}
 
 	// Build a record purely as a vehicle for issuing the two credentials against the petitioner's
 	// keys. It is never published from here and never self-signed — only its owner can do that,
@@ -226,5 +262,44 @@ func cmdPetitionAssign(args []string) error {
 	fmt.Printf("assigned %s to petition %s\n", out.Address, *pf.code)
 	fmt.Fprintf(os.Stderr, "The petitioner's browser will pick this up on its own — they do not need to be told the\n"+
 		"address, only that it is ready. Their mailbox becomes live the moment they complete it.\n")
+	return nil
+}
+
+// replaceIncumbent tombstones the key address is bound to now, unless there is nothing to replace:
+// the address is unbound, or it is already bound to the petitioned key itself.
+func replaceIncumbent(peers string, root *identity.IdentityKeyPair, address string, petitioned ed25519.PublicKey, yes bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	n, err := dialDaemon(ctx, peers)
+	if err != nil {
+		return err
+	}
+	defer n.Close()
+
+	cur, err := n.Registry().Lookup(ctx, address)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		fmt.Fprintf(os.Stderr, "%s is not bound to any key — nothing to replace\n", address)
+		return nil
+	case err != nil:
+		return fmt.Errorf("look up %s: %w", address, err)
+	}
+	incumbent := cur.Ed25519Public
+	if bytes.Equal(incumbent, petitioned) {
+		fmt.Fprintf(os.Stderr, "%s is already bound to the petitioned key — nothing to replace\n", address)
+		return nil
+	}
+	if !yes && !confirmTombstone(address, incumbent) {
+		return fmt.Errorf("aborted")
+	}
+	rev, accepted, already, err := tombstoneKey(ctx, n, root, address, incumbent)
+	if err != nil {
+		return err
+	}
+	if already {
+		fmt.Printf("%s was already tombstoned for %s (revision %d)\n", hex.EncodeToString(incumbent), address, rev)
+		return nil
+	}
+	fmt.Printf("tombstoned %s for %s (revision %d, accepted by %d node(s))\n", hex.EncodeToString(incumbent), address, rev, accepted)
 	return nil
 }

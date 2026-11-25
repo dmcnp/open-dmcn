@@ -1,0 +1,51 @@
+# dmcnd — the DMCN reference daemon (serving node, webmail, optional SMTP bridge) for one domain.
+# Installed by deploy/install.sh. Per-host settings live in /etc/dmcnd/dmcnd.env, not here.
+[Unit]
+Description=DMCN reference daemon
+Documentation=https://dmcn.dev/quickstart
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dmcnd
+Group=dmcnd
+ExecStart=/usr/local/bin/dmcnd
+Restart=on-failure
+RestartSec=5
+
+# /var/lib/dmcnd holds everything the daemon writes: the libp2p identity (node.key, whose peer ID
+# is published in your _dmcn record, so it must survive restarts and reinstalls), the mailbox and
+# record stores, sessions, the petition queue and the autocert certificate cache (certs/).
+StateDirectory=dmcnd
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/dmcnd
+Environment=DMCND_DATA_DIR=/var/lib/dmcnd
+
+EnvironmentFile=/etc/dmcnd/dmcnd.env
+
+# :443 for webmail (autocert's ACME challenge only works there) and :25 for the bridge are
+# privileged ports; this grants exactly that and nothing else.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Hardening. Files the daemon creates are owner-only, the rest of the filesystem is read-only to
+# it (/etc/dmcnd included, so a compromised daemon cannot rewrite its own configuration), and it
+# can see no home directory.
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# AF_NETLINK is required: libp2p enumerates local interface addresses over netlink.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

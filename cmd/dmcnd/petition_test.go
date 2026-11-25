@@ -444,3 +444,59 @@ func TestStatusLeaksNothingBeforeAssignment(t *testing.T) {
 		t.Errorf("unknown code returned %d, want 404", code)
 	}
 }
+
+// TestLostKeyRecoveryReusesThePetition is the production incident this path was built from: a
+// user lost the only key for their address, petitioned for a new one, and the admin assigned the
+// same address. The claim is refused — the old key still holds the address — and nothing about
+// that refusal may spend the petition, because `petition assign --replace` finishes the job by
+// adding the tombstone alone and telling the petitioner to press claim again.
+func TestLostKeyRecoveryReusesThePetition(t *testing.T) {
+	f := newPetFixture(t)
+	const address = "alice@" + petDomain
+
+	lost := f.petition()
+	if code, out := f.assign(lost, address); code != http.StatusOK {
+		t.Fatalf("assign the original key: %d %v", code, out)
+	}
+	if code, out := f.complete(lost); code != http.StatusOK {
+		t.Fatalf("complete the original key: %d %v", code, out)
+	}
+
+	fresh := f.petition()
+	if code, out := f.assign(fresh, address); code != http.StatusOK {
+		t.Fatalf("assign the new key: %d %v", code, out)
+	}
+	if code, _ := f.complete(fresh); code == http.StatusOK {
+		t.Fatal("a new key took over a live address with no root tombstone")
+	}
+	if rec, err := f.n.Lookup(f.ctx, address); err != nil || !rec.Ed25519Public.Equal(lost.kp.Ed25519Public) {
+		t.Fatal("the refused claim disturbed the incumbent binding")
+	}
+
+	// What --replace publishes: the root tombstones the incumbent. No re-assign follows.
+	rm, err := identity.NewAddressRemovalRecord(petDomain, address, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rm.RemovedBindings = append(rm.RemovedBindings, identity.RemovedBinding{
+		Ed25519Public: lost.kp.Ed25519Public, RemovedAt: time.Now().UTC(),
+	})
+	if err := rm.Sign(f.root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.n.PublishRemoval(f.ctx, rm); err != nil {
+		t.Fatalf("publish tombstone: %v", err)
+	}
+
+	// The same petition, claimed again, now lands.
+	if code, out := f.complete(fresh); code != http.StatusOK {
+		t.Fatalf("claim after the tombstone: %d %v — the petition was spent by the refused claim", code, out)
+	}
+	rec, err := f.n.Lookup(f.ctx, address)
+	if err != nil {
+		t.Fatalf("lookup after recovery: %v", err)
+	}
+	if !rec.Ed25519Public.Equal(fresh.kp.Ed25519Public) {
+		t.Fatal("the address is still bound to the lost key")
+	}
+}

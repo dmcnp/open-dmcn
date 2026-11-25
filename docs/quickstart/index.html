@@ -41,7 +41,7 @@
 <header style="position:sticky;top:0;z-index:30;background:var(--surface-page);border-bottom:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
   <div style="max-width:1120px;margin:0 auto;padding:13px clamp(18px,5vw,40px);display:flex;align-items:center;gap:clamp(14px,3vw,30px);">
     <a href="/" style="display:inline-flex;align-items:flex-end;gap:8px;text-decoration:none;">
-      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:23px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:7px;height:7px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="display:inline-flex;align-items:baseline;font-weight:600;font-size:23px;letter-spacing:-0.0435em;color:var(--text-strong);">dmcn<span style="width:0.3044em;height:0.3044em;margin-left:0.1305em;position:relative;top:0.1304em;background:var(--brand);"></span></span>
       <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">protocol</span>
     </a>
     <nav data-desk style="display:flex;gap:clamp(12px,1.8vw,24px);flex:1;flex-wrap:wrap;min-width:0;">
@@ -466,9 +466,11 @@ recipient's client verifies three things without asking any server anything: the
 signed by the key it names, that key holds a <code>bridge</code> credential from the domain root, and the
 credential is <em>for that key</em> — so a real bridge's credential cannot be stapled to someone else's
 attestation.</p>
-<p>Start the bridge without a credential and it still relays mail, but every recipient will treat
-its verdicts as unverified. The daemon says so at startup rather than letting you find out from
-someone else's inbox.</p>
+<p>The daemon checks the credential at startup the way those clients will: it must be for this domain,
+for this node's key, and signed by this domain's root. Without one, or with one that fails any of
+those, the bridge does not start and the log says which and how to issue a good one, rather than
+letting you find out from someone else's inbox. A node moved to a new domain needs a new
+credential; the old domain's does not carry over. DMCN mail is unaffected either way.</p>
 <p>Outbound — your users writing to ordinary email addresses — needs one more thing: a <code>bridge=</code>
 token in your <code>_dmcn</code> record, so a sender can find out which peer carries mail off the network.
 It is the DMCN analogue of an MX record, and usually the same address as your <code>seed=</code>:</p>
@@ -555,7 +557,9 @@ you. Bcc recipients are delivered to and never named, exactly as in ordinary mai
 <p>Outbound, you hear about <strong>failures only</strong>. A non-delivery notice arrives from <code>mailer-daemon@</code>
 your domain with the reason in the body; a successful send produces no mail, the way email has
 always worked. The signed receipt is on the bridge's audit trail either way.</p>
-<p><strong>On the TLS to other mail servers.</strong> Outbound STARTTLS is <em>opportunistic</em>: encrypted where the
+<p><strong>On the TLS to other mail servers.</strong> Inbound, the bridge offers STARTTLS with the webmail's own
+certificate — the one autocert fetched, or <code>DMCND_TLS_CERT</code>/<code>DMCND_TLS_KEY</code> — so mail from any
+server that supports it arrives encrypted, with no extra setup. Outbound STARTTLS is <em>opportunistic</em>: encrypted where the
 receiving server offers it, and the certificate is deliberately not verified. That is what every
 production MTA does, and the reason is that the alternative to unverified TLS is cleartext, not
 verified TLS — SMTP has no trust anchor, and much of the internet's mail infrastructure presents
@@ -579,7 +583,7 @@ verdict into a rubber stamp, so never run it anywhere real mail arrives.</p>
 <footer style="background:var(--surface-page);border-top:1px solid var(--border-subtle);font-family:var(--font-sans);container-type:inline-size;">
   <div data-foot style="max-width:1120px;margin:0 auto;padding:44px clamp(18px,5vw,40px);">
     <div data-foot-brand>
-      <span style="display:inline-flex;align-items:flex-end;font-weight:600;font-size:22px;letter-spacing:-1px;color:var(--text-strong);">dmcn<span style="width:6px;height:6px;background:var(--brand);margin-left:3px;margin-bottom:4px;"></span></span>
+      <span style="display:inline-flex;align-items:baseline;font-weight:600;font-size:22px;letter-spacing:-0.0435em;color:var(--text-strong);">dmcn<span style="width:0.3044em;height:0.3044em;margin-left:0.1305em;position:relative;top:0.1304em;background:var(--brand);"></span></span>
       <p style="margin:14px 0 0;max-width:280px;font-size:13px;line-height:1.55;color:var(--text-muted);">The DMCN Protocol. An open mail protocol where the address is a keypair, not a name a server vouches for.</p>
       <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:var(--text-subtle);">Apache-2.0, with an express patent grant.</p>
     </div>

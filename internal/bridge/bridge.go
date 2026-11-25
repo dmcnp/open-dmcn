@@ -59,11 +59,14 @@ type Config struct {
 	InboundMaxPerSenderPerHour int // messages per envelope sender per hour
 	InboundMaxConnections      int // concurrent SMTP connections
 
-	// Inbound SMTP transport security. TLSCertFile+TLSKeyFile enable STARTTLS.
+	// Inbound SMTP transport security. TLSCertFile+TLSKeyFile, or a ready-made
+	// TLSConfig (e.g. one backed by an ACME manager, whose certificates renew without
+	// a restart), enable STARTTLS — set one or the other, not both.
 	// RequireTLS rejects mail until the connection is upgraded; ImplicitTLS runs
 	// the listener as SMTPS (TLS from the first byte). Require/Implicit need a cert.
 	TLSCertFile string
 	TLSKeyFile  string
+	TLSConfig   *tls.Config
 	RequireTLS  bool
 	ImplicitTLS bool
 
@@ -899,7 +902,13 @@ func makeBridgeDeliver(n *node.Node, senderAddr string, senderKP *identity.Ident
 // buildSMTPTLS turns the bridge's TLS config fields into an smtpTLS, or nil for
 // a plaintext listener. RequireTLS/ImplicitTLS without a certificate is an error.
 func buildSMTPTLS(cfg Config) (*smtpTLS, error) {
-	if cfg.TLSCertFile == "" && cfg.TLSKeyFile == "" {
+	hasFiles := cfg.TLSCertFile != "" || cfg.TLSKeyFile != ""
+	switch {
+	case cfg.TLSConfig != nil && hasFiles:
+		return nil, fmt.Errorf("set either a TLS config or tls-cert/tls-key, not both")
+	case cfg.TLSConfig != nil:
+		return &smtpTLS{config: cfg.TLSConfig, require: cfg.RequireTLS, implicit: cfg.ImplicitTLS}, nil
+	case !hasFiles:
 		if cfg.RequireTLS || cfg.ImplicitTLS {
 			return nil, fmt.Errorf("require-tls/implicit-tls set but no tls-cert/tls-key provided")
 		}
