@@ -13,6 +13,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // TestDaemonInProcessRoundTrip exercises the daemon's in-process wiring end-to-end without a
@@ -126,7 +127,7 @@ func TestDaemonInProcessRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("challenge (list): %v", err)
 	}
-	entries, _, err := proxy.List(ctx, "bob@"+domain, nonce, bobSign(nonce), 0, nil)
+	entries, _, err := proxy.List(ctx, "bob@"+domain, relay.MailboxProof{Nonce: nonce, Signature: bobSign(nonce)}, 0, nil)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestDaemonInProcessRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("challenge (body): %v", err)
 	}
-	body, err := proxy.Body(ctx, "bob@"+domain, nonceB, bobSign(nonceB), entryHash)
+	body, err := proxy.Body(ctx, "bob@"+domain, relay.MailboxProof{Nonce: nonceB, Signature: bobSign(nonceB)}, entryHash)
 	if err != nil {
 		t.Fatalf("body: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestDaemonInProcessRoundTrip(t *testing.T) {
 		t.Fatalf("challenge (auth): %v", err)
 	}
 	wrongSig, _ := crypto.Sign(aliceKP.Ed25519Private, nonceX)
-	if _, _, err := proxy.List(ctx, "bob@"+domain, nonceX, wrongSig, 0, nil); err == nil {
+	if _, _, err := proxy.List(ctx, "bob@"+domain, relay.MailboxProof{Nonce: nonceX, Signature: wrongSig}, 0, nil); err == nil {
 		t.Fatal("list accepted a signature from the wrong key")
 	}
 
@@ -178,14 +179,14 @@ func TestDaemonInProcessRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("challenge (delete): %v", err)
 	}
-	if err := proxy.Delete(ctx, "bob@"+domain, nonceD, bobSign(nonceD), entryHash); err != nil {
+	if err := proxy.Delete(ctx, "bob@"+domain, relay.MailboxProof{Nonce: nonceD, Signature: bobSign(nonceD)}, entryHash); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	nonceL, err := proxy.Challenge(ctx, "bob@"+domain)
 	if err != nil {
 		t.Fatalf("challenge (list2): %v", err)
 	}
-	entries2, _, err := proxy.List(ctx, "bob@"+domain, nonceL, bobSign(nonceL), 0, nil)
+	entries2, _, err := proxy.List(ctx, "bob@"+domain, relay.MailboxProof{Nonce: nonceL, Signature: bobSign(nonceL)}, 0, nil)
 	if err != nil {
 		t.Fatalf("list after delete: %v", err)
 	}

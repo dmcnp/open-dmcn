@@ -36,6 +36,21 @@ const (
 	// deploy-ordering signal for forwarding: an owner's client publishes a forward only once
 	// every relay that will serve the record says this.
 	CapForwardSchema = "forward-schema"
+
+	// CapDeviceRegistry: this relay keeps a device registry and enforces it, so a mailbox that
+	// has held a device needs a proof from an active one (SPEC_EXT_DEVICES.md §3). It says the
+	// relay keeps a registry. Only an enrolment attempt says where a given device stands.
+	CapDeviceRegistry = "device-registry"
+
+	// CapDeviceReads: this relay applies the two classes of operation, so a request that reads
+	// or organises a mailbox may leave the account signature off. A client leaves it off only
+	// where every relay it uses for the mailbox says this. A relay without it refuses such a
+	// request, so a client that guesses wrong is shut out and not let in.
+	CapDeviceReads = "device-reads"
+
+	// CapKvWriteTime: stored entries carry the relay's own write time and the writing device,
+	// so a client can count a waiting period from a time no writer chose.
+	CapKvWriteTime = "kv-write-time"
 )
 
 // capabilities returns the tokens this build advertises, newest last.
@@ -43,5 +58,15 @@ const (
 // Deliberately a function over a package-level slice: a caller that mutated a shared slice
 // would change what every future Ping claims.
 func capabilities() []string {
-	return []string{CapRotationSchema, CapRotation, CapForwardSchema}
+	return []string{CapRotationSchema, CapRotation, CapForwardSchema, CapKvWriteTime}
+}
+
+// Capabilities is what this relay advertises: the build's tokens, and the ones that depend on
+// how it was configured. The device tokens appear only where a registry is actually enforced.
+func (r *Relay) Capabilities() []string {
+	caps := capabilities()
+	if r.devices != nil {
+		caps = append(caps, CapDeviceRegistry, CapDeviceReads)
+	}
+	return caps
 }

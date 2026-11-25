@@ -13,8 +13,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"dmcn.dev/open-dmcn/dmcnpb"
+	"dmcn.dev/open-dmcn/internal/core/crypto"
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
+	"dmcn.dev/open-dmcn/internal/relay"
 	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
@@ -49,8 +51,19 @@ type MessageHandler struct {
 	// routing credential before we STORE to them (defeats forged-routing mail redirection).
 	// nil ⇒ skipped (tests / a self-host node that signs its own routing).
 	verifyRouting func(ctx context.Context, rec *identity.IdentityRecord) error
-	log           logr.Logger
+	// sendGate decides whether this send comes from a device the sender's mailbox has
+	// enrolled (SPEC_EXT_DEVICES.md §9). nil ⇒ no registry behind this handler.
+	sendGate SendGate
+	log      logr.Logger
 }
+
+// SendGate checks a send against the sender's device registry. signature is the sender's own
+// over the envelope hash; devicePub and deviceSig are the device's send proof over the same
+// hash, and may be empty. It returns a *relay.OpError where the send is refused.
+type SendGate func(ctx context.Context, senderAddr string, envHash, signature, devicePub, deviceSig []byte) error
+
+// SetSendGate installs the device check for sends. Without one, sending is not gated.
+func (h *MessageHandler) SetSendGate(g SendGate) { h.sendGate = g }
 
 // NewMessageHandler creates a new MessageHandler.
 func NewMessageHandler(
@@ -80,6 +93,11 @@ type sendRequest struct {
 	// Onion requests 3-hop onion-routed delivery. The server also forces onion
 	// when the recipient's record sets RequireOnion (stricter-wins).
 	Onion bool `json:"onion"`
+	// DevicePublic and DeviceSignature (base64) are the sending device's proof: its signature
+	// over "dmcn-device-send-v1\0" || envelope hash. Needed once the sender's mailbox has
+	// devices.
+	DevicePublic    string `json:"device_public,omitempty"`
+	DeviceSignature string `json:"device_signature,omitempty"`
 }
 
 // HandleSend handles sending a message.
@@ -126,6 +144,34 @@ func (h *MessageHandler) HandleSend(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid signature encoding")
 		return
+	}
+
+	// The same device check that guards reading guards sending through this server. It runs
+	// before anything is delivered, and says nothing about a STORE made some other way.
+	if h.sendGate != nil {
+		devicePub, derr := base64.StdEncoding.DecodeString(req.DevicePublic)
+		deviceSig, serr := base64.StdEncoding.DecodeString(req.DeviceSignature)
+		if derr != nil || serr != nil {
+			writeError(w, http.StatusBadRequest, "invalid device proof encoding")
+			return
+		}
+		canonical, merr := proto.Marshal(env.ToProto()) // as the relay hashes it
+		if merr != nil {
+			writeError(w, http.StatusBadRequest, "invalid envelope")
+			return
+		}
+		envHash := crypto.SHA256Hash(canonical)
+		if gerr := h.sendGate(r.Context(), req.SenderAddress, envHash[:], sigBytes, devicePub, deviceSig); gerr != nil {
+			var oe *relay.OpError
+			if errors.As(gerr, &oe) && oe.Code == "DEVICE_NOT_ENROLLED" {
+				writeErrorCode(w, http.StatusForbidden, "device_not_enrolled",
+					"This device is not approved to send from this account. Pair it from a device that still has access.")
+				return
+			}
+			h.log.Warn("send refused at the device gate", logr.M("sender", req.SenderAddress), logr.M("error", gerr.Error()))
+			writeErrorCode(w, http.StatusForbidden, "auth_failed", "this send could not be verified")
+			return
+		}
 	}
 
 	// Route STORE to recipient's relay hints if recipient_address is provided.

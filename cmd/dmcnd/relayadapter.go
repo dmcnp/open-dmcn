@@ -26,8 +26,9 @@ import (
 type addressLookup func(ctx context.Context, address string) (*identity.IdentityRecord, error)
 
 // inProcRelay implements webapi.RelayProxy against the local mailbox. Challenge issues a fresh
-// nonce; List/Body/Delete verify the caller's signature over that nonce against the address's
-// Ed25519 key before touching the mailbox (keyed by the address's X25519 public key in hex).
+// nonce; every op then goes through the relay's own gate (Relay.AuthorizeMailbox), which is
+// also what the libp2p stream handler calls, so the two ways into a mailbox can't disagree
+// about who is let in.
 type inProcRelay struct {
 	node   *node.Node
 	lookup addressLookup
@@ -46,21 +47,22 @@ func (p *inProcRelay) Challenge(ctx context.Context, address string) ([]byte, er
 	return crypto.RandomBytes(32)
 }
 
-// authorize verifies the signature over the server-issued nonce against address's record and
-// returns the mailbox key (hex of the record's X25519 public key) on success.
-func (p *inProcRelay) authorize(ctx context.Context, address string, nonce, signature []byte) (string, error) {
+// authorize puts a request through the mailbox gate and returns the mailbox key (hex of the
+// record's X25519 public key) and the active device that signed, if one did.
+func (p *inProcRelay) authorize(ctx context.Context, address string, proof relay.MailboxProof, class relay.OpClass) (rxHex string, device []byte, err error) {
 	rec, err := p.lookup(ctx, address)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	if err := crypto.Verify(rec.Ed25519Public, nonce, signature); err != nil {
-		return "", fmt.Errorf("mailbox auth: signature verification failed")
+	device, err = p.node.Relay().AuthorizeMailbox(ctx, rec, proof, class)
+	if err != nil {
+		return "", nil, err
 	}
-	return fmt.Sprintf("%x", rec.X25519Public[:]), nil
+	return fmt.Sprintf("%x", rec.X25519Public[:]), device, nil
 }
 
-func (p *inProcRelay) List(ctx context.Context, address string, nonce, signature []byte, limit int, cursor []byte) ([]*dmcnpb.MailboxEntry, []byte, error) {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) List(ctx context.Context, address string, proof relay.MailboxProof, limit int, cursor []byte) ([]*dmcnpb.MailboxEntry, []byte, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassDevice)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -71,16 +73,16 @@ func (p *inProcRelay) List(ctx context.Context, address string, nonce, signature
 	return entries, []byte(next), nil
 }
 
-func (p *inProcRelay) Body(ctx context.Context, address string, nonce, signature []byte, hash [32]byte) (*dmcnpb.MailboxBody, error) {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) Body(ctx context.Context, address string, proof relay.MailboxProof, hash [32]byte) (*dmcnpb.MailboxBody, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassDevice)
 	if err != nil {
 		return nil, err
 	}
 	return p.node.Relay().Mailbox().GetBody(ctx, rxHex, hash)
 }
 
-func (p *inProcRelay) Delete(ctx context.Context, address string, nonce, signature []byte, hash [32]byte) error {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) Delete(ctx context.Context, address string, proof relay.MailboxProof, hash [32]byte) error {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassOwner)
 	if err != nil {
 		return err
 	}
@@ -89,48 +91,90 @@ func (p *inProcRelay) Delete(ctx context.Context, address string, nonce, signatu
 
 // --- Personal storage ---------------------------------------------------------------------
 //
-// Each op authorises exactly like the mail ops above — the browser signs a server-issued nonce —
-// then delegates to the Relay, which is also what the libp2p stream handler calls. Quota lives
-// there rather than here, so the in-process and over-the-wire paths cannot drift apart.
+// Each op is gated like the mail ops above, then delegates to the Relay, which is also what
+// the libp2p stream handler calls. Quota lives there rather than here, so the in-process and
+// over-the-wire paths cannot drift apart.
 
-func (p *inProcRelay) KvGet(ctx context.Context, address string, nonce, signature []byte, key string) ([]byte, uint64, bool, error) {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) KvGet(ctx context.Context, address string, proof relay.MailboxProof, key string) (relay.KvItem, bool, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassDevice)
 	if err != nil {
-		return nil, 0, false, err
+		return relay.KvItem{}, false, err
 	}
 	return p.node.Relay().KvGet(ctx, rxHex, key)
 }
 
-func (p *inProcRelay) KvPut(ctx context.Context, address string, nonce, signature []byte, key string, sealed []byte, expectedVersion uint64) (uint64, error) {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) KvPut(ctx context.Context, address string, proof relay.MailboxProof, key string, sealed []byte, expectedVersion uint64) (uint64, error) {
+	rxHex, device, err := p.authorize(ctx, address, proof, relay.KvPutClass(key))
 	if err != nil {
 		return 0, err
 	}
-	return p.node.Relay().KvPut(ctx, rxHex, key, sealed, expectedVersion)
+	return p.node.Relay().KvPut(ctx, rxHex, key, sealed, expectedVersion, device)
 }
 
-func (p *inProcRelay) KvList(ctx context.Context, address string, nonce, signature []byte, prefix string, limit int, cursor string, values bool) ([]relay.KvItem, string, error) {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) KvList(ctx context.Context, address string, proof relay.MailboxProof, prefix string, limit int, cursor string, values bool) ([]relay.KvItem, string, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassDevice)
 	if err != nil {
 		return nil, "", err
 	}
 	return p.node.Relay().KvList(ctx, rxHex, prefix, limit, cursor, values)
 }
 
-func (p *inProcRelay) KvDelete(ctx context.Context, address string, nonce, signature []byte, key string) error {
-	rxHex, err := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) KvDelete(ctx context.Context, address string, proof relay.MailboxProof, key string) error {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.KvDeleteClass(key))
 	if err != nil {
 		return err
 	}
 	return p.node.Relay().KvDelete(ctx, rxHex, key)
 }
 
-func (p *inProcRelay) KvStat(ctx context.Context, address string, nonce, signature []byte) (used, quota, count uint64, err error) {
-	rxHex, aerr := p.authorize(ctx, address, nonce, signature)
+func (p *inProcRelay) KvStat(ctx context.Context, address string, proof relay.MailboxProof) (used, quota, count uint64, err error) {
+	rxHex, _, aerr := p.authorize(ctx, address, proof, relay.ClassDevice)
 	if aerr != nil {
 		return 0, 0, 0, aerr
 	}
 	return p.node.Relay().KvStat(ctx, rxHex)
+}
+
+// --- Device registry ------------------------------------------------------------------------
+
+func (p *inProcRelay) DeviceEnroll(ctx context.Context, address string, proof relay.MailboxProof, op *dmcnpb.MailboxDeviceEnrollOp) (*dmcnpb.DeviceRecord, bool, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassEnroll)
+	if err != nil {
+		return nil, false, err
+	}
+	return p.node.Relay().DeviceEnroll(ctx, rxHex, address, op, proof.Nonce)
+}
+
+func (p *inProcRelay) DeviceList(ctx context.Context, address string, proof relay.MailboxProof) ([]*dmcnpb.DeviceRecord, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassOwner)
+	if err != nil {
+		return nil, err
+	}
+	return p.node.Relay().DeviceList(ctx, rxHex, address)
+}
+
+func (p *inProcRelay) DeviceRetire(ctx context.Context, address string, proof relay.MailboxProof, op *dmcnpb.MailboxDeviceRetireOp) (*dmcnpb.DeviceRecord, error) {
+	rxHex, _, err := p.authorize(ctx, address, proof, relay.ClassOwner)
+	if err != nil {
+		return nil, err
+	}
+	return p.node.Relay().DeviceRetire(ctx, rxHex, address, op, proof.Nonce)
+}
+
+// newSendGate is the device check for a send made through this server. The sender is one of
+// this node's own accounts, so its registry is here. The sender's signature over the envelope
+// hash is checked first: the gate only means something for a send the account key made.
+func newSendGate(n *node.Node, lookup addressLookup) webapi.SendGate {
+	return func(ctx context.Context, senderAddr string, envHash, signature, devicePub, deviceSig []byte) error {
+		rec, err := lookup(ctx, senderAddr)
+		if err != nil {
+			return err
+		}
+		if err := crypto.Verify(rec.Ed25519Public, envHash, signature); err != nil {
+			return &relay.OpError{Code: "AUTH_FAILED", Message: "the sender's signature does not verify"}
+		}
+		return n.Relay().AuthorizeSend(ctx, rec, envHash, devicePub, deviceSig)
+	}
 }
 
 // inProcRouter implements webapi.RelayRouter. A STORE whose hint resolves to this node is

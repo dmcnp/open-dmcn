@@ -39,6 +39,12 @@ export interface StorageEntry<T> {
   key: string;
   value: T;
   version: number;
+  /**
+   * When the relay recorded this version, unix seconds, where it says. The relay's clock and
+   * never the writer's, so it is the one time about an entry that whoever wrote it could not
+   * choose. Absent from a server that does not record it, and from the on-device fallback.
+   */
+  writtenAt?: number;
 }
 
 // StorageConflictError is thrown by put() when a compare-and-swap fails; the caller
@@ -59,7 +65,7 @@ interface record<T> {
 interface ChallengeResp { correlation_id: string; nonce: string }
 interface KvGetResp { found: boolean; sealed?: string; version: number }
 interface KvPutResp { version: number }
-interface KvItemResp { key: string; sealed?: string; version: number }
+interface KvItemResp { key: string; sealed?: string; version: number; written_at?: number }
 interface KvListResp { items: KvItemResp[]; next_cursor?: string }
 interface KvStatResp { used_bytes: number; quota_bytes: number; count: number }
 
@@ -265,7 +271,10 @@ export class PersonalStore {
             }
             if (!it.sealed) continue;
             try {
-              out.push({ key: it.key, value: await this.unseal<T>(it.sealed), version: it.version });
+              out.push({
+                key: it.key, value: await this.unseal<T>(it.sealed), version: it.version,
+                ...(it.written_at ? { writtenAt: it.written_at } : {}),
+              });
             } catch {
               // One unreadable blob must not take out the whole namespace — skip it and keep
               // the rest of the address book, folder or flag set usable.

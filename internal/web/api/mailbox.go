@@ -20,11 +20,6 @@ import (
 	"dmcn.dev/open-dmcn/internal/webcore"
 )
 
-// NOTE (open-dmcn reference implementation): the mail-filter and personal-KV ops
-// (get_filter/put_filter, storage_*) rode the product mailbox-ext protocol and are
-// omitted. Per-account state (Sent/contacts/flags/labels/settings) lives in the
-// browser's IndexedDB. The core mailbox surface is list / body / delete.
-//
 // This backend shares the daemon's node in-process rather than dialing a remote
 // relay, so RelayProxy is transport-neutral: the challenge/complete two-phase
 // (which preserves zero-knowledge — the browser signs each nonce) is expressed as
@@ -48,22 +43,31 @@ var (
 )
 
 // RelayProxy is the relay-facing surface the mailbox endpoints need. Challenge issues a
-// fresh single-use nonce the caller must sign to authorize an op for its mailbox; the
-// List/Body/Delete methods verify that signature (against the address's record) and run
-// the op. The private key never leaves the browser — the server only holds the nonce
-// between challenge and complete.
+// fresh single-use nonce the caller must sign to authorize an op for its mailbox; every
+// other method takes the proof the browser made over that nonce and runs the op if the
+// relay's gate accepts it. No private key leaves the browser: the server only holds the
+// nonce between challenge and complete.
+//
+// The proof is the account key's signature and, once the mailbox has devices, an enrolled
+// device's (relay.AuthorizeMailbox). A refusal the client acts on comes back as a
+// *relay.OpError, and writeOpError turns its code into the response.
 type RelayProxy interface {
 	Challenge(ctx context.Context, address string) (nonce []byte, err error)
-	List(ctx context.Context, address string, nonce, signature []byte, limit int, cursor []byte) (entries []*dmcnpb.MailboxEntry, next []byte, err error)
-	Body(ctx context.Context, address string, nonce, signature []byte, hash [32]byte) (*dmcnpb.MailboxBody, error)
-	Delete(ctx context.Context, address string, nonce, signature []byte, hash [32]byte) error
+	List(ctx context.Context, address string, proof relay.MailboxProof, limit int, cursor []byte) (entries []*dmcnpb.MailboxEntry, next []byte, err error)
+	Body(ctx context.Context, address string, proof relay.MailboxProof, hash [32]byte) (*dmcnpb.MailboxBody, error)
+	Delete(ctx context.Context, address string, proof relay.MailboxProof, hash [32]byte) error
 	// Personal storage: the owner's sealed per-account state (contacts, Sent, flags, labels,
 	// settings). The relay only ever sees ciphertext.
-	KvGet(ctx context.Context, address string, nonce, signature []byte, key string) (sealed []byte, version uint64, found bool, err error)
-	KvPut(ctx context.Context, address string, nonce, signature []byte, key string, sealed []byte, expectedVersion uint64) (version uint64, err error)
-	KvList(ctx context.Context, address string, nonce, signature []byte, prefix string, limit int, cursor string, values bool) (items []relay.KvItem, next string, err error)
-	KvDelete(ctx context.Context, address string, nonce, signature []byte, key string) error
-	KvStat(ctx context.Context, address string, nonce, signature []byte) (used, quota, count uint64, err error)
+	KvGet(ctx context.Context, address string, proof relay.MailboxProof, key string) (item relay.KvItem, found bool, err error)
+	KvPut(ctx context.Context, address string, proof relay.MailboxProof, key string, sealed []byte, expectedVersion uint64) (version uint64, err error)
+	KvList(ctx context.Context, address string, proof relay.MailboxProof, prefix string, limit int, cursor string, values bool) (items []relay.KvItem, next string, err error)
+	KvDelete(ctx context.Context, address string, proof relay.MailboxProof, key string) error
+	KvStat(ctx context.Context, address string, proof relay.MailboxProof) (used, quota, count uint64, err error)
+	// The device registry. The op's own signatures (an approval, a retirement) are made over
+	// the same nonce as the proof, which is why they arrive at completion and not before.
+	DeviceEnroll(ctx context.Context, address string, proof relay.MailboxProof, op *dmcnpb.MailboxDeviceEnrollOp) (device *dmcnpb.DeviceRecord, genesis bool, err error)
+	DeviceList(ctx context.Context, address string, proof relay.MailboxProof) ([]*dmcnpb.DeviceRecord, error)
+	DeviceRetire(ctx context.Context, address string, proof relay.MailboxProof, op *dmcnpb.MailboxDeviceRetireOp) (*dmcnpb.DeviceRecord, error)
 }
 
 // pendingMailbox holds a challenge nonce + op parameters between the challenge and
@@ -84,6 +88,13 @@ type pendingMailbox struct {
 	sealed          []byte
 	expectedVersion uint64
 	values          bool
+
+	// Device registry: who is being enrolled or retired. Fixed at the challenge, so a
+	// completion can only finish the op that was asked for.
+	devicePub        []byte
+	deviceLabel      []byte
+	deviceCredential []byte
+	recovery         bool
 }
 
 // pendingStore holds in-flight mailbox challenges keyed by a random correlation
@@ -161,6 +172,14 @@ type mailboxChallengeRequest struct {
 	Sealed          string `json:"sealed,omitempty"`           // base64; kv_put payload
 	ExpectedVersion uint64 `json:"expected_version,omitempty"` // kv_put CAS; 0 = unconditional
 	Values          bool   `json:"values,omitempty"`           // kv_list: include blobs, not just keys
+
+	// Device registry (device_enroll, device_retire). DevicePublic is the device being enrolled
+	// or retired. The approving device's signature is not here: it covers the nonce this call
+	// returns, so it arrives with the completion.
+	DevicePublic     string `json:"device_public,omitempty"`     // base64
+	DeviceLabel      string `json:"device_label,omitempty"`      // base64 SealedBlob, sealed to the owner
+	DeviceCredential string `json:"device_credential,omitempty"` // base64 marshaled Credential
+	Recovery         bool   `json:"recovery,omitempty"`          // device_enroll: join on the recovery delay
 }
 
 type mailboxChallengeResponse struct {
@@ -170,7 +189,17 @@ type mailboxChallengeResponse struct {
 
 type mailboxCompleteRequest struct {
 	CorrelationID string `json:"correlation_id"`
-	Signature     string `json:"signature"` // base64 (over the challenge nonce)
+	// The account key over the challenge nonce, base64. May be empty on an operation an
+	// enrolled device may perform by itself.
+	Signature string `json:"signature,omitempty"`
+	// The device half: this device's key, and its signature over the tagged nonce. Required by
+	// the relay once the mailbox has devices.
+	DevicePublic    string `json:"device_public,omitempty"`
+	DeviceSignature string `json:"device_signature,omitempty"`
+	// device_enroll and device_retire: the asking device's own authorization over the same
+	// nonce, and for an enrolment the moment it attests the newcomer joined.
+	ApproverSignature string `json:"approver_signature,omitempty"`
+	ApprovedAt        int64  `json:"approved_at,omitempty"`
 }
 
 // mailboxEntryData is one header preview in a list result. Entry is the base64
@@ -200,6 +229,9 @@ type kvGetResponse struct {
 	Found   bool   `json:"found"`
 	Sealed  string `json:"sealed,omitempty"`
 	Version uint64 `json:"version"`
+	// The relay's own record of the write: when, and by which device (sealed to the owner).
+	WrittenAt    int64  `json:"written_at,omitempty"`
+	SealedWriter string `json:"sealed_writer,omitempty"`
 }
 
 type kvPutResponse struct {
@@ -207,9 +239,11 @@ type kvPutResponse struct {
 }
 
 type kvItemData struct {
-	Key     string `json:"key"`
-	Sealed  string `json:"sealed,omitempty"`
-	Version uint64 `json:"version"`
+	Key          string `json:"key"`
+	Sealed       string `json:"sealed,omitempty"`
+	Version      uint64 `json:"version"`
+	WrittenAt    int64  `json:"written_at,omitempty"`
+	SealedWriter string `json:"sealed_writer,omitempty"`
 }
 
 type kvListResponse struct {
@@ -242,7 +276,8 @@ func (h *MailboxHandler) HandleChallenge(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	switch req.Op {
-	case "list", "body", "delete", "kv_get", "kv_put", "kv_list", "kv_delete", "kv_stat":
+	case "list", "body", "delete", "kv_get", "kv_put", "kv_list", "kv_delete", "kv_stat",
+		"device_enroll", "device_list", "device_retire":
 	default:
 		writeError(w, http.StatusBadRequest, "unknown mailbox op: "+req.Op)
 		return
@@ -257,6 +292,30 @@ func (h *MailboxHandler) HandleChallenge(w http.ResponseWriter, r *http.Request)
 		expectedVersion: req.ExpectedVersion,
 		values:          req.Values,
 		expiresAt:       time.Now().Add(30 * time.Second),
+		recovery:        req.Op == "device_enroll" && req.Recovery,
+	}
+	for _, f := range []struct {
+		in   string
+		out  *[]byte
+		what string
+	}{
+		{req.DevicePublic, &p.devicePub, "device key"},
+		{req.DeviceLabel, &p.deviceLabel, "device label"},
+		{req.DeviceCredential, &p.deviceCredential, "device credential"},
+	} {
+		if f.in == "" {
+			continue
+		}
+		b, err := base64.StdEncoding.DecodeString(f.in)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid "+f.what+" encoding")
+			return
+		}
+		*f.out = b
+	}
+	if (req.Op == "device_enroll" || req.Op == "device_retire") && len(p.devicePub) != 32 {
+		writeError(w, http.StatusBadRequest, "device key must be 32 bytes")
+		return
 	}
 	if req.Sealed != "" {
 		blob, err := base64.StdEncoding.DecodeString(req.Sealed)
@@ -343,10 +402,27 @@ func (h *MailboxHandler) HandleComplete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	signature, err := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid signature encoding")
-		return
+	proof := relay.MailboxProof{Nonce: p.nonce}
+	var approverSig []byte
+	for _, f := range []struct {
+		in   string
+		out  *[]byte
+		what string
+	}{
+		{req.Signature, &proof.Signature, "signature"},
+		{req.DevicePublic, &proof.DevicePublic, "device key"},
+		{req.DeviceSignature, &proof.DeviceSignature, "device signature"},
+		{req.ApproverSignature, &approverSig, "approver signature"},
+	} {
+		if f.in == "" {
+			continue
+		}
+		b, err := base64.StdEncoding.DecodeString(f.in)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid "+f.what+" encoding")
+			return
+		}
+		*f.out = b
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -354,9 +430,9 @@ func (h *MailboxHandler) HandleComplete(w http.ResponseWriter, r *http.Request) 
 
 	switch p.op {
 	case "list":
-		entries, next, err := h.relay.List(ctx, p.address, p.nonce, signature, p.limit, p.cursor)
+		entries, next, err := h.relay.List(ctx, p.address, proof, p.limit, p.cursor)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "mailbox list failed: "+err.Error())
+			h.writeOpError(w, "mailbox list", err)
 			return
 		}
 		out := make([]mailboxEntryData, 0, len(entries))
@@ -374,9 +450,9 @@ func (h *MailboxHandler) HandleComplete(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusOK, mailboxListResponse{Entries: out, NextCursor: base64.StdEncoding.EncodeToString(next)})
 
 	case "body":
-		body, err := h.relay.Body(ctx, p.address, p.nonce, signature, p.hash)
+		body, err := h.relay.Body(ctx, p.address, proof, p.hash)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "mailbox body failed: "+err.Error())
+			h.writeOpError(w, "mailbox body", err)
 			return
 		}
 		b, mErr := proto.Marshal(body)
@@ -390,67 +466,176 @@ func (h *MailboxHandler) HandleComplete(w http.ResponseWriter, r *http.Request) 
 		})
 
 	case "delete":
-		if err := h.relay.Delete(ctx, p.address, p.nonce, signature, p.hash); err != nil {
-			writeError(w, http.StatusBadGateway, "mailbox delete failed: "+err.Error())
+		if err := h.relay.Delete(ctx, p.address, proof, p.hash); err != nil {
+			h.writeOpError(w, "mailbox delete", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, mailboxDeletedResponse{Hash: hex.EncodeToString(p.hash[:])})
 
 	case "kv_get":
-		sealed, version, found, err := h.relay.KvGet(ctx, p.address, p.nonce, signature, p.key)
+		it, found, err := h.relay.KvGet(ctx, p.address, proof, p.key)
 		if err != nil {
-			h.writeKvError(w, "get", err)
+			h.writeOpError(w, "mailbox storage get", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, kvGetResponse{
-			Found: found, Version: version, Sealed: base64.StdEncoding.EncodeToString(sealed),
+			Found: found, Version: it.Version, Sealed: base64.StdEncoding.EncodeToString(it.Sealed),
+			WrittenAt: it.WrittenAt, SealedWriter: base64.StdEncoding.EncodeToString(it.SealedWriter),
 		})
 
 	case "kv_put":
-		version, err := h.relay.KvPut(ctx, p.address, p.nonce, signature, p.key, p.sealed, p.expectedVersion)
+		version, err := h.relay.KvPut(ctx, p.address, proof, p.key, p.sealed, p.expectedVersion)
 		if err != nil {
-			h.writeKvError(w, "put", err)
+			h.writeOpError(w, "mailbox storage put", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, kvPutResponse{Version: version})
 
 	case "kv_list":
-		items, next, err := h.relay.KvList(ctx, p.address, p.nonce, signature, p.prefix, p.limit, string(p.cursor), p.values)
+		items, next, err := h.relay.KvList(ctx, p.address, proof, p.prefix, p.limit, string(p.cursor), p.values)
 		if err != nil {
-			h.writeKvError(w, "list", err)
+			h.writeOpError(w, "mailbox storage list", err)
 			return
 		}
 		out := make([]kvItemData, 0, len(items))
 		for _, it := range items {
 			out = append(out, kvItemData{
 				Key: it.Key, Version: it.Version,
-				Sealed: base64.StdEncoding.EncodeToString(it.Sealed),
+				Sealed:    base64.StdEncoding.EncodeToString(it.Sealed),
+				WrittenAt: it.WrittenAt, SealedWriter: base64.StdEncoding.EncodeToString(it.SealedWriter),
 			})
 		}
 		writeJSON(w, http.StatusOK, kvListResponse{Items: out, NextCursor: next})
 
 	case "kv_delete":
-		if err := h.relay.KvDelete(ctx, p.address, p.nonce, signature, p.key); err != nil {
-			h.writeKvError(w, "delete", err)
+		if err := h.relay.KvDelete(ctx, p.address, proof, p.key); err != nil {
+			h.writeOpError(w, "mailbox storage delete", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, kvDeleteResponse{Deleted: true})
 
 	case "kv_stat":
-		used, quota, count, err := h.relay.KvStat(ctx, p.address, p.nonce, signature)
+		used, quota, count, err := h.relay.KvStat(ctx, p.address, proof)
 		if err != nil {
-			h.writeKvError(w, "stat", err)
+			h.writeOpError(w, "mailbox storage stat", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, kvStatResponse{UsedBytes: used, QuotaBytes: quota, Count: count})
+
+	case "device_enroll":
+		// The approving device is the one that proved itself at the gate: one key signs both,
+		// so a device can't vouch for another while authenticating as a third. It is named only
+		// where there is an approval to name it for. A first device proves itself with the key
+		// it is enrolling, and that isn't an approver.
+		op := &dmcnpb.MailboxDeviceEnrollOp{
+			Ed25519PublicKey: p.devicePub,
+			SealedLabel:      p.deviceLabel,
+			DeviceCredential: p.deviceCredential,
+			Recovery:         p.recovery,
+		}
+		if len(approverSig) > 0 {
+			op.ApproverEd25519PublicKey = proof.DevicePublic
+			op.ApproverSignature = approverSig
+			op.ApprovedAt = req.ApprovedAt
+		}
+		device, genesis, err := h.relay.DeviceEnroll(ctx, p.address, proof, op)
+		if err != nil {
+			h.writeOpError(w, "device enrol", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, deviceEnrollResponse{Device: deviceData(device), Genesis: genesis})
+
+	case "device_list":
+		devices, err := h.relay.DeviceList(ctx, p.address, proof)
+		if err != nil {
+			h.writeOpError(w, "device list", err)
+			return
+		}
+		out := make([]deviceRecordData, 0, len(devices))
+		for _, d := range devices {
+			out = append(out, deviceData(d))
+		}
+		writeJSON(w, http.StatusOK, deviceListResponse{Devices: out})
+
+	case "device_retire":
+		device, err := h.relay.DeviceRetire(ctx, p.address, proof, &dmcnpb.MailboxDeviceRetireOp{
+			Ed25519PublicKey:       p.devicePub,
+			SignerEd25519PublicKey: proof.DevicePublic,
+			SignerSignature:        approverSig,
+		})
+		if err != nil {
+			h.writeOpError(w, "device retire", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, deviceRetireResponse{Device: deviceData(device)})
 	}
 }
 
-// writeKvError maps a storage failure to a status the client can act on rather than a blanket
-// 502. The distinctions matter to the caller: a conflict means re-read and retry, a full quota
-// means delete something, and UNSUPPORTED means this relay has no personal storage at all and the
-// client should fall back to keeping state locally instead of retrying forever.
-func (h *MailboxHandler) writeKvError(w http.ResponseWriter, op string, err error) {
+// deviceRecordData is one device as the client sees it. The label stays sealed: the server
+// can't read what the owner calls their devices.
+type deviceRecordData struct {
+	Public      string `json:"public"` // base64 Ed25519
+	EnrolledAt  int64  `json:"enrolled_at"`
+	RetiredAt   int64  `json:"retired_at,omitempty"`
+	EligibleAt  int64  `json:"eligible_at,omitempty"` // set while a recovery enrolment waits
+	Credential  string `json:"credential,omitempty"`  // the domain's attestation, if one was supplied
+	SealedLabel string `json:"sealed_label,omitempty"`
+}
+
+func deviceData(d *dmcnpb.DeviceRecord) deviceRecordData {
+	if d == nil {
+		return deviceRecordData{}
+	}
+	return deviceRecordData{
+		Public:      base64.StdEncoding.EncodeToString(d.GetEd25519PublicKey()),
+		EnrolledAt:  d.GetEnrolledAt(),
+		RetiredAt:   d.GetRetiredAt(),
+		EligibleAt:  d.GetEligibleAt(),
+		Credential:  base64.StdEncoding.EncodeToString(d.GetDeviceCredential()),
+		SealedLabel: base64.StdEncoding.EncodeToString(d.GetSealedLabel()),
+	}
+}
+
+type deviceEnrollResponse struct {
+	Device deviceRecordData `json:"device"`
+	// Genesis reports that this enrolment created the registry.
+	Genesis bool `json:"genesis"`
+}
+
+type deviceListResponse struct {
+	Devices []deviceRecordData `json:"devices"`
+}
+
+type deviceRetireResponse struct {
+	Device deviceRecordData `json:"device"`
+}
+
+// opErrorStatus is the HTTP answer to each refusal a client acts on. The code in the body is
+// the relay's own, lowercased: a client branches on that and never on the sentence beside it.
+//
+// None of these is 401. A session that is refused at the mailbox gate is still a valid
+// session, and a client that re-authenticated on it would loop.
+var opErrorStatus = map[string]int{
+	"AUTH_FAILED":              http.StatusForbidden,
+	"DEVICE_NOT_ENROLLED":      http.StatusForbidden,
+	"DEVICE_APPROVAL_REQUIRED": http.StatusForbidden,
+	"DEVICE_ON_PROBATION":      http.StatusForbidden,
+	"DEVICE_RECOVERY_DISABLED": http.StatusForbidden,
+	"DEVICE_ALREADY_ENROLLED":  http.StatusConflict,
+	"INVALID_REQUEST":          http.StatusBadRequest,
+	"UNSUPPORTED":              http.StatusNotImplemented,
+}
+
+// writeOpError answers a failed mailbox op. A refusal with a code keeps it; a storage failure
+// keeps the statuses a client already acts on; anything else is a 502.
+func (h *MailboxHandler) writeOpError(w http.ResponseWriter, what string, err error) {
+	var oe *relay.OpError
+	if errors.As(err, &oe) {
+		if status, ok := opErrorStatus[oe.Code]; ok {
+			writeErrorCode(w, status, strings.ToLower(oe.Code), oe.Message)
+			return
+		}
+	}
 	msg := err.Error()
 	switch {
 	case errors.Is(err, relay.ErrKvUnsupported) || strings.Contains(msg, "does not host personal storage"):
@@ -462,6 +647,6 @@ func (h *MailboxHandler) writeKvError(w http.ResponseWriter, op string, err erro
 	case errors.Is(err, relay.ErrKvBadKey):
 		writeErrorCode(w, http.StatusBadRequest, "storage_bad_key", msg)
 	default:
-		writeError(w, http.StatusBadGateway, "mailbox storage "+op+" failed: "+msg)
+		writeError(w, http.StatusBadGateway, what+" failed: "+msg)
 	}
 }

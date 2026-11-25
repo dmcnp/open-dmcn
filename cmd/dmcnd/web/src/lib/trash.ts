@@ -11,6 +11,14 @@
 // the flag as ciphertext and has no idea which messages are waiting or since when. So the sweep
 // runs whenever an unlocked client is open (hooks/useTrashPurge.ts), and mail whose time is up
 // while no client is open goes the next time one is.
+//
+// How long a message has waited is counted from when the RELAY recorded the mark, not from the
+// `trashedAt` inside it. A device can be allowed to file mail without the account's signing key
+// (SPEC_EXT_DEVICES.md §3), and such a device writes flag records. If the sweep trusted the time
+// in the record, that device could backdate it and have the owner's own client delete the mail
+// for it, which is the one thing it was not allowed to do. `trashedAt` is what the Deleted view
+// shows and sorts by. Any later change to the same record (marking it read, say) moves the
+// relay's time forward and so lengthens the wait, which errs on the side of keeping mail.
 
 import type { FlagRecord } from './api/flagStore';
 import type { FilterList } from './api/filterList';
@@ -36,11 +44,17 @@ export function purgeAt(trashedAt: number, days: number): number {
 /**
  * The messages whose time in Deleted is up, by hash. The retention is read now rather than when
  * each was deleted, so changing it applies to everything already waiting.
+ *
+ * `storedAt` is when each record was last written by a clock its writer did not choose (unix ms;
+ * useFlags). The wait is counted from that. A record with no entry there was written before
+ * relays kept the time, when only a device holding the account's signing key could write one, so
+ * for those the time in the record is still the owner's word and is used.
  */
-export function expiredTrash(flags: Map<string, FlagRecord>, days: number, now: number): string[] {
+export function expiredTrash(flags: Map<string, FlagRecord>, days: number, now: number, storedAt: Map<string, number> = new Map()): string[] {
   const out: string[] = [];
   for (const [hash, f] of flags) {
-    if (f.trashedAt !== undefined && purgeAt(f.trashedAt, days) <= now) out.push(hash);
+    if (f.trashedAt === undefined) continue;
+    if (purgeAt(storedAt.get(hash) ?? f.trashedAt, days) <= now) out.push(hash);
   }
   return out;
 }

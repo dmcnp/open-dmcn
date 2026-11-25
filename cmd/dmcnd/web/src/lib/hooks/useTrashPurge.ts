@@ -21,7 +21,7 @@ const SWEEP_MS = 60 * 60 * 1000;
  * than letting the message reappear where it came from.
  */
 export function useTrashPurge(): void {
-  const { flags, ready: flagsReady, removeFlags } = useFlags();
+  const { flags, storedAt, ready: flagsReady, removeFlags } = useFlags();
   const { messages, loaded: mailLoaded, accessState, deleteMessage } = useMessages();
   const { sent, loaded: sentLoaded, deleteSent } = useSent();
   const { settings, loaded: settingsLoaded } = useSettings();
@@ -35,7 +35,7 @@ export function useTrashPurge(): void {
 
   useEffect(() => {
     if (!flagsReady || !mailLoaded || !sentLoaded || !settingsLoaded || accessState !== 'ok') return;
-    const due = expiredTrash(flags, trashDays(settings.trashDays), Date.now()).filter(h => !inFlight.current.has(h));
+    const due = expiredTrash(flags, trashDays(settings.trashDays), Date.now(), storedAt).filter(h => !inFlight.current.has(h));
     if (due.length === 0) return;
     const inMailbox = new Set(messages.map(m => m.hash));
     const inSent = new Set(sent.map(p => p.hash));
@@ -56,5 +56,5 @@ export function useTrashPurge(): void {
         }
       })();
     }
-  }, [tick, flags, flagsReady, messages, mailLoaded, sent, sentLoaded, settings.trashDays, settingsLoaded, accessState, deleteMessage, deleteSent, removeFlags]);
+  }, [tick, flags, storedAt, flagsReady, messages, mailLoaded, sent, sentLoaded, settings.trashDays, settingsLoaded, accessState, deleteMessage, deleteSent, removeFlags]);
 }

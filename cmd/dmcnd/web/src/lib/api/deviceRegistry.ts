@@ -10,7 +10,7 @@
 // rules out. In pairing, the approving device enrols the newcomer in the same step that hands
 // over the account keys.
 import { deployment } from '@deployment';
-import { postJSONAs } from './client';
+import { ApiError, postJSONAs } from './client';
 import { getOrCreateDeviceKey, loadDeviceKey, deviceChallengeBytes } from '../crypto/deviceKey';
 import { deviceApprovalBytes, deviceRetirementBytes } from '../crypto/deviceKey';
 import { signWithKey } from '../crypto/sign';
@@ -192,7 +192,20 @@ export async function retireDevice(address: string, account: AccountSigner, devi
 export type EnrolmentState =
   | { state: 'enrolled'; genesis: boolean }
   | { state: 'needs-approval' }
+  /** This server keeps no device registry: there is nothing to join, and nothing is wrong. */
+  | { state: 'no-registry' }
   | { state: 'unavailable'; error: unknown };
+
+/**
+ * The code a server gave a refusal, or '' when it gave none.
+ *
+ * Every refusal this module acts on has one (SPEC_EXT_DEVICES.md §6), and a client tells them
+ * apart by it. The sentence beside it is for a person. The phrase matches further down are for
+ * a server from before the codes: they go when no such server is left to talk to.
+ */
+function refusalCode(err: unknown): string {
+  return err instanceof ApiError && err.code ? err.code : '';
+}
 
 /**
  * Put this browser on the mailbox if it can be, and report what it found.
@@ -277,6 +290,11 @@ export async function requestRecovery(account: AccountSigner, sealedLabel?: Uint
  * of the owner's), because a domain that refuses recovery says so in its own words.
  */
 export function classifyRecovery(err: unknown): RecoveryState {
+  switch (refusalCode(err)) {
+    case 'device_recovery_disabled': return { state: 'disabled' };
+    case 'device_already_enrolled': return { state: 'already-asked' };
+    case 'device_approval_required': return { state: 'cancelled' };
+  }
   if (err instanceof Error) {
     if (err.message.includes('does not let a device join without approval')) return { state: 'disabled' };
     if (err.message.includes('this device is already enrolled')) return { state: 'already-asked' };
@@ -321,11 +339,19 @@ export function waitingDevices(devices: DeviceRecord[], nowSec: number): DeviceR
  * while "needs approval" taken as success lets a browser believe it is fine until its first
  * mailbox call fails with nothing to explain it.
  *
- * Matched on the message because the mailbox proxy forwards the relay's own words. A code would
- * be sturdier and is worth adding when that proxy grows structured errors; until then the strings
- * are pinned by tests on both sides of the boundary.
+ * Read from the server's code (refusalCode). The phrase matches below are for a server from
+ * before the codes, which forwarded only the relay's own words.
  */
 export function classifyEnrolment(err: unknown): EnrolmentState {
+  switch (refusalCode(err)) {
+    case 'device_approval_required': return { state: 'needs-approval' };
+    case 'device_already_enrolled': return { state: 'enrolled', genesis: false };
+    case 'unsupported': return { state: 'no-registry' };
+  }
+  // A server from before the registry answers the op itself as unknown.
+  if (err instanceof ApiError && err.status === 400 && err.message.includes('unknown mailbox op')) {
+    return { state: 'no-registry' };
+  }
   if (err instanceof Error) {
     // Both phrases contain the word "already", and a loose match on it reads a shut-out browser
     // as a working one — so each match is the narrowest phrase unique to its answer. The relay
@@ -342,11 +368,11 @@ export function classifyEnrolment(err: unknown): EnrolmentState {
  * never paired, or removed from another device. Holding the account key is not enough once an
  * account has devices, so the remedy is pairing, not signing in again.
  *
- * Matched on the relay's sentence (relay.ErrDeviceNotEnrolled), which the mailbox proxy forwards,
- * for the reason classifyEnrolment gives; TestDeviceErrorPhrasesTheBrowserMatches pins it on the
- * Go side.
+ * Read from the server's code, with the relay's sentence as the fallback for a server from
+ * before the codes; TestDeviceErrorPhrasesTheBrowserMatches pins that sentence on the Go side.
  */
 export function isUnapprovedDevice(err: unknown): boolean {
+  if (refusalCode(err) === 'device_not_enrolled') return true;
   const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
   return message.includes('requires a proof from an enrolled device');
 }

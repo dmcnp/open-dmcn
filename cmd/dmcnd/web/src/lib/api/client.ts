@@ -318,3 +318,16 @@ export interface SendMessageResponse {
 export function sendMessage(req: SendMessageRequest): Promise<SendMessageResponse> {
   return request('POST', '/api/v1/messages/send', req);
 }
+
+// Device pairing (SPEC_EXT_DEVICES.md §8): what a device with no account yet needs to ask to
+// join one. Both are open and restricted by the server to pairing.local addresses.
+
+/** Publish the newcomer's throwaway, self-signed identity so its mailbox can be found. */
+export function pairRegister(identityRecordB64: string): Promise<void> {
+  return apiRequest('POST', '/api/v1/pair/register', { identity_record: identityRecordB64 });
+}
+
+/** A short session bound to the throwaway address, for the mailbox and send endpoints. */
+export function pairSession(ephemeralAddress: string): Promise<SessionResponse> {
+  return apiRequest('POST', '/api/v1/pair/session', { ephemeral_address: ephemeralAddress });
+}

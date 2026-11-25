@@ -119,6 +119,11 @@ type DomainAuthorityRecord struct {
 	// admissibility would split-brain record admission. Meaningful only with
 	// PolicyAllowKeyRotation.
 	RotationMinDeviceAgeDays uint32
+
+	// DeviceRecoveryDelayHours is how long a device that joined a mailbox through recovery waits
+	// before it can act (SPEC_EXT_DEVICES.md §4). Read it through DeviceRecoveryDelay(), which
+	// resolves zero to the default and the sentinel to "no recovery path".
+	DeviceRecoveryDelayHours uint32
 }
 
 // ResolveAuthority returns the authority credential in the DAR whose Subject is pub,
@@ -177,6 +182,31 @@ func (d *DomainAuthorityRecord) RequiresOnion() bool {
 // without the operator. Default off.
 func (d *DomainAuthorityRecord) AllowKeyRotation() bool {
 	return d.PolicyFlags&PolicyAllowKeyRotation != 0
+}
+
+// DeviceRecoveryDisabled, in DomainAuthorityRecord.DeviceRecoveryDelayHours, turns the recovery
+// path off: on such a domain an owner who loses every enrolled device has no way back short of
+// the operator. A sentinel and not zero, so "nobody set this" and "we decided against it" stay
+// apart: the first gets a working default, the second gets what it asked for.
+const DeviceRecoveryDisabled uint32 = ^uint32(0)
+
+// DefaultDeviceRecoveryDelay is how long a recovery enrolment waits where the domain names no
+// delay. The default is a working recovery path, which cuts both ways: a copied account key can
+// take a mailbox after this long if nobody on it objects. No recovery at all would mean an
+// owner who loses their only device loses their mail for good.
+const DefaultDeviceRecoveryDelay = 7 * 24 * time.Hour
+
+// DeviceRecoveryDelay reports how long a device waits after joining through recovery, and
+// whether the domain permits recovery at all.
+func (d *DomainAuthorityRecord) DeviceRecoveryDelay() (time.Duration, bool) {
+	switch d.DeviceRecoveryDelayHours {
+	case DeviceRecoveryDisabled:
+		return 0, false
+	case 0:
+		return DefaultDeviceRecoveryDelay, true
+	default:
+		return time.Duration(d.DeviceRecoveryDelayHours) * time.Hour, true
+	}
 }
 
 // DefaultRotationMinDeviceAge is the device tenure a rotation needs when a domain enables
@@ -308,6 +338,7 @@ func (d *DomainAuthorityRecord) ToProto() *dmcnpb.DomainAuthorityRecord {
 		ReservedLocalParts:        d.ReservedLocalParts,
 		FleetDomain:               d.FleetDomain,
 		RotationMinDeviceAgeDays:  d.RotationMinDeviceAgeDays,
+		DeviceRecoveryDelayHours:  d.DeviceRecoveryDelayHours,
 	}
 	for _, k := range d.SupersededKeys {
 		x := k.X25519Public
@@ -343,6 +374,7 @@ func DomainAuthorityRecordFromProto(pb *dmcnpb.DomainAuthorityRecord) (*DomainAu
 		ReservedLocalParts:       append([]string(nil), pb.ReservedLocalParts...),
 		FleetDomain:              pb.FleetDomain,
 		RotationMinDeviceAgeDays: pb.RotationMinDeviceAgeDays,
+		DeviceRecoveryDelayHours: pb.DeviceRecoveryDelayHours,
 	}
 	copy(d.AuthorityX25519[:], pb.AuthorityX25519PublicKey)
 	copy(d.SelfSignature[:], pb.SelfSignature)

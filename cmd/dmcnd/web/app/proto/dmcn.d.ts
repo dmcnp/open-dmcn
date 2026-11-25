@@ -4063,6 +4063,15 @@ export namespace dmcn {
 
             /** RelayResponse mailboxKvStat */
             mailboxKvStat?: (dmcn.relay.IMailboxKvStatResponse|null);
+
+            /** RelayResponse mailboxDeviceEnroll */
+            mailboxDeviceEnroll?: (dmcn.relay.IMailboxDeviceEnrollResponse|null);
+
+            /** RelayResponse mailboxDeviceList */
+            mailboxDeviceList?: (dmcn.relay.IMailboxDeviceListResponse|null);
+
+            /** RelayResponse mailboxDeviceRetire */
+            mailboxDeviceRetire?: (dmcn.relay.IMailboxDeviceRetireResponse|null);
         }
 
         /** Represents a RelayResponse. */
@@ -4143,8 +4152,17 @@ export namespace dmcn {
             /** RelayResponse mailboxKvStat. */
             public mailboxKvStat?: (dmcn.relay.IMailboxKvStatResponse|null);
 
+            /** RelayResponse mailboxDeviceEnroll. */
+            public mailboxDeviceEnroll?: (dmcn.relay.IMailboxDeviceEnrollResponse|null);
+
+            /** RelayResponse mailboxDeviceList. */
+            public mailboxDeviceList?: (dmcn.relay.IMailboxDeviceListResponse|null);
+
+            /** RelayResponse mailboxDeviceRetire. */
+            public mailboxDeviceRetire?: (dmcn.relay.IMailboxDeviceRetireResponse|null);
+
             /** RelayResponse response. */
-            public response?: ("store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat");
+            public response?: ("store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat"|"mailboxDeviceEnroll"|"mailboxDeviceList"|"mailboxDeviceRetire");
 
             /**
              * Creates a new RelayResponse instance using the specified properties.
@@ -4951,6 +4969,763 @@ export namespace dmcn {
 
             /**
              * Gets the default type url for FetchInit
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a DeviceRecord. */
+        interface IDeviceRecord {
+
+            /** DeviceRecord ed25519PublicKey */
+            ed25519PublicKey?: (Uint8Array|null);
+
+            /** DeviceRecord enrolledAt */
+            enrolledAt?: (number|Long|null);
+
+            /** DeviceRecord sealedLabel */
+            sealedLabel?: (Uint8Array|null);
+
+            /** DeviceRecord retiredAt */
+            retiredAt?: (number|Long|null);
+
+            /** DeviceRecord eligibleAt */
+            eligibleAt?: (number|Long|null);
+
+            /** DeviceRecord deviceCredential */
+            deviceCredential?: (Uint8Array|null);
+        }
+
+        /** Represents a DeviceRecord. */
+        class DeviceRecord implements IDeviceRecord {
+
+            /**
+             * Constructs a new DeviceRecord.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IDeviceRecord);
+
+            /** DeviceRecord ed25519PublicKey. */
+            public ed25519PublicKey: Uint8Array;
+
+            /** DeviceRecord enrolledAt. */
+            public enrolledAt: (number|Long);
+
+            /** DeviceRecord sealedLabel. */
+            public sealedLabel: Uint8Array;
+
+            /** DeviceRecord retiredAt. */
+            public retiredAt: (number|Long);
+
+            /** DeviceRecord eligibleAt. */
+            public eligibleAt: (number|Long);
+
+            /** DeviceRecord deviceCredential. */
+            public deviceCredential: Uint8Array;
+
+            /**
+             * Creates a new DeviceRecord instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns DeviceRecord instance
+             */
+            public static create(properties?: dmcn.relay.IDeviceRecord): dmcn.relay.DeviceRecord;
+
+            /**
+             * Encodes the specified DeviceRecord message. Does not implicitly {@link dmcn.relay.DeviceRecord.verify|verify} messages.
+             * @param message DeviceRecord message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IDeviceRecord, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified DeviceRecord message, length delimited. Does not implicitly {@link dmcn.relay.DeviceRecord.verify|verify} messages.
+             * @param message DeviceRecord message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IDeviceRecord, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a DeviceRecord message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns DeviceRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.DeviceRecord;
+
+            /**
+             * Decodes a DeviceRecord message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns DeviceRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.DeviceRecord;
+
+            /**
+             * Verifies a DeviceRecord message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a DeviceRecord message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns DeviceRecord
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.DeviceRecord;
+
+            /**
+             * Creates a plain object from a DeviceRecord message. Also converts values to other types if specified.
+             * @param message DeviceRecord
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.DeviceRecord, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this DeviceRecord to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for DeviceRecord
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxDeviceEnrollOp. */
+        interface IMailboxDeviceEnrollOp {
+
+            /** MailboxDeviceEnrollOp ed25519PublicKey */
+            ed25519PublicKey?: (Uint8Array|null);
+
+            /** MailboxDeviceEnrollOp sealedLabel */
+            sealedLabel?: (Uint8Array|null);
+
+            /** MailboxDeviceEnrollOp approverEd25519PublicKey */
+            approverEd25519PublicKey?: (Uint8Array|null);
+
+            /** MailboxDeviceEnrollOp approverSignature */
+            approverSignature?: (Uint8Array|null);
+
+            /** MailboxDeviceEnrollOp deviceCredential */
+            deviceCredential?: (Uint8Array|null);
+
+            /** MailboxDeviceEnrollOp approvedAt */
+            approvedAt?: (number|Long|null);
+
+            /** MailboxDeviceEnrollOp recovery */
+            recovery?: (boolean|null);
+        }
+
+        /** Represents a MailboxDeviceEnrollOp. */
+        class MailboxDeviceEnrollOp implements IMailboxDeviceEnrollOp {
+
+            /**
+             * Constructs a new MailboxDeviceEnrollOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxDeviceEnrollOp);
+
+            /** MailboxDeviceEnrollOp ed25519PublicKey. */
+            public ed25519PublicKey: Uint8Array;
+
+            /** MailboxDeviceEnrollOp sealedLabel. */
+            public sealedLabel: Uint8Array;
+
+            /** MailboxDeviceEnrollOp approverEd25519PublicKey. */
+            public approverEd25519PublicKey: Uint8Array;
+
+            /** MailboxDeviceEnrollOp approverSignature. */
+            public approverSignature: Uint8Array;
+
+            /** MailboxDeviceEnrollOp deviceCredential. */
+            public deviceCredential: Uint8Array;
+
+            /** MailboxDeviceEnrollOp approvedAt. */
+            public approvedAt: (number|Long);
+
+            /** MailboxDeviceEnrollOp recovery. */
+            public recovery: boolean;
+
+            /**
+             * Creates a new MailboxDeviceEnrollOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxDeviceEnrollOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxDeviceEnrollOp): dmcn.relay.MailboxDeviceEnrollOp;
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollOp message. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollOp.verify|verify} messages.
+             * @param message MailboxDeviceEnrollOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxDeviceEnrollOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollOp.verify|verify} messages.
+             * @param message MailboxDeviceEnrollOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxDeviceEnrollOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxDeviceEnrollOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxDeviceEnrollOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxDeviceEnrollOp;
+
+            /**
+             * Decodes a MailboxDeviceEnrollOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxDeviceEnrollOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxDeviceEnrollOp;
+
+            /**
+             * Verifies a MailboxDeviceEnrollOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxDeviceEnrollOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxDeviceEnrollOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxDeviceEnrollOp;
+
+            /**
+             * Creates a plain object from a MailboxDeviceEnrollOp message. Also converts values to other types if specified.
+             * @param message MailboxDeviceEnrollOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxDeviceEnrollOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxDeviceEnrollOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxDeviceEnrollOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxDeviceEnrollResponse. */
+        interface IMailboxDeviceEnrollResponse {
+
+            /** MailboxDeviceEnrollResponse device */
+            device?: (dmcn.relay.IDeviceRecord|null);
+
+            /** MailboxDeviceEnrollResponse genesis */
+            genesis?: (boolean|null);
+        }
+
+        /** Represents a MailboxDeviceEnrollResponse. */
+        class MailboxDeviceEnrollResponse implements IMailboxDeviceEnrollResponse {
+
+            /**
+             * Constructs a new MailboxDeviceEnrollResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxDeviceEnrollResponse);
+
+            /** MailboxDeviceEnrollResponse device. */
+            public device?: (dmcn.relay.IDeviceRecord|null);
+
+            /** MailboxDeviceEnrollResponse genesis. */
+            public genesis: boolean;
+
+            /**
+             * Creates a new MailboxDeviceEnrollResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxDeviceEnrollResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxDeviceEnrollResponse): dmcn.relay.MailboxDeviceEnrollResponse;
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollResponse message. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollResponse.verify|verify} messages.
+             * @param message MailboxDeviceEnrollResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxDeviceEnrollResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollResponse.verify|verify} messages.
+             * @param message MailboxDeviceEnrollResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxDeviceEnrollResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxDeviceEnrollResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxDeviceEnrollResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxDeviceEnrollResponse;
+
+            /**
+             * Decodes a MailboxDeviceEnrollResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxDeviceEnrollResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxDeviceEnrollResponse;
+
+            /**
+             * Verifies a MailboxDeviceEnrollResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxDeviceEnrollResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxDeviceEnrollResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxDeviceEnrollResponse;
+
+            /**
+             * Creates a plain object from a MailboxDeviceEnrollResponse message. Also converts values to other types if specified.
+             * @param message MailboxDeviceEnrollResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxDeviceEnrollResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxDeviceEnrollResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxDeviceEnrollResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxDeviceListOp. */
+        interface IMailboxDeviceListOp {
+        }
+
+        /** Represents a MailboxDeviceListOp. */
+        class MailboxDeviceListOp implements IMailboxDeviceListOp {
+
+            /**
+             * Constructs a new MailboxDeviceListOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxDeviceListOp);
+
+            /**
+             * Creates a new MailboxDeviceListOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxDeviceListOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxDeviceListOp): dmcn.relay.MailboxDeviceListOp;
+
+            /**
+             * Encodes the specified MailboxDeviceListOp message. Does not implicitly {@link dmcn.relay.MailboxDeviceListOp.verify|verify} messages.
+             * @param message MailboxDeviceListOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxDeviceListOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxDeviceListOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceListOp.verify|verify} messages.
+             * @param message MailboxDeviceListOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxDeviceListOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxDeviceListOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxDeviceListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxDeviceListOp;
+
+            /**
+             * Decodes a MailboxDeviceListOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxDeviceListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxDeviceListOp;
+
+            /**
+             * Verifies a MailboxDeviceListOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxDeviceListOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxDeviceListOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxDeviceListOp;
+
+            /**
+             * Creates a plain object from a MailboxDeviceListOp message. Also converts values to other types if specified.
+             * @param message MailboxDeviceListOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxDeviceListOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxDeviceListOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxDeviceListOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxDeviceListResponse. */
+        interface IMailboxDeviceListResponse {
+
+            /** MailboxDeviceListResponse devices */
+            devices?: (dmcn.relay.IDeviceRecord[]|null);
+        }
+
+        /** Represents a MailboxDeviceListResponse. */
+        class MailboxDeviceListResponse implements IMailboxDeviceListResponse {
+
+            /**
+             * Constructs a new MailboxDeviceListResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxDeviceListResponse);
+
+            /** MailboxDeviceListResponse devices. */
+            public devices: dmcn.relay.IDeviceRecord[];
+
+            /**
+             * Creates a new MailboxDeviceListResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxDeviceListResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxDeviceListResponse): dmcn.relay.MailboxDeviceListResponse;
+
+            /**
+             * Encodes the specified MailboxDeviceListResponse message. Does not implicitly {@link dmcn.relay.MailboxDeviceListResponse.verify|verify} messages.
+             * @param message MailboxDeviceListResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxDeviceListResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxDeviceListResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceListResponse.verify|verify} messages.
+             * @param message MailboxDeviceListResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxDeviceListResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxDeviceListResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxDeviceListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxDeviceListResponse;
+
+            /**
+             * Decodes a MailboxDeviceListResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxDeviceListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxDeviceListResponse;
+
+            /**
+             * Verifies a MailboxDeviceListResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxDeviceListResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxDeviceListResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxDeviceListResponse;
+
+            /**
+             * Creates a plain object from a MailboxDeviceListResponse message. Also converts values to other types if specified.
+             * @param message MailboxDeviceListResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxDeviceListResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxDeviceListResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxDeviceListResponse
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxDeviceRetireOp. */
+        interface IMailboxDeviceRetireOp {
+
+            /** MailboxDeviceRetireOp ed25519PublicKey */
+            ed25519PublicKey?: (Uint8Array|null);
+
+            /** MailboxDeviceRetireOp signerEd25519PublicKey */
+            signerEd25519PublicKey?: (Uint8Array|null);
+
+            /** MailboxDeviceRetireOp signerSignature */
+            signerSignature?: (Uint8Array|null);
+        }
+
+        /** Represents a MailboxDeviceRetireOp. */
+        class MailboxDeviceRetireOp implements IMailboxDeviceRetireOp {
+
+            /**
+             * Constructs a new MailboxDeviceRetireOp.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxDeviceRetireOp);
+
+            /** MailboxDeviceRetireOp ed25519PublicKey. */
+            public ed25519PublicKey: Uint8Array;
+
+            /** MailboxDeviceRetireOp signerEd25519PublicKey. */
+            public signerEd25519PublicKey: Uint8Array;
+
+            /** MailboxDeviceRetireOp signerSignature. */
+            public signerSignature: Uint8Array;
+
+            /**
+             * Creates a new MailboxDeviceRetireOp instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxDeviceRetireOp instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxDeviceRetireOp): dmcn.relay.MailboxDeviceRetireOp;
+
+            /**
+             * Encodes the specified MailboxDeviceRetireOp message. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireOp.verify|verify} messages.
+             * @param message MailboxDeviceRetireOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxDeviceRetireOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxDeviceRetireOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireOp.verify|verify} messages.
+             * @param message MailboxDeviceRetireOp message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxDeviceRetireOp, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxDeviceRetireOp message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxDeviceRetireOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxDeviceRetireOp;
+
+            /**
+             * Decodes a MailboxDeviceRetireOp message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxDeviceRetireOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxDeviceRetireOp;
+
+            /**
+             * Verifies a MailboxDeviceRetireOp message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxDeviceRetireOp message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxDeviceRetireOp
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxDeviceRetireOp;
+
+            /**
+             * Creates a plain object from a MailboxDeviceRetireOp message. Also converts values to other types if specified.
+             * @param message MailboxDeviceRetireOp
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxDeviceRetireOp, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxDeviceRetireOp to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxDeviceRetireOp
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a MailboxDeviceRetireResponse. */
+        interface IMailboxDeviceRetireResponse {
+
+            /** MailboxDeviceRetireResponse device */
+            device?: (dmcn.relay.IDeviceRecord|null);
+        }
+
+        /** Represents a MailboxDeviceRetireResponse. */
+        class MailboxDeviceRetireResponse implements IMailboxDeviceRetireResponse {
+
+            /**
+             * Constructs a new MailboxDeviceRetireResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.relay.IMailboxDeviceRetireResponse);
+
+            /** MailboxDeviceRetireResponse device. */
+            public device?: (dmcn.relay.IDeviceRecord|null);
+
+            /**
+             * Creates a new MailboxDeviceRetireResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns MailboxDeviceRetireResponse instance
+             */
+            public static create(properties?: dmcn.relay.IMailboxDeviceRetireResponse): dmcn.relay.MailboxDeviceRetireResponse;
+
+            /**
+             * Encodes the specified MailboxDeviceRetireResponse message. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireResponse.verify|verify} messages.
+             * @param message MailboxDeviceRetireResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.relay.IMailboxDeviceRetireResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified MailboxDeviceRetireResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireResponse.verify|verify} messages.
+             * @param message MailboxDeviceRetireResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.relay.IMailboxDeviceRetireResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a MailboxDeviceRetireResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns MailboxDeviceRetireResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.relay.MailboxDeviceRetireResponse;
+
+            /**
+             * Decodes a MailboxDeviceRetireResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns MailboxDeviceRetireResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.relay.MailboxDeviceRetireResponse;
+
+            /**
+             * Verifies a MailboxDeviceRetireResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a MailboxDeviceRetireResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns MailboxDeviceRetireResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.relay.MailboxDeviceRetireResponse;
+
+            /**
+             * Creates a plain object from a MailboxDeviceRetireResponse message. Also converts values to other types if specified.
+             * @param message MailboxDeviceRetireResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.relay.MailboxDeviceRetireResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this MailboxDeviceRetireResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for MailboxDeviceRetireResponse
              * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns The default type url
              */
@@ -7890,6 +8665,15 @@ export namespace dmcn {
 
             /** MailboxOp kvStat */
             kvStat?: (dmcn.relay.IMailboxKvStatOp|null);
+
+            /** MailboxOp deviceEnroll */
+            deviceEnroll?: (dmcn.relay.IMailboxDeviceEnrollOp|null);
+
+            /** MailboxOp deviceList */
+            deviceList?: (dmcn.relay.IMailboxDeviceListOp|null);
+
+            /** MailboxOp deviceRetire */
+            deviceRetire?: (dmcn.relay.IMailboxDeviceRetireOp|null);
         }
 
         /** Represents a MailboxOp. */
@@ -7937,8 +8721,17 @@ export namespace dmcn {
             /** MailboxOp kvStat. */
             public kvStat?: (dmcn.relay.IMailboxKvStatOp|null);
 
+            /** MailboxOp deviceEnroll. */
+            public deviceEnroll?: (dmcn.relay.IMailboxDeviceEnrollOp|null);
+
+            /** MailboxOp deviceList. */
+            public deviceList?: (dmcn.relay.IMailboxDeviceListOp|null);
+
+            /** MailboxOp deviceRetire. */
+            public deviceRetire?: (dmcn.relay.IMailboxDeviceRetireOp|null);
+
             /** MailboxOp op. */
-            public op?: ("list"|"body"|"delete"|"kvPut"|"kvGet"|"kvList"|"kvDelete"|"kvStat");
+            public op?: ("list"|"body"|"delete"|"kvPut"|"kvGet"|"kvList"|"kvDelete"|"kvStat"|"deviceEnroll"|"deviceList"|"deviceRetire");
 
             /**
              * Creates a new MailboxOp instance using the specified properties.
@@ -9434,6 +10227,12 @@ export namespace dmcn {
 
             /** MailboxKvGetResponse version */
             version?: (number|Long|null);
+
+            /** MailboxKvGetResponse writtenAt */
+            writtenAt?: (number|Long|null);
+
+            /** MailboxKvGetResponse sealedWriter */
+            sealedWriter?: (Uint8Array|null);
         }
 
         /** Represents a MailboxKvGetResponse. */
@@ -9453,6 +10252,12 @@ export namespace dmcn {
 
             /** MailboxKvGetResponse version. */
             public version: (number|Long);
+
+            /** MailboxKvGetResponse writtenAt. */
+            public writtenAt: (number|Long);
+
+            /** MailboxKvGetResponse sealedWriter. */
+            public sealedWriter: Uint8Array;
 
             /**
              * Creates a new MailboxKvGetResponse instance using the specified properties.
@@ -9543,6 +10348,12 @@ export namespace dmcn {
 
             /** MailboxKvItem version */
             version?: (number|Long|null);
+
+            /** MailboxKvItem writtenAt */
+            writtenAt?: (number|Long|null);
+
+            /** MailboxKvItem sealedWriter */
+            sealedWriter?: (Uint8Array|null);
         }
 
         /** Represents a MailboxKvItem. */
@@ -9562,6 +10373,12 @@ export namespace dmcn {
 
             /** MailboxKvItem version. */
             public version: (number|Long);
+
+            /** MailboxKvItem writtenAt. */
+            public writtenAt: (number|Long);
+
+            /** MailboxKvItem sealedWriter. */
+            public sealedWriter: Uint8Array;
 
             /**
              * Creates a new MailboxKvItem instance using the specified properties.
@@ -10281,6 +11098,270 @@ export namespace dmcn {
 
             /**
              * Gets the default type url for BridgeDeliveryReceipt
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+    }
+
+    /** Namespace pairing. */
+    namespace pairing {
+
+        /** Properties of a CloneRequest. */
+        interface ICloneRequest {
+
+            /** CloneRequest ephemeralEd25519Pub */
+            ephemeralEd25519Pub?: (Uint8Array|null);
+
+            /** CloneRequest ephemeralX25519Pub */
+            ephemeralX25519Pub?: (Uint8Array|null);
+
+            /** CloneRequest deviceId */
+            deviceId?: (Uint8Array|null);
+
+            /** CloneRequest label */
+            label?: (string|null);
+
+            /** CloneRequest requestedAt */
+            requestedAt?: (number|Long|null);
+
+            /** CloneRequest deviceEd25519Pub */
+            deviceEd25519Pub?: (Uint8Array|null);
+        }
+
+        /** Represents a CloneRequest. */
+        class CloneRequest implements ICloneRequest {
+
+            /**
+             * Constructs a new CloneRequest.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.pairing.ICloneRequest);
+
+            /** CloneRequest ephemeralEd25519Pub. */
+            public ephemeralEd25519Pub: Uint8Array;
+
+            /** CloneRequest ephemeralX25519Pub. */
+            public ephemeralX25519Pub: Uint8Array;
+
+            /** CloneRequest deviceId. */
+            public deviceId: Uint8Array;
+
+            /** CloneRequest label. */
+            public label: string;
+
+            /** CloneRequest requestedAt. */
+            public requestedAt: (number|Long);
+
+            /** CloneRequest deviceEd25519Pub. */
+            public deviceEd25519Pub: Uint8Array;
+
+            /**
+             * Creates a new CloneRequest instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns CloneRequest instance
+             */
+            public static create(properties?: dmcn.pairing.ICloneRequest): dmcn.pairing.CloneRequest;
+
+            /**
+             * Encodes the specified CloneRequest message. Does not implicitly {@link dmcn.pairing.CloneRequest.verify|verify} messages.
+             * @param message CloneRequest message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.pairing.ICloneRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified CloneRequest message, length delimited. Does not implicitly {@link dmcn.pairing.CloneRequest.verify|verify} messages.
+             * @param message CloneRequest message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.pairing.ICloneRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a CloneRequest message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns CloneRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.pairing.CloneRequest;
+
+            /**
+             * Decodes a CloneRequest message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns CloneRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.pairing.CloneRequest;
+
+            /**
+             * Verifies a CloneRequest message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a CloneRequest message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns CloneRequest
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.pairing.CloneRequest;
+
+            /**
+             * Creates a plain object from a CloneRequest message. Also converts values to other types if specified.
+             * @param message CloneRequest
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.pairing.CloneRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this CloneRequest to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for CloneRequest
+             * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns The default type url
+             */
+            public static getTypeUrl(typeUrlPrefix?: string): string;
+        }
+
+        /** Properties of a CloneResponse. */
+        interface ICloneResponse {
+
+            /** CloneResponse address */
+            address?: (string|null);
+
+            /** CloneResponse ed25519Public */
+            ed25519Public?: (Uint8Array|null);
+
+            /** CloneResponse ed25519Private */
+            ed25519Private?: (Uint8Array|null);
+
+            /** CloneResponse x25519Public */
+            x25519Public?: (Uint8Array|null);
+
+            /** CloneResponse x25519Private */
+            x25519Private?: (Uint8Array|null);
+
+            /** CloneResponse deviceId */
+            deviceId?: (Uint8Array|null);
+
+            /** CloneResponse createdAt */
+            createdAt?: (number|Long|null);
+        }
+
+        /** Represents a CloneResponse. */
+        class CloneResponse implements ICloneResponse {
+
+            /**
+             * Constructs a new CloneResponse.
+             * @param [properties] Properties to set
+             */
+            constructor(properties?: dmcn.pairing.ICloneResponse);
+
+            /** CloneResponse address. */
+            public address: string;
+
+            /** CloneResponse ed25519Public. */
+            public ed25519Public: Uint8Array;
+
+            /** CloneResponse ed25519Private. */
+            public ed25519Private: Uint8Array;
+
+            /** CloneResponse x25519Public. */
+            public x25519Public: Uint8Array;
+
+            /** CloneResponse x25519Private. */
+            public x25519Private: Uint8Array;
+
+            /** CloneResponse deviceId. */
+            public deviceId: Uint8Array;
+
+            /** CloneResponse createdAt. */
+            public createdAt: (number|Long);
+
+            /**
+             * Creates a new CloneResponse instance using the specified properties.
+             * @param [properties] Properties to set
+             * @returns CloneResponse instance
+             */
+            public static create(properties?: dmcn.pairing.ICloneResponse): dmcn.pairing.CloneResponse;
+
+            /**
+             * Encodes the specified CloneResponse message. Does not implicitly {@link dmcn.pairing.CloneResponse.verify|verify} messages.
+             * @param message CloneResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encode(message: dmcn.pairing.ICloneResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified CloneResponse message, length delimited. Does not implicitly {@link dmcn.pairing.CloneResponse.verify|verify} messages.
+             * @param message CloneResponse message or plain object to encode
+             * @param [writer] Writer to encode to
+             * @returns Writer
+             */
+            public static encodeDelimited(message: dmcn.pairing.ICloneResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a CloneResponse message from the specified reader or buffer.
+             * @param reader Reader or buffer to decode from
+             * @param [length] Message length if known beforehand
+             * @returns CloneResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): dmcn.pairing.CloneResponse;
+
+            /**
+             * Decodes a CloneResponse message from the specified reader or buffer, length delimited.
+             * @param reader Reader or buffer to decode from
+             * @returns CloneResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): dmcn.pairing.CloneResponse;
+
+            /**
+             * Verifies a CloneResponse message.
+             * @param message Plain object to verify
+             * @returns `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): (string|null);
+
+            /**
+             * Creates a CloneResponse message from a plain object. Also converts values to their respective internal types.
+             * @param object Plain object
+             * @returns CloneResponse
+             */
+            public static fromObject(object: { [k: string]: any }): dmcn.pairing.CloneResponse;
+
+            /**
+             * Creates a plain object from a CloneResponse message. Also converts values to other types if specified.
+             * @param message CloneResponse
+             * @param [options] Conversion options
+             * @returns Plain object
+             */
+            public static toObject(message: dmcn.pairing.CloneResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this CloneResponse to JSON.
+             * @returns JSON object
+             */
+            public toJSON(): { [k: string]: any };
+
+            /**
+             * Gets the default type url for CloneResponse
              * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns The default type url
              */

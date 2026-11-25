@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { classifyEnrolment, classifyRecovery, describeBrowser, deviceStanding, forgetRecovery, isUnapprovedDevice, MAX_DEVICE_LABEL, openDeviceLabel, rememberedRecovery, rememberRecovery, sealDeviceLabel, waitingDevices, type DeviceRecord } from './deviceRegistry';
 import { toBase64 } from '../crypto/keys';
+import { ApiError } from './bearer';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
 // Putting this browser on the registry doubles as the probe for whether it is already there, and
@@ -38,6 +39,39 @@ describe('classifyEnrolment', () => {
 
   it('does not mistake a non-Error rejection for a state', () => {
     expect(classifyEnrolment('something threw a string')).toMatchObject({ state: 'unavailable' });
+  });
+});
+
+// A server says which refusal it is with a code, and both servers use the same ones. The words
+// beside the code are for a person and may change, so none of these cases can be read from them.
+describe('refusals read by code', () => {
+  const refusal = (status: number, code: string) => new ApiError('whatever the server chose to say', status, code);
+
+  it('reads an enrolment answer from its code', () => {
+    expect(classifyEnrolment(refusal(409, 'device_already_enrolled'))).toEqual({ state: 'enrolled', genesis: false });
+    expect(classifyEnrolment(refusal(403, 'device_approval_required'))).toEqual({ state: 'needs-approval' });
+  });
+
+  it('carries on without a registry where the server keeps none', () => {
+    expect(classifyEnrolment(refusal(501, 'unsupported'))).toEqual({ state: 'no-registry' });
+    // A server from before the registry does not know the op at all.
+    expect(classifyEnrolment(new ApiError('unknown mailbox op: device_enroll', 400))).toEqual({ state: 'no-registry' });
+  });
+
+  it('does not take some other refusal for one of these', () => {
+    expect(classifyEnrolment(refusal(403, 'auth_failed'))).toMatchObject({ state: 'unavailable' });
+    expect(classifyEnrolment(refusal(403, 'device_on_probation'))).toMatchObject({ state: 'unavailable' });
+    expect(isUnapprovedDevice(refusal(403, 'auth_failed'))).toBe(false);
+  });
+
+  it('reads a recovery answer from its code', () => {
+    expect(classifyRecovery(refusal(403, 'device_recovery_disabled'))).toEqual({ state: 'disabled' });
+    expect(classifyRecovery(refusal(409, 'device_already_enrolled'))).toEqual({ state: 'already-asked' });
+    expect(classifyRecovery(refusal(403, 'device_approval_required'))).toEqual({ state: 'cancelled' });
+  });
+
+  it('knows a mailbox call refused for want of an enrolled device', () => {
+    expect(isUnapprovedDevice(refusal(403, 'device_not_enrolled'))).toBe(true);
   });
 });
 

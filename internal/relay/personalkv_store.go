@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	ds "github.com/ipfs/go-datastore"
 	dsquery "github.com/ipfs/go-datastore/query"
@@ -41,11 +42,17 @@ var ErrKvBadKey = errors.New("relay: personal kv invalid key")
 type PersistentKvStore struct {
 	store ds.Batching
 	mu    sync.Mutex // serializes read-modify-write in Put so local CAS is race-free
+	// now stamps each write. The time is the relay's observation and never the writer's claim,
+	// which is the point of recording it. Overridable in tests.
+	now func() time.Time
 }
+
+// SetClock overrides the write clock. Tests only.
+func (s *PersistentKvStore) SetClock(now func() time.Time) { s.now = now }
 
 // NewPersonalKvStore returns a personal KV store over the given datastore.
 func NewPersonalKvStore(d ds.Batching) *PersistentKvStore {
-	return &PersistentKvStore{store: d}
+	return &PersistentKvStore{store: d, now: time.Now}
 }
 
 // KvItem is one entry in a KV list page. Sealed is populated only when the list
@@ -54,13 +61,21 @@ type KvItem struct {
 	Key     string
 	Sealed  []byte
 	Version uint64
+	// WrittenAt is this relay's clock, in Unix seconds, when the version was written. 0 on an
+	// entry written before the relay recorded it.
+	WrittenAt int64
+	// SealedWriter names the device that signed the write, sealed to the owner (see Relay.KvPut).
+	// Empty where the write carried no device proof.
+	SealedWriter []byte
 }
 
 // kvRecord is the stored wrapper: an opaque sealed blob plus a monotonic version
 // used for compare-and-swap. The relay never interprets Sealed.
 type kvRecord struct {
-	Version uint64 `json:"version"`
-	Sealed  []byte `json:"sealed"`
+	Version   uint64 `json:"version"`
+	Sealed    []byte `json:"sealed"`
+	WrittenAt int64  `json:"written_at,omitempty"`
+	Writer    []byte `json:"writer,omitempty"`
 }
 
 func ownerPrefix(ownerHex string) string {
@@ -109,28 +124,40 @@ func kvKey(ownerHex, key string) (ds.Key, error) {
 
 // Get returns the sealed blob + version for a key, or found=false if absent.
 func (s *PersistentKvStore) Get(ctx context.Context, ownerHex, key string) (sealed []byte, version uint64, found bool, err error) {
+	it, found, err := s.GetEntry(ctx, ownerHex, key)
+	return it.Sealed, it.Version, found, err
+}
+
+// GetEntry returns one entry with the marks the relay keeps beside it, or found=false.
+func (s *PersistentKvStore) GetEntry(ctx context.Context, ownerHex, key string) (item KvItem, found bool, err error) {
 	k, err := kvKey(ownerHex, key)
 	if err != nil {
-		return nil, 0, false, err
+		return KvItem{}, false, err
 	}
 	data, err := s.store.Get(ctx, k)
 	if errors.Is(err, ds.ErrNotFound) {
-		return nil, 0, false, nil
+		return KvItem{}, false, nil
 	}
 	if err != nil {
-		return nil, 0, false, fmt.Errorf("relay: personal kv get: %w", err)
+		return KvItem{}, false, fmt.Errorf("relay: personal kv get: %w", err)
 	}
 	var rec kvRecord
 	if err := json.Unmarshal(data, &rec); err != nil {
-		return nil, 0, false, fmt.Errorf("relay: personal kv unmarshal: %w", err)
+		return KvItem{}, false, fmt.Errorf("relay: personal kv unmarshal: %w", err)
 	}
-	return rec.Sealed, rec.Version, true, nil
+	return KvItem{Key: key, Sealed: rec.Sealed, Version: rec.Version, WrittenAt: rec.WrittenAt, SealedWriter: rec.Writer}, true, nil
 }
 
 // Put writes (creates or overwrites) a blob and returns the new version. When
 // expectedVersion != 0 the write is a compare-and-swap: it succeeds only if the
 // stored version equals expectedVersion, else it returns ErrKvConflict.
 func (s *PersistentKvStore) Put(ctx context.Context, ownerHex, key string, sealed []byte, expectedVersion uint64) (newVersion uint64, err error) {
+	return s.PutBy(ctx, ownerHex, key, sealed, expectedVersion, nil)
+}
+
+// PutBy is Put with the writing device recorded beside the entry. sealedWriter is opaque here:
+// the caller sealed it to the owner. Every write is stamped with this store's clock.
+func (s *PersistentKvStore) PutBy(ctx context.Context, ownerHex, key string, sealed []byte, expectedVersion uint64, sealedWriter []byte) (newVersion uint64, err error) {
 	k, err := kvKey(ownerHex, key)
 	if err != nil {
 		return 0, err
@@ -161,7 +188,7 @@ func (s *PersistentKvStore) Put(ctx context.Context, ownerHex, key string, seale
 	}
 
 	newVersion = cur + 1
-	out, err := json.Marshal(kvRecord{Version: newVersion, Sealed: sealed})
+	out, err := json.Marshal(kvRecord{Version: newVersion, Sealed: sealed, WrittenAt: s.now().Unix(), Writer: sealedWriter})
 	if err != nil {
 		return 0, fmt.Errorf("relay: personal kv put: marshal: %w", err)
 	}
@@ -253,6 +280,8 @@ func (s *PersistentKvStore) List(ctx context.Context, ownerHex, prefix string, l
 			}
 			it.Sealed = rec.Sealed
 			it.Version = rec.Version
+			it.WrittenAt = rec.WrittenAt
+			it.SealedWriter = rec.Writer
 		}
 		items = append(items, it)
 		lastKey = r.Key

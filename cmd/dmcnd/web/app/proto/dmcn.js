@@ -13195,6 +13195,9 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.relay.IMailboxKvListResponse|null} [mailboxKvList] RelayResponse mailboxKvList
              * @property {dmcn.relay.IMailboxKvDeleteResponse|null} [mailboxKvDelete] RelayResponse mailboxKvDelete
              * @property {dmcn.relay.IMailboxKvStatResponse|null} [mailboxKvStat] RelayResponse mailboxKvStat
+             * @property {dmcn.relay.IMailboxDeviceEnrollResponse|null} [mailboxDeviceEnroll] RelayResponse mailboxDeviceEnroll
+             * @property {dmcn.relay.IMailboxDeviceListResponse|null} [mailboxDeviceList] RelayResponse mailboxDeviceList
+             * @property {dmcn.relay.IMailboxDeviceRetireResponse|null} [mailboxDeviceRetire] RelayResponse mailboxDeviceRetire
              */
 
             /**
@@ -13396,17 +13399,41 @@ export const dmcn = $root.dmcn = (() => {
              */
             RelayResponse.prototype.mailboxKvStat = null;
 
+            /**
+             * RelayResponse mailboxDeviceEnroll.
+             * @member {dmcn.relay.IMailboxDeviceEnrollResponse|null|undefined} mailboxDeviceEnroll
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxDeviceEnroll = null;
+
+            /**
+             * RelayResponse mailboxDeviceList.
+             * @member {dmcn.relay.IMailboxDeviceListResponse|null|undefined} mailboxDeviceList
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxDeviceList = null;
+
+            /**
+             * RelayResponse mailboxDeviceRetire.
+             * @member {dmcn.relay.IMailboxDeviceRetireResponse|null|undefined} mailboxDeviceRetire
+             * @memberof dmcn.relay.RelayResponse
+             * @instance
+             */
+            RelayResponse.prototype.mailboxDeviceRetire = null;
+
             // OneOf field names bound to virtual getters and setters
             let $oneOfFields;
 
             /**
              * RelayResponse response.
-             * @member {"store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat"|undefined} response
+             * @member {"store"|"fetchChallenge"|"fetch"|"ack"|"ping"|"error"|"mailboxList"|"mailboxBodyHeader"|"mailboxDelete"|"onionForward"|"getIdentity"|"getDar"|"getFleetRoster"|"getRemoval"|"getBlocklist"|"putRecord"|"getRelayDescriptor"|"getHistory"|"mailboxKvPut"|"mailboxKvGet"|"mailboxKvList"|"mailboxKvDelete"|"mailboxKvStat"|"mailboxDeviceEnroll"|"mailboxDeviceList"|"mailboxDeviceRetire"|undefined} response
              * @memberof dmcn.relay.RelayResponse
              * @instance
              */
             Object.defineProperty(RelayResponse.prototype, "response", {
-                get: $util.oneOfGetter($oneOfFields = ["store", "fetchChallenge", "fetch", "ack", "ping", "error", "mailboxList", "mailboxBodyHeader", "mailboxDelete", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor", "getHistory", "mailboxKvPut", "mailboxKvGet", "mailboxKvList", "mailboxKvDelete", "mailboxKvStat"]),
+                get: $util.oneOfGetter($oneOfFields = ["store", "fetchChallenge", "fetch", "ack", "ping", "error", "mailboxList", "mailboxBodyHeader", "mailboxDelete", "onionForward", "getIdentity", "getDar", "getFleetRoster", "getRemoval", "getBlocklist", "putRecord", "getRelayDescriptor", "getHistory", "mailboxKvPut", "mailboxKvGet", "mailboxKvList", "mailboxKvDelete", "mailboxKvStat", "mailboxDeviceEnroll", "mailboxDeviceList", "mailboxDeviceRetire"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -13484,6 +13511,12 @@ export const dmcn = $root.dmcn = (() => {
                     $root.dmcn.relay.GetRelayDescriptorResponse.encode(message.getRelayDescriptor, writer.uint32(/* id 34, wireType 2 =*/274).fork(), q + 1).ldelim();
                 if (message.getHistory != null && Object.hasOwnProperty.call(message, "getHistory"))
                     $root.dmcn.relay.GetHistoryResponse.encode(message.getHistory, writer.uint32(/* id 37, wireType 2 =*/298).fork(), q + 1).ldelim();
+                if (message.mailboxDeviceEnroll != null && Object.hasOwnProperty.call(message, "mailboxDeviceEnroll"))
+                    $root.dmcn.relay.MailboxDeviceEnrollResponse.encode(message.mailboxDeviceEnroll, writer.uint32(/* id 38, wireType 2 =*/306).fork(), q + 1).ldelim();
+                if (message.mailboxDeviceList != null && Object.hasOwnProperty.call(message, "mailboxDeviceList"))
+                    $root.dmcn.relay.MailboxDeviceListResponse.encode(message.mailboxDeviceList, writer.uint32(/* id 39, wireType 2 =*/314).fork(), q + 1).ldelim();
+                if (message.mailboxDeviceRetire != null && Object.hasOwnProperty.call(message, "mailboxDeviceRetire"))
+                    $root.dmcn.relay.MailboxDeviceRetireResponse.encode(message.mailboxDeviceRetire, writer.uint32(/* id 40, wireType 2 =*/322).fork(), q + 1).ldelim();
                 return writer;
             };
 
@@ -13614,6 +13647,18 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 22: {
                             message.mailboxKvStat = $root.dmcn.relay.MailboxKvStatResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 38: {
+                            message.mailboxDeviceEnroll = $root.dmcn.relay.MailboxDeviceEnrollResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 39: {
+                            message.mailboxDeviceList = $root.dmcn.relay.MailboxDeviceListResponse.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 40: {
+                            message.mailboxDeviceRetire = $root.dmcn.relay.MailboxDeviceRetireResponse.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
                         }
                     default:
@@ -13884,6 +13929,36 @@ export const dmcn = $root.dmcn = (() => {
                             return "mailboxKvStat." + error;
                     }
                 }
+                if (message.mailboxDeviceEnroll != null && Object.hasOwnProperty.call(message, "mailboxDeviceEnroll")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxDeviceEnrollResponse.verify(message.mailboxDeviceEnroll, long + 1);
+                        if (error)
+                            return "mailboxDeviceEnroll." + error;
+                    }
+                }
+                if (message.mailboxDeviceList != null && Object.hasOwnProperty.call(message, "mailboxDeviceList")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxDeviceListResponse.verify(message.mailboxDeviceList, long + 1);
+                        if (error)
+                            return "mailboxDeviceList." + error;
+                    }
+                }
+                if (message.mailboxDeviceRetire != null && Object.hasOwnProperty.call(message, "mailboxDeviceRetire")) {
+                    if (properties.response === 1)
+                        return "response: multiple values";
+                    properties.response = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxDeviceRetireResponse.verify(message.mailboxDeviceRetire, long + 1);
+                        if (error)
+                            return "mailboxDeviceRetire." + error;
+                    }
+                }
                 return null;
             };
 
@@ -14020,6 +14095,21 @@ export const dmcn = $root.dmcn = (() => {
                         throw TypeError(".dmcn.relay.RelayResponse.mailboxKvStat: object expected");
                     message.mailboxKvStat = $root.dmcn.relay.MailboxKvStatResponse.fromObject(object.mailboxKvStat, long + 1);
                 }
+                if (object.mailboxDeviceEnroll != null) {
+                    if (!$util.isObject(object.mailboxDeviceEnroll))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxDeviceEnroll: object expected");
+                    message.mailboxDeviceEnroll = $root.dmcn.relay.MailboxDeviceEnrollResponse.fromObject(object.mailboxDeviceEnroll, long + 1);
+                }
+                if (object.mailboxDeviceList != null) {
+                    if (!$util.isObject(object.mailboxDeviceList))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxDeviceList: object expected");
+                    message.mailboxDeviceList = $root.dmcn.relay.MailboxDeviceListResponse.fromObject(object.mailboxDeviceList, long + 1);
+                }
+                if (object.mailboxDeviceRetire != null) {
+                    if (!$util.isObject(object.mailboxDeviceRetire))
+                        throw TypeError(".dmcn.relay.RelayResponse.mailboxDeviceRetire: object expected");
+                    message.mailboxDeviceRetire = $root.dmcn.relay.MailboxDeviceRetireResponse.fromObject(object.mailboxDeviceRetire, long + 1);
+                }
                 return message;
             };
 
@@ -14154,6 +14244,21 @@ export const dmcn = $root.dmcn = (() => {
                     object.getHistory = $root.dmcn.relay.GetHistoryResponse.toObject(message.getHistory, options, q + 1);
                     if (options.oneofs)
                         object.response = "getHistory";
+                }
+                if (message.mailboxDeviceEnroll != null && Object.hasOwnProperty.call(message, "mailboxDeviceEnroll")) {
+                    object.mailboxDeviceEnroll = $root.dmcn.relay.MailboxDeviceEnrollResponse.toObject(message.mailboxDeviceEnroll, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxDeviceEnroll";
+                }
+                if (message.mailboxDeviceList != null && Object.hasOwnProperty.call(message, "mailboxDeviceList")) {
+                    object.mailboxDeviceList = $root.dmcn.relay.MailboxDeviceListResponse.toObject(message.mailboxDeviceList, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxDeviceList";
+                }
+                if (message.mailboxDeviceRetire != null && Object.hasOwnProperty.call(message, "mailboxDeviceRetire")) {
+                    object.mailboxDeviceRetire = $root.dmcn.relay.MailboxDeviceRetireResponse.toObject(message.mailboxDeviceRetire, options, q + 1);
+                    if (options.oneofs)
+                        object.response = "mailboxDeviceRetire";
                 }
                 return object;
             };
@@ -16078,6 +16183,2077 @@ export const dmcn = $root.dmcn = (() => {
             };
 
             return FetchInit;
+        })();
+
+        relay.DeviceRecord = (function() {
+
+            /**
+             * Properties of a DeviceRecord.
+             * @memberof dmcn.relay
+             * @interface IDeviceRecord
+             * @property {Uint8Array|null} [ed25519PublicKey] DeviceRecord ed25519PublicKey
+             * @property {number|Long|null} [enrolledAt] DeviceRecord enrolledAt
+             * @property {Uint8Array|null} [sealedLabel] DeviceRecord sealedLabel
+             * @property {number|Long|null} [retiredAt] DeviceRecord retiredAt
+             * @property {number|Long|null} [eligibleAt] DeviceRecord eligibleAt
+             * @property {Uint8Array|null} [deviceCredential] DeviceRecord deviceCredential
+             */
+
+            /**
+             * Constructs a new DeviceRecord.
+             * @memberof dmcn.relay
+             * @classdesc Represents a DeviceRecord.
+             * @implements IDeviceRecord
+             * @constructor
+             * @param {dmcn.relay.IDeviceRecord=} [properties] Properties to set
+             */
+            function DeviceRecord(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * DeviceRecord ed25519PublicKey.
+             * @member {Uint8Array} ed25519PublicKey
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             */
+            DeviceRecord.prototype.ed25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * DeviceRecord enrolledAt.
+             * @member {number|Long} enrolledAt
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             */
+            DeviceRecord.prototype.enrolledAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * DeviceRecord sealedLabel.
+             * @member {Uint8Array} sealedLabel
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             */
+            DeviceRecord.prototype.sealedLabel = $util.newBuffer([]);
+
+            /**
+             * DeviceRecord retiredAt.
+             * @member {number|Long} retiredAt
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             */
+            DeviceRecord.prototype.retiredAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * DeviceRecord eligibleAt.
+             * @member {number|Long} eligibleAt
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             */
+            DeviceRecord.prototype.eligibleAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * DeviceRecord deviceCredential.
+             * @member {Uint8Array} deviceCredential
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             */
+            DeviceRecord.prototype.deviceCredential = $util.newBuffer([]);
+
+            /**
+             * Creates a new DeviceRecord instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {dmcn.relay.IDeviceRecord=} [properties] Properties to set
+             * @returns {dmcn.relay.DeviceRecord} DeviceRecord instance
+             */
+            DeviceRecord.create = function create(properties) {
+                return new DeviceRecord(properties);
+            };
+
+            /**
+             * Encodes the specified DeviceRecord message. Does not implicitly {@link dmcn.relay.DeviceRecord.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {dmcn.relay.IDeviceRecord} message DeviceRecord message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            DeviceRecord.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.ed25519PublicKey);
+                if (message.enrolledAt != null && Object.hasOwnProperty.call(message, "enrolledAt"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).int64(message.enrolledAt);
+                if (message.sealedLabel != null && Object.hasOwnProperty.call(message, "sealedLabel"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.sealedLabel);
+                if (message.retiredAt != null && Object.hasOwnProperty.call(message, "retiredAt"))
+                    writer.uint32(/* id 4, wireType 0 =*/32).int64(message.retiredAt);
+                if (message.eligibleAt != null && Object.hasOwnProperty.call(message, "eligibleAt"))
+                    writer.uint32(/* id 5, wireType 0 =*/40).int64(message.eligibleAt);
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.deviceCredential);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified DeviceRecord message, length delimited. Does not implicitly {@link dmcn.relay.DeviceRecord.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {dmcn.relay.IDeviceRecord} message DeviceRecord message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            DeviceRecord.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a DeviceRecord message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.DeviceRecord} DeviceRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            DeviceRecord.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.DeviceRecord();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.ed25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 2: {
+                            message.enrolledAt = reader.int64();
+                            break;
+                        }
+                    case 3: {
+                            message.sealedLabel = reader.bytes();
+                            break;
+                        }
+                    case 4: {
+                            message.retiredAt = reader.int64();
+                            break;
+                        }
+                    case 5: {
+                            message.eligibleAt = reader.int64();
+                            break;
+                        }
+                    case 6: {
+                            message.deviceCredential = reader.bytes();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a DeviceRecord message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.DeviceRecord} DeviceRecord
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            DeviceRecord.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a DeviceRecord message.
+             * @function verify
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            DeviceRecord.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    if (!(message.ed25519PublicKey && typeof message.ed25519PublicKey.length === "number" || $util.isString(message.ed25519PublicKey)))
+                        return "ed25519PublicKey: buffer expected";
+                if (message.enrolledAt != null && Object.hasOwnProperty.call(message, "enrolledAt"))
+                    if (!$util.isInteger(message.enrolledAt) && !(message.enrolledAt && $util.isInteger(message.enrolledAt.low) && $util.isInteger(message.enrolledAt.high)))
+                        return "enrolledAt: integer|Long expected";
+                if (message.sealedLabel != null && Object.hasOwnProperty.call(message, "sealedLabel"))
+                    if (!(message.sealedLabel && typeof message.sealedLabel.length === "number" || $util.isString(message.sealedLabel)))
+                        return "sealedLabel: buffer expected";
+                if (message.retiredAt != null && Object.hasOwnProperty.call(message, "retiredAt"))
+                    if (!$util.isInteger(message.retiredAt) && !(message.retiredAt && $util.isInteger(message.retiredAt.low) && $util.isInteger(message.retiredAt.high)))
+                        return "retiredAt: integer|Long expected";
+                if (message.eligibleAt != null && Object.hasOwnProperty.call(message, "eligibleAt"))
+                    if (!$util.isInteger(message.eligibleAt) && !(message.eligibleAt && $util.isInteger(message.eligibleAt.low) && $util.isInteger(message.eligibleAt.high)))
+                        return "eligibleAt: integer|Long expected";
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    if (!(message.deviceCredential && typeof message.deviceCredential.length === "number" || $util.isString(message.deviceCredential)))
+                        return "deviceCredential: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a DeviceRecord message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.DeviceRecord} DeviceRecord
+             */
+            DeviceRecord.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.DeviceRecord)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.DeviceRecord: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.DeviceRecord();
+                if (object.ed25519PublicKey != null)
+                    if (typeof object.ed25519PublicKey === "string")
+                        $util.base64.decode(object.ed25519PublicKey, message.ed25519PublicKey = $util.newBuffer($util.base64.length(object.ed25519PublicKey)), 0);
+                    else if (object.ed25519PublicKey.length >= 0)
+                        message.ed25519PublicKey = object.ed25519PublicKey;
+                if (object.enrolledAt != null)
+                    if ($util.Long)
+                        message.enrolledAt = $util.Long.fromValue(object.enrolledAt, false);
+                    else if (typeof object.enrolledAt === "string")
+                        message.enrolledAt = parseInt(object.enrolledAt, 10);
+                    else if (typeof object.enrolledAt === "number")
+                        message.enrolledAt = object.enrolledAt;
+                    else if (typeof object.enrolledAt === "object")
+                        message.enrolledAt = new $util.LongBits(object.enrolledAt.low >>> 0, object.enrolledAt.high >>> 0).toNumber();
+                if (object.sealedLabel != null)
+                    if (typeof object.sealedLabel === "string")
+                        $util.base64.decode(object.sealedLabel, message.sealedLabel = $util.newBuffer($util.base64.length(object.sealedLabel)), 0);
+                    else if (object.sealedLabel.length >= 0)
+                        message.sealedLabel = object.sealedLabel;
+                if (object.retiredAt != null)
+                    if ($util.Long)
+                        message.retiredAt = $util.Long.fromValue(object.retiredAt, false);
+                    else if (typeof object.retiredAt === "string")
+                        message.retiredAt = parseInt(object.retiredAt, 10);
+                    else if (typeof object.retiredAt === "number")
+                        message.retiredAt = object.retiredAt;
+                    else if (typeof object.retiredAt === "object")
+                        message.retiredAt = new $util.LongBits(object.retiredAt.low >>> 0, object.retiredAt.high >>> 0).toNumber();
+                if (object.eligibleAt != null)
+                    if ($util.Long)
+                        message.eligibleAt = $util.Long.fromValue(object.eligibleAt, false);
+                    else if (typeof object.eligibleAt === "string")
+                        message.eligibleAt = parseInt(object.eligibleAt, 10);
+                    else if (typeof object.eligibleAt === "number")
+                        message.eligibleAt = object.eligibleAt;
+                    else if (typeof object.eligibleAt === "object")
+                        message.eligibleAt = new $util.LongBits(object.eligibleAt.low >>> 0, object.eligibleAt.high >>> 0).toNumber();
+                if (object.deviceCredential != null)
+                    if (typeof object.deviceCredential === "string")
+                        $util.base64.decode(object.deviceCredential, message.deviceCredential = $util.newBuffer($util.base64.length(object.deviceCredential)), 0);
+                    else if (object.deviceCredential.length >= 0)
+                        message.deviceCredential = object.deviceCredential;
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a DeviceRecord message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {dmcn.relay.DeviceRecord} message DeviceRecord
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            DeviceRecord.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    if (options.bytes === String)
+                        object.ed25519PublicKey = "";
+                    else {
+                        object.ed25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.ed25519PublicKey = $util.newBuffer(object.ed25519PublicKey);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.enrolledAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.enrolledAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.sealedLabel = "";
+                    else {
+                        object.sealedLabel = [];
+                        if (options.bytes !== Array)
+                            object.sealedLabel = $util.newBuffer(object.sealedLabel);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.retiredAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.retiredAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.eligibleAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.eligibleAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.deviceCredential = "";
+                    else {
+                        object.deviceCredential = [];
+                        if (options.bytes !== Array)
+                            object.deviceCredential = $util.newBuffer(object.deviceCredential);
+                    }
+                }
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    object.ed25519PublicKey = options.bytes === String ? $util.base64.encode(message.ed25519PublicKey, 0, message.ed25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.ed25519PublicKey) : message.ed25519PublicKey;
+                if (message.enrolledAt != null && Object.hasOwnProperty.call(message, "enrolledAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.enrolledAt = typeof message.enrolledAt === "number" ? BigInt(message.enrolledAt) : $util.Long.fromBits(message.enrolledAt.low >>> 0, message.enrolledAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.enrolledAt === "number")
+                        object.enrolledAt = options.longs === String ? String(message.enrolledAt) : message.enrolledAt;
+                    else
+                        object.enrolledAt = options.longs === String ? $util.Long.prototype.toString.call(message.enrolledAt) : options.longs === Number ? new $util.LongBits(message.enrolledAt.low >>> 0, message.enrolledAt.high >>> 0).toNumber() : message.enrolledAt;
+                if (message.sealedLabel != null && Object.hasOwnProperty.call(message, "sealedLabel"))
+                    object.sealedLabel = options.bytes === String ? $util.base64.encode(message.sealedLabel, 0, message.sealedLabel.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealedLabel) : message.sealedLabel;
+                if (message.retiredAt != null && Object.hasOwnProperty.call(message, "retiredAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.retiredAt = typeof message.retiredAt === "number" ? BigInt(message.retiredAt) : $util.Long.fromBits(message.retiredAt.low >>> 0, message.retiredAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.retiredAt === "number")
+                        object.retiredAt = options.longs === String ? String(message.retiredAt) : message.retiredAt;
+                    else
+                        object.retiredAt = options.longs === String ? $util.Long.prototype.toString.call(message.retiredAt) : options.longs === Number ? new $util.LongBits(message.retiredAt.low >>> 0, message.retiredAt.high >>> 0).toNumber() : message.retiredAt;
+                if (message.eligibleAt != null && Object.hasOwnProperty.call(message, "eligibleAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.eligibleAt = typeof message.eligibleAt === "number" ? BigInt(message.eligibleAt) : $util.Long.fromBits(message.eligibleAt.low >>> 0, message.eligibleAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.eligibleAt === "number")
+                        object.eligibleAt = options.longs === String ? String(message.eligibleAt) : message.eligibleAt;
+                    else
+                        object.eligibleAt = options.longs === String ? $util.Long.prototype.toString.call(message.eligibleAt) : options.longs === Number ? new $util.LongBits(message.eligibleAt.low >>> 0, message.eligibleAt.high >>> 0).toNumber() : message.eligibleAt;
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    object.deviceCredential = options.bytes === String ? $util.base64.encode(message.deviceCredential, 0, message.deviceCredential.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceCredential) : message.deviceCredential;
+                return object;
+            };
+
+            /**
+             * Converts this DeviceRecord to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.DeviceRecord
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            DeviceRecord.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for DeviceRecord
+             * @function getTypeUrl
+             * @memberof dmcn.relay.DeviceRecord
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            DeviceRecord.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.DeviceRecord";
+            };
+
+            return DeviceRecord;
+        })();
+
+        relay.MailboxDeviceEnrollOp = (function() {
+
+            /**
+             * Properties of a MailboxDeviceEnrollOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxDeviceEnrollOp
+             * @property {Uint8Array|null} [ed25519PublicKey] MailboxDeviceEnrollOp ed25519PublicKey
+             * @property {Uint8Array|null} [sealedLabel] MailboxDeviceEnrollOp sealedLabel
+             * @property {Uint8Array|null} [approverEd25519PublicKey] MailboxDeviceEnrollOp approverEd25519PublicKey
+             * @property {Uint8Array|null} [approverSignature] MailboxDeviceEnrollOp approverSignature
+             * @property {Uint8Array|null} [deviceCredential] MailboxDeviceEnrollOp deviceCredential
+             * @property {number|Long|null} [approvedAt] MailboxDeviceEnrollOp approvedAt
+             * @property {boolean|null} [recovery] MailboxDeviceEnrollOp recovery
+             */
+
+            /**
+             * Constructs a new MailboxDeviceEnrollOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxDeviceEnrollOp.
+             * @implements IMailboxDeviceEnrollOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxDeviceEnrollOp=} [properties] Properties to set
+             */
+            function MailboxDeviceEnrollOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxDeviceEnrollOp ed25519PublicKey.
+             * @member {Uint8Array} ed25519PublicKey
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.ed25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceEnrollOp sealedLabel.
+             * @member {Uint8Array} sealedLabel
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.sealedLabel = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceEnrollOp approverEd25519PublicKey.
+             * @member {Uint8Array} approverEd25519PublicKey
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.approverEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceEnrollOp approverSignature.
+             * @member {Uint8Array} approverSignature
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.approverSignature = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceEnrollOp deviceCredential.
+             * @member {Uint8Array} deviceCredential
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.deviceCredential = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceEnrollOp approvedAt.
+             * @member {number|Long} approvedAt
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.approvedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * MailboxDeviceEnrollOp recovery.
+             * @member {boolean} recovery
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             */
+            MailboxDeviceEnrollOp.prototype.recovery = false;
+
+            /**
+             * Creates a new MailboxDeviceEnrollOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceEnrollOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxDeviceEnrollOp} MailboxDeviceEnrollOp instance
+             */
+            MailboxDeviceEnrollOp.create = function create(properties) {
+                return new MailboxDeviceEnrollOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollOp message. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceEnrollOp} message MailboxDeviceEnrollOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceEnrollOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.ed25519PublicKey);
+                if (message.sealedLabel != null && Object.hasOwnProperty.call(message, "sealedLabel"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.sealedLabel);
+                if (message.approverEd25519PublicKey != null && Object.hasOwnProperty.call(message, "approverEd25519PublicKey"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.approverEd25519PublicKey);
+                if (message.approverSignature != null && Object.hasOwnProperty.call(message, "approverSignature"))
+                    writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.approverSignature);
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.deviceCredential);
+                if (message.approvedAt != null && Object.hasOwnProperty.call(message, "approvedAt"))
+                    writer.uint32(/* id 6, wireType 0 =*/48).int64(message.approvedAt);
+                if (message.recovery != null && Object.hasOwnProperty.call(message, "recovery"))
+                    writer.uint32(/* id 7, wireType 0 =*/56).bool(message.recovery);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceEnrollOp} message MailboxDeviceEnrollOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceEnrollOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxDeviceEnrollOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxDeviceEnrollOp} MailboxDeviceEnrollOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceEnrollOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxDeviceEnrollOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.ed25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 2: {
+                            message.sealedLabel = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.approverEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 4: {
+                            message.approverSignature = reader.bytes();
+                            break;
+                        }
+                    case 5: {
+                            message.deviceCredential = reader.bytes();
+                            break;
+                        }
+                    case 6: {
+                            message.approvedAt = reader.int64();
+                            break;
+                        }
+                    case 7: {
+                            message.recovery = reader.bool();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxDeviceEnrollOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxDeviceEnrollOp} MailboxDeviceEnrollOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceEnrollOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxDeviceEnrollOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxDeviceEnrollOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    if (!(message.ed25519PublicKey && typeof message.ed25519PublicKey.length === "number" || $util.isString(message.ed25519PublicKey)))
+                        return "ed25519PublicKey: buffer expected";
+                if (message.sealedLabel != null && Object.hasOwnProperty.call(message, "sealedLabel"))
+                    if (!(message.sealedLabel && typeof message.sealedLabel.length === "number" || $util.isString(message.sealedLabel)))
+                        return "sealedLabel: buffer expected";
+                if (message.approverEd25519PublicKey != null && Object.hasOwnProperty.call(message, "approverEd25519PublicKey"))
+                    if (!(message.approverEd25519PublicKey && typeof message.approverEd25519PublicKey.length === "number" || $util.isString(message.approverEd25519PublicKey)))
+                        return "approverEd25519PublicKey: buffer expected";
+                if (message.approverSignature != null && Object.hasOwnProperty.call(message, "approverSignature"))
+                    if (!(message.approverSignature && typeof message.approverSignature.length === "number" || $util.isString(message.approverSignature)))
+                        return "approverSignature: buffer expected";
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    if (!(message.deviceCredential && typeof message.deviceCredential.length === "number" || $util.isString(message.deviceCredential)))
+                        return "deviceCredential: buffer expected";
+                if (message.approvedAt != null && Object.hasOwnProperty.call(message, "approvedAt"))
+                    if (!$util.isInteger(message.approvedAt) && !(message.approvedAt && $util.isInteger(message.approvedAt.low) && $util.isInteger(message.approvedAt.high)))
+                        return "approvedAt: integer|Long expected";
+                if (message.recovery != null && Object.hasOwnProperty.call(message, "recovery"))
+                    if (typeof message.recovery !== "boolean")
+                        return "recovery: boolean expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxDeviceEnrollOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxDeviceEnrollOp} MailboxDeviceEnrollOp
+             */
+            MailboxDeviceEnrollOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxDeviceEnrollOp)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxDeviceEnrollOp: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxDeviceEnrollOp();
+                if (object.ed25519PublicKey != null)
+                    if (typeof object.ed25519PublicKey === "string")
+                        $util.base64.decode(object.ed25519PublicKey, message.ed25519PublicKey = $util.newBuffer($util.base64.length(object.ed25519PublicKey)), 0);
+                    else if (object.ed25519PublicKey.length >= 0)
+                        message.ed25519PublicKey = object.ed25519PublicKey;
+                if (object.sealedLabel != null)
+                    if (typeof object.sealedLabel === "string")
+                        $util.base64.decode(object.sealedLabel, message.sealedLabel = $util.newBuffer($util.base64.length(object.sealedLabel)), 0);
+                    else if (object.sealedLabel.length >= 0)
+                        message.sealedLabel = object.sealedLabel;
+                if (object.approverEd25519PublicKey != null)
+                    if (typeof object.approverEd25519PublicKey === "string")
+                        $util.base64.decode(object.approverEd25519PublicKey, message.approverEd25519PublicKey = $util.newBuffer($util.base64.length(object.approverEd25519PublicKey)), 0);
+                    else if (object.approverEd25519PublicKey.length >= 0)
+                        message.approverEd25519PublicKey = object.approverEd25519PublicKey;
+                if (object.approverSignature != null)
+                    if (typeof object.approverSignature === "string")
+                        $util.base64.decode(object.approverSignature, message.approverSignature = $util.newBuffer($util.base64.length(object.approverSignature)), 0);
+                    else if (object.approverSignature.length >= 0)
+                        message.approverSignature = object.approverSignature;
+                if (object.deviceCredential != null)
+                    if (typeof object.deviceCredential === "string")
+                        $util.base64.decode(object.deviceCredential, message.deviceCredential = $util.newBuffer($util.base64.length(object.deviceCredential)), 0);
+                    else if (object.deviceCredential.length >= 0)
+                        message.deviceCredential = object.deviceCredential;
+                if (object.approvedAt != null)
+                    if ($util.Long)
+                        message.approvedAt = $util.Long.fromValue(object.approvedAt, false);
+                    else if (typeof object.approvedAt === "string")
+                        message.approvedAt = parseInt(object.approvedAt, 10);
+                    else if (typeof object.approvedAt === "number")
+                        message.approvedAt = object.approvedAt;
+                    else if (typeof object.approvedAt === "object")
+                        message.approvedAt = new $util.LongBits(object.approvedAt.low >>> 0, object.approvedAt.high >>> 0).toNumber();
+                if (object.recovery != null)
+                    message.recovery = Boolean(object.recovery);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxDeviceEnrollOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {dmcn.relay.MailboxDeviceEnrollOp} message MailboxDeviceEnrollOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxDeviceEnrollOp.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    if (options.bytes === String)
+                        object.ed25519PublicKey = "";
+                    else {
+                        object.ed25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.ed25519PublicKey = $util.newBuffer(object.ed25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.sealedLabel = "";
+                    else {
+                        object.sealedLabel = [];
+                        if (options.bytes !== Array)
+                            object.sealedLabel = $util.newBuffer(object.sealedLabel);
+                    }
+                    if (options.bytes === String)
+                        object.approverEd25519PublicKey = "";
+                    else {
+                        object.approverEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.approverEd25519PublicKey = $util.newBuffer(object.approverEd25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.approverSignature = "";
+                    else {
+                        object.approverSignature = [];
+                        if (options.bytes !== Array)
+                            object.approverSignature = $util.newBuffer(object.approverSignature);
+                    }
+                    if (options.bytes === String)
+                        object.deviceCredential = "";
+                    else {
+                        object.deviceCredential = [];
+                        if (options.bytes !== Array)
+                            object.deviceCredential = $util.newBuffer(object.deviceCredential);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.approvedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.approvedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    object.recovery = false;
+                }
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    object.ed25519PublicKey = options.bytes === String ? $util.base64.encode(message.ed25519PublicKey, 0, message.ed25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.ed25519PublicKey) : message.ed25519PublicKey;
+                if (message.sealedLabel != null && Object.hasOwnProperty.call(message, "sealedLabel"))
+                    object.sealedLabel = options.bytes === String ? $util.base64.encode(message.sealedLabel, 0, message.sealedLabel.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealedLabel) : message.sealedLabel;
+                if (message.approverEd25519PublicKey != null && Object.hasOwnProperty.call(message, "approverEd25519PublicKey"))
+                    object.approverEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.approverEd25519PublicKey, 0, message.approverEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.approverEd25519PublicKey) : message.approverEd25519PublicKey;
+                if (message.approverSignature != null && Object.hasOwnProperty.call(message, "approverSignature"))
+                    object.approverSignature = options.bytes === String ? $util.base64.encode(message.approverSignature, 0, message.approverSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.approverSignature) : message.approverSignature;
+                if (message.deviceCredential != null && Object.hasOwnProperty.call(message, "deviceCredential"))
+                    object.deviceCredential = options.bytes === String ? $util.base64.encode(message.deviceCredential, 0, message.deviceCredential.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceCredential) : message.deviceCredential;
+                if (message.approvedAt != null && Object.hasOwnProperty.call(message, "approvedAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.approvedAt = typeof message.approvedAt === "number" ? BigInt(message.approvedAt) : $util.Long.fromBits(message.approvedAt.low >>> 0, message.approvedAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.approvedAt === "number")
+                        object.approvedAt = options.longs === String ? String(message.approvedAt) : message.approvedAt;
+                    else
+                        object.approvedAt = options.longs === String ? $util.Long.prototype.toString.call(message.approvedAt) : options.longs === Number ? new $util.LongBits(message.approvedAt.low >>> 0, message.approvedAt.high >>> 0).toNumber() : message.approvedAt;
+                if (message.recovery != null && Object.hasOwnProperty.call(message, "recovery"))
+                    object.recovery = message.recovery;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxDeviceEnrollOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxDeviceEnrollOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxDeviceEnrollOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxDeviceEnrollOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxDeviceEnrollOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxDeviceEnrollOp";
+            };
+
+            return MailboxDeviceEnrollOp;
+        })();
+
+        relay.MailboxDeviceEnrollResponse = (function() {
+
+            /**
+             * Properties of a MailboxDeviceEnrollResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxDeviceEnrollResponse
+             * @property {dmcn.relay.IDeviceRecord|null} [device] MailboxDeviceEnrollResponse device
+             * @property {boolean|null} [genesis] MailboxDeviceEnrollResponse genesis
+             */
+
+            /**
+             * Constructs a new MailboxDeviceEnrollResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxDeviceEnrollResponse.
+             * @implements IMailboxDeviceEnrollResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxDeviceEnrollResponse=} [properties] Properties to set
+             */
+            function MailboxDeviceEnrollResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxDeviceEnrollResponse device.
+             * @member {dmcn.relay.IDeviceRecord|null|undefined} device
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @instance
+             */
+            MailboxDeviceEnrollResponse.prototype.device = null;
+
+            /**
+             * MailboxDeviceEnrollResponse genesis.
+             * @member {boolean} genesis
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @instance
+             */
+            MailboxDeviceEnrollResponse.prototype.genesis = false;
+
+            /**
+             * Creates a new MailboxDeviceEnrollResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceEnrollResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxDeviceEnrollResponse} MailboxDeviceEnrollResponse instance
+             */
+            MailboxDeviceEnrollResponse.create = function create(properties) {
+                return new MailboxDeviceEnrollResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollResponse message. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceEnrollResponse} message MailboxDeviceEnrollResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceEnrollResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.device != null && Object.hasOwnProperty.call(message, "device"))
+                    $root.dmcn.relay.DeviceRecord.encode(message.device, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                if (message.genesis != null && Object.hasOwnProperty.call(message, "genesis"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).bool(message.genesis);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceEnrollResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceEnrollResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceEnrollResponse} message MailboxDeviceEnrollResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceEnrollResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxDeviceEnrollResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxDeviceEnrollResponse} MailboxDeviceEnrollResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceEnrollResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxDeviceEnrollResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.device = $root.dmcn.relay.DeviceRecord.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 2: {
+                            message.genesis = reader.bool();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxDeviceEnrollResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxDeviceEnrollResponse} MailboxDeviceEnrollResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceEnrollResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxDeviceEnrollResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxDeviceEnrollResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.device != null && Object.hasOwnProperty.call(message, "device")) {
+                    let error = $root.dmcn.relay.DeviceRecord.verify(message.device, long + 1);
+                    if (error)
+                        return "device." + error;
+                }
+                if (message.genesis != null && Object.hasOwnProperty.call(message, "genesis"))
+                    if (typeof message.genesis !== "boolean")
+                        return "genesis: boolean expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxDeviceEnrollResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxDeviceEnrollResponse} MailboxDeviceEnrollResponse
+             */
+            MailboxDeviceEnrollResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxDeviceEnrollResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxDeviceEnrollResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxDeviceEnrollResponse();
+                if (object.device != null) {
+                    if (!$util.isObject(object.device))
+                        throw TypeError(".dmcn.relay.MailboxDeviceEnrollResponse.device: object expected");
+                    message.device = $root.dmcn.relay.DeviceRecord.fromObject(object.device, long + 1);
+                }
+                if (object.genesis != null)
+                    message.genesis = Boolean(object.genesis);
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxDeviceEnrollResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {dmcn.relay.MailboxDeviceEnrollResponse} message MailboxDeviceEnrollResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxDeviceEnrollResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.device = null;
+                    object.genesis = false;
+                }
+                if (message.device != null && Object.hasOwnProperty.call(message, "device"))
+                    object.device = $root.dmcn.relay.DeviceRecord.toObject(message.device, options, q + 1);
+                if (message.genesis != null && Object.hasOwnProperty.call(message, "genesis"))
+                    object.genesis = message.genesis;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxDeviceEnrollResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxDeviceEnrollResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxDeviceEnrollResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxDeviceEnrollResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxDeviceEnrollResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxDeviceEnrollResponse";
+            };
+
+            return MailboxDeviceEnrollResponse;
+        })();
+
+        relay.MailboxDeviceListOp = (function() {
+
+            /**
+             * Properties of a MailboxDeviceListOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxDeviceListOp
+             */
+
+            /**
+             * Constructs a new MailboxDeviceListOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxDeviceListOp.
+             * @implements IMailboxDeviceListOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxDeviceListOp=} [properties] Properties to set
+             */
+            function MailboxDeviceListOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * Creates a new MailboxDeviceListOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceListOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxDeviceListOp} MailboxDeviceListOp instance
+             */
+            MailboxDeviceListOp.create = function create(properties) {
+                return new MailboxDeviceListOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceListOp message. Does not implicitly {@link dmcn.relay.MailboxDeviceListOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceListOp} message MailboxDeviceListOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceListOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceListOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceListOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceListOp} message MailboxDeviceListOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceListOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxDeviceListOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxDeviceListOp} MailboxDeviceListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceListOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxDeviceListOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxDeviceListOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxDeviceListOp} MailboxDeviceListOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceListOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxDeviceListOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxDeviceListOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxDeviceListOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxDeviceListOp} MailboxDeviceListOp
+             */
+            MailboxDeviceListOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxDeviceListOp)
+                    return object;
+                return new $root.dmcn.relay.MailboxDeviceListOp();
+            };
+
+            /**
+             * Creates a plain object from a MailboxDeviceListOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {dmcn.relay.MailboxDeviceListOp} message MailboxDeviceListOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxDeviceListOp.toObject = function toObject() {
+                return {};
+            };
+
+            /**
+             * Converts this MailboxDeviceListOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxDeviceListOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxDeviceListOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxDeviceListOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxDeviceListOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxDeviceListOp";
+            };
+
+            return MailboxDeviceListOp;
+        })();
+
+        relay.MailboxDeviceListResponse = (function() {
+
+            /**
+             * Properties of a MailboxDeviceListResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxDeviceListResponse
+             * @property {Array.<dmcn.relay.IDeviceRecord>|null} [devices] MailboxDeviceListResponse devices
+             */
+
+            /**
+             * Constructs a new MailboxDeviceListResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxDeviceListResponse.
+             * @implements IMailboxDeviceListResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxDeviceListResponse=} [properties] Properties to set
+             */
+            function MailboxDeviceListResponse(properties) {
+                this.devices = [];
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxDeviceListResponse devices.
+             * @member {Array.<dmcn.relay.IDeviceRecord>} devices
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @instance
+             */
+            MailboxDeviceListResponse.prototype.devices = $util.emptyArray;
+
+            /**
+             * Creates a new MailboxDeviceListResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceListResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxDeviceListResponse} MailboxDeviceListResponse instance
+             */
+            MailboxDeviceListResponse.create = function create(properties) {
+                return new MailboxDeviceListResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceListResponse message. Does not implicitly {@link dmcn.relay.MailboxDeviceListResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceListResponse} message MailboxDeviceListResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceListResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.devices != null && message.devices.length)
+                    for (let i = 0; i < message.devices.length; ++i)
+                        $root.dmcn.relay.DeviceRecord.encode(message.devices[i], writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceListResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceListResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceListResponse} message MailboxDeviceListResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceListResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxDeviceListResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxDeviceListResponse} MailboxDeviceListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceListResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxDeviceListResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            if (!(message.devices && message.devices.length))
+                                message.devices = [];
+                            message.devices.push($root.dmcn.relay.DeviceRecord.decode(reader, reader.uint32(), undefined, long + 1));
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxDeviceListResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxDeviceListResponse} MailboxDeviceListResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceListResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxDeviceListResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxDeviceListResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.devices != null && Object.hasOwnProperty.call(message, "devices")) {
+                    if (!Array.isArray(message.devices))
+                        return "devices: array expected";
+                    for (let i = 0; i < message.devices.length; ++i) {
+                        let error = $root.dmcn.relay.DeviceRecord.verify(message.devices[i], long + 1);
+                        if (error)
+                            return "devices." + error;
+                    }
+                }
+                return null;
+            };
+
+            /**
+             * Creates a MailboxDeviceListResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxDeviceListResponse} MailboxDeviceListResponse
+             */
+            MailboxDeviceListResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxDeviceListResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxDeviceListResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxDeviceListResponse();
+                if (object.devices) {
+                    if (!Array.isArray(object.devices))
+                        throw TypeError(".dmcn.relay.MailboxDeviceListResponse.devices: array expected");
+                    message.devices = [];
+                    for (let i = 0; i < object.devices.length; ++i) {
+                        if (!$util.isObject(object.devices[i]))
+                            throw TypeError(".dmcn.relay.MailboxDeviceListResponse.devices: object expected");
+                        message.devices[i] = $root.dmcn.relay.DeviceRecord.fromObject(object.devices[i], long + 1);
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxDeviceListResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {dmcn.relay.MailboxDeviceListResponse} message MailboxDeviceListResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxDeviceListResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.arrays || options.defaults)
+                    object.devices = [];
+                if (message.devices && message.devices.length) {
+                    object.devices = [];
+                    for (let j = 0; j < message.devices.length; ++j)
+                        object.devices[j] = $root.dmcn.relay.DeviceRecord.toObject(message.devices[j], options, q + 1);
+                }
+                return object;
+            };
+
+            /**
+             * Converts this MailboxDeviceListResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxDeviceListResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxDeviceListResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxDeviceListResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxDeviceListResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxDeviceListResponse";
+            };
+
+            return MailboxDeviceListResponse;
+        })();
+
+        relay.MailboxDeviceRetireOp = (function() {
+
+            /**
+             * Properties of a MailboxDeviceRetireOp.
+             * @memberof dmcn.relay
+             * @interface IMailboxDeviceRetireOp
+             * @property {Uint8Array|null} [ed25519PublicKey] MailboxDeviceRetireOp ed25519PublicKey
+             * @property {Uint8Array|null} [signerEd25519PublicKey] MailboxDeviceRetireOp signerEd25519PublicKey
+             * @property {Uint8Array|null} [signerSignature] MailboxDeviceRetireOp signerSignature
+             */
+
+            /**
+             * Constructs a new MailboxDeviceRetireOp.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxDeviceRetireOp.
+             * @implements IMailboxDeviceRetireOp
+             * @constructor
+             * @param {dmcn.relay.IMailboxDeviceRetireOp=} [properties] Properties to set
+             */
+            function MailboxDeviceRetireOp(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxDeviceRetireOp ed25519PublicKey.
+             * @member {Uint8Array} ed25519PublicKey
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @instance
+             */
+            MailboxDeviceRetireOp.prototype.ed25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceRetireOp signerEd25519PublicKey.
+             * @member {Uint8Array} signerEd25519PublicKey
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @instance
+             */
+            MailboxDeviceRetireOp.prototype.signerEd25519PublicKey = $util.newBuffer([]);
+
+            /**
+             * MailboxDeviceRetireOp signerSignature.
+             * @member {Uint8Array} signerSignature
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @instance
+             */
+            MailboxDeviceRetireOp.prototype.signerSignature = $util.newBuffer([]);
+
+            /**
+             * Creates a new MailboxDeviceRetireOp instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceRetireOp=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxDeviceRetireOp} MailboxDeviceRetireOp instance
+             */
+            MailboxDeviceRetireOp.create = function create(properties) {
+                return new MailboxDeviceRetireOp(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceRetireOp message. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireOp.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceRetireOp} message MailboxDeviceRetireOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceRetireOp.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.ed25519PublicKey);
+                if (message.signerEd25519PublicKey != null && Object.hasOwnProperty.call(message, "signerEd25519PublicKey"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.signerEd25519PublicKey);
+                if (message.signerSignature != null && Object.hasOwnProperty.call(message, "signerSignature"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.signerSignature);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceRetireOp message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireOp.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceRetireOp} message MailboxDeviceRetireOp message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceRetireOp.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxDeviceRetireOp message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxDeviceRetireOp} MailboxDeviceRetireOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceRetireOp.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxDeviceRetireOp();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.ed25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 2: {
+                            message.signerEd25519PublicKey = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.signerSignature = reader.bytes();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxDeviceRetireOp message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxDeviceRetireOp} MailboxDeviceRetireOp
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceRetireOp.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxDeviceRetireOp message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxDeviceRetireOp.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    if (!(message.ed25519PublicKey && typeof message.ed25519PublicKey.length === "number" || $util.isString(message.ed25519PublicKey)))
+                        return "ed25519PublicKey: buffer expected";
+                if (message.signerEd25519PublicKey != null && Object.hasOwnProperty.call(message, "signerEd25519PublicKey"))
+                    if (!(message.signerEd25519PublicKey && typeof message.signerEd25519PublicKey.length === "number" || $util.isString(message.signerEd25519PublicKey)))
+                        return "signerEd25519PublicKey: buffer expected";
+                if (message.signerSignature != null && Object.hasOwnProperty.call(message, "signerSignature"))
+                    if (!(message.signerSignature && typeof message.signerSignature.length === "number" || $util.isString(message.signerSignature)))
+                        return "signerSignature: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a MailboxDeviceRetireOp message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxDeviceRetireOp} MailboxDeviceRetireOp
+             */
+            MailboxDeviceRetireOp.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxDeviceRetireOp)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxDeviceRetireOp: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxDeviceRetireOp();
+                if (object.ed25519PublicKey != null)
+                    if (typeof object.ed25519PublicKey === "string")
+                        $util.base64.decode(object.ed25519PublicKey, message.ed25519PublicKey = $util.newBuffer($util.base64.length(object.ed25519PublicKey)), 0);
+                    else if (object.ed25519PublicKey.length >= 0)
+                        message.ed25519PublicKey = object.ed25519PublicKey;
+                if (object.signerEd25519PublicKey != null)
+                    if (typeof object.signerEd25519PublicKey === "string")
+                        $util.base64.decode(object.signerEd25519PublicKey, message.signerEd25519PublicKey = $util.newBuffer($util.base64.length(object.signerEd25519PublicKey)), 0);
+                    else if (object.signerEd25519PublicKey.length >= 0)
+                        message.signerEd25519PublicKey = object.signerEd25519PublicKey;
+                if (object.signerSignature != null)
+                    if (typeof object.signerSignature === "string")
+                        $util.base64.decode(object.signerSignature, message.signerSignature = $util.newBuffer($util.base64.length(object.signerSignature)), 0);
+                    else if (object.signerSignature.length >= 0)
+                        message.signerSignature = object.signerSignature;
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxDeviceRetireOp message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {dmcn.relay.MailboxDeviceRetireOp} message MailboxDeviceRetireOp
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxDeviceRetireOp.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    if (options.bytes === String)
+                        object.ed25519PublicKey = "";
+                    else {
+                        object.ed25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.ed25519PublicKey = $util.newBuffer(object.ed25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.signerEd25519PublicKey = "";
+                    else {
+                        object.signerEd25519PublicKey = [];
+                        if (options.bytes !== Array)
+                            object.signerEd25519PublicKey = $util.newBuffer(object.signerEd25519PublicKey);
+                    }
+                    if (options.bytes === String)
+                        object.signerSignature = "";
+                    else {
+                        object.signerSignature = [];
+                        if (options.bytes !== Array)
+                            object.signerSignature = $util.newBuffer(object.signerSignature);
+                    }
+                }
+                if (message.ed25519PublicKey != null && Object.hasOwnProperty.call(message, "ed25519PublicKey"))
+                    object.ed25519PublicKey = options.bytes === String ? $util.base64.encode(message.ed25519PublicKey, 0, message.ed25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.ed25519PublicKey) : message.ed25519PublicKey;
+                if (message.signerEd25519PublicKey != null && Object.hasOwnProperty.call(message, "signerEd25519PublicKey"))
+                    object.signerEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.signerEd25519PublicKey, 0, message.signerEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.signerEd25519PublicKey) : message.signerEd25519PublicKey;
+                if (message.signerSignature != null && Object.hasOwnProperty.call(message, "signerSignature"))
+                    object.signerSignature = options.bytes === String ? $util.base64.encode(message.signerSignature, 0, message.signerSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signerSignature) : message.signerSignature;
+                return object;
+            };
+
+            /**
+             * Converts this MailboxDeviceRetireOp to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxDeviceRetireOp.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxDeviceRetireOp
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxDeviceRetireOp
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxDeviceRetireOp.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxDeviceRetireOp";
+            };
+
+            return MailboxDeviceRetireOp;
+        })();
+
+        relay.MailboxDeviceRetireResponse = (function() {
+
+            /**
+             * Properties of a MailboxDeviceRetireResponse.
+             * @memberof dmcn.relay
+             * @interface IMailboxDeviceRetireResponse
+             * @property {dmcn.relay.IDeviceRecord|null} [device] MailboxDeviceRetireResponse device
+             */
+
+            /**
+             * Constructs a new MailboxDeviceRetireResponse.
+             * @memberof dmcn.relay
+             * @classdesc Represents a MailboxDeviceRetireResponse.
+             * @implements IMailboxDeviceRetireResponse
+             * @constructor
+             * @param {dmcn.relay.IMailboxDeviceRetireResponse=} [properties] Properties to set
+             */
+            function MailboxDeviceRetireResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * MailboxDeviceRetireResponse device.
+             * @member {dmcn.relay.IDeviceRecord|null|undefined} device
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @instance
+             */
+            MailboxDeviceRetireResponse.prototype.device = null;
+
+            /**
+             * Creates a new MailboxDeviceRetireResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceRetireResponse=} [properties] Properties to set
+             * @returns {dmcn.relay.MailboxDeviceRetireResponse} MailboxDeviceRetireResponse instance
+             */
+            MailboxDeviceRetireResponse.create = function create(properties) {
+                return new MailboxDeviceRetireResponse(properties);
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceRetireResponse message. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceRetireResponse} message MailboxDeviceRetireResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceRetireResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.device != null && Object.hasOwnProperty.call(message, "device"))
+                    $root.dmcn.relay.DeviceRecord.encode(message.device, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                return writer;
+            };
+
+            /**
+             * Encodes the specified MailboxDeviceRetireResponse message, length delimited. Does not implicitly {@link dmcn.relay.MailboxDeviceRetireResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {dmcn.relay.IMailboxDeviceRetireResponse} message MailboxDeviceRetireResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            MailboxDeviceRetireResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a MailboxDeviceRetireResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.relay.MailboxDeviceRetireResponse} MailboxDeviceRetireResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceRetireResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.relay.MailboxDeviceRetireResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.device = $root.dmcn.relay.DeviceRecord.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a MailboxDeviceRetireResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.relay.MailboxDeviceRetireResponse} MailboxDeviceRetireResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            MailboxDeviceRetireResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a MailboxDeviceRetireResponse message.
+             * @function verify
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            MailboxDeviceRetireResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.device != null && Object.hasOwnProperty.call(message, "device")) {
+                    let error = $root.dmcn.relay.DeviceRecord.verify(message.device, long + 1);
+                    if (error)
+                        return "device." + error;
+                }
+                return null;
+            };
+
+            /**
+             * Creates a MailboxDeviceRetireResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.relay.MailboxDeviceRetireResponse} MailboxDeviceRetireResponse
+             */
+            MailboxDeviceRetireResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.relay.MailboxDeviceRetireResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.relay.MailboxDeviceRetireResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.relay.MailboxDeviceRetireResponse();
+                if (object.device != null) {
+                    if (!$util.isObject(object.device))
+                        throw TypeError(".dmcn.relay.MailboxDeviceRetireResponse.device: object expected");
+                    message.device = $root.dmcn.relay.DeviceRecord.fromObject(object.device, long + 1);
+                }
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a MailboxDeviceRetireResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {dmcn.relay.MailboxDeviceRetireResponse} message MailboxDeviceRetireResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            MailboxDeviceRetireResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults)
+                    object.device = null;
+                if (message.device != null && Object.hasOwnProperty.call(message, "device"))
+                    object.device = $root.dmcn.relay.DeviceRecord.toObject(message.device, options, q + 1);
+                return object;
+            };
+
+            /**
+             * Converts this MailboxDeviceRetireResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            MailboxDeviceRetireResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for MailboxDeviceRetireResponse
+             * @function getTypeUrl
+             * @memberof dmcn.relay.MailboxDeviceRetireResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            MailboxDeviceRetireResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.relay.MailboxDeviceRetireResponse";
+            };
+
+            return MailboxDeviceRetireResponse;
         })();
 
         relay.FetchChallenge = (function() {
@@ -23501,6 +25677,9 @@ export const dmcn = $root.dmcn = (() => {
              * @property {dmcn.relay.IMailboxKvListOp|null} [kvList] MailboxOp kvList
              * @property {dmcn.relay.IMailboxKvDeleteOp|null} [kvDelete] MailboxOp kvDelete
              * @property {dmcn.relay.IMailboxKvStatOp|null} [kvStat] MailboxOp kvStat
+             * @property {dmcn.relay.IMailboxDeviceEnrollOp|null} [deviceEnroll] MailboxOp deviceEnroll
+             * @property {dmcn.relay.IMailboxDeviceListOp|null} [deviceList] MailboxOp deviceList
+             * @property {dmcn.relay.IMailboxDeviceRetireOp|null} [deviceRetire] MailboxOp deviceRetire
              */
 
             /**
@@ -23614,17 +25793,41 @@ export const dmcn = $root.dmcn = (() => {
              */
             MailboxOp.prototype.kvStat = null;
 
+            /**
+             * MailboxOp deviceEnroll.
+             * @member {dmcn.relay.IMailboxDeviceEnrollOp|null|undefined} deviceEnroll
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.deviceEnroll = null;
+
+            /**
+             * MailboxOp deviceList.
+             * @member {dmcn.relay.IMailboxDeviceListOp|null|undefined} deviceList
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.deviceList = null;
+
+            /**
+             * MailboxOp deviceRetire.
+             * @member {dmcn.relay.IMailboxDeviceRetireOp|null|undefined} deviceRetire
+             * @memberof dmcn.relay.MailboxOp
+             * @instance
+             */
+            MailboxOp.prototype.deviceRetire = null;
+
             // OneOf field names bound to virtual getters and setters
             let $oneOfFields;
 
             /**
              * MailboxOp op.
-             * @member {"list"|"body"|"delete"|"kvPut"|"kvGet"|"kvList"|"kvDelete"|"kvStat"|undefined} op
+             * @member {"list"|"body"|"delete"|"kvPut"|"kvGet"|"kvList"|"kvDelete"|"kvStat"|"deviceEnroll"|"deviceList"|"deviceRetire"|undefined} op
              * @memberof dmcn.relay.MailboxOp
              * @instance
              */
             Object.defineProperty(MailboxOp.prototype, "op", {
-                get: $util.oneOfGetter($oneOfFields = ["list", "body", "delete", "kvPut", "kvGet", "kvList", "kvDelete", "kvStat"]),
+                get: $util.oneOfGetter($oneOfFields = ["list", "body", "delete", "kvPut", "kvGet", "kvList", "kvDelete", "kvStat", "deviceEnroll", "deviceList", "deviceRetire"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -23680,6 +25883,12 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 14, wireType 2 =*/114).bytes(message.deviceEd25519PublicKey);
                 if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
                     writer.uint32(/* id 15, wireType 2 =*/122).bytes(message.deviceSignature);
+                if (message.deviceEnroll != null && Object.hasOwnProperty.call(message, "deviceEnroll"))
+                    $root.dmcn.relay.MailboxDeviceEnrollOp.encode(message.deviceEnroll, writer.uint32(/* id 16, wireType 2 =*/130).fork(), q + 1).ldelim();
+                if (message.deviceList != null && Object.hasOwnProperty.call(message, "deviceList"))
+                    $root.dmcn.relay.MailboxDeviceListOp.encode(message.deviceList, writer.uint32(/* id 17, wireType 2 =*/138).fork(), q + 1).ldelim();
+                if (message.deviceRetire != null && Object.hasOwnProperty.call(message, "deviceRetire"))
+                    $root.dmcn.relay.MailboxDeviceRetireOp.encode(message.deviceRetire, writer.uint32(/* id 18, wireType 2 =*/146).fork(), q + 1).ldelim();
                 return writer;
             };
 
@@ -23766,6 +25975,18 @@ export const dmcn = $root.dmcn = (() => {
                         }
                     case 12: {
                             message.kvStat = $root.dmcn.relay.MailboxKvStatOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 16: {
+                            message.deviceEnroll = $root.dmcn.relay.MailboxDeviceEnrollOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 17: {
+                            message.deviceList = $root.dmcn.relay.MailboxDeviceListOp.decode(reader, reader.uint32(), undefined, long + 1);
+                            break;
+                        }
+                    case 18: {
+                            message.deviceRetire = $root.dmcn.relay.MailboxDeviceRetireOp.decode(reader, reader.uint32(), undefined, long + 1);
                             break;
                         }
                     default:
@@ -23898,6 +26119,36 @@ export const dmcn = $root.dmcn = (() => {
                             return "kvStat." + error;
                     }
                 }
+                if (message.deviceEnroll != null && Object.hasOwnProperty.call(message, "deviceEnroll")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxDeviceEnrollOp.verify(message.deviceEnroll, long + 1);
+                        if (error)
+                            return "deviceEnroll." + error;
+                    }
+                }
+                if (message.deviceList != null && Object.hasOwnProperty.call(message, "deviceList")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxDeviceListOp.verify(message.deviceList, long + 1);
+                        if (error)
+                            return "deviceList." + error;
+                    }
+                }
+                if (message.deviceRetire != null && Object.hasOwnProperty.call(message, "deviceRetire")) {
+                    if (properties.op === 1)
+                        return "op: multiple values";
+                    properties.op = 1;
+                    {
+                        let error = $root.dmcn.relay.MailboxDeviceRetireOp.verify(message.deviceRetire, long + 1);
+                        if (error)
+                            return "deviceRetire." + error;
+                    }
+                }
                 return null;
             };
 
@@ -23978,6 +26229,21 @@ export const dmcn = $root.dmcn = (() => {
                     if (!$util.isObject(object.kvStat))
                         throw TypeError(".dmcn.relay.MailboxOp.kvStat: object expected");
                     message.kvStat = $root.dmcn.relay.MailboxKvStatOp.fromObject(object.kvStat, long + 1);
+                }
+                if (object.deviceEnroll != null) {
+                    if (!$util.isObject(object.deviceEnroll))
+                        throw TypeError(".dmcn.relay.MailboxOp.deviceEnroll: object expected");
+                    message.deviceEnroll = $root.dmcn.relay.MailboxDeviceEnrollOp.fromObject(object.deviceEnroll, long + 1);
+                }
+                if (object.deviceList != null) {
+                    if (!$util.isObject(object.deviceList))
+                        throw TypeError(".dmcn.relay.MailboxOp.deviceList: object expected");
+                    message.deviceList = $root.dmcn.relay.MailboxDeviceListOp.fromObject(object.deviceList, long + 1);
+                }
+                if (object.deviceRetire != null) {
+                    if (!$util.isObject(object.deviceRetire))
+                        throw TypeError(".dmcn.relay.MailboxOp.deviceRetire: object expected");
+                    message.deviceRetire = $root.dmcn.relay.MailboxDeviceRetireOp.fromObject(object.deviceRetire, long + 1);
                 }
                 return message;
             };
@@ -24077,6 +26343,21 @@ export const dmcn = $root.dmcn = (() => {
                     object.deviceEd25519PublicKey = options.bytes === String ? $util.base64.encode(message.deviceEd25519PublicKey, 0, message.deviceEd25519PublicKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceEd25519PublicKey) : message.deviceEd25519PublicKey;
                 if (message.deviceSignature != null && Object.hasOwnProperty.call(message, "deviceSignature"))
                     object.deviceSignature = options.bytes === String ? $util.base64.encode(message.deviceSignature, 0, message.deviceSignature.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceSignature) : message.deviceSignature;
+                if (message.deviceEnroll != null && Object.hasOwnProperty.call(message, "deviceEnroll")) {
+                    object.deviceEnroll = $root.dmcn.relay.MailboxDeviceEnrollOp.toObject(message.deviceEnroll, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "deviceEnroll";
+                }
+                if (message.deviceList != null && Object.hasOwnProperty.call(message, "deviceList")) {
+                    object.deviceList = $root.dmcn.relay.MailboxDeviceListOp.toObject(message.deviceList, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "deviceList";
+                }
+                if (message.deviceRetire != null && Object.hasOwnProperty.call(message, "deviceRetire")) {
+                    object.deviceRetire = $root.dmcn.relay.MailboxDeviceRetireOp.toObject(message.deviceRetire, options, q + 1);
+                    if (options.oneofs)
+                        object.op = "deviceRetire";
+                }
                 return object;
             };
 
@@ -27880,6 +30161,8 @@ export const dmcn = $root.dmcn = (() => {
              * @property {boolean|null} [found] MailboxKvGetResponse found
              * @property {Uint8Array|null} [sealed] MailboxKvGetResponse sealed
              * @property {number|Long|null} [version] MailboxKvGetResponse version
+             * @property {number|Long|null} [writtenAt] MailboxKvGetResponse writtenAt
+             * @property {Uint8Array|null} [sealedWriter] MailboxKvGetResponse sealedWriter
              */
 
             /**
@@ -27922,6 +30205,22 @@ export const dmcn = $root.dmcn = (() => {
             MailboxKvGetResponse.prototype.version = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
             /**
+             * MailboxKvGetResponse writtenAt.
+             * @member {number|Long} writtenAt
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @instance
+             */
+            MailboxKvGetResponse.prototype.writtenAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * MailboxKvGetResponse sealedWriter.
+             * @member {Uint8Array} sealedWriter
+             * @memberof dmcn.relay.MailboxKvGetResponse
+             * @instance
+             */
+            MailboxKvGetResponse.prototype.sealedWriter = $util.newBuffer([]);
+
+            /**
              * Creates a new MailboxKvGetResponse instance using the specified properties.
              * @function create
              * @memberof dmcn.relay.MailboxKvGetResponse
@@ -27955,6 +30254,10 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.sealed);
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.version);
+                if (message.writtenAt != null && Object.hasOwnProperty.call(message, "writtenAt"))
+                    writer.uint32(/* id 4, wireType 0 =*/32).int64(message.writtenAt);
+                if (message.sealedWriter != null && Object.hasOwnProperty.call(message, "sealedWriter"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.sealedWriter);
                 return writer;
             };
 
@@ -28007,6 +30310,14 @@ export const dmcn = $root.dmcn = (() => {
                             message.version = reader.uint64();
                             break;
                         }
+                    case 4: {
+                            message.writtenAt = reader.int64();
+                            break;
+                        }
+                    case 5: {
+                            message.sealedWriter = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -28055,6 +30366,12 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     if (!$util.isInteger(message.version) && !(message.version && $util.isInteger(message.version.low) && $util.isInteger(message.version.high)))
                         return "version: integer|Long expected";
+                if (message.writtenAt != null && Object.hasOwnProperty.call(message, "writtenAt"))
+                    if (!$util.isInteger(message.writtenAt) && !(message.writtenAt && $util.isInteger(message.writtenAt.low) && $util.isInteger(message.writtenAt.high)))
+                        return "writtenAt: integer|Long expected";
+                if (message.sealedWriter != null && Object.hasOwnProperty.call(message, "sealedWriter"))
+                    if (!(message.sealedWriter && typeof message.sealedWriter.length === "number" || $util.isString(message.sealedWriter)))
+                        return "sealedWriter: buffer expected";
                 return null;
             };
 
@@ -28092,6 +30409,20 @@ export const dmcn = $root.dmcn = (() => {
                         message.version = object.version;
                     else if (typeof object.version === "object")
                         message.version = new $util.LongBits(object.version.low >>> 0, object.version.high >>> 0).toNumber(true);
+                if (object.writtenAt != null)
+                    if ($util.Long)
+                        message.writtenAt = $util.Long.fromValue(object.writtenAt, false);
+                    else if (typeof object.writtenAt === "string")
+                        message.writtenAt = parseInt(object.writtenAt, 10);
+                    else if (typeof object.writtenAt === "number")
+                        message.writtenAt = object.writtenAt;
+                    else if (typeof object.writtenAt === "object")
+                        message.writtenAt = new $util.LongBits(object.writtenAt.low >>> 0, object.writtenAt.high >>> 0).toNumber();
+                if (object.sealedWriter != null)
+                    if (typeof object.sealedWriter === "string")
+                        $util.base64.decode(object.sealedWriter, message.sealedWriter = $util.newBuffer($util.base64.length(object.sealedWriter)), 0);
+                    else if (object.sealedWriter.length >= 0)
+                        message.sealedWriter = object.sealedWriter;
                 return message;
             };
 
@@ -28126,6 +30457,18 @@ export const dmcn = $root.dmcn = (() => {
                         object.version = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
                     } else
                         object.version = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.writtenAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.writtenAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.sealedWriter = "";
+                    else {
+                        object.sealedWriter = [];
+                        if (options.bytes !== Array)
+                            object.sealedWriter = $util.newBuffer(object.sealedWriter);
+                    }
                 }
                 if (message.found != null && Object.hasOwnProperty.call(message, "found"))
                     object.found = message.found;
@@ -28138,6 +30481,15 @@ export const dmcn = $root.dmcn = (() => {
                         object.version = options.longs === String ? String(message.version) : message.version;
                     else
                         object.version = options.longs === String ? $util.Long.prototype.toString.call(message.version) : options.longs === Number ? new $util.LongBits(message.version.low >>> 0, message.version.high >>> 0).toNumber(true) : message.version;
+                if (message.writtenAt != null && Object.hasOwnProperty.call(message, "writtenAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.writtenAt = typeof message.writtenAt === "number" ? BigInt(message.writtenAt) : $util.Long.fromBits(message.writtenAt.low >>> 0, message.writtenAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.writtenAt === "number")
+                        object.writtenAt = options.longs === String ? String(message.writtenAt) : message.writtenAt;
+                    else
+                        object.writtenAt = options.longs === String ? $util.Long.prototype.toString.call(message.writtenAt) : options.longs === Number ? new $util.LongBits(message.writtenAt.low >>> 0, message.writtenAt.high >>> 0).toNumber() : message.writtenAt;
+                if (message.sealedWriter != null && Object.hasOwnProperty.call(message, "sealedWriter"))
+                    object.sealedWriter = options.bytes === String ? $util.base64.encode(message.sealedWriter, 0, message.sealedWriter.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealedWriter) : message.sealedWriter;
                 return object;
             };
 
@@ -28179,6 +30531,8 @@ export const dmcn = $root.dmcn = (() => {
              * @property {string|null} [key] MailboxKvItem key
              * @property {Uint8Array|null} [sealed] MailboxKvItem sealed
              * @property {number|Long|null} [version] MailboxKvItem version
+             * @property {number|Long|null} [writtenAt] MailboxKvItem writtenAt
+             * @property {Uint8Array|null} [sealedWriter] MailboxKvItem sealedWriter
              */
 
             /**
@@ -28221,6 +30575,22 @@ export const dmcn = $root.dmcn = (() => {
             MailboxKvItem.prototype.version = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
             /**
+             * MailboxKvItem writtenAt.
+             * @member {number|Long} writtenAt
+             * @memberof dmcn.relay.MailboxKvItem
+             * @instance
+             */
+            MailboxKvItem.prototype.writtenAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * MailboxKvItem sealedWriter.
+             * @member {Uint8Array} sealedWriter
+             * @memberof dmcn.relay.MailboxKvItem
+             * @instance
+             */
+            MailboxKvItem.prototype.sealedWriter = $util.newBuffer([]);
+
+            /**
              * Creates a new MailboxKvItem instance using the specified properties.
              * @function create
              * @memberof dmcn.relay.MailboxKvItem
@@ -28254,6 +30624,10 @@ export const dmcn = $root.dmcn = (() => {
                     writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.sealed);
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.version);
+                if (message.writtenAt != null && Object.hasOwnProperty.call(message, "writtenAt"))
+                    writer.uint32(/* id 4, wireType 0 =*/32).int64(message.writtenAt);
+                if (message.sealedWriter != null && Object.hasOwnProperty.call(message, "sealedWriter"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.sealedWriter);
                 return writer;
             };
 
@@ -28306,6 +30680,14 @@ export const dmcn = $root.dmcn = (() => {
                             message.version = reader.uint64();
                             break;
                         }
+                    case 4: {
+                            message.writtenAt = reader.int64();
+                            break;
+                        }
+                    case 5: {
+                            message.sealedWriter = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7, long);
                         break;
@@ -28354,6 +30736,12 @@ export const dmcn = $root.dmcn = (() => {
                 if (message.version != null && Object.hasOwnProperty.call(message, "version"))
                     if (!$util.isInteger(message.version) && !(message.version && $util.isInteger(message.version.low) && $util.isInteger(message.version.high)))
                         return "version: integer|Long expected";
+                if (message.writtenAt != null && Object.hasOwnProperty.call(message, "writtenAt"))
+                    if (!$util.isInteger(message.writtenAt) && !(message.writtenAt && $util.isInteger(message.writtenAt.low) && $util.isInteger(message.writtenAt.high)))
+                        return "writtenAt: integer|Long expected";
+                if (message.sealedWriter != null && Object.hasOwnProperty.call(message, "sealedWriter"))
+                    if (!(message.sealedWriter && typeof message.sealedWriter.length === "number" || $util.isString(message.sealedWriter)))
+                        return "sealedWriter: buffer expected";
                 return null;
             };
 
@@ -28391,6 +30779,20 @@ export const dmcn = $root.dmcn = (() => {
                         message.version = object.version;
                     else if (typeof object.version === "object")
                         message.version = new $util.LongBits(object.version.low >>> 0, object.version.high >>> 0).toNumber(true);
+                if (object.writtenAt != null)
+                    if ($util.Long)
+                        message.writtenAt = $util.Long.fromValue(object.writtenAt, false);
+                    else if (typeof object.writtenAt === "string")
+                        message.writtenAt = parseInt(object.writtenAt, 10);
+                    else if (typeof object.writtenAt === "number")
+                        message.writtenAt = object.writtenAt;
+                    else if (typeof object.writtenAt === "object")
+                        message.writtenAt = new $util.LongBits(object.writtenAt.low >>> 0, object.writtenAt.high >>> 0).toNumber();
+                if (object.sealedWriter != null)
+                    if (typeof object.sealedWriter === "string")
+                        $util.base64.decode(object.sealedWriter, message.sealedWriter = $util.newBuffer($util.base64.length(object.sealedWriter)), 0);
+                    else if (object.sealedWriter.length >= 0)
+                        message.sealedWriter = object.sealedWriter;
                 return message;
             };
 
@@ -28425,6 +30827,18 @@ export const dmcn = $root.dmcn = (() => {
                         object.version = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
                     } else
                         object.version = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.writtenAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.writtenAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.sealedWriter = "";
+                    else {
+                        object.sealedWriter = [];
+                        if (options.bytes !== Array)
+                            object.sealedWriter = $util.newBuffer(object.sealedWriter);
+                    }
                 }
                 if (message.key != null && Object.hasOwnProperty.call(message, "key"))
                     object.key = message.key;
@@ -28437,6 +30851,15 @@ export const dmcn = $root.dmcn = (() => {
                         object.version = options.longs === String ? String(message.version) : message.version;
                     else
                         object.version = options.longs === String ? $util.Long.prototype.toString.call(message.version) : options.longs === Number ? new $util.LongBits(message.version.low >>> 0, message.version.high >>> 0).toNumber(true) : message.version;
+                if (message.writtenAt != null && Object.hasOwnProperty.call(message, "writtenAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.writtenAt = typeof message.writtenAt === "number" ? BigInt(message.writtenAt) : $util.Long.fromBits(message.writtenAt.low >>> 0, message.writtenAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.writtenAt === "number")
+                        object.writtenAt = options.longs === String ? String(message.writtenAt) : message.writtenAt;
+                    else
+                        object.writtenAt = options.longs === String ? $util.Long.prototype.toString.call(message.writtenAt) : options.longs === Number ? new $util.LongBits(message.writtenAt.low >>> 0, message.writtenAt.high >>> 0).toNumber() : message.writtenAt;
+                if (message.sealedWriter != null && Object.hasOwnProperty.call(message, "sealedWriter"))
+                    object.sealedWriter = options.bytes === String ? $util.base64.encode(message.sealedWriter, 0, message.sealedWriter.length) : options.bytes === Array ? Array.prototype.slice.call(message.sealedWriter) : message.sealedWriter;
                 return object;
             };
 
@@ -30441,6 +32864,840 @@ export const dmcn = $root.dmcn = (() => {
         })();
 
         return bridge;
+    })();
+
+    dmcn.pairing = (function() {
+
+        /**
+         * Namespace pairing.
+         * @memberof dmcn
+         * @namespace
+         */
+        const pairing = {};
+
+        pairing.CloneRequest = (function() {
+
+            /**
+             * Properties of a CloneRequest.
+             * @memberof dmcn.pairing
+             * @interface ICloneRequest
+             * @property {Uint8Array|null} [ephemeralEd25519Pub] CloneRequest ephemeralEd25519Pub
+             * @property {Uint8Array|null} [ephemeralX25519Pub] CloneRequest ephemeralX25519Pub
+             * @property {Uint8Array|null} [deviceId] CloneRequest deviceId
+             * @property {string|null} [label] CloneRequest label
+             * @property {number|Long|null} [requestedAt] CloneRequest requestedAt
+             * @property {Uint8Array|null} [deviceEd25519Pub] CloneRequest deviceEd25519Pub
+             */
+
+            /**
+             * Constructs a new CloneRequest.
+             * @memberof dmcn.pairing
+             * @classdesc Represents a CloneRequest.
+             * @implements ICloneRequest
+             * @constructor
+             * @param {dmcn.pairing.ICloneRequest=} [properties] Properties to set
+             */
+            function CloneRequest(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * CloneRequest ephemeralEd25519Pub.
+             * @member {Uint8Array} ephemeralEd25519Pub
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             */
+            CloneRequest.prototype.ephemeralEd25519Pub = $util.newBuffer([]);
+
+            /**
+             * CloneRequest ephemeralX25519Pub.
+             * @member {Uint8Array} ephemeralX25519Pub
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             */
+            CloneRequest.prototype.ephemeralX25519Pub = $util.newBuffer([]);
+
+            /**
+             * CloneRequest deviceId.
+             * @member {Uint8Array} deviceId
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             */
+            CloneRequest.prototype.deviceId = $util.newBuffer([]);
+
+            /**
+             * CloneRequest label.
+             * @member {string} label
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             */
+            CloneRequest.prototype.label = "";
+
+            /**
+             * CloneRequest requestedAt.
+             * @member {number|Long} requestedAt
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             */
+            CloneRequest.prototype.requestedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * CloneRequest deviceEd25519Pub.
+             * @member {Uint8Array} deviceEd25519Pub
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             */
+            CloneRequest.prototype.deviceEd25519Pub = $util.newBuffer([]);
+
+            /**
+             * Creates a new CloneRequest instance using the specified properties.
+             * @function create
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {dmcn.pairing.ICloneRequest=} [properties] Properties to set
+             * @returns {dmcn.pairing.CloneRequest} CloneRequest instance
+             */
+            CloneRequest.create = function create(properties) {
+                return new CloneRequest(properties);
+            };
+
+            /**
+             * Encodes the specified CloneRequest message. Does not implicitly {@link dmcn.pairing.CloneRequest.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {dmcn.pairing.ICloneRequest} message CloneRequest message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            CloneRequest.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.ephemeralEd25519Pub != null && Object.hasOwnProperty.call(message, "ephemeralEd25519Pub"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.ephemeralEd25519Pub);
+                if (message.ephemeralX25519Pub != null && Object.hasOwnProperty.call(message, "ephemeralX25519Pub"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.ephemeralX25519Pub);
+                if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.deviceId);
+                if (message.label != null && Object.hasOwnProperty.call(message, "label"))
+                    writer.uint32(/* id 4, wireType 2 =*/34).string(message.label);
+                if (message.requestedAt != null && Object.hasOwnProperty.call(message, "requestedAt"))
+                    writer.uint32(/* id 5, wireType 0 =*/40).int64(message.requestedAt);
+                if (message.deviceEd25519Pub != null && Object.hasOwnProperty.call(message, "deviceEd25519Pub"))
+                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.deviceEd25519Pub);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified CloneRequest message, length delimited. Does not implicitly {@link dmcn.pairing.CloneRequest.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {dmcn.pairing.ICloneRequest} message CloneRequest message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            CloneRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a CloneRequest message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.pairing.CloneRequest} CloneRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            CloneRequest.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.pairing.CloneRequest();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.ephemeralEd25519Pub = reader.bytes();
+                            break;
+                        }
+                    case 2: {
+                            message.ephemeralX25519Pub = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.deviceId = reader.bytes();
+                            break;
+                        }
+                    case 4: {
+                            message.label = reader.string();
+                            break;
+                        }
+                    case 5: {
+                            message.requestedAt = reader.int64();
+                            break;
+                        }
+                    case 6: {
+                            message.deviceEd25519Pub = reader.bytes();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a CloneRequest message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.pairing.CloneRequest} CloneRequest
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            CloneRequest.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a CloneRequest message.
+             * @function verify
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            CloneRequest.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.ephemeralEd25519Pub != null && Object.hasOwnProperty.call(message, "ephemeralEd25519Pub"))
+                    if (!(message.ephemeralEd25519Pub && typeof message.ephemeralEd25519Pub.length === "number" || $util.isString(message.ephemeralEd25519Pub)))
+                        return "ephemeralEd25519Pub: buffer expected";
+                if (message.ephemeralX25519Pub != null && Object.hasOwnProperty.call(message, "ephemeralX25519Pub"))
+                    if (!(message.ephemeralX25519Pub && typeof message.ephemeralX25519Pub.length === "number" || $util.isString(message.ephemeralX25519Pub)))
+                        return "ephemeralX25519Pub: buffer expected";
+                if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
+                    if (!(message.deviceId && typeof message.deviceId.length === "number" || $util.isString(message.deviceId)))
+                        return "deviceId: buffer expected";
+                if (message.label != null && Object.hasOwnProperty.call(message, "label"))
+                    if (!$util.isString(message.label))
+                        return "label: string expected";
+                if (message.requestedAt != null && Object.hasOwnProperty.call(message, "requestedAt"))
+                    if (!$util.isInteger(message.requestedAt) && !(message.requestedAt && $util.isInteger(message.requestedAt.low) && $util.isInteger(message.requestedAt.high)))
+                        return "requestedAt: integer|Long expected";
+                if (message.deviceEd25519Pub != null && Object.hasOwnProperty.call(message, "deviceEd25519Pub"))
+                    if (!(message.deviceEd25519Pub && typeof message.deviceEd25519Pub.length === "number" || $util.isString(message.deviceEd25519Pub)))
+                        return "deviceEd25519Pub: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a CloneRequest message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.pairing.CloneRequest} CloneRequest
+             */
+            CloneRequest.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.pairing.CloneRequest)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.pairing.CloneRequest: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.pairing.CloneRequest();
+                if (object.ephemeralEd25519Pub != null)
+                    if (typeof object.ephemeralEd25519Pub === "string")
+                        $util.base64.decode(object.ephemeralEd25519Pub, message.ephemeralEd25519Pub = $util.newBuffer($util.base64.length(object.ephemeralEd25519Pub)), 0);
+                    else if (object.ephemeralEd25519Pub.length >= 0)
+                        message.ephemeralEd25519Pub = object.ephemeralEd25519Pub;
+                if (object.ephemeralX25519Pub != null)
+                    if (typeof object.ephemeralX25519Pub === "string")
+                        $util.base64.decode(object.ephemeralX25519Pub, message.ephemeralX25519Pub = $util.newBuffer($util.base64.length(object.ephemeralX25519Pub)), 0);
+                    else if (object.ephemeralX25519Pub.length >= 0)
+                        message.ephemeralX25519Pub = object.ephemeralX25519Pub;
+                if (object.deviceId != null)
+                    if (typeof object.deviceId === "string")
+                        $util.base64.decode(object.deviceId, message.deviceId = $util.newBuffer($util.base64.length(object.deviceId)), 0);
+                    else if (object.deviceId.length >= 0)
+                        message.deviceId = object.deviceId;
+                if (object.label != null)
+                    message.label = String(object.label);
+                if (object.requestedAt != null)
+                    if ($util.Long)
+                        message.requestedAt = $util.Long.fromValue(object.requestedAt, false);
+                    else if (typeof object.requestedAt === "string")
+                        message.requestedAt = parseInt(object.requestedAt, 10);
+                    else if (typeof object.requestedAt === "number")
+                        message.requestedAt = object.requestedAt;
+                    else if (typeof object.requestedAt === "object")
+                        message.requestedAt = new $util.LongBits(object.requestedAt.low >>> 0, object.requestedAt.high >>> 0).toNumber();
+                if (object.deviceEd25519Pub != null)
+                    if (typeof object.deviceEd25519Pub === "string")
+                        $util.base64.decode(object.deviceEd25519Pub, message.deviceEd25519Pub = $util.newBuffer($util.base64.length(object.deviceEd25519Pub)), 0);
+                    else if (object.deviceEd25519Pub.length >= 0)
+                        message.deviceEd25519Pub = object.deviceEd25519Pub;
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a CloneRequest message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {dmcn.pairing.CloneRequest} message CloneRequest
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            CloneRequest.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    if (options.bytes === String)
+                        object.ephemeralEd25519Pub = "";
+                    else {
+                        object.ephemeralEd25519Pub = [];
+                        if (options.bytes !== Array)
+                            object.ephemeralEd25519Pub = $util.newBuffer(object.ephemeralEd25519Pub);
+                    }
+                    if (options.bytes === String)
+                        object.ephemeralX25519Pub = "";
+                    else {
+                        object.ephemeralX25519Pub = [];
+                        if (options.bytes !== Array)
+                            object.ephemeralX25519Pub = $util.newBuffer(object.ephemeralX25519Pub);
+                    }
+                    if (options.bytes === String)
+                        object.deviceId = "";
+                    else {
+                        object.deviceId = [];
+                        if (options.bytes !== Array)
+                            object.deviceId = $util.newBuffer(object.deviceId);
+                    }
+                    object.label = "";
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.requestedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.requestedAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                    if (options.bytes === String)
+                        object.deviceEd25519Pub = "";
+                    else {
+                        object.deviceEd25519Pub = [];
+                        if (options.bytes !== Array)
+                            object.deviceEd25519Pub = $util.newBuffer(object.deviceEd25519Pub);
+                    }
+                }
+                if (message.ephemeralEd25519Pub != null && Object.hasOwnProperty.call(message, "ephemeralEd25519Pub"))
+                    object.ephemeralEd25519Pub = options.bytes === String ? $util.base64.encode(message.ephemeralEd25519Pub, 0, message.ephemeralEd25519Pub.length) : options.bytes === Array ? Array.prototype.slice.call(message.ephemeralEd25519Pub) : message.ephemeralEd25519Pub;
+                if (message.ephemeralX25519Pub != null && Object.hasOwnProperty.call(message, "ephemeralX25519Pub"))
+                    object.ephemeralX25519Pub = options.bytes === String ? $util.base64.encode(message.ephemeralX25519Pub, 0, message.ephemeralX25519Pub.length) : options.bytes === Array ? Array.prototype.slice.call(message.ephemeralX25519Pub) : message.ephemeralX25519Pub;
+                if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
+                    object.deviceId = options.bytes === String ? $util.base64.encode(message.deviceId, 0, message.deviceId.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceId) : message.deviceId;
+                if (message.label != null && Object.hasOwnProperty.call(message, "label"))
+                    object.label = message.label;
+                if (message.requestedAt != null && Object.hasOwnProperty.call(message, "requestedAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.requestedAt = typeof message.requestedAt === "number" ? BigInt(message.requestedAt) : $util.Long.fromBits(message.requestedAt.low >>> 0, message.requestedAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.requestedAt === "number")
+                        object.requestedAt = options.longs === String ? String(message.requestedAt) : message.requestedAt;
+                    else
+                        object.requestedAt = options.longs === String ? $util.Long.prototype.toString.call(message.requestedAt) : options.longs === Number ? new $util.LongBits(message.requestedAt.low >>> 0, message.requestedAt.high >>> 0).toNumber() : message.requestedAt;
+                if (message.deviceEd25519Pub != null && Object.hasOwnProperty.call(message, "deviceEd25519Pub"))
+                    object.deviceEd25519Pub = options.bytes === String ? $util.base64.encode(message.deviceEd25519Pub, 0, message.deviceEd25519Pub.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceEd25519Pub) : message.deviceEd25519Pub;
+                return object;
+            };
+
+            /**
+             * Converts this CloneRequest to JSON.
+             * @function toJSON
+             * @memberof dmcn.pairing.CloneRequest
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            CloneRequest.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for CloneRequest
+             * @function getTypeUrl
+             * @memberof dmcn.pairing.CloneRequest
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            CloneRequest.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.pairing.CloneRequest";
+            };
+
+            return CloneRequest;
+        })();
+
+        pairing.CloneResponse = (function() {
+
+            /**
+             * Properties of a CloneResponse.
+             * @memberof dmcn.pairing
+             * @interface ICloneResponse
+             * @property {string|null} [address] CloneResponse address
+             * @property {Uint8Array|null} [ed25519Public] CloneResponse ed25519Public
+             * @property {Uint8Array|null} [ed25519Private] CloneResponse ed25519Private
+             * @property {Uint8Array|null} [x25519Public] CloneResponse x25519Public
+             * @property {Uint8Array|null} [x25519Private] CloneResponse x25519Private
+             * @property {Uint8Array|null} [deviceId] CloneResponse deviceId
+             * @property {number|Long|null} [createdAt] CloneResponse createdAt
+             */
+
+            /**
+             * Constructs a new CloneResponse.
+             * @memberof dmcn.pairing
+             * @classdesc Represents a CloneResponse.
+             * @implements ICloneResponse
+             * @constructor
+             * @param {dmcn.pairing.ICloneResponse=} [properties] Properties to set
+             */
+            function CloneResponse(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * CloneResponse address.
+             * @member {string} address
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.address = "";
+
+            /**
+             * CloneResponse ed25519Public.
+             * @member {Uint8Array} ed25519Public
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.ed25519Public = $util.newBuffer([]);
+
+            /**
+             * CloneResponse ed25519Private.
+             * @member {Uint8Array} ed25519Private
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.ed25519Private = $util.newBuffer([]);
+
+            /**
+             * CloneResponse x25519Public.
+             * @member {Uint8Array} x25519Public
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.x25519Public = $util.newBuffer([]);
+
+            /**
+             * CloneResponse x25519Private.
+             * @member {Uint8Array} x25519Private
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.x25519Private = $util.newBuffer([]);
+
+            /**
+             * CloneResponse deviceId.
+             * @member {Uint8Array} deviceId
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.deviceId = $util.newBuffer([]);
+
+            /**
+             * CloneResponse createdAt.
+             * @member {number|Long} createdAt
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             */
+            CloneResponse.prototype.createdAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * Creates a new CloneResponse instance using the specified properties.
+             * @function create
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {dmcn.pairing.ICloneResponse=} [properties] Properties to set
+             * @returns {dmcn.pairing.CloneResponse} CloneResponse instance
+             */
+            CloneResponse.create = function create(properties) {
+                return new CloneResponse(properties);
+            };
+
+            /**
+             * Encodes the specified CloneResponse message. Does not implicitly {@link dmcn.pairing.CloneResponse.verify|verify} messages.
+             * @function encode
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {dmcn.pairing.ICloneResponse} message CloneResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            CloneResponse.encode = function encode(message, writer, q) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    writer.uint32(/* id 1, wireType 2 =*/10).string(message.address);
+                if (message.ed25519Public != null && Object.hasOwnProperty.call(message, "ed25519Public"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.ed25519Public);
+                if (message.ed25519Private != null && Object.hasOwnProperty.call(message, "ed25519Private"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.ed25519Private);
+                if (message.x25519Public != null && Object.hasOwnProperty.call(message, "x25519Public"))
+                    writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.x25519Public);
+                if (message.x25519Private != null && Object.hasOwnProperty.call(message, "x25519Private"))
+                    writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.x25519Private);
+                if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
+                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.deviceId);
+                if (message.createdAt != null && Object.hasOwnProperty.call(message, "createdAt"))
+                    writer.uint32(/* id 7, wireType 0 =*/56).int64(message.createdAt);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified CloneResponse message, length delimited. Does not implicitly {@link dmcn.pairing.CloneResponse.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {dmcn.pairing.ICloneResponse} message CloneResponse message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            CloneResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a CloneResponse message from the specified reader or buffer.
+             * @function decode
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {dmcn.pairing.CloneResponse} CloneResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            CloneResponse.decode = function decode(reader, length, error, long) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                if (long === undefined)
+                    long = 0;
+                if (long > $Reader.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.dmcn.pairing.CloneResponse();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            message.address = reader.string();
+                            break;
+                        }
+                    case 2: {
+                            message.ed25519Public = reader.bytes();
+                            break;
+                        }
+                    case 3: {
+                            message.ed25519Private = reader.bytes();
+                            break;
+                        }
+                    case 4: {
+                            message.x25519Public = reader.bytes();
+                            break;
+                        }
+                    case 5: {
+                            message.x25519Private = reader.bytes();
+                            break;
+                        }
+                    case 6: {
+                            message.deviceId = reader.bytes();
+                            break;
+                        }
+                    case 7: {
+                            message.createdAt = reader.int64();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7, long);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a CloneResponse message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {dmcn.pairing.CloneResponse} CloneResponse
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            CloneResponse.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a CloneResponse message.
+             * @function verify
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            CloneResponse.verify = function verify(message, long) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    return "maximum nesting depth exceeded";
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    if (!$util.isString(message.address))
+                        return "address: string expected";
+                if (message.ed25519Public != null && Object.hasOwnProperty.call(message, "ed25519Public"))
+                    if (!(message.ed25519Public && typeof message.ed25519Public.length === "number" || $util.isString(message.ed25519Public)))
+                        return "ed25519Public: buffer expected";
+                if (message.ed25519Private != null && Object.hasOwnProperty.call(message, "ed25519Private"))
+                    if (!(message.ed25519Private && typeof message.ed25519Private.length === "number" || $util.isString(message.ed25519Private)))
+                        return "ed25519Private: buffer expected";
+                if (message.x25519Public != null && Object.hasOwnProperty.call(message, "x25519Public"))
+                    if (!(message.x25519Public && typeof message.x25519Public.length === "number" || $util.isString(message.x25519Public)))
+                        return "x25519Public: buffer expected";
+                if (message.x25519Private != null && Object.hasOwnProperty.call(message, "x25519Private"))
+                    if (!(message.x25519Private && typeof message.x25519Private.length === "number" || $util.isString(message.x25519Private)))
+                        return "x25519Private: buffer expected";
+                if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
+                    if (!(message.deviceId && typeof message.deviceId.length === "number" || $util.isString(message.deviceId)))
+                        return "deviceId: buffer expected";
+                if (message.createdAt != null && Object.hasOwnProperty.call(message, "createdAt"))
+                    if (!$util.isInteger(message.createdAt) && !(message.createdAt && $util.isInteger(message.createdAt.low) && $util.isInteger(message.createdAt.high)))
+                        return "createdAt: integer|Long expected";
+                return null;
+            };
+
+            /**
+             * Creates a CloneResponse message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {dmcn.pairing.CloneResponse} CloneResponse
+             */
+            CloneResponse.fromObject = function fromObject(object, long) {
+                if (object instanceof $root.dmcn.pairing.CloneResponse)
+                    return object;
+                if (!$util.isObject(object))
+                    throw TypeError(".dmcn.pairing.CloneResponse: object expected");
+                if (long === undefined)
+                    long = 0;
+                if (long > $util.recursionLimit)
+                    throw Error("maximum nesting depth exceeded");
+                let message = new $root.dmcn.pairing.CloneResponse();
+                if (object.address != null)
+                    message.address = String(object.address);
+                if (object.ed25519Public != null)
+                    if (typeof object.ed25519Public === "string")
+                        $util.base64.decode(object.ed25519Public, message.ed25519Public = $util.newBuffer($util.base64.length(object.ed25519Public)), 0);
+                    else if (object.ed25519Public.length >= 0)
+                        message.ed25519Public = object.ed25519Public;
+                if (object.ed25519Private != null)
+                    if (typeof object.ed25519Private === "string")
+                        $util.base64.decode(object.ed25519Private, message.ed25519Private = $util.newBuffer($util.base64.length(object.ed25519Private)), 0);
+                    else if (object.ed25519Private.length >= 0)
+                        message.ed25519Private = object.ed25519Private;
+                if (object.x25519Public != null)
+                    if (typeof object.x25519Public === "string")
+                        $util.base64.decode(object.x25519Public, message.x25519Public = $util.newBuffer($util.base64.length(object.x25519Public)), 0);
+                    else if (object.x25519Public.length >= 0)
+                        message.x25519Public = object.x25519Public;
+                if (object.x25519Private != null)
+                    if (typeof object.x25519Private === "string")
+                        $util.base64.decode(object.x25519Private, message.x25519Private = $util.newBuffer($util.base64.length(object.x25519Private)), 0);
+                    else if (object.x25519Private.length >= 0)
+                        message.x25519Private = object.x25519Private;
+                if (object.deviceId != null)
+                    if (typeof object.deviceId === "string")
+                        $util.base64.decode(object.deviceId, message.deviceId = $util.newBuffer($util.base64.length(object.deviceId)), 0);
+                    else if (object.deviceId.length >= 0)
+                        message.deviceId = object.deviceId;
+                if (object.createdAt != null)
+                    if ($util.Long)
+                        message.createdAt = $util.Long.fromValue(object.createdAt, false);
+                    else if (typeof object.createdAt === "string")
+                        message.createdAt = parseInt(object.createdAt, 10);
+                    else if (typeof object.createdAt === "number")
+                        message.createdAt = object.createdAt;
+                    else if (typeof object.createdAt === "object")
+                        message.createdAt = new $util.LongBits(object.createdAt.low >>> 0, object.createdAt.high >>> 0).toNumber();
+                return message;
+            };
+
+            /**
+             * Creates a plain object from a CloneResponse message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {dmcn.pairing.CloneResponse} message CloneResponse
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            CloneResponse.toObject = function toObject(message, options, q) {
+                if (!options)
+                    options = {};
+                if (q === undefined)
+                    q = 0;
+                if (q > $util.recursionLimit)
+                    throw Error("max depth exceeded");
+                let object = {};
+                if (options.defaults) {
+                    object.address = "";
+                    if (options.bytes === String)
+                        object.ed25519Public = "";
+                    else {
+                        object.ed25519Public = [];
+                        if (options.bytes !== Array)
+                            object.ed25519Public = $util.newBuffer(object.ed25519Public);
+                    }
+                    if (options.bytes === String)
+                        object.ed25519Private = "";
+                    else {
+                        object.ed25519Private = [];
+                        if (options.bytes !== Array)
+                            object.ed25519Private = $util.newBuffer(object.ed25519Private);
+                    }
+                    if (options.bytes === String)
+                        object.x25519Public = "";
+                    else {
+                        object.x25519Public = [];
+                        if (options.bytes !== Array)
+                            object.x25519Public = $util.newBuffer(object.x25519Public);
+                    }
+                    if (options.bytes === String)
+                        object.x25519Private = "";
+                    else {
+                        object.x25519Private = [];
+                        if (options.bytes !== Array)
+                            object.x25519Private = $util.newBuffer(object.x25519Private);
+                    }
+                    if (options.bytes === String)
+                        object.deviceId = "";
+                    else {
+                        object.deviceId = [];
+                        if (options.bytes !== Array)
+                            object.deviceId = $util.newBuffer(object.deviceId);
+                    }
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.createdAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+                    } else
+                        object.createdAt = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
+                }
+                if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+                    object.address = message.address;
+                if (message.ed25519Public != null && Object.hasOwnProperty.call(message, "ed25519Public"))
+                    object.ed25519Public = options.bytes === String ? $util.base64.encode(message.ed25519Public, 0, message.ed25519Public.length) : options.bytes === Array ? Array.prototype.slice.call(message.ed25519Public) : message.ed25519Public;
+                if (message.ed25519Private != null && Object.hasOwnProperty.call(message, "ed25519Private"))
+                    object.ed25519Private = options.bytes === String ? $util.base64.encode(message.ed25519Private, 0, message.ed25519Private.length) : options.bytes === Array ? Array.prototype.slice.call(message.ed25519Private) : message.ed25519Private;
+                if (message.x25519Public != null && Object.hasOwnProperty.call(message, "x25519Public"))
+                    object.x25519Public = options.bytes === String ? $util.base64.encode(message.x25519Public, 0, message.x25519Public.length) : options.bytes === Array ? Array.prototype.slice.call(message.x25519Public) : message.x25519Public;
+                if (message.x25519Private != null && Object.hasOwnProperty.call(message, "x25519Private"))
+                    object.x25519Private = options.bytes === String ? $util.base64.encode(message.x25519Private, 0, message.x25519Private.length) : options.bytes === Array ? Array.prototype.slice.call(message.x25519Private) : message.x25519Private;
+                if (message.deviceId != null && Object.hasOwnProperty.call(message, "deviceId"))
+                    object.deviceId = options.bytes === String ? $util.base64.encode(message.deviceId, 0, message.deviceId.length) : options.bytes === Array ? Array.prototype.slice.call(message.deviceId) : message.deviceId;
+                if (message.createdAt != null && Object.hasOwnProperty.call(message, "createdAt"))
+                    if (typeof BigInt !== "undefined" && options.longs === BigInt)
+                        object.createdAt = typeof message.createdAt === "number" ? BigInt(message.createdAt) : $util.Long.fromBits(message.createdAt.low >>> 0, message.createdAt.high >>> 0, false).toBigInt();
+                    else if (typeof message.createdAt === "number")
+                        object.createdAt = options.longs === String ? String(message.createdAt) : message.createdAt;
+                    else
+                        object.createdAt = options.longs === String ? $util.Long.prototype.toString.call(message.createdAt) : options.longs === Number ? new $util.LongBits(message.createdAt.low >>> 0, message.createdAt.high >>> 0).toNumber() : message.createdAt;
+                return object;
+            };
+
+            /**
+             * Converts this CloneResponse to JSON.
+             * @function toJSON
+             * @memberof dmcn.pairing.CloneResponse
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            CloneResponse.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for CloneResponse
+             * @function getTypeUrl
+             * @memberof dmcn.pairing.CloneResponse
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            CloneResponse.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/dmcn.pairing.CloneResponse";
+            };
+
+            return CloneResponse;
+        })();
+
+        return pairing;
     })();
 
     return dmcn;

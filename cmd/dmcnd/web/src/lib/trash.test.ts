@@ -37,6 +37,22 @@ describe('expiredTrash', () => {
   it('never touches mail that was not deleted', () => {
     expect(expiredTrash(flags, 1, now + 365 * DAY)).not.toContain('kept');
   });
+  // A device may be allowed to write flag records without the account's signing key. The time
+  // inside a record is that device's to choose, so the wait is counted from when the relay
+  // recorded the write, which it is not.
+  it('counts from when the relay recorded the mark, not from the time inside it', () => {
+    const backdated = new Map<string, FlagRecord>([['m', flag(now - 30 * DAY)]]);
+    const justWritten = new Map([['m', now - 60_000]]);
+    expect(expiredTrash(backdated, 7, now, justWritten)).toEqual([]);
+    expect(expiredTrash(backdated, 7, now + 7 * DAY, justWritten)).toEqual(['m']);
+  });
+  it('does not remove early because the record names a later time than the relay saw', () => {
+    const postdated = new Map<string, FlagRecord>([['m', flag(now + 30 * DAY)]]);
+    expect(expiredTrash(postdated, 7, now, new Map([['m', now - 8 * DAY]]))).toEqual(['m']);
+  });
+  it('falls back to the record for a mark written before relays kept the time', () => {
+    expect(expiredTrash(flags, 7, now, new Map([['fresh', now - 1 * DAY]])).sort()).toEqual(['due', 'overdue']);
+  });
 });
 
 describe('purgeWhen', () => {

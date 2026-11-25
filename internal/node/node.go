@@ -422,6 +422,9 @@ func New(ctx context.Context, cfg Config, log ...logr.Logger) (*Node, error) {
 		// settings), over the same datastore. Sealed to the owner alone — the relay
 		// only ever holds ciphertext. Owner auth reuses the FETCH challenge.
 		relayOpts = append(relayOpts, relay.WithPersonalKv(relay.NewPersonalKvStore(store)))
+		// The device registry shares the mailbox's datastore: a node that can keep a mailbox can
+		// say which devices may open it (SPEC_EXT_DEVICES.md).
+		relayOpts = append(relayOpts, relay.WithDeviceRegistry(relay.NewDeviceStore(store)))
 		if cfg.StorageQuotaBytes > 0 {
 			relayOpts = append(relayOpts, relay.WithStorageQuota(cfg.StorageQuotaBytes))
 		}

@@ -76,6 +76,10 @@ message RelayResponse {
     MailboxKvListResponse mailbox_kv_list = 20;
     MailboxKvDeleteResponse mailbox_kv_delete = 21;
     MailboxKvStatResponse mailbox_kv_stat = 22;
+    // --- Device registry responses (SPEC_EXT_DEVICES.md). ---
+    MailboxDeviceEnrollResponse mailbox_device_enroll = 38;
+    MailboxDeviceListResponse mailbox_device_list = 39;
+    MailboxDeviceRetireResponse mailbox_device_retire = 40;
   }
 
   // GRAVESTONE: arms 11-17 and 23-27 were filter/operator response arms (moved to the
@@ -138,6 +142,64 @@ message FetchInit {
   string address = 1;
 }
 
+// --- Device registry (SPEC_EXT_DEVICES.md) ----------------------------------------------
+//
+// A mailbox keeps a list of enrolled devices, each with a signing key generated on that device.
+// Once it has held one, every request needs a proof from an active device, so a copied account
+// key opens nothing by itself. The relay learns a device's public key and its dates, and nothing
+// else: names arrive sealed to the owner.
+
+// DeviceRecord is one device on a mailbox.
+message DeviceRecord {
+  bytes ed25519_public_key = 1;
+  int64 enrolled_at = 2;       // Unix seconds; where the date comes from is §4
+  bytes sealed_label = 3;      // a SealedBlob holding the device's name, sealed to the owner
+  int64 retired_at = 4;        // 0 = not retired
+  int64 eligible_at = 5;       // 0 = effective at once; else a recovery enrolment waits until then
+  bytes device_credential = 6; // optional marshaled Credential (role "device")
+}
+
+// MailboxDeviceEnrollOp adds a device. A mailbox that has never held one admits the first at
+// once. After that an enrolment needs an approval from an active device, signed over this
+// exchange's nonce, or `recovery`, which joins after the domain's delay.
+message MailboxDeviceEnrollOp {
+  bytes ed25519_public_key = 1;
+  bytes sealed_label = 2;                 // optional, at most 2048 bytes
+  bytes approver_ed25519_public_key = 3;  // empty for a first device or a recovery
+  // Ed25519 by the approver over
+  // "dmcn-device-approve-v1\0" || lowercased address || ed25519_public_key || nonce ||
+  // approved_at (8 bytes, big-endian).
+  bytes approver_signature = 4;
+  bytes device_credential = 5;            // optional marshaled Credential
+  int64 approved_at = 6;                  // Unix seconds, covered by approver_signature
+  bool recovery = 7;
+}
+
+message MailboxDeviceEnrollResponse {
+  DeviceRecord device = 1;
+  bool genesis = 2;  // true if this enrolment created the registry
+}
+
+// MailboxDeviceListOp lists every device on the mailbox, removed and waiting ones included.
+message MailboxDeviceListOp {}
+
+message MailboxDeviceListResponse {
+  repeated DeviceRecord devices = 1;
+}
+
+// MailboxDeviceRetireOp removes a device. A different active device has to ask.
+message MailboxDeviceRetireOp {
+  bytes ed25519_public_key = 1;         // the device to retire
+  bytes signer_ed25519_public_key = 2;  // the active device asking
+  // Ed25519 by the signer over
+  // "dmcn-device-retire-v1\0" || lowercased address || ed25519_public_key || nonce.
+  bytes signer_signature = 3;
+}
+
+message MailboxDeviceRetireResponse {
+  DeviceRecord device = 1;
+}
+
 // FetchChallenge is sent by the server with a random nonce for the client to sign.
 message FetchChallenge {
   bytes nonce = 1;   // 32 bytes random challenge
@@ -145,23 +207,21 @@ message FetchChallenge {
 
 // FetchProof provides the signed challenge nonce to authenticate the recipient.
 //
-// `signature` proves possession of the ACCOUNT key — who the mailbox belongs to. Where the
-// mailbox has enrolled devices, that alone is deliberately no longer enough: the proof must ALSO
-// carry a signature from one of those devices. The two answer different questions and neither
-// substitutes for the other. The account key says this is the owner's mailbox; the device key
-// says the request comes from somewhere the owner has approved. Requiring both is what makes a
-// key copied out of a backup export useless on its own, since device keys are generated on their
-// device and never travel in one.
+// `signature` proves possession of the ACCOUNT key: whose mailbox this is. A relay that keeps a
+// device registry (SPEC_EXT_DEVICES.md) asks for a second proof once the mailbox has held a
+// device: a signature from one of its active devices, which says the request comes from
+// somewhere the owner approved. Neither substitutes for the other. A key copied out of a backup
+// can only answer the first, since device keys are generated on their device and never travel.
 //
-// A mailbox that has enrolled NO devices is answered on the account signature alone, which is
-// how an account that predates the registry keeps working until it enrols for the first time.
+// A mailbox that has never held a device is answered on the account signature alone. One whose
+// devices have all been removed is not: the registry is still claimed.
 message FetchProof {
   string address = 1;
   bytes nonce = 2;
   bytes signature = 3;   // Ed25519 by the ACCOUNT key over nonce
-  // device_ed25519_public_key names the enrolled device making this request, and
-  // device_signature is that device's own Ed25519 over the same nonce. Both empty is valid only
-  // while the mailbox has no enrolled devices.
+  // device_ed25519_public_key names the active device making this request, and device_signature
+  // is that device's Ed25519 over "dmcn-device-challenge-v1\0" || nonce. Both empty is valid
+  // only while the mailbox has never held a device.
   bytes device_ed25519_public_key = 4;
   bytes device_signature = 5;
 }
@@ -353,13 +413,13 @@ message MailboxBody {
 // signature prove the caller controls the recipient identity, exactly like FETCH.
 message MailboxOp {
   bytes nonce = 1;          // echoed challenge nonce
-  bytes signature = 2;      // Ed25519 by the ACCOUNT key over nonce
-  // device_ed25519_public_key / device_signature carry the enrolled DEVICE's proof over the same
-  // nonce. Where the mailbox has enrolled devices, both are required alongside the account
-  // signature: the account key says whose mailbox this is, the device key says the request comes
-  // from somewhere the owner approved, and a key copied out of a backup export can only answer
-  // the first. Both empty is valid only while the mailbox has no enrolled devices. See
-  // FetchProof, which carries the same pair for the transient path.
+  // Ed25519 by the ACCOUNT key over nonce. At a relay that advertises "device-reads" it may be
+  // empty on an operation a device may perform by itself (SPEC_EXT_DEVICES.md §3). A signature
+  // that is present is always checked.
+  bytes signature = 2;
+  // device_ed25519_public_key / device_signature carry an active DEVICE's proof: its Ed25519
+  // over "dmcn-device-challenge-v1\0" || nonce. Required once the mailbox has held a device.
+  // Both empty is valid only while it never has. See FetchProof, which carries the same pair.
   bytes device_ed25519_public_key = 14;
   bytes device_signature = 15;
   oneof op {
@@ -375,6 +435,10 @@ message MailboxOp {
     MailboxKvListOp kv_list = 10;
     MailboxKvDeleteOp kv_delete = 11;
     MailboxKvStatOp kv_stat = 12;
+    // The device registry (SPEC_EXT_DEVICES.md §6).
+    MailboxDeviceEnrollOp device_enroll = 16;
+    MailboxDeviceListOp device_list = 17;
+    MailboxDeviceRetireOp device_retire = 18;
   }
 
   // GRAVESTONE: 6-7 were the mail-filter ops (get_filter, put_filter), which remain an
@@ -454,6 +518,11 @@ message StoreInit {
 // "settings/app"); the relay treats it as an opaque string. Values are sealed to the OWNER
 // alone, so the relay only ever holds ciphertext it cannot read.
 //
+// One exception to "opaque": a relay with a device registry lets a device write a short list of
+// keys without the account signature (SPEC_EXT_DEVICES.md §3), and it matches those by name. So
+// "drafts/", "draft-body/", "draft-att/", "flags/" and "settings/labels" are protocol, not a
+// client's choice.
+//
 // This is in the core because the relay already stores a person's mail; storing sealed metadata
 // ABOUT that mail is the same trust posture, and without it every client is either single-device
 // or invents its own incompatible sync. It is the role IMAP plays alongside SMTP: the store and
@@ -506,6 +575,13 @@ message MailboxKvGetResponse {
   bool found = 1;
   bytes sealed = 2;
   uint64 version = 3;
+  // written_at is the relay's clock, in Unix seconds, when this version was written. The
+  // writer cannot set it. 0 on an entry written before relays recorded it.
+  int64 written_at = 4;
+  // sealed_writer is the device that signed the write: a SealedBlob (JSON) of its 32-byte
+  // public key, sealed to the owner by the relay, which keeps no readable copy. Empty where
+  // the write carried no device proof.
+  bytes sealed_writer = 5;
 }
 
 // MailboxKvItem is one entry in a KV LIST page.
@@ -513,6 +589,8 @@ message MailboxKvItem {
   string key = 1;
   bytes sealed = 2;    // present only when the list op set values=true
   uint64 version = 3;
+  int64 written_at = 4;      // present only when the list op set values=true
+  bytes sealed_writer = 5;   // present only when the list op set values=true
 }
 
 // MailboxKvListResponse is a page of KV items plus a continuation cursor (empty when the
