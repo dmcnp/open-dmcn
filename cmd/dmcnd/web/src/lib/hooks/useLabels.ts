@@ -144,15 +144,21 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
   const deleteFolder = useCallback((id: string) =>
     mutate(d => ({ ...d, folders: d.folders.filter(f => f.id !== id) })), [mutate]);
 
-  const reorderLabels = useCallback(async (ids: string[]) => {
-    // Shown at once; the write below confirms it, or the next sync puts back what is stored.
-    setDoc(d => ({ ...d, labels: inOrder(d.labels, ids) }));
-    await mutate(d => ({ ...d, labels: inOrder(d.labels, ids) }));
+  // Reordering shows the new order at once. If saving it fails, the stored order is read back, so
+  // the screen never shows an order that isn't saved; the caller shows the error.
+  const reorder = useCallback(async (apply: (d: LabelsDoc) => LabelsDoc) => {
+    setDoc(apply);
+    try {
+      await mutate(apply);
+    } catch (e) {
+      syncRef.current();
+      throw e;
+    }
   }, [mutate]);
-  const reorderFolders = useCallback(async (ids: string[]) => {
-    setDoc(d => ({ ...d, folders: inOrder(d.folders, ids) }));
-    await mutate(d => ({ ...d, folders: inOrder(d.folders, ids) }));
-  }, [mutate]);
+  const reorderLabels = useCallback((ids: string[]) =>
+    reorder(d => ({ ...d, labels: inOrder(d.labels, ids) })), [reorder]);
+  const reorderFolders = useCallback((ids: string[]) =>
+    reorder(d => ({ ...d, folders: inOrder(d.folders, ids) })), [reorder]);
 
   const value: LabelsContextValue = {
     ready,

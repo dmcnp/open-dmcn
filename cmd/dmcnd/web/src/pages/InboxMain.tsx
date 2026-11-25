@@ -211,14 +211,17 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
         setDx(Math.max(-most, Math.min(filing ? d.width : lead, d.startDx + ddx)));
       }
     };
-    // Where a drag comes to rest: open on one side, closed, or (all the way left) acted on.
-    const settle = () => {
-      if (fullArmed && fullSwipe) {
+    // Where a drag comes to rest: open on one side, closed, or (past the full-swipe point) acted
+    // on. `act` is false when the browser cancelled the gesture (it took it over to scroll, or the
+    // phone interrupted): a swipe nobody finished must never delete, archive or open anything, so
+    // it only snaps open or closed.
+    const settle = (act = true) => {
+      if (act && fullArmed && fullSwipe) {
         setDx(-width);
         window.setTimeout(() => { close(); if (fullSwipe === 'archive') onArchive(); else onDelete(); }, 180);
         return;
       }
-      if (fullRightArmed && filing) {
+      if (act && fullRightArmed && filing) {
         close();
         filing.pickFolder();
         return;
@@ -302,7 +305,7 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
         )}
         <div
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-          onPointerCancel={() => { drag.current.active = false; if (drag.current.decided === 'h') settle(); }}
+          onPointerCancel={() => { drag.current.active = false; if (drag.current.decided === 'h') settle(false); }}
           style={{
             position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', cursor: 'pointer',
             padding: 'var(--space-3) var(--space-4)', touchAction: 'pan-y',

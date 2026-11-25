@@ -24,6 +24,12 @@ interface FlagsContextValue {
   synced: boolean;
   refreshFlags: () => void;
   setFlag: (messageHash: string, delta: FlagDelta) => Promise<void>;
+  // setFlagIfAbsent writes only if the store holds no record for the message yet, checked against
+  // the store itself just before writing. For sender rules, which file "untouched" mail: a record
+  // another device made since this tab last synced (the message read or starred on the phone) must
+  // not be replaced by one holding only the folder. Resolves true when it wrote. A small window
+  // remains between the read and the write; the store has no create-only write to close it.
+  setFlagIfAbsent: (messageHash: string, delta: FlagDelta) => Promise<boolean>;
   markRead: (messageHash: string) => Promise<void>;
   isRead: (messageHash: string) => boolean;
   isArchived: (messageHash: string) => boolean;
@@ -106,6 +112,23 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     setFlags(map);
   }, []);
 
+  const setFlagIfAbsent = useCallback(async (messageHash: string, delta: FlagDelta) => {
+    const store = storeRef.current;
+    if (!store || flagsRef.current.has(messageHash)) return false;
+    const existing = await store.get(messageHash);
+    if (existing) {
+      // Take the record in, so the message stops looking untouched here too.
+      const map = new Map(flagsRef.current);
+      map.set(messageHash, existing);
+      flagsRef.current = map;
+      setFlags(map);
+      return false;
+    }
+    if (flagsRef.current.has(messageHash)) return false; // touched here meanwhile
+    await setFlag(messageHash, delta);
+    return true;
+  }, [setFlag]);
+
   const markRead = useCallback(async (messageHash: string) => {
     const current = flagsRef.current.get(messageHash);
     if (current?.read) return; // already read — no write
@@ -154,7 +177,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     FlagsContext.Provider,
-    { value: { flags, ready, synced, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
+    { value: { flags, ready, synced, refreshFlags, setFlag, setFlagIfAbsent, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
     children
   );
 }

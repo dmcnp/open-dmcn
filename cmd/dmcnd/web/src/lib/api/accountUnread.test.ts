@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiError } from './bearer';
 import type { WorkingKeys } from '../crypto/workingKeys';
 
-// The background unread counter talks to the relay through three reads; each is stubbed so a
+// The background unread counter talks to the relay through four reads; each is stubbed so a
 // test decides what the relay answers and counts how often it was asked.
 const relay = { list: vi.fn(), flags: vi.fn(), login: vi.fn() };
 
@@ -11,6 +11,10 @@ vi.mock('./mailboxRest', () => ({
 }));
 vi.mock('./flagStore', () => ({
   FlagStore: class { list() { return relay.flags(); } },
+}));
+// The folders, read so filed mail isn't counted (an empty list here: nothing is filed).
+vi.mock('./labelStore', () => ({
+  LabelStore: class { async get() { return { doc: { v: 1, labels: [], folders: [] }, version: 1 }; } },
 }));
 vi.mock('./client', async () => ({
   ApiError: (await import('./bearer')).ApiError,

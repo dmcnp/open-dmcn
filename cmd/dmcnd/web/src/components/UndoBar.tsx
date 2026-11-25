@@ -51,7 +51,7 @@ export function UndoBar({ notice, onUndo, onDismiss, timeoutMs }: {
       }}
     >
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{notice.text}</span>
-      <Button variant="ghost" size="sm" leftIcon={<Icon name="undo" size={16} />} onClick={() => onUndo(notice)}>Undo</Button>
+      {notice.undo && <Button variant="ghost" size="sm" leftIcon={<Icon name="undo" size={16} />} onClick={() => onUndo(notice)}>Undo</Button>}
       <IconButton size="sm" aria-label="Close" onClick={() => onDismiss(notice.id)}><Icon name="x" size={15} /></IconButton>
     </div>
   );

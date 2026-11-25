@@ -16,6 +16,9 @@
 import type { FlagDelta, FlagRecord } from './api/flagStore';
 import type { FolderDef } from './api/labelStore';
 import { placeOf, type Addressed, type Place, type PlaceContext } from './mailView';
+import { lookupFailureKind } from './recipientLookup';
+import { fromBase64 } from './crypto/keys';
+import { toHex } from './crypto/bytes';
 
 /** A sender's standing rule: their new mail goes straight to a folder. */
 export interface FilingRule {
@@ -113,21 +116,77 @@ export function unfilingDelta(before: FlagRecord | undefined): FlagDelta {
 }
 
 /**
- * The address filing may follow, or null. `directoryKeyHex` is what the directory publishes for
- * the sender's address (null when the address is not a DMCN identity, as for ordinary email).
- * A verified DMCN sender is followed, and so is ordinary email by its address alone. Never a
- * message claiming a DMCN address while signed by some other key: that is the forgery the row's
- * shield and the reader both refuse.
+ * What the directory said about a sender's address, for filing:
+ * - `{ keyHex }`: a DMCN identity, with the signing key it publishes (lowercase hex)
+ * - `'legacy'`: the directory answered that there is no DMCN identity here (ordinary email)
+ * - `'distrusted'`: the identity claims a countersignature that failed to verify
+ * - `'unchecked'`: the directory couldn't be asked (an outage, a timeout, a malformed answer)
+ *
+ * Kept apart on purpose: a lookup that fails must never read as "ordinary email", or a forged
+ * message claiming a DMCN address would be filed by that address during any outage.
+ */
+export type SenderCheck = { keyHex: string } | 'legacy' | 'distrusted' | 'unchecked';
+
+/** Reads a directory answer, or the error a lookup failed with, as a SenderCheck. */
+export function checkFromLookup(
+  answer: { ed25519_pub?: string; identity_unverifiable?: boolean } | null,
+  error?: unknown,
+): SenderCheck {
+  if (!answer) return lookupFailureKind(error) === 'legacy' ? 'legacy' : 'unchecked';
+  if (answer.identity_unverifiable) return 'distrusted';
+  try {
+    const keyHex = answer.ed25519_pub ? toHex(fromBase64(answer.ed25519_pub)) : '';
+    return keyHex ? { keyHex } : 'unchecked';
+  } catch {
+    return 'unchecked';
+  }
+}
+
+/** How long filing waits for the directory before treating the sender as unchecked. */
+export const SENDER_CHECK_MS = 3000;
+
+/**
+ * Asks the directory about an address, at most `timeoutMs`. Definite answers (a key, or "not a
+ * DMCN identity") are kept in `cache` for the session; a failure or a timeout is not, so the
+ * next attempt asks again.
+ */
+export async function checkSender(
+  address: string,
+  lookup: (address: string) => Promise<{ ed25519_pub?: string; identity_unverifiable?: boolean }>,
+  cache: Map<string, SenderCheck>,
+  timeoutMs = SENDER_CHECK_MS,
+): Promise<SenderCheck> {
+  const a = normalizedAddress(address);
+  const known = cache.get(a);
+  if (known) return known;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<SenderCheck>(resolve => { timer = setTimeout(() => resolve('unchecked'), timeoutMs); });
+  const asked = lookup(a).then(r => checkFromLookup(r), e => checkFromLookup(null, e));
+  const check = await Promise.race([asked, timeout]);
+  clearTimeout(timer);
+  if (check === 'legacy' || typeof check === 'object') cache.set(a, check);
+  return check;
+}
+
+/**
+ * The address filing may follow, or null. A DMCN sender is followed only when the message is
+ * signed by the key the directory publishes; ordinary email (the directory says there is no DMCN
+ * identity) by its address alone. Never a distrusted identity, never a message whose key doesn't
+ * match (the forgery the row's shield and the reader both refuse), and never while the directory
+ * couldn't be asked.
  *
  * DEV NOTE: as in the Apple client, ordinary email is filed by address alone. Whether it passed
  * SPF/DKIM/DMARC is in the bridge's attestation inside the encrypted body, which the list cannot
- * see, and a directory outage also reads as "not a DMCN identity".
+ * see.
  */
-export function filingSender(m: { senderAddress: string; senderPublicKey: string }, directoryKeyHex: string | null): string | null {
+export function filingSender(m: { senderAddress: string; senderPublicKey: string }, check: SenderCheck): string | null {
   const s = normalizedAddress(m.senderAddress);
   if (!s) return null;
-  if (directoryKeyHex && m.senderPublicKey && directoryKeyHex.toLowerCase() !== m.senderPublicKey.toLowerCase()) return null;
-  return s;
+  if (check === 'legacy') return s;
+  if (typeof check === 'object') {
+    return m.senderPublicKey && m.senderPublicKey.toLowerCase() === check.keyHex.toLowerCase() ? s : null;
+  }
+  return null;
 }
 
 const placeOfFolder = (folderId: string | undefined): Place => (folderId ? `folder:${folderId}` : 'inbox');

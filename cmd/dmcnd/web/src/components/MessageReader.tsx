@@ -239,7 +239,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     setCreateBusy(true); setCreateErr('');
     try {
       if (creating === 'label') await addLabel(msg.hash, await createLabel(n, newColor));
-      else filing.file(msg, await createFolder(n));
+      // The name goes with it: the folder list here is from before the folder existed.
+      else filing.file(msg, await createFolder(n), n);
       setCreating(null); setNewName('');
     } catch (e) {
       setCreateErr(e instanceof Error ? e.message : String(e));

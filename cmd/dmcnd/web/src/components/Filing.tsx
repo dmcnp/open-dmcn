@@ -11,19 +11,20 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useContacts } from '../lib/hooks/useContacts';
 import { useUndo } from '../lib/hooks/useUndo';
 import { lookupIdentity } from '../lib/api/client';
-import { directoryKey } from '../lib/trust/senderKind';
 import { controlSubjects } from '../lib/unread';
 import { placeOf, type Place, type PlaceContext } from '../lib/mailView';
 import {
-  asksAboutSender, autoFilingCandidates, filingChoices, filingDelta, filingSender, normalizedAddress,
-  restoreRule, ruleFor, rulesOf, sameSenderMail, unfilingDelta, withoutRule, withRule,
-  type Fileable, type FilingRule, type SwipeFiling,
+  asksAboutSender, autoFilingCandidates, checkSender, filingChoices, filingDelta, filingSender, normalizedAddress,
+  restoreRule, ruleFor, rulesOf, sameSenderMail, withoutRule, withRule,
+  type Fileable, type SenderCheck, type SwipeFiling,
 } from '../lib/filing';
+import { moveAlwaysWithUndo, moveWithUndo, setArchivedWithUndo, trashWithUndo, type ActionDeps } from '../lib/filingActions';
 
 // Filing for the whole mail shell: moving a message to a folder or back to the Inbox, the question
 // about the sender's other mail, labels from a row, Undo after a move, delete or archive, and the
 // sender rules that file new mail as it arrives. The Apple client does the same with the same
-// synced settings (lib/filing.ts), so either one can make a rule and both apply it.
+// synced settings (lib/filing.ts), so either one can make a rule and both apply it. The steps of
+// each action, and what Undo restores, are in lib/filingActions.ts.
 //
 // Rows, the reader and swipes all call in here, so the question and the Undo bar read the same
 // wherever the move began.
@@ -35,8 +36,11 @@ interface FilingContextValue {
   placeName: (p: Place) => string;
   /** The folder picker's choices for a message. */
   choices: (m: Preview) => { includeInbox: boolean; folders: { id: string; name: string }[] };
-  /** Moves a message to a folder, or to the Inbox with undefined. May ask about the sender first. */
-  file: (m: Preview, folderId: string | undefined) => void;
+  /**
+   * Moves a message to a folder, or to the Inbox with undefined. May ask about the sender first.
+   * `folderName` names a folder made a moment ago, which the folder list may not hold yet.
+   */
+  file: (m: Preview, folderId: string | undefined, folderName?: string) => void;
   /** Asks for a folder name, makes the folder, and files the message in it. */
   newFolderFor: (m: Preview) => void;
   /** Opens the folder list in a dialog: what a full swipe right does on the phone, where a web page
@@ -83,7 +87,7 @@ function offerText(o: Offer) {
 
 export function FilingProvider({ children }: { children: ReactNode }) {
   const { messages, loaded: mailLoaded } = useMessages();
-  const { flags, synced: flagsSynced, setFlag, trash } = useFlags();
+  const { flags, synced: flagsSynced, setFlag, setFlagIfAbsent } = useFlags();
   const { folders, knownFolderIds, ready: labelsReady, folderById, createFolder, createLabel } = useLabels();
   const { settings, loaded: settingsLoaded, changeSettings } = useSettings();
   const { filter, ready: filterReady } = useMailFilter();
@@ -94,11 +98,17 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   const swipeFiling: SwipeFiling | undefined = settings.swipeFiling;
   const control = controlSubjects();
   const ctx: PlaceContext = { address, flags, filter, control, knownFolderIds };
-  // The latest of each, for the callbacks that run after a wait (the directory, the question).
-  const live = useRef({ ctx, messages, flags, swipeFiling });
-  live.current = { ctx, messages, flags, swipeFiling };
+  // The latest of each, for the callbacks that run after a wait (the directory, the question):
+  // a closure made before the wait would hold the values from before it.
+  const live = useRef({ ctx, messages, flags, swipeFiling, address, folderById });
+  live.current = { ctx, messages, flags, swipeFiling, address, folderById };
+  // The directory's definite answers about senders, for this tab. Failures are not kept.
+  const senderCache = useRef(new Map<string, SenderCheck>());
 
-  const [offer, setOffer] = useState<Offer | null>(null);
+  // Questions wait in line, so moving a second message before the first one's question is
+  // answered asks both, in order, instead of dropping one.
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const offer = offers[0] ?? null;
   const [naming, setNaming] = useState<Naming>(null);
   const [picking, setPicking] = useState<Preview | null>(null);
   const [newName, setNewName] = useState('');
@@ -106,88 +116,93 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   const [nameBusy, setNameBusy] = useState(false);
   const [nameErr, setNameErr] = useState('');
 
+  // Nothing waits across accounts: a question about one mailbox is never answered in another.
+  useEffect(() => { setOffers([]); setPicking(null); setNaming(null); }, [address]);
+
   const placeName = useCallback((p: Place): string => {
     if (p.startsWith('folder:')) return folderById(p.slice('folder:'.length))?.name ?? 'a folder';
     return p === 'inbox' ? 'Inbox' : p === 'archive' ? 'Archive' : p === 'sent' ? 'Sent' : 'Deleted';
   }, [folderById]);
-  const folderName = (id: string | undefined) => (id ? folderById(id)?.name ?? 'a folder' : 'the Inbox');
+  const folderLabel = (id: string | undefined, given?: string) =>
+    (id ? given ?? live.current.folderById(id)?.name ?? 'a folder' : 'the Inbox');
 
   const placeOfMessage = (m: Preview) => placeOf(m, ctx);
   const choices = (m: Preview) => filingChoices(placeOf(m, ctx), folders);
 
-  // Moves by hand, with Undo: each message goes back to where it was, Archive included. `rule` is
-  // the sender's rule before an "always", which Undo puts back.
-  const moveWithUndo = useCallback(async (hashes: string[], folderId: string | undefined, rule?: { sender: string; before: FilingRule | undefined }) => {
-    const before = new Map(hashes.map(h => [h, live.current.flags.get(h)]));
-    const delta = filingDelta(folderId);
-    await Promise.all(hashes.map(h => setFlag(h, delta).catch(() => { /* the next sync shows it */ })));
-    const place = folderName(folderId);
-    offerUndo(hashes.length > 1 ? `Moved ${hashes.length} messages to ${place}` : `Moved to ${place}`, async () => {
-      await Promise.all([...before].map(([h, f]) => setFlag(h, unfilingDelta(f)).catch(() => {})));
-      if (rule) await changeSettings(cur => ({ swipeFiling: restoreRule(cur.swipeFiling, rule.before, rule.sender) }));
-    });
-  }, [setFlag, offerUndo, changeSettings, folderById]);
+  const deps = useCallback((): ActionDeps => ({
+    setFlag,
+    flagOf: h => live.current.flags.get(h),
+    notify: offerUndo,
+    account: () => live.current.address,
+  }), [setFlag, offerUndo]);
 
   // Asks first whether the rest of the sender's mail should follow, and moves nothing until
-  // answered. Files straight away when the owner turned the question off, or there is nothing to
-  // ask: a sender filing can't follow, one a rule already files there, or (for the Inbox) no rule
-  // and nothing else to move.
-  const file = useCallback((m: Preview, folderId: string | undefined) => {
-    if (!asksAboutSender(live.current.swipeFiling)) { void moveWithUndo([m.hash], folderId); return; }
+  // answered. Moves straight away when the owner turned the question off, or there is nothing to
+  // ask: a sender filing can't follow (including one the directory couldn't be asked about within
+  // a few seconds), one a rule already files there, or (for the Inbox) no rule and nothing else to
+  // move.
+  const file = useCallback((m: Preview, folderId: string | undefined, givenName?: string) => {
+    const place = folderLabel(folderId, givenName);
+    const moveOne = () => { void moveWithUndo(deps(), [m.hash], folderId, place); };
+    if (!asksAboutSender(live.current.swipeFiling)) { moveOne(); return; }
+    const account = live.current.address;
     const addr = normalizedAddress(m.senderAddress);
-    void directoryKey(addr, lookupIdentity).then(dirKey => {
+    void checkSender(addr, lookupIdentity, senderCache.current).then(check => {
+      if (live.current.address !== account) return; // another account now: nothing moves
       const { ctx: c, messages: all, swipeFiling: sf } = live.current;
-      const senderOf = (o: Fileable) => filingSender(o, normalizedAddress(o.senderAddress) === addr ? dirKey : null);
+      const senderOf = (o: Fileable) => filingSender(o, normalizedAddress(o.senderAddress) === addr ? check : 'unchecked');
       const sender = senderOf(m);
-      if (!sender) { void moveWithUndo([m.hash], folderId); return; }
+      if (!sender) { moveOne(); return; }
       const rule = ruleFor(sf, sender);
       const others = sameSenderMail(m, folderId, all, c, senderOf);
-      if (folderId && rule?.folderId === folderId) { void moveWithUndo([m.hash], folderId); return; }
-      if (!folderId && !rule && others.length === 0) { void moveWithUndo([m.hash], folderId); return; }
+      if (folderId && rule?.folderId === folderId) { moveOne(); return; }
+      if (!folderId && !rule && others.length === 0) { moveOne(); return; }
       const from = placeOf(m, c);
-      setOffer({
-        message: m, sender, senderName: nameFor(m.senderAddress), folderId,
-        folderName: folderName(folderId),
+      const next: Offer = {
+        message: m, sender, senderName: nameFor(m.senderAddress), folderId, folderName: place,
         fromName: !from || from === 'inbox' ? 'the Inbox' : placeName(from),
         others,
-      });
+      };
+      setOffers(q => [...q.filter(x => x.message.hash !== m.hash), next]);
     });
-  }, [moveWithUndo, nameFor, placeName]);
+  // folderLabel reads the live ref, so it needs no dependency of its own.
+  }, [deps, nameFor, placeName]);
+
+  // Takes an answered question out of the line, with any later one about a message it moved.
+  const answered = (o: Offer, moved: string[]) =>
+    setOffers(q => q.filter(x => x !== o && !moved.includes(x.message.hash)));
 
   // Always: this message and the sender's other mail move now, and from here on their new mail is
   // filed there by a rule, or, for the Inbox, simply isn't filed any more.
-  const acceptOffer = async (o: Offer) => {
-    setOffer(null);
+  const acceptOffer = (o: Offer) => {
+    const hashes = [o.message.hash, ...o.others];
+    answered(o, hashes);
     const before = ruleFor(live.current.swipeFiling, o.sender);
-    await moveWithUndo([o.message.hash, ...o.others], o.folderId, { sender: o.sender, before });
     const now = Math.floor(Date.now() / 1000);
-    await changeSettings(cur => ({
-      swipeFiling: o.folderId ? withRule(cur.swipeFiling, o.sender, o.folderId, now) : withoutRule(cur.swipeFiling, o.sender),
-    })).catch(() => { /* the rule is not saved; the move stands */ });
+    void moveAlwaysWithUndo(deps(), hashes, o.folderId, o.folderName,
+      () => changeSettings(cur => ({
+        swipeFiling: o.folderId ? withRule(cur.swipeFiling, o.sender, o.folderId, now) : withoutRule(cur.swipeFiling, o.sender),
+      })),
+      () => changeSettings(cur => ({ swipeFiling: restoreRule(cur.swipeFiling, before, o.sender) })),
+    );
   };
-  const justThisOne = (o: Offer) => { setOffer(null); void moveWithUndo([o.message.hash], o.folderId); };
+  const justThisOne = (o: Offer) => {
+    answered(o, [o.message.hash]);
+    void moveWithUndo(deps(), [o.message.hash], o.folderId, o.folderName);
+  };
+  const cancelOffer = (o: Offer) => answered(o, []);
 
   const toggleLabel = useCallback((m: Preview, labelId: string) => {
     const cur = live.current.flags.get(m.hash)?.labelIds ?? [];
     const next = cur.includes(labelId) ? cur.filter(id => id !== labelId) : [...cur, labelId];
-    void setFlag(m.hash, { labelIds: next }).catch(() => {});
-  }, [setFlag]);
-
-  const trashWithUndo = useCallback(async (hashes: string[]) => {
-    const before = new Map(hashes.map(h => [h, live.current.flags.get(h)?.trashedAt]));
-    await Promise.all(hashes.map(h => trash(h).catch(() => {})));
-    offerUndo('Moved to Deleted', async () => {
-      await Promise.all([...before].map(([h, t]) => setFlag(h, { trashedAt: t }).catch(() => {})));
-    });
-  }, [trash, setFlag, offerUndo]);
-
-  const setArchivedWithUndo = useCallback(async (hashes: string[], archived: boolean) => {
-    const before = new Map(hashes.map(h => [h, live.current.flags.get(h)?.archived]));
-    await Promise.all(hashes.map(h => setFlag(h, { archived }).catch(() => {})));
-    offerUndo(archived ? 'Archived' : 'Moved out of Archive', async () => {
-      await Promise.all([...before].map(([h, a]) => setFlag(h, { archived: a }).catch(() => {})));
-    });
+    void setFlag(m.hash, { labelIds: next }).catch(() =>
+      offerUndo("Couldn't change the labels. Check your connection and try again."));
   }, [setFlag, offerUndo]);
+
+  const trash = useCallback(async (hashes: string[]) => { await trashWithUndo(deps(), hashes, Date.now()); }, [deps]);
+  const archive = useCallback(async (hashes: string[], archived: boolean) => {
+    await setArchivedWithUndo(deps(), hashes, archived);
+  }, [deps]);
 
   const beginNaming = (kind: 'folder' | 'label', message: Preview) => {
     setNaming({ kind, message }); setNewName(''); setNewColor(LABEL_COLORS[0]); setNameErr('');
@@ -200,7 +215,8 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       if (naming.kind === 'folder') {
         const id = await createFolder(n);
         setNaming(null);
-        file(naming.message, id);
+        // The name goes with it: the folder list here is from before the folder existed.
+        file(naming.message, id, n);
       } else {
         const id = await createLabel(n, newColor);
         setNaming(null);
@@ -215,20 +231,23 @@ export function FilingProvider({ children }: { children: ReactNode }) {
 
   // Sender rules, applied to new mail as it arrives in this tab. Waits until every input has
   // really loaded: an untouched message is recognised by having no flag record, so a flag list
-  // that failed to load would make every message look untouched.
+  // that failed to load would make every message look untouched. Each write first checks the
+  // store itself for a record (setFlagIfAbsent), so mail another device has just read or starred
+  // isn't reset. A sender the directory couldn't be asked about isn't filed; the next change to
+  // the mail or the flags tries again.
   const inFlight = useRef(new Set<string>());
   const rules = rulesOf(swipeFiling);
   useEffect(() => {
     if (!mailLoaded || !flagsSynced || !labelsReady || !filterReady || !settingsLoaded || !rules.length) return;
+    const account = address;
     const due = autoFilingCandidates(messages, rules, ctx).filter(c => !inFlight.current.has(c.hash));
     for (const c of due) {
       inFlight.current.add(c.hash);
-      void directoryKey(c.message.senderAddress, lookupIdentity)
-        .then(dirKey => {
-          // Checked again now the directory has answered: the owner may have touched it meanwhile.
-          if (live.current.flags.has(c.hash)) return;
-          if (!filingSender(c.message, dirKey)) return;
-          return setFlag(c.hash, filingDelta(c.folderId));
+      void checkSender(c.message.senderAddress, lookupIdentity, senderCache.current)
+        .then(check => {
+          if (live.current.address !== account || live.current.flags.has(c.hash)) return false;
+          if (!filingSender(c.message, check)) return false;
+          return setFlagIfAbsent(c.hash, filingDelta(c.folderId));
         })
         .catch(() => { /* tried again on the next change */ })
         .finally(() => inFlight.current.delete(c.hash));
@@ -242,7 +261,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
     newFolderFor: m => beginNaming('folder', m),
     pickFolderFor: m => setPicking(m),
     newLabelFor: m => beginNaming('label', m),
-    toggleLabel, trashWithUndo, setArchivedWithUndo,
+    toggleLabel, trashWithUndo: trash, setArchivedWithUndo: archive,
   };
 
   return (
@@ -250,13 +269,13 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       {children}
       <Dialog
         open={!!offer}
-        onClose={() => setOffer(null)}
+        onClose={() => { if (offer) cancelOffer(offer); }}
         title={o?.title}
         footer={offer && o ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 'var(--space-2)', width: '100%' }}>
-            <Button variant="ghost" onClick={() => setOffer(null)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => cancelOffer(offer)}>Cancel</Button>
             <Button variant="secondary" onClick={() => justThisOne(offer)}>Just this one</Button>
-            <Button variant="primary" onClick={() => void acceptOffer(offer)}>{o.answer}</Button>
+            <Button variant="primary" onClick={() => acceptOffer(offer)}>{o.answer}</Button>
           </div>
         ) : null}
       >

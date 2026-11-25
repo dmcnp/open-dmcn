@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  asksAboutSender, autoFilingCandidates, filingChoices, filingDelta, filingSender, fullSwipeArchives,
+  asksAboutSender, autoFilingCandidates, checkFromLookup, checkSender, filingChoices, filingDelta, filingSender, fullSwipeArchives,
   moved, movedTo, restoreRule, ruleFor, rulesByFolder, sameSenderMail, unfilingDelta, withRule, withoutRule,
-  type Fileable, type SwipeFiling,
+  type Fileable, type SenderCheck, type SwipeFiling,
 } from './filing';
+import { ApiError } from './api/bearer';
 import type { FlagRecord } from './api/flagStore';
 import type { PlaceContext } from './mailView';
 
@@ -68,11 +69,54 @@ describe('filingDelta', () => {
 });
 
 describe('filingSender', () => {
-  it('follows a verified DMCN sender or ordinary email, never a key mismatch', () => {
-    expect(filingSender({ senderAddress: 'A@x', senderPublicKey: 'ab' }, 'AB')).toBe('a@x');
-    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: 'ab' }, null)).toBe('a@x');
-    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: 'ab' }, 'cd')).toBeNull();
-    expect(filingSender({ senderAddress: ' ', senderPublicKey: '' }, null)).toBeNull();
+  it('follows a DMCN sender only when the message is signed by the published key', () => {
+    expect(filingSender({ senderAddress: 'A@x', senderPublicKey: 'ab' }, { keyHex: 'AB' })).toBe('a@x');
+    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: 'cd' }, { keyHex: 'ab' })).toBeNull();
+    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: '' }, { keyHex: 'ab' })).toBeNull();
+  });
+  it('follows ordinary email by its address alone', () => {
+    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: 'ab' }, 'legacy')).toBe('a@x');
+  });
+  it('never follows a distrusted identity, or one the directory could not be asked about', () => {
+    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: 'ab' }, 'distrusted')).toBeNull();
+    expect(filingSender({ senderAddress: 'a@x', senderPublicKey: 'ab' }, 'unchecked')).toBeNull();
+    expect(filingSender({ senderAddress: ' ', senderPublicKey: '' }, 'legacy')).toBeNull();
+  });
+});
+
+describe('checkFromLookup', () => {
+  const b64 = btoa(String.fromCharCode(0xab, 0xcd));
+  it('reads a published key as hex', () => {
+    expect(checkFromLookup({ ed25519_pub: b64 })).toEqual({ keyHex: 'abcd' });
+  });
+  it('tells "no DMCN identity" (404) apart from an outage', () => {
+    expect(checkFromLookup(null, new ApiError('not found', 404))).toBe('legacy');
+    expect(checkFromLookup(null, new ApiError('bad gateway', 502))).toBe('unchecked');
+    expect(checkFromLookup(null, new TypeError('Failed to fetch'))).toBe('unchecked');
+  });
+  it('distrusts an identity whose countersignature failed, and a malformed answer is unchecked', () => {
+    expect(checkFromLookup({ ed25519_pub: b64, identity_unverifiable: true })).toBe('distrusted');
+    expect(checkFromLookup({ ed25519_pub: '' })).toBe('unchecked');
+  });
+});
+
+describe('checkSender', () => {
+  const b64 = btoa(String.fromCharCode(0xab));
+  it('keeps definite answers and asks again after a failure', async () => {
+    const cache = new Map<string, SenderCheck>();
+    let calls = 0;
+    const failing = async () => { calls++; throw new ApiError('down', 503); };
+    expect(await checkSender('A@x', failing, cache)).toBe('unchecked');
+    expect(await checkSender('a@x', failing, cache)).toBe('unchecked');
+    expect(calls).toBe(2);
+    const working = async () => { calls++; return { ed25519_pub: b64 }; };
+    expect(await checkSender('a@x', working, cache)).toEqual({ keyHex: 'ab' });
+    expect(await checkSender('a@x', failing, cache)).toEqual({ keyHex: 'ab' });
+    expect(calls).toBe(3);
+  });
+  it('gives up after the time limit instead of waiting forever', async () => {
+    const never = () => new Promise<{ ed25519_pub: string }>(() => {});
+    expect(await checkSender('slow@x', never, new Map(), 20)).toBe('unchecked');
   });
 });
 
@@ -86,7 +130,7 @@ describe('filingChoices', () => {
 });
 
 describe('sameSenderMail', () => {
-  const senderOf = (m: Fileable) => filingSender(m, null);
+  const senderOf = (m: Fileable) => filingSender(m, 'legacy');
   it('takes only the sender\'s mail from the same place', () => {
     const m = msg('ada@x');
     const inbox2 = msg('ADA@x');
@@ -109,7 +153,7 @@ describe('sameSenderMail', () => {
   it('leaves out a forged copy the sender check refuses', () => {
     const m = msg('ada@x', { senderPublicKey: 'aa' });
     const forged = msg('ada@x', { senderPublicKey: 'bb' });
-    const real = (x: Fileable) => filingSender(x, 'aa');
+    const real = (x: Fileable) => filingSender(x, { keyHex: 'aa' });
     expect(sameSenderMail(m, 'f1', [m, forged], ctx(), real)).toEqual([]);
   });
 });

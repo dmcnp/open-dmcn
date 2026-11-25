@@ -1,22 +1,27 @@
-import { createContext, useContext, useState, useCallback, useRef, ReactNode, createElement } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode, createElement } from 'react';
 import { UndoBar } from '../../components/UndoBar';
+import { useAuth } from './useAuth';
+import { useKeys } from './useKeys';
+import { UndoFailedError } from '../filingActions';
 
 // useUndo: after a move, a delete or an archive, a short bar says what happened, with Undo. A
 // full swipe on the phone is easy to do by accident, and a moved message vanishes from the list
 // it was in, so the way back is offered where the hand already is rather than in another view.
+// The same bar says so when an action fails, without an Undo.
 //
-// One notice at a time: a new action replaces the bar (its own Undo is the one wanted next). The
-// bar goes after a few seconds; what it undoes is the caller's, so this only holds and runs it.
+// One notice at a time: a new one replaces the bar. The bar goes after a few seconds, and at once
+// when the account changes (switching, locking, signing out): an Undo for one mailbox must never
+// be pressed in another. What it undoes is the caller's; this only holds it and runs it once.
 
 export interface UndoNotice {
   id: number;
   text: string;
-  undo: () => void | Promise<void>;
+  undo?: () => void | Promise<void>;
 }
 
 interface UndoContextValue {
-  /** Shows the bar. `undo` runs at most once, when Undo is pressed. */
-  offerUndo: (text: string, undo: () => void | Promise<void>) => void;
+  /** Shows the bar. With `undo`, it has an Undo button, which runs `undo` at most once. */
+  offerUndo: (text: string, undo?: () => void | Promise<void>) => void;
 }
 
 const UndoContext = createContext<UndoContextValue | null>(null);
@@ -27,8 +32,14 @@ export const UNDO_MS = 6000;
 export function UndoProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState<UndoNotice | null>(null);
   const nextId = useRef(1);
+  const { address } = useAuth();
+  const { keys } = useKeys();
 
-  const offerUndo = useCallback((text: string, undo: () => void | Promise<void>) => {
+  // A different account, or none (switched, locked, signed out): whatever the bar offered belongs
+  // to the one before. Not the session token, which renews for the same account.
+  useEffect(() => { setNotice(null); }, [address, keys]);
+
+  const offerUndo = useCallback((text: string, undo?: () => void | Promise<void>) => {
     setNotice({ id: nextId.current++, text, undo });
   }, []);
 
@@ -38,7 +49,11 @@ export function UndoProvider({ children }: { children: ReactNode }) {
 
   const runUndo = useCallback((n: UndoNotice) => {
     dismiss(n.id);
-    void Promise.resolve().then(n.undo).catch(() => { /* the next sync shows where things are */ });
+    if (!n.undo) return;
+    void Promise.resolve().then(n.undo).catch(e => {
+      const text = e instanceof UndoFailedError ? e.message : "Couldn't undo. Check your connection and try again.";
+      setNotice({ id: nextId.current++, text });
+    });
   }, [dismiss]);
 
   return createElement(

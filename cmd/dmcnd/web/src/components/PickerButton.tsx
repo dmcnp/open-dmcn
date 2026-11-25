@@ -33,6 +33,9 @@ export function NativePicker({ label, value, onChange, options, children, style,
         onChange={e => {
           const v = e.target.value;
           e.currentTarget.value = value;
+          // Let go of the list once something is picked: a select keeps focus after a choice, which
+          // would keep a row's hover actions showing until the next click elsewhere.
+          e.currentTarget.blur();
           onChange(v);
         }}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', font: 'inherit', border: 0 }}
