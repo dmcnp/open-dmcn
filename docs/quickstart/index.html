@@ -370,7 +370,10 @@ expires (24h by default, <code>DMCND_PETITION_TTL</code>). And <strong>the code 
 petition requires the private key the browser proved it held, so an overheard code gets an
 eavesdropper nothing.</p>
 <p>To free an address later — a lost key, someone leaving — <code>dmcndcli remove-address</code> publishes a
-root-signed tombstone, after which the address can be petitioned for again.</p>
+root-signed tombstone, after which the address can be petitioned for again. When the person who
+lost their key is the one petitioning, <code>dmcndcli petition assign --replace</code> does both in one step:
+it tombstones the old key and assigns the address to the new petition. Their mail from before was
+encrypted to the lost key, so the address comes back and the old mail does not.</p>
 <h2 id="configuration">Configuration<a class="hash" href="#configuration" aria-label="Link to this section">#</a></h2>
 <p>Everything is environment-driven. These are the ones you'll actually touch:</p>
 <div class="table-wrap"><table>
