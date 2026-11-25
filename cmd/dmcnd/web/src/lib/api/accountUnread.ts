@@ -13,6 +13,7 @@
 import type { WorkingKeys } from '../crypto/workingKeys';
 import { MailboxSync } from './mailboxRest';
 import { FlagStore } from './flagStore';
+import { LabelStore } from './labelStore';
 import { deployment } from '@deployment';
 import { loginWithKeys, ApiError } from './client';
 import { countUnread } from '../unread';
@@ -52,14 +53,16 @@ async function mintToken(address: string, wk: WorkingKeys): Promise<string> {
 async function countWithToken(address: string, wk: WorkingKeys, token: string): Promise<number> {
   let sync = syncs.get(address);
   if (!sync) { sync = new MailboxSync(wk, () => { /* no subscribers */ }, token, deployment.identities ? () => deployment.identities!(wk, token) : undefined); syncs.set(address, sync); }
-  const [previews, flags, filter] = await Promise.all([
+  const [previews, flags, filter, folderIds] = await Promise.all([
     sync.list(),
     new FlagStore(wk, token).list(),
     // A missing/unreadable blocklist only means blocked senders aren't excluded —
     // not a reason to report no count at all.
     deployment.mailFilter(wk, token).get().catch(() => null),
+    // Filed mail is not Inbox mail, so it doesn't count; unreadable folders only mean it does.
+    new LabelStore(wk, token).get().then(({ doc }) => new Set(doc.folders.map(f => f.id))).catch(() => new Set<string>()),
   ]);
-  return countUnread(previews, address, flags, filter);
+  return countUnread(previews, address, flags, filter, folderIds);
 }
 
 // fetchAccountUnread returns the unread count for an account this tab holds unlocked

@@ -18,8 +18,18 @@ interface FlagsContextValue {
   // ready is false until the first load settles. Until then every message reads as unarchived
   // and unread, so a view built on flags waits for it rather than drawing that and taking it back.
   ready: boolean;
+  // synced is true once a list has actually come back. ready also turns true when the first load
+  // FAILS, leaving an empty map; anything that treats "no flag record" as "never touched" (sender
+  // rules filing new mail) waits for this instead, or it would overwrite every record it can't see.
+  synced: boolean;
   refreshFlags: () => void;
   setFlag: (messageHash: string, delta: FlagDelta) => Promise<void>;
+  // setFlagIfAbsent writes only if the store holds no record for the message yet, checked against
+  // the store itself just before writing. For sender rules, which file "untouched" mail: a record
+  // another device made since this tab last synced (the message read or starred on the phone) must
+  // not be replaced by one holding only the folder. Resolves true when it wrote. A small window
+  // remains between the read and the write; the store has no create-only write to close it.
+  setFlagIfAbsent: (messageHash: string, delta: FlagDelta) => Promise<boolean>;
   markRead: (messageHash: string) => Promise<void>;
   isRead: (messageHash: string) => boolean;
   isArchived: (messageHash: string) => boolean;
@@ -46,6 +56,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   const { sessionToken, isAuthenticated } = useAuth();
   const [flags, setFlags] = useState<Map<string, FlagRecord>>(new Map());
   const [ready, setReady] = useState(false);
+  const [synced, setSynced] = useState(false);
   const storeRef = useRef<FlagStore | null>(null);
   const flagsRef = useRef<Map<string, FlagRecord>>(new Map());
   const syncRef = useRef<() => void>(() => {});
@@ -63,6 +74,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
           if (cancelled) return;
           flagsRef.current = map;
           setFlags(map);
+          setSynced(true);
         })
         .catch(() => { /* transient; keep the last good map */ })
         .finally(() => { if (!cancelled) setReady(true); });
@@ -77,6 +89,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
       flagsRef.current = new Map();
       syncRef.current = () => {};
       setReady(false);
+      setSynced(false);
       setFlags(new Map());
     };
   }, [keys, sessionToken, isAuthenticated]);
@@ -97,6 +110,30 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     map.set(messageHash, next);
     flagsRef.current = map;
     setFlags(map);
+  }, []);
+
+  const setFlagIfAbsent = useCallback(async (messageHash: string, delta: FlagDelta) => {
+    // Everything goes through the store this started with: the read takes a moment, and if the
+    // account changes meanwhile, storeRef points at another mailbox, which this must never touch.
+    const store = storeRef.current;
+    if (!store || flagsRef.current.has(messageHash)) return false;
+    const existing = await store.get(messageHash);
+    if (storeRef.current !== store) return false;
+    const remember = (rec: FlagRecord) => {
+      if (storeRef.current !== store) return;
+      const map = new Map(flagsRef.current);
+      map.set(messageHash, rec);
+      flagsRef.current = map;
+      setFlags(map);
+    };
+    if (existing) {
+      // Take the record in, so the message stops looking untouched here too.
+      remember(existing);
+      return false;
+    }
+    if (flagsRef.current.has(messageHash)) return false; // touched here meanwhile
+    remember(await store.apply(messageHash, undefined, delta));
+    return true;
   }, []);
 
   const markRead = useCallback(async (messageHash: string) => {
@@ -147,7 +184,7 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     FlagsContext.Provider,
-    { value: { flags, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
+    { value: { flags, ready, synced, refreshFlags, setFlag, setFlagIfAbsent, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
     children
   );
 }

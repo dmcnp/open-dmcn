@@ -32,6 +32,9 @@ import { matches, parseQuery, type MatchContext } from '../lib/search/query';
 import { useSearch, useSearchHits } from '../lib/search/useSearchIndex';
 import { useSettings } from '../lib/hooks/useSettings';
 import { purgeWhen, shownInDeleted, trashDays } from '../lib/trash';
+import { useFiling } from '../components/Filing';
+import { NativePicker, PickerButton, PICK_INBOX, PICK_NEW, PICK_PROMPT } from '../components/PickerButton';
+import { canFile, fullSwipeArchives } from '../lib/filing';
 
 // Control messages this deployment carries (device pairing, countersign requests) are
 // surfaced in their own panels, not the normal mail folders. Empty on a deployment whose
@@ -73,8 +76,40 @@ function groupSent(previews: Preview[]): Row[] {
 // --- message row (desktop one-line w/ hover delete; mobile two-line w/ swipe) ---
 
 const SWIPE_W = 176; // px revealed by swiping a row left on mobile (Archive + Delete)
+const LEAD_W = 176; // px revealed by swiping a row right on mobile (Folder + Label)
+// How far a full swipe left has to go, as a share of the row, before letting go acts on its own.
+const FULL_SWIPE = 0.55;
 
-function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, place, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore }: {
+/** What a row offers for filing: the folder picker's choices and the labels, each a native list. */
+interface RowFiling {
+  includeInbox: boolean;
+  folders: { id: string; name: string }[];
+  labels: { id: string; name: string; applied: boolean }[];
+  onFolder: (value: string) => void;
+  onLabel: (value: string) => void;
+  /** Opens the folder list in a dialog, for a full swipe right. */
+  pickFolder: () => void;
+}
+
+// The <option>s of a row's two pickers. Each rests on a disabled prompt, so the list opens with
+// nothing chosen and every real entry reports when picked.
+function folderOptions(f: RowFiling) {
+  return <>
+    <option value={PICK_PROMPT} disabled>Move to…</option>
+    {f.includeInbox && <option value={PICK_INBOX}>Inbox</option>}
+    {f.folders.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+    <option value={PICK_NEW}>New folder…</option>
+  </>;
+}
+function labelOptions(f: RowFiling) {
+  return <>
+    <option value={PICK_PROMPT} disabled>Labels</option>
+    {f.labels.map(l => <option key={l.id} value={l.id}>{l.applied ? `✓ ${l.name}` : l.name}</option>)}
+    <option value={PICK_NEW}>New label…</option>
+  </>;
+}
+
+function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, place, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore, filing, fullSwipe, wideActions }: {
   msg: Preview; sent: boolean; unknownSender?: boolean; trustedSender?: boolean; mobile: boolean; hovered: boolean;
   read: boolean; starred: boolean; inArchive: boolean; nameFor: (address: string) => string;
   /** Set in search results: where the message lives, shown ahead of its subject. */
@@ -82,6 +117,13 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
   onOpen: () => void; onDelete: () => void; onArchive: () => void; onToggleStar: () => void; onHover: (h: boolean) => void;
   /** Set in Deleted: the row offers Restore, and its delete is for good, so it asks a second time. */
   onRestore?: () => void;
+  /** Set where the message can be filed: Inbox, Archive and folders, not Sent or Deleted. */
+  filing?: RowFiling;
+  /** What a full swipe left does on the phone; unset in Deleted, where delete is for good. */
+  fullSwipe?: 'delete' | 'archive';
+  /** The view offers filing on its rows, so every row reserves room for Folder and Label: one
+   *  width for the whole list, or the dates of rows that can't be filed would sit apart. */
+  wideActions?: boolean;
 }) {
   const inDeleted = !!onRestore;
   // Unread applies to received mail only (you don't "read" your own Sent copy).
@@ -141,10 +183,24 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
   // Deleting for good from Deleted takes a second press on the same button, as the drafts and
   // contacts trash buttons do. Moving mail to Deleted never asks: it can be restored.
   const [armed, setArmed] = useState(false);
-  const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false });
+  // A hover action's native list is open: the actions stay showing while it is.
+  const [picking, setPicking] = useState(false);
+  const drag = useRef({ x: 0, y: 0, active: false, decided: null as null | 'h' | 'v', startDx: 0, moved: false, width: 0 });
+  const rowRef = useRef<HTMLDivElement>(null);
 
   if (mobile) {
-    const onDown = (e: React.PointerEvent) => { drag.current = { x: e.clientX, y: e.clientY, active: true, decided: null, startDx: dx, moved: false }; };
+    // Swiping right shows Folder and Label, where the message can be filed; left shows Archive and
+    // Delete. Going all the way either way acts without a tap: left does the button at the edge,
+    // right opens the folder list. (That list is a dialog, not the phone's own picker: Safari lets
+    // a page open its picker only from a tap on it.)
+    const lead = filing ? LEAD_W : 0;
+    const width = drag.current.width || rowRef.current?.offsetWidth || 0;
+    const fullArmed = !!fullSwipe && width > 0 && dx <= -width * FULL_SWIPE;
+    const fullRightArmed = !!filing && width > 0 && dx >= width * FULL_SWIPE;
+    const close = () => { setDx(0); setArmed(false); };
+    const onDown = (e: React.PointerEvent) => {
+      drag.current = { x: e.clientX, y: e.clientY, active: true, decided: null, startDx: dx, moved: false, width: rowRef.current?.offsetWidth ?? 0 };
+    };
     const onMove = (e: React.PointerEvent) => {
       const d = drag.current; if (!d.active) return;
       const ddx = e.clientX - d.x, ddy = e.clientY - d.y;
@@ -152,7 +208,30 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
         d.decided = Math.abs(ddx) > Math.abs(ddy) ? 'h' : 'v';
         if (d.decided === 'h') { try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ } }
       }
-      if (d.decided === 'h') { d.moved = true; setDx(Math.max(-SWIPE_W, Math.min(0, d.startDx + ddx))); }
+      if (d.decided === 'h') {
+        d.moved = true;
+        const most = fullSwipe ? d.width : SWIPE_W;
+        setDx(Math.max(-most, Math.min(filing ? d.width : lead, d.startDx + ddx)));
+      }
+    };
+    // Where a drag comes to rest: open on one side, closed, or (past the full-swipe point) acted
+    // on. `act` is false when the browser cancelled the gesture (it took it over to scroll, or the
+    // phone interrupted): a swipe nobody finished must never delete, archive or open anything, so
+    // it only snaps open or closed.
+    const settle = (act = true) => {
+      if (act && fullArmed && fullSwipe) {
+        setDx(-width);
+        window.setTimeout(() => { close(); if (fullSwipe === 'archive') onArchive(); else onDelete(); }, 180);
+        return;
+      }
+      if (act && fullRightArmed && filing) {
+        close();
+        filing.pickFolder();
+        return;
+      }
+      if (dx >= lead / 2 && lead > 0) setDx(lead);
+      else if (dx <= -SWIPE_W / 2) setDx(-SWIPE_W);
+      else close();
     };
     const onUp = () => {
       const d = drag.current; d.active = false;
@@ -162,40 +241,74 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
       // cancels these pointers once it takes the gesture over to scroll, and at the top of
       // the list there is nothing left for it to scroll.
       if (d.decided === 'v') return;
-      if (d.decided !== 'h' && !d.moved) { if (dx < 0) { setDx(0); setArmed(false); } else onOpen(); return; }
-      if (d.decided === 'h') { const open = dx <= -SWIPE_W / 2; setDx(open ? -SWIPE_W : 0); if (!open) setArmed(false); }
+      if (d.decided !== 'h' && !d.moved) { if (dx !== 0) close(); else onOpen(); return; }
+      if (d.decided === 'h') settle();
     };
+    const tile: CSSProperties = {
+      flex: 1, border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)',
+    };
+    const archiveTile = !sent && (
+      <button key="archive" aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={() => { close(); onArchive(); }}
+        style={{ ...tile, background: 'var(--surface-hover)', color: 'var(--text-strong)' }}>
+        <Icon name="archive" size={20} /> {inArchive ? 'Unarchive' : 'Archive'}
+      </button>
+    );
+    const deleteTile = (
+      <button key="delete" aria-label="Delete" onClick={() => { close(); onDelete(); }}
+        style={{ ...tile, background: 'var(--danger)', color: '#fff' }}>
+        <Icon name="trash" size={20} /> Delete
+      </button>
+    );
+    // The edge button is the one a full swipe does, so it sits at the edge and, once the swipe
+    // has gone far enough, takes the whole width to say so.
+    const edgeIsArchive = fullSwipe === 'archive' && !sent;
+    const trailing = fullArmed
+      ? [edgeIsArchive ? archiveTile : deleteTile]
+      : edgeIsArchive ? [deleteTile, archiveTile] : [archiveTile, deleteTile];
     return (
-      <div style={{ position: 'relative', borderBottom: '1px solid var(--border-subtle)', overflow: 'hidden', background: 'var(--surface-page)' }}>
-        {/* action layer revealed by swiping left */}
-        <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: SWIPE_W, display: 'flex' }}>
+      <div ref={rowRef} style={{ position: 'relative', borderBottom: '1px solid var(--border-subtle)', overflow: 'hidden', background: 'var(--surface-page)' }}>
+        {/* actions revealed by swiping right: each opens the phone's own list */}
+        {filing && dx > 0 && (
+          <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: Math.max(LEAD_W, dx), display: 'flex' }}>
+            {fullRightArmed ? (
+              <div style={{ ...tile, background: 'var(--brand)', color: 'var(--text-onbrand)' }}>
+                <Icon name="folder" size={20} /> Move to folder
+              </div>
+            ) : (<>
+            <NativePicker label="Move to folder" value={PICK_PROMPT} options={folderOptions(filing)}
+              onChange={v => { close(); filing.onFolder(v); }}
+              style={{ ...tile, background: 'var(--brand)', color: 'var(--text-onbrand)' }}>
+              <Icon name="folder" size={20} /> Folder
+            </NativePicker>
+            <NativePicker label="Labels" value={PICK_PROMPT} options={labelOptions(filing)}
+              onChange={v => { close(); filing.onLabel(v); }}
+              style={{ ...tile, background: 'var(--surface-hover)', color: 'var(--text-strong)' }}>
+              <Icon name="tag" size={20} /> Label
+            </NativePicker>
+            </>)}
+          </div>
+        )}
+        {/* actions revealed by swiping left */}
+        {dx < 0 && (
+        <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: Math.max(SWIPE_W, -dx), display: 'flex' }}>
           {inDeleted ? (
             <>
-              <button aria-label="Restore" onClick={() => { setDx(0); setArmed(false); onRestore?.(); }}
-                style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--surface-hover)', color: 'var(--text-strong)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
+              <button aria-label="Restore" onClick={() => { close(); onRestore?.(); }}
+                style={{ ...tile, background: 'var(--surface-hover)', color: 'var(--text-strong)' }}>
                 <Icon name="undo" size={20} /> Restore
               </button>
-              <button aria-label={armed ? 'Tap again to delete forever' : 'Delete forever'} onClick={() => { if (armed) { setDx(0); setArmed(false); onDelete(); } else setArmed(true); }}
-                style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--danger)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
+              <button aria-label={armed ? 'Tap again to delete forever' : 'Delete forever'} onClick={() => { if (armed) { close(); onDelete(); } else setArmed(true); }}
+                style={{ ...tile, background: 'var(--danger)', color: '#fff' }}>
                 <Icon name="trash" size={20} /> {armed ? 'Tap again' : 'Delete forever'}
               </button>
             </>
-          ) : (<>
-          {!sent && (
-            <button aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={() => { setDx(0); onArchive(); }}
-              style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--surface-hover)', color: 'var(--text-strong)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
-              <Icon name="archive" size={20} /> {inArchive ? 'Unarchive' : 'Archive'}
-            </button>
-          )}
-          <button aria-label="Delete" onClick={() => { setDx(0); onDelete(); }}
-            style={{ flex: 1, border: 'none', cursor: 'pointer', background: 'var(--danger)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, font: 'inherit', fontSize: 'var(--text-2xs)' }}>
-            <Icon name="trash" size={20} /> Delete
-          </button>
-          </>)}
+          ) : trailing}
         </div>
+        )}
         <div
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-          onPointerCancel={() => { drag.current.active = false; setDx(dx <= -SWIPE_W / 2 ? -SWIPE_W : 0); }}
+          onPointerCancel={() => { drag.current.active = false; if (drag.current.decided === 'h') settle(false); }}
           style={{
             position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 'var(--space-3)', cursor: 'pointer',
             padding: 'var(--space-3) var(--space-4)', touchAction: 'pan-y',
@@ -278,12 +391,12 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
           </span>
         )}
       </div>
-      <div style={{ flex: 'none', width: 140, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <div style={{ flex: 'none', width: wideActions ? 196 : 140, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)' }}>
         {/* The date never moves or disappears, and the hover actions keep their slot
             when hidden (visibility, not unmounting) — so hovering changes colours,
             never geometry. */}
         <span style={{ flex: 1, textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatWhen(msg.sentAt)}</span>
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, visibility: hovered || armed ? 'visible' : 'hidden' }}>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, visibility: hovered || armed || picking ? 'visible' : 'hidden' }}>
           {inDeleted ? (
             <>
               <IconButton size="sm" aria-label="Restore" title="Restore" onClick={e => { e.stopPropagation(); onRestore?.(); }}><Icon name="undo" size={16} /></IconButton>
@@ -291,6 +404,16 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
             </>
           ) : (
             <>
+              {filing && (
+                <>
+                  <PickerButton icon="folder" label="Move to folder" value={PICK_PROMPT} size={28} onChange={filing.onFolder} onFocusChange={setPicking}>
+                    {folderOptions(filing)}
+                  </PickerButton>
+                  <PickerButton icon="tag" label="Labels" value={PICK_PROMPT} size={28} onChange={filing.onLabel} onFocusChange={setPicking}>
+                    {labelOptions(filing)}
+                  </PickerButton>
+                </>
+              )}
               {!sent && (
                 <IconButton size="sm" aria-label={inArchive ? 'Unarchive' : 'Archive'} onClick={e => { e.stopPropagation(); onArchive(); }}><Icon name="archive" size={16} /></IconButton>
               )}
@@ -351,10 +474,11 @@ export function InboxMain() {
 function MailList() {
   const { messages, loaded: mailLoaded, error, accessState, refresh, deleteMessage } = useMessages();
   const { sent, loaded: sentLoaded, error: sentError, refreshSent, fetchSentFull, deleteSent } = useSent();
-  const { flags, ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags, isTrashed, trashedAt, trash, restore } = useFlags();
+  const { flags, ready: flagsReady, isRead, isArchived, isStarred, setFlag, markRead, labelsOf, folderOf, removeFlags, isTrashed, trashedAt, restore } = useFlags();
   const { settings } = useSettings();
   const keepDays = trashDays(settings.trashDays);
-  const { ready: labelsReady, knownFolderIds, labelById, folderById } = useLabels();
+  const { ready: labelsReady, knownFolderIds, labelById, folderById, labels } = useLabels();
+  const filing = useFiling();
   const { address } = useAuth();
   const gettingStarted = useGettingStarted();
   const navigate = useNavigate();
@@ -500,12 +624,9 @@ function MailList() {
   }
 
   // Delete moves to Deleted, which asks nothing because it can be undone: the message stays where
-  // it is, marked (lib/trash.ts). From Deleted, delete is for good.
-  const doDelete = async (hashes: string[]) => {
-    for (const hash of hashes) {
-      try { await trash(hash); } catch { /* ignore */ }
-    }
-  };
+  // it is, marked (lib/trash.ts), and the Undo bar offers it back at once. From Deleted, delete is
+  // for good.
+  const doDelete = (hashes: string[]) => filing.trashWithUndo(hashes);
   const doRestore = async (hashes: string[]) => {
     for (const hash of hashes) {
       try { await restore(hash); } catch { /* ignore */ }
@@ -539,7 +660,33 @@ function MailList() {
   const placeLabel = (p: Place | undefined) => (!p ? undefined
     : p.startsWith('folder:') ? placeName(p)
     : p === 'inbox' ? 'Inbox' : p === 'archive' ? 'Archive' : p === 'sent' ? 'Sent' : 'Deleted');
-  const toggleArchive = (m: Preview) => setFlag(m.hash, { archived: !isArchived(m.hash) });
+  const toggleArchive = (m: Preview) => filing.setArchivedWithUndo([m.hash], !isArchived(m.hash));
+
+  // What a row offers for filing. Only where filing can take a message from (Inbox, Archive, a
+  // folder): Sent rows take no flags at the relay, and Deleted mail is restored, not filed.
+  const rowFiling = (m: Preview): RowFiling | undefined => {
+    if (isSentRow(m) || isTrashed(m.hash)) return undefined;
+    const p = placeOf(m, placeCtx);
+    if (!canFile(p)) return undefined;
+    const c = filing.choices(m);
+    const applied = labelsOf(m.hash);
+    return {
+      includeInbox: c.includeInbox,
+      folders: c.folders,
+      labels: labels.map(l => ({ id: l.id, name: l.name, applied: applied.includes(l.id) })),
+      onFolder: v => {
+        if (v === PICK_NEW) filing.newFolderFor(m);
+        else if (v === PICK_INBOX) filing.file(m, undefined);
+        else if (v && v !== PICK_PROMPT) filing.file(m, v);
+      },
+      onLabel: v => {
+        if (v === PICK_NEW) filing.newLabelFor(m);
+        else if (v && v !== PICK_PROMPT) filing.toggleLabel(m, v);
+      },
+      pickFolder: () => filing.pickFolderFor(m),
+    };
+  };
+  const swipeArchives = fullSwipeArchives(settings.swipeFiling);
   const toggleStar = (m: Preview) => setFlag(m.hash, { starred: !isStarred(m.hash) });
 
   const handleReply = (replyTo: ComposeReplyTo) => {
@@ -709,6 +856,9 @@ function MailList() {
                     onArchive={() => toggleArchive(msg)}
                     onToggleStar={() => toggleStar(msg)}
                     onHover={h => setHovered(h ? msg.hash : null)}
+                    filing={rowFiling(msg)}
+                    wideActions={!inDeleted && folder !== 'sent'}
+                    fullSwipe={isTrashed(msg.hash) ? undefined : swipeArchives && !isSentRow(msg) ? 'archive' : 'delete'}
                   />
                 ))
               )}

@@ -51,6 +51,13 @@ export class FlagStore {
     return out;
   }
 
+  // get reads one message's record from the store itself, not the tab's cache: null when it has
+  // none. For writes that must not run over a record another device has just made.
+  async get(messageHash: string): Promise<FlagRecord | null> {
+    const e = await this.store.get<FlagRecord>(flagKey(messageHash));
+    return e ? e.value : null;
+  }
+
   // apply merges a delta onto the current record and writes it back. current is the
   // caller's latest known record (from the provider cache); the whole record is
   // replaced (last-writer-wins per message).

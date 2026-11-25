@@ -40,6 +40,17 @@ interface LabelsContextValue {
   createFolder: (name: string) => Promise<string>;
   renameFolder: (id: string, name: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
+  // Reordering writes the whole order the owner sees. Ids the other device added meanwhile stay,
+  // after the ones given; ids it deleted are dropped.
+  reorderLabels: (ids: string[]) => Promise<void>;
+  reorderFolders: (ids: string[]) => Promise<void>;
+}
+
+// inOrder lists `items` in the order of `ids`, anything not named keeping its place at the end.
+function inOrder<T extends { id: string }>(items: T[], ids: string[]): T[] {
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  const named = items.filter(x => rank.has(x.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+  return [...named, ...items.filter(x => !rank.has(x.id))];
 }
 
 const LabelsContext = createContext<LabelsContextValue | null>(null);
@@ -133,6 +144,22 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
   const deleteFolder = useCallback((id: string) =>
     mutate(d => ({ ...d, folders: d.folders.filter(f => f.id !== id) })), [mutate]);
 
+  // Reordering shows the new order at once. If saving it fails, the stored order is read back, so
+  // the screen never shows an order that isn't saved; the caller shows the error.
+  const reorder = useCallback(async (apply: (d: LabelsDoc) => LabelsDoc) => {
+    setDoc(apply);
+    try {
+      await mutate(apply);
+    } catch (e) {
+      syncRef.current();
+      throw e;
+    }
+  }, [mutate]);
+  const reorderLabels = useCallback((ids: string[]) =>
+    reorder(d => ({ ...d, labels: inOrder(d.labels, ids) })), [reorder]);
+  const reorderFolders = useCallback((ids: string[]) =>
+    reorder(d => ({ ...d, folders: inOrder(d.folders, ids) })), [reorder]);
+
   const value: LabelsContextValue = {
     ready,
     labels: doc.labels,
@@ -143,6 +170,7 @@ export function LabelsProvider({ children }: { children: ReactNode }) {
     refreshLabels,
     createLabel, renameLabel, deleteLabel,
     createFolder, renameFolder, deleteFolder,
+    reorderLabels, reorderFolders,
   };
 
   return createElement(LabelsContext.Provider, { value }, children);

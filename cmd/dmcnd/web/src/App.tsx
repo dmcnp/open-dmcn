@@ -11,6 +11,8 @@ import { ContactsProvider } from './lib/hooks/useContacts';
 import { MailFilterProvider } from './lib/hooks/useMailFilter';
 import { SearchIndexProvider } from './lib/search/useSearchIndex';
 import { SyncProvider } from './lib/sync/useSync';
+import { UndoProvider } from './lib/hooks/useUndo';
+import { FilingProvider } from './components/Filing';
 import { Login } from './pages/Login';
 import { InboxMain } from './pages/InboxMain';
 import { Contacts } from './pages/Contacts';
@@ -48,6 +50,8 @@ export function App() {
         <ContactsProvider>
         <MailFilterProvider>
         <SearchIndexProvider>
+        <UndoProvider>
+        <FilingProvider>
         <BrowserRouter>
           <SessionRenewer />
           {/* Above the routes on purpose: a tapped notification for a LOCKED account has to be
@@ -73,6 +77,8 @@ export function App() {
             <Route path="*" element={<Navigate to="/inbox" replace />} />
           </Routes>
         </BrowserRouter>
+        </FilingProvider>
+        </UndoProvider>
         </SearchIndexProvider>
         </MailFilterProvider>
         </ContactsProvider>

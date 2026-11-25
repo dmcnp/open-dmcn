@@ -10,6 +10,7 @@
 
 import { PersonalStore } from './personalStore';
 import type { WorkingKeys } from '../crypto/workingKeys';
+import type { SwipeFiling } from '../filing';
 
 export interface AppSettings {
   v: number;
@@ -36,6 +37,9 @@ export interface AppSettings {
   // How many days deleted mail waits in Deleted before a client removes it for good (1–7).
   // Undefined reads as the default (lib/trash.ts), which is what every existing account gets.
   trashDays?: number;
+  // Filing: sender rules and the two filing preferences, shared with the Apple client, which
+  // reads and writes the same field. Shape and defaults: lib/filing.ts.
+  swipeFiling?: SwipeFiling;
 }
 
 export const SETTINGS_KEY = 'settings/app';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties } from 'react';
 import type { Preview, FullBody } from '../lib/api/mailboxRest';
 import type { ComposeReplyTo } from '../lib/compose';
 import { useMessages } from '../lib/hooks/useMessages';
@@ -11,6 +11,8 @@ import { Button, IconButton, Input, Tag } from '../ds';
 import { Icon } from './Icon';
 import { ConfirmTrashButton } from './ConfirmTrashButton';
 import { ColorSwatches } from './ColorSwatches';
+import { NativePicker, PickerButton, PICK_INBOX, PICK_PROMPT } from './PickerButton';
+import { useFiling } from './Filing';
 import { lookupIdentity } from '../lib/api/client';
 import { verifyBridgeAttestation, bridgeOriginalIndex, BridgeTrustTier, type BridgeAttestation } from '../lib/crypto/bridgeAttest';
 import { verifyDeliveryReceipt, type DeliveryReceiptView } from '../lib/crypto/receiptAttest';
@@ -195,7 +197,8 @@ export interface MessageReaderProps {
  */
 export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, openFull, onDelete, deleted, starred, archived, onToggleStar, onArchive }: MessageReaderProps) {
   const { openMessageFull } = useMessages();
-  const { labelsOf, folderOf, addLabel, removeLabel, setFolder } = useFlags();
+  const { labelsOf, folderOf, addLabel, removeLabel } = useFlags();
+  const filing = useFiling();
   const { labels, folders, labelById, createLabel, createFolder } = useLabels();
   const { address } = useAuth();
   const { contactByAddress, nameFor, allowlist, pinKey, ready: contactsReady } = useContacts();
@@ -212,6 +215,10 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
   const availableLabels = labels.filter(l => !appliedLabelIds.includes(l.id));
   const currentFolder = folderOf(msg.hash);
   const currentFolderDef = currentFolder ? folders.find(f => f.id === currentFolder) : undefined;
+  // Where the message lives, for the toolbar's place button: "Inbox", "Archive" or the folder's
+  // name, which opens the folder list. Not for Sent, whose rows the relay takes no flags on.
+  const place = sentView ? null : filing.placeOfMessage(msg);
+  const placeChoices = filing.choices(msg);
 
   // Making a label or folder from here, on the message that prompted it. The rail lists them and
   // Settings names them; neither is any use mid-read, and leaving for Settings costs the place in
@@ -232,7 +239,8 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
     setCreateBusy(true); setCreateErr('');
     try {
       if (creating === 'label') await addLabel(msg.hash, await createLabel(n, newColor));
-      else await setFolder(msg.hash, await createFolder(n));
+      // The name goes with it: the folder list here is from before the folder existed.
+      else filing.file(msg, await createFolder(n), n);
       setCreating(null); setNewName('');
     } catch (e) {
       setCreateErr(e instanceof Error ? e.message : String(e));
@@ -759,19 +767,32 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
               {availableLabels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               <option value={NEW_OPTION}>New label…</option>
             </PickerButton>
-            <PickerButton
-              icon="folder"
-              label="Move to folder"
-              value={currentFolder ?? ''}
-              onChange={id => {
-                if (id === NEW_OPTION) beginCreate('folder');
-                else void setFolder(msg.hash, id || undefined);
-              }}
-            >
-              <option value="">No folder</option>
-              {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              <option value={NEW_OPTION}>New folder…</option>
-            </PickerButton>
+            {place && (place === 'inbox' || place === 'archive' || place.startsWith('folder:')) && (
+              <NativePicker
+                label={`In ${filing.placeName(place)}. Move to folder`}
+                value={PICK_PROMPT}
+                onChange={id => {
+                  if (id === NEW_OPTION) beginCreate('folder');
+                  else if (id === PICK_INBOX) filing.file(msg, undefined);
+                  else if (id && id !== PICK_PROMPT) filing.file(msg, id);
+                }}
+                options={<>
+                  <option value={PICK_PROMPT} disabled>Move to…</option>
+                  {placeChoices.includeInbox && <option value={PICK_INBOX}>Inbox</option>}
+                  {placeChoices.folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  <option value={NEW_OPTION}>New folder…</option>
+                </>}
+                style={{
+                  height: 32, alignItems: 'center', gap: 6, padding: '0 10px', maxWidth: mobile ? 130 : 200,
+                  border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-body)', fontSize: 'var(--text-sm)', fontWeight: 500,
+                }}
+              >
+                <Icon name={place === 'inbox' ? 'inbox' : place === 'archive' ? 'archive' : 'folder'} size={15} style={{ flex: 'none' }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{filing.placeName(place)}</span>
+                <Icon name="chevron-down" size={14} style={{ flex: 'none', color: 'var(--text-muted)' }} />
+              </NativePicker>
+            )}
             <div aria-hidden="true" style={{ width: 1, height: 20, margin: '0 6px', background: 'var(--border-default)' }} />
           </>
         )}
@@ -856,7 +877,7 @@ export function MessageReader({ msg, sentView, onBack, onReply, mobile = false, 
             {(appliedLabels.length > 0 || currentFolderDef || creating !== null) && (
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)' }}>
                 {currentFolderDef && (
-                  <Tag onRemove={() => void setFolder(msg.hash, undefined)}>
+                  <Tag onRemove={() => filing.file(msg, undefined)}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="folder" size={12} />{currentFolderDef.name}</span>
                   </Tag>
                 )}
@@ -1049,43 +1070,6 @@ function BodyText({ body, bodyError, hasHtml }: { body: string | null; bodyError
     );
   }
   return <>{body}</>;
-}
-
-// PickerButton is a toolbar icon that opens a native picker. The select is real and covers the
-// icon, invisible: the platform's own list, keyboard and screen-reader behaviour (and a phone's
-// wheel picker) come with it, and nothing has to be rebuilt to look like a menu.
-function PickerButton({ icon, label, value, onChange, children }: {
-  icon: 'tag' | 'folder';
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <span title={label} style={{
-      position: 'relative', width: 36, height: 36, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      borderRadius: 'var(--radius-sm)', color: 'var(--text-body)', boxShadow: focused ? 'var(--focus-ring)' : undefined,
-    }}>
-      <Icon name={icon} size={18} />
-      <select
-        aria-label={label}
-        value={value}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onChange={e => {
-          const v = e.target.value;
-          // The label picker always rests on its prompt; the folder picker on the current folder,
-          // except when "New folder…" hands over to the create row.
-          e.currentTarget.value = value;
-          onChange(v);
-        }}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', font: 'inherit', border: 0 }}
-      >
-        {children}
-      </select>
-    </span>
-  );
 }
 
 // HtmlConfirm asks once more before a gated message's HTML is rendered. Floating under its button

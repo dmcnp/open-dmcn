@@ -4,6 +4,8 @@ import { Button, Input, IconButton } from '../ds';
 import { SettingsSection } from './SettingsSection';
 import { ColorSwatches } from './ColorSwatches';
 import { Icon } from './Icon';
+import { ReorderList } from './ReorderList';
+import { useIsMobile } from '../lib/useIsMobile';
 
 // Naming labels and folders — create, rename, recolour, delete. It writes to the
 // "settings/labels" doc (via useLabels, compare-and-swap). Assignment to messages happens in the
@@ -20,11 +22,13 @@ import { Icon } from './Icon';
 // Identifies the row currently being renamed inline (null ⇒ nothing is being edited).
 type Editing = { kind: 'label' | 'folder'; id: string } | null;
 
-const rowStyle = { display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) 0' } as const;
 const emptyStyle = { fontSize: 'var(--text-sm)', color: 'var(--text-muted)' } as const;
 
 export function LabelSettings() {
-  const { labels, folders, createLabel, renameLabel, deleteLabel, createFolder, renameFolder, deleteFolder } = useLabels();
+  const { labels, folders, createLabel, renameLabel, deleteLabel, createFolder, renameFolder, deleteFolder, reorderLabels, reorderFolders } = useLabels();
+  // The order here is the order the rail and the pickers use, on every device. A phone drags;
+  // a pointer gets arrows.
+  const drag = useIsMobile();
   const [labelName, setLabelName] = useState('');
   const [labelColor, setLabelColor] = useState(LABEL_COLORS[0]);
   const [folderName, setFolderName] = useState('');
@@ -82,27 +86,32 @@ export function LabelSettings() {
       <SettingsSection title="Labels">
         <div>
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
-            A message can carry any number of labels. They show in the rail once you have one.
+            A message can carry any number of labels. They show in the rail once you have one, in this order.
           </div>
           {labels.length === 0 && <div style={emptyStyle}>No labels yet.</div>}
-          {labels.map(l => (
-            editing?.kind === 'label' && editing.id === l.id ? (
-              <div key={l.id} style={{ ...rowStyle, flexWrap: 'wrap' }}>
-                <Input value={draftName} onChange={e => setDraftName(e.target.value)} placeholder="Label name" autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} style={{ flex: 1, minWidth: 140 }} />
-                <ColorSwatches selected={draftColor} onPick={setDraftColor} />
-                <IconButton size="sm" aria-label="Save label" disabled={busy || !draftName.trim()} onClick={saveEdit}><Icon name="check" size={15} /></IconButton>
-                <IconButton size="sm" aria-label="Cancel rename" disabled={busy} onClick={cancelEdit}><Icon name="x" size={15} /></IconButton>
-              </div>
-            ) : (
-              <div key={l.id} style={rowStyle}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: l.color, flex: 'none' }} />
-                <span style={{ flex: 1, fontSize: 'var(--text-md)', color: 'var(--text-strong)' }}>{l.name}</span>
-                <IconButton size="sm" aria-label={`Rename label ${l.name}`} disabled={busy} onClick={() => startEditLabel(l.id, l.name, l.color)}><Icon name="pencil" size={15} /></IconButton>
-                <IconButton size="sm" aria-label={`Delete label ${l.name}`} disabled={busy} onClick={() => void run(() => deleteLabel(l.id))}><Icon name="trash" size={15} /></IconButton>
-              </div>
-            )
-          ))}
+          <ReorderList kind="label" drag={drag} disabled={busy || editing !== null}
+            onReorder={ids => void run(() => reorderLabels(ids))}
+            items={labels.map(l => ({
+              id: l.id,
+              name: l.name,
+              content: editing?.kind === 'label' && editing.id === l.id ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                  <Input value={draftName} onChange={e => setDraftName(e.target.value)} placeholder="Label name" autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} style={{ flex: 1, minWidth: 140 }} />
+                  <ColorSwatches selected={draftColor} onPick={setDraftColor} />
+                  <IconButton size="sm" aria-label="Save label" disabled={busy || !draftName.trim()} onClick={saveEdit}><Icon name="check" size={15} /></IconButton>
+                  <IconButton size="sm" aria-label="Cancel rename" disabled={busy} onClick={cancelEdit}><Icon name="x" size={15} /></IconButton>
+                </div>
+              ) : (
+                <>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: l.color, flex: 'none' }} />
+                  <span style={{ flex: 1, fontSize: 'var(--text-md)', color: 'var(--text-strong)' }}>{l.name}</span>
+                  <IconButton size="sm" aria-label={`Rename label ${l.name}`} disabled={busy} onClick={() => startEditLabel(l.id, l.name, l.color)}><Icon name="pencil" size={15} /></IconButton>
+                  <IconButton size="sm" aria-label={`Delete label ${l.name}`} disabled={busy} onClick={() => void run(() => deleteLabel(l.id))}><Icon name="trash" size={15} /></IconButton>
+                </>
+              ),
+            }))}
+          />
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
             <ColorSwatches selected={labelColor} onPick={setLabelColor} />
           </div>
@@ -117,27 +126,32 @@ export function LabelSettings() {
       <SettingsSection title="Folders">
         <div>
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
-            A message sits in one folder at a time. They show in the rail once you have one.
+            A message sits in one folder at a time. They show in the rail once you have one, in this order.
           </div>
           {folders.length === 0 && <div style={emptyStyle}>No folders yet.</div>}
-          {folders.map(f => (
-            editing?.kind === 'folder' && editing.id === f.id ? (
-              <div key={f.id} style={rowStyle}>
-                <Icon name="folder" size={15} style={{ color: 'var(--text-muted)', flex: 'none' }} />
-                <Input value={draftName} onChange={e => setDraftName(e.target.value)} placeholder="Folder name" autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} style={{ flex: 1 }} />
-                <IconButton size="sm" aria-label="Save folder" disabled={busy || !draftName.trim()} onClick={saveEdit}><Icon name="check" size={15} /></IconButton>
-                <IconButton size="sm" aria-label="Cancel rename" disabled={busy} onClick={cancelEdit}><Icon name="x" size={15} /></IconButton>
-              </div>
-            ) : (
-              <div key={f.id} style={rowStyle}>
-                <Icon name="folder" size={15} style={{ color: 'var(--text-muted)', flex: 'none' }} />
-                <span style={{ flex: 1, fontSize: 'var(--text-md)', color: 'var(--text-strong)' }}>{f.name}</span>
-                <IconButton size="sm" aria-label={`Rename folder ${f.name}`} disabled={busy} onClick={() => startEditFolder(f.id, f.name)}><Icon name="pencil" size={15} /></IconButton>
-                <IconButton size="sm" aria-label={`Delete folder ${f.name}`} disabled={busy} onClick={() => void run(() => deleteFolder(f.id))}><Icon name="trash" size={15} /></IconButton>
-              </div>
-            )
-          ))}
+          <ReorderList kind="folder" drag={drag} disabled={busy || editing !== null}
+            onReorder={ids => void run(() => reorderFolders(ids))}
+            items={folders.map(f => ({
+              id: f.id,
+              name: f.name,
+              content: editing?.kind === 'folder' && editing.id === f.id ? (
+                <>
+                  <Icon name="folder" size={15} style={{ color: 'var(--text-muted)', flex: 'none' }} />
+                  <Input value={draftName} onChange={e => setDraftName(e.target.value)} placeholder="Folder name" autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} style={{ flex: 1 }} />
+                  <IconButton size="sm" aria-label="Save folder" disabled={busy || !draftName.trim()} onClick={saveEdit}><Icon name="check" size={15} /></IconButton>
+                  <IconButton size="sm" aria-label="Cancel rename" disabled={busy} onClick={cancelEdit}><Icon name="x" size={15} /></IconButton>
+                </>
+              ) : (
+                <>
+                  <Icon name="folder" size={15} style={{ color: 'var(--text-muted)', flex: 'none' }} />
+                  <span style={{ flex: 1, fontSize: 'var(--text-md)', color: 'var(--text-strong)' }}>{f.name}</span>
+                  <IconButton size="sm" aria-label={`Rename folder ${f.name}`} disabled={busy} onClick={() => startEditFolder(f.id, f.name)}><Icon name="pencil" size={15} /></IconButton>
+                  <IconButton size="sm" aria-label={`Delete folder ${f.name}`} disabled={busy} onClick={() => void run(() => deleteFolder(f.id))}><Icon name="trash" size={15} /></IconButton>
+                </>
+              ),
+            }))}
+          />
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
             <Input value={folderName} onChange={e => setFolderName(e.target.value)} placeholder="New folder name"
               onKeyDown={e => { if (e.key === 'Enter') addFolder(); }} style={{ flex: 1 }} />
