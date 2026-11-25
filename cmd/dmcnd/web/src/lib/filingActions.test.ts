@@ -137,4 +137,24 @@ describe('moveAlwaysWithUndo', () => {
     expect(f.last().text).toContain("the rule couldn't be saved");
     expect(f.last().undo).toBeDefined();
   });
+
+  it('does not save the rule if the account changed while the messages moved', async () => {
+    const f = fake();
+    let saved = false;
+    const slowDeps: ActionDeps = { ...f.deps, setFlag: async (h, d) => { f.switchAccount('other@x'); await f.deps.setFlag(h, d); } };
+    await moveAlwaysWithUndo(slowDeps, ['a'], 'f1', 'Projects', async () => { saved = true; }, async () => {});
+    expect(saved).toBe(false);
+  });
+
+  it('does not restore the rule in another account after Undo', async () => {
+    const f = fake();
+    let restored = false;
+    await moveAlwaysWithUndo(f.deps, ['a'], 'f1', 'Projects', async () => {}, async () => { restored = true; });
+    const undo = f.last().undo!;
+    // The account changes while Undo's writes are in flight.
+    const write = f.deps.setFlag;
+    f.deps.setFlag = async (h, d) => { f.switchAccount('other@x'); await write(h, d); };
+    await undo();
+    expect(restored).toBe(false);
+  });
 });

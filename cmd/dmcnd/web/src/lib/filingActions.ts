@@ -55,7 +55,9 @@ async function changeWithUndo(
     // mailbox the store now writes to, so nothing is written.
     if (deps.account() !== account) return;
     const res = await Promise.allSettled(done.map(h => deps.setFlag(h, back(before.get(h)))));
-    if (afterUndo) await afterUndo();
+    // Checked again: the writes take a moment, and what follows (an "always" move's rule) is
+    // written to whichever account is signed in by then.
+    if (afterUndo && deps.account() === account) await afterUndo();
     if (res.some(r => r.status === 'rejected')) throw new UndoFailedError();
   };
   deps.notify(done.length < hashes.length ? text.some(done.length, hashes.length) : text.all(done.length), undo);
@@ -109,12 +111,15 @@ export async function moveAlwaysWithUndo(
   saveRule: () => Promise<void>,
   restoreRule: () => Promise<void>,
 ): Promise<Done> {
+  const account = deps.account();
   let saved: Promise<void> = Promise.resolve();
   const moved = await moveWithUndo(deps, hashes, folderId, place, async () => {
     await saved.catch(() => { /* nothing was saved, so nothing to put back past this */ });
-    await restoreRule();
+    if (deps.account() === account) await restoreRule();
   });
-  if (!moved.undo) return moved;
+  // The rule belongs to the account the move was made in. If that is no longer the one signed in
+  // (the moves took a moment), saving now would write it into another account's settings.
+  if (!moved.undo || deps.account() !== account) return moved;
   saved = saveRule();
   try {
     await saved;

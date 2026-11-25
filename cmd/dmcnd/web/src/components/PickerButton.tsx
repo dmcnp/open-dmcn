@@ -29,6 +29,8 @@ export function NativePicker({ label, value, onChange, options, children, style,
         onFocus={() => focus(true)}
         onBlur={() => focus(false)}
         onClick={e => e.stopPropagation()}
+        // Closing the list with Escape picks nothing, so onChange never runs: let go here too.
+        onKeyDown={e => { if (e.key === 'Escape') e.currentTarget.blur(); }}
         onPointerDown={e => e.stopPropagation()}
         onChange={e => {
           const v = e.target.value;

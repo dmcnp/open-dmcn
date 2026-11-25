@@ -109,7 +109,7 @@ function labelOptions(f: RowFiling) {
   </>;
 }
 
-function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, place, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore, filing, fullSwipe }: {
+function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, read, starred, inArchive, place, nameFor, onOpen, onDelete, onArchive, onToggleStar, onHover, onRestore, filing, fullSwipe, wideActions }: {
   msg: Preview; sent: boolean; unknownSender?: boolean; trustedSender?: boolean; mobile: boolean; hovered: boolean;
   read: boolean; starred: boolean; inArchive: boolean; nameFor: (address: string) => string;
   /** Set in search results: where the message lives, shown ahead of its subject. */
@@ -121,6 +121,9 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
   filing?: RowFiling;
   /** What a full swipe left does on the phone; unset in Deleted, where delete is for good. */
   fullSwipe?: 'delete' | 'archive';
+  /** The view offers filing on its rows, so every row reserves room for Folder and Label: one
+   *  width for the whole list, or the dates of rows that can't be filed would sit apart. */
+  wideActions?: boolean;
 }) {
   const inDeleted = !!onRestore;
   // Unread applies to received mail only (you don't "read" your own Sent copy).
@@ -388,7 +391,7 @@ function MailRow({ msg, sent, unknownSender, trustedSender, mobile, hovered, rea
           </span>
         )}
       </div>
-      <div style={{ flex: 'none', width: filing ? 196 : 140, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <div style={{ flex: 'none', width: wideActions ? 196 : 140, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)' }}>
         {/* The date never moves or disappears, and the hover actions keep their slot
             when hidden (visibility, not unmounting) — so hovering changes colours,
             never geometry. */}
@@ -854,6 +857,7 @@ function MailList() {
                     onToggleStar={() => toggleStar(msg)}
                     onHover={h => setHovered(h ? msg.hash : null)}
                     filing={rowFiling(msg)}
+                    wideActions={!inDeleted && folder !== 'sent'}
                     fullSwipe={isTrashed(msg.hash) ? undefined : swipeArchives && !isSentRow(msg) ? 'archive' : 'delete'}
                   />
                 ))

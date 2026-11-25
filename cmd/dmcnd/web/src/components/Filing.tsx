@@ -14,7 +14,7 @@ import { lookupIdentity } from '../lib/api/client';
 import { controlSubjects } from '../lib/unread';
 import { placeOf, type Place, type PlaceContext } from '../lib/mailView';
 import {
-  asksAboutSender, autoFilingCandidates, checkSender, filingChoices, filingDelta, filingSender, normalizedAddress,
+  SENDER_CHECK_MS, asksAboutSender, autoFilingCandidates, checkSender, filingChoices, filingDelta, filingSender, normalizedAddress,
   restoreRule, ruleFor, rulesOf, sameSenderMail, withoutRule, withRule,
   type Fileable, type SenderCheck, type SwipeFiling,
 } from '../lib/filing';
@@ -58,30 +58,34 @@ interface FilingContextValue {
 
 const FilingContext = createContext<FilingContextValue | null>(null);
 
-/** The question that "always" answers, held until the owner answers it. */
+/**
+ * The question that "always" answers, held until the owner answers it. What it would move with the
+ * message is not kept here: it is worked out from the mail as it is when the question shows and
+ * again when it is answered, since a question waiting in line can outlive the state it was asked
+ * in (an earlier answer may have moved some of that mail somewhere else).
+ */
 interface Offer {
   message: Preview;
   sender: string;
   senderName: string;
+  check: SenderCheck;
   folderId: string | undefined;
   folderName: string;
-  fromName: string;
-  others: string[];
 }
 
 type Naming = { kind: 'folder' | 'label'; message: Preview } | null;
 
-function offerText(o: Offer) {
+function offerText(o: Offer, others: string[], fromName: string) {
   const toInbox = o.folderId === undefined;
   const title = toInbox ? `Move mail from ${o.senderName} back to the Inbox?` : `Move mail from ${o.senderName} to ${o.folderName}?`;
   const answer = toInbox ? 'Always use the Inbox' : `Always move to ${o.folderName}`;
   const later = toInbox
     ? `new mail from ${o.senderName} will arrive in the Inbox again.`
     : `new mail from ${o.senderName} will go there automatically.`;
-  const there = `from ${o.senderName} in ${o.fromName}`;
-  const summary = o.others.length === 0 ? `From now on, ${later}`
-    : o.others.length === 1 ? `1 other message ${there} will move there now, and ${later}`
-    : `${o.others.length} other messages ${there} will move there now, and ${later}`;
+  const there = `from ${o.senderName} in ${fromName}`;
+  const summary = others.length === 0 ? `From now on, ${later}`
+    : others.length === 1 ? `1 other message ${there} will move there now, and ${later}`
+    : `${others.length} other messages ${there} will move there now, and ${later}`;
   return { title, answer, summary };
 }
 
@@ -104,6 +108,9 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   live.current = { ctx, messages, flags, swipeFiling, address, folderById };
   // The directory's definite answers about senders, for this tab. Failures are not kept.
   const senderCache = useRef(new Map<string, SenderCheck>());
+  const senderPending = useRef(new Map<string, Promise<SenderCheck>>());
+  const askDirectory = (a: string) =>
+    checkSender(a, lookupIdentity, senderCache.current, SENDER_CHECK_MS, senderPending.current);
 
   // Questions wait in line, so moving a second message before the first one's question is
   // answered asks both, in order, instead of dropping one.
@@ -147,7 +154,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
     if (!asksAboutSender(live.current.swipeFiling)) { moveOne(); return; }
     const account = live.current.address;
     const addr = normalizedAddress(m.senderAddress);
-    void checkSender(addr, lookupIdentity, senderCache.current).then(check => {
+    void askDirectory(addr).then(check => {
       if (live.current.address !== account) return; // another account now: nothing moves
       const { ctx: c, messages: all, swipeFiling: sf } = live.current;
       const senderOf = (o: Fileable) => filingSender(o, normalizedAddress(o.senderAddress) === addr ? check : 'unchecked');
@@ -157,26 +164,34 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       const others = sameSenderMail(m, folderId, all, c, senderOf);
       if (folderId && rule?.folderId === folderId) { moveOne(); return; }
       if (!folderId && !rule && others.length === 0) { moveOne(); return; }
-      const from = placeOf(m, c);
-      const next: Offer = {
-        message: m, sender, senderName: nameFor(m.senderAddress), folderId, folderName: place,
-        fromName: !from || from === 'inbox' ? 'the Inbox' : placeName(from),
-        others,
-      };
+      const next: Offer = { message: m, sender, senderName: nameFor(m.senderAddress), check, folderId, folderName: place };
       setOffers(q => [...q.filter(x => x.message.hash !== m.hash), next]);
     });
   // folderLabel reads the live ref, so it needs no dependency of its own.
   }, [deps, nameFor, placeName]);
 
-  // Takes an answered question out of the line, with any later one about a message it moved.
-  const answered = (o: Offer, moved: string[]) =>
-    setOffers(q => q.filter(x => x !== o && !moved.includes(x.message.hash)));
+  // The sender's other mail the question would move, and where it is, from the mail as it is now.
+  const othersFor = (o: Offer) => {
+    const { ctx: c, messages: all } = live.current;
+    const addr = normalizedAddress(o.message.senderAddress);
+    const senderOf = (x: Fileable) => filingSender(x, normalizedAddress(x.senderAddress) === addr ? o.check : 'unchecked');
+    return sameSenderMail(o.message, o.folderId, all, c, senderOf);
+  };
+  const fromNameOf = (o: Offer) => {
+    const from = placeOf(o.message, live.current.ctx);
+    return !from || from === 'inbox' ? 'the Inbox' : placeName(from);
+  };
+
+  // Takes an answered question out of the line. Once its move is done, later questions about
+  // messages it actually moved go too; one about a message whose move failed stays.
+  const answered = (o: Offer) => setOffers(q => q.filter(x => x !== o));
+  const movedAway = (done: string[]) => setOffers(q => q.filter(x => !done.includes(x.message.hash)));
 
   // Always: this message and the sender's other mail move now, and from here on their new mail is
   // filed there by a rule, or, for the Inbox, simply isn't filed any more.
   const acceptOffer = (o: Offer) => {
-    const hashes = [o.message.hash, ...o.others];
-    answered(o, hashes);
+    const hashes = [o.message.hash, ...othersFor(o)];
+    answered(o);
     const before = ruleFor(live.current.swipeFiling, o.sender);
     const now = Math.floor(Date.now() / 1000);
     void moveAlwaysWithUndo(deps(), hashes, o.folderId, o.folderName,
@@ -184,13 +199,13 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         swipeFiling: o.folderId ? withRule(cur.swipeFiling, o.sender, o.folderId, now) : withoutRule(cur.swipeFiling, o.sender),
       })),
       () => changeSettings(cur => ({ swipeFiling: restoreRule(cur.swipeFiling, before, o.sender) })),
-    );
+    ).then(r => movedAway(r.done));
   };
   const justThisOne = (o: Offer) => {
-    answered(o, [o.message.hash]);
-    void moveWithUndo(deps(), [o.message.hash], o.folderId, o.folderName);
+    answered(o);
+    void moveWithUndo(deps(), [o.message.hash], o.folderId, o.folderName).then(r => movedAway(r.done));
   };
-  const cancelOffer = (o: Offer) => answered(o, []);
+  const cancelOffer = (o: Offer) => answered(o);
 
   const toggleLabel = useCallback((m: Preview, labelId: string) => {
     const cur = live.current.flags.get(m.hash)?.labelIds ?? [];
@@ -243,7 +258,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
     const due = autoFilingCandidates(messages, rules, ctx).filter(c => !inFlight.current.has(c.hash));
     for (const c of due) {
       inFlight.current.add(c.hash);
-      void checkSender(c.message.senderAddress, lookupIdentity, senderCache.current)
+      void askDirectory(c.message.senderAddress)
         .then(check => {
           if (live.current.address !== account || live.current.flags.has(c.hash)) return false;
           if (!filingSender(c.message, check)) return false;
@@ -255,7 +270,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
   // ctx is rebuilt each render from the values listed here.
   }, [messages, flags, swipeFiling, knownFolderIds.size, mailLoaded, flagsSynced, labelsReady, filterReady, settingsLoaded, filter, address]);
 
-  const o = offer ? offerText(offer) : null;
+  const o = offer ? offerText(offer, othersFor(offer), fromNameOf(offer)) : null;
   const value: FilingContextValue = {
     placeOfMessage, placeName, choices, file,
     newFolderFor: m => beginNaming('folder', m),

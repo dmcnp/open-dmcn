@@ -146,26 +146,38 @@ export function checkFromLookup(
 export const SENDER_CHECK_MS = 3000;
 
 /**
- * Asks the directory about an address, at most `timeoutMs`. Definite answers (a key, or "not a
- * DMCN identity") are kept in `cache` for the session; a failure or a timeout is not, so the
- * next attempt asks again.
+ * Asks the directory about an address, at most `timeoutMs`. Definite answers (a key, "not a
+ * DMCN identity", "distrusted") are kept in `cache` for the session; a failure or a timeout is
+ * not, so the next attempt asks again. Callers asking about the same address at the same time
+ * share one lookup (`pending`), so a burst of mail from one sender asks the directory once.
  */
 export async function checkSender(
   address: string,
   lookup: (address: string) => Promise<{ ed25519_pub?: string; identity_unverifiable?: boolean }>,
   cache: Map<string, SenderCheck>,
   timeoutMs = SENDER_CHECK_MS,
+  pending: Map<string, Promise<SenderCheck>> = new Map(),
 ): Promise<SenderCheck> {
   const a = normalizedAddress(address);
   const known = cache.get(a);
   if (known) return known;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<SenderCheck>(resolve => { timer = setTimeout(() => resolve('unchecked'), timeoutMs); });
-  const asked = lookup(a).then(r => checkFromLookup(r), e => checkFromLookup(null, e));
-  const check = await Promise.race([asked, timeout]);
-  clearTimeout(timer);
-  if (check === 'legacy' || typeof check === 'object') cache.set(a, check);
-  return check;
+  const inFlight = pending.get(a);
+  if (inFlight) return inFlight;
+  const asking = (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<SenderCheck>(resolve => { timer = setTimeout(() => resolve('unchecked'), timeoutMs); });
+    const asked = lookup(a).then(r => checkFromLookup(r), e => checkFromLookup(null, e));
+    const check = await Promise.race([asked, timeout]);
+    clearTimeout(timer);
+    if (check !== 'unchecked') cache.set(a, check);
+    return check;
+  })();
+  pending.set(a, asking);
+  try {
+    return await asking;
+  } finally {
+    pending.delete(a);
+  }
 }
 
 /**

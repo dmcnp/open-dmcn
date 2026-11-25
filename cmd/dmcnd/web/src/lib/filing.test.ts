@@ -114,6 +114,18 @@ describe('checkSender', () => {
     expect(await checkSender('a@x', failing, cache)).toEqual({ keyHex: 'ab' });
     expect(calls).toBe(3);
   });
+  it('asks once for many messages from one sender at the same time, and keeps "distrusted"', async () => {
+    const cache = new Map<string, SenderCheck>();
+    const pending = new Map<string, Promise<SenderCheck>>();
+    let calls = 0;
+    const lookup = async () => { calls++; await new Promise(r => setTimeout(r, 5)); return { ed25519_pub: b64, identity_unverifiable: true }; };
+    const all = await Promise.all([1, 2, 3].map(() => checkSender('ada@x', lookup, cache, 1000, pending)));
+    expect(all).toEqual(['distrusted', 'distrusted', 'distrusted']);
+    expect(calls).toBe(1);
+    expect(pending.size).toBe(0);
+    await checkSender('ada@x', lookup, cache, 1000, pending);
+    expect(calls).toBe(1);
+  });
   it('gives up after the time limit instead of waiting forever', async () => {
     const never = () => new Promise<{ ed25519_pub: string }>(() => {});
     expect(await checkSender('slow@x', never, new Map(), 20)).toBe('unchecked');

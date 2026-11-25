@@ -113,21 +113,28 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setFlagIfAbsent = useCallback(async (messageHash: string, delta: FlagDelta) => {
+    // Everything goes through the store this started with: the read takes a moment, and if the
+    // account changes meanwhile, storeRef points at another mailbox, which this must never touch.
     const store = storeRef.current;
     if (!store || flagsRef.current.has(messageHash)) return false;
     const existing = await store.get(messageHash);
-    if (existing) {
-      // Take the record in, so the message stops looking untouched here too.
+    if (storeRef.current !== store) return false;
+    const remember = (rec: FlagRecord) => {
+      if (storeRef.current !== store) return;
       const map = new Map(flagsRef.current);
-      map.set(messageHash, existing);
+      map.set(messageHash, rec);
       flagsRef.current = map;
       setFlags(map);
+    };
+    if (existing) {
+      // Take the record in, so the message stops looking untouched here too.
+      remember(existing);
       return false;
     }
     if (flagsRef.current.has(messageHash)) return false; // touched here meanwhile
-    await setFlag(messageHash, delta);
+    remember(await store.apply(messageHash, undefined, delta));
     return true;
-  }, [setFlag]);
+  }, []);
 
   const markRead = useCallback(async (messageHash: string) => {
     const current = flagsRef.current.get(messageHash);
