@@ -33,11 +33,12 @@ func TestKvRoundTrip(t *testing.T) {
 	r := kvRelay(t, 0)
 	ctx := context.Background()
 
-	v1, err := r.KvPut(ctx, kvOwner, "contacts/alice", []byte("sealed-blob-1"), 0)
+	v1, err := r.KvPut(ctx, kvOwner, "contacts/alice", []byte("sealed-blob-1"), 0, nil)
 	if err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	sealed, version, found, err := r.KvGet(ctx, kvOwner, "contacts/alice")
+	got, found, err := r.KvGet(ctx, kvOwner, "contacts/alice")
+	sealed, version := got.Sealed, got.Version
 	if err != nil || !found {
 		t.Fatalf("get: found=%v err=%v", found, err)
 	}
@@ -56,7 +57,7 @@ func TestKvRoundTrip(t *testing.T) {
 	if err := r.KvDelete(ctx, kvOwner, "contacts/alice"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if _, _, found, _ = r.KvGet(ctx, kvOwner, "contacts/alice"); found {
+	if _, found, _ = r.KvGet(ctx, kvOwner, "contacts/alice"); found {
 		t.Error("the key survived deletion")
 	}
 }
@@ -68,10 +69,10 @@ func TestKvIsolatedPerOwner(t *testing.T) {
 	ctx := context.Background()
 	other := strings.Repeat("bb", 32)
 
-	if _, err := r.KvPut(ctx, kvOwner, "contacts/alice", []byte("mine"), 0); err != nil {
+	if _, err := r.KvPut(ctx, kvOwner, "contacts/alice", []byte("mine"), 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, found, _ := r.KvGet(ctx, other, "contacts/alice"); found {
+	if _, found, _ := r.KvGet(ctx, other, "contacts/alice"); found {
 		t.Fatal("one owner read another owner's key")
 	}
 	items, _, err := r.KvList(ctx, other, "contacts/", 0, "", true)
@@ -89,19 +90,19 @@ func TestKvCompareAndSwap(t *testing.T) {
 	r := kvRelay(t, 0)
 	ctx := context.Background()
 
-	v1, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("a"), 0)
+	v1, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("a"), 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("b"), v1); err != nil {
+	if _, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("b"), v1, nil); err != nil {
 		t.Fatalf("CAS at the current version was rejected: %v", err)
 	}
 	// A second device still holding v1 must lose.
-	if _, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("c"), v1); !errors.Is(err, ErrKvConflict) {
+	if _, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("c"), v1, nil); !errors.Is(err, ErrKvConflict) {
 		t.Errorf("a stale CAS was accepted: %v", err)
 	}
 	// Unconditional writes still overwrite — that is what expectedVersion=0 means.
-	if _, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("d"), 0); err != nil {
+	if _, err := r.KvPut(ctx, kvOwner, "settings/app", []byte("d"), 0, nil); err != nil {
 		t.Errorf("unconditional write rejected: %v", err)
 	}
 }
@@ -111,10 +112,10 @@ func TestKvQuotaIsEnforced(t *testing.T) {
 	r := kvRelay(t, 64)
 	ctx := context.Background()
 
-	if _, err := r.KvPut(ctx, kvOwner, "contacts/a", make([]byte, 32), 0); err != nil {
+	if _, err := r.KvPut(ctx, kvOwner, "contacts/a", make([]byte, 32), 0, nil); err != nil {
 		t.Fatalf("a write within quota was refused: %v", err)
 	}
-	if _, err := r.KvPut(ctx, kvOwner, "contacts/b", make([]byte, 128), 0); !errors.Is(err, ErrQuotaExceeded) {
+	if _, err := r.KvPut(ctx, kvOwner, "contacts/b", make([]byte, 128), 0, nil); !errors.Is(err, ErrQuotaExceeded) {
 		t.Errorf("a write over quota was accepted: %v", err)
 	}
 }
@@ -124,7 +125,7 @@ func TestKvQuotaIsEnforced(t *testing.T) {
 func TestKvStatReportsTheEnforcedFigure(t *testing.T) {
 	r := kvRelay(t, 1024)
 	ctx := context.Background()
-	if _, err := r.KvPut(ctx, kvOwner, "contacts/a", make([]byte, 100), 0); err != nil {
+	if _, err := r.KvPut(ctx, kvOwner, "contacts/a", make([]byte, 100), 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	used, quota, count, err := r.KvStat(ctx, kvOwner)
@@ -148,10 +149,10 @@ func TestKvUnsupportedWhenAbsent(t *testing.T) {
 	r := &Relay{log: logr.With(logr.M("test", "personalkv"))} // no personalKv
 	ctx := context.Background()
 
-	if _, _, _, err := r.KvGet(ctx, kvOwner, "contacts/a"); !errors.Is(err, ErrKvUnsupported) {
+	if _, _, err := r.KvGet(ctx, kvOwner, "contacts/a"); !errors.Is(err, ErrKvUnsupported) {
 		t.Errorf("get: %v", err)
 	}
-	if _, err := r.KvPut(ctx, kvOwner, "contacts/a", []byte("x"), 0); !errors.Is(err, ErrKvUnsupported) {
+	if _, err := r.KvPut(ctx, kvOwner, "contacts/a", []byte("x"), 0, nil); !errors.Is(err, ErrKvUnsupported) {
 		t.Errorf("put: %v", err)
 	}
 	if _, _, err := r.KvList(ctx, kvOwner, "contacts/", 0, "", true); !errors.Is(err, ErrKvUnsupported) {

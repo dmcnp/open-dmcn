@@ -13,7 +13,8 @@ alongside SMTP: it holds the mail together with the state that belongs with it.
 
 A mailbox holder may keep per-account state on their home relay: contacts, sent messages,
 read/unread and labels, client settings. Logical keys are `"<namespace>/<id>"` and the relay
-treats them as opaque strings; `MailboxKvList` pages a `"<namespace>/"` prefix.
+treats them as opaque strings; `MailboxKvList` pages a `"<namespace>/"` prefix. There is one
+exception to "opaque", in §3.
 
 **Values are sealed to the owner alone.** The relay stores ciphertext for which it holds no key.
 It can count bytes and serve blobs back, and that is all. This is the same posture as the
@@ -44,8 +45,8 @@ Each is one `MailboxOp` arm, sent after the FETCH challenge exactly like `list`,
 | Op | Response | What it does |
 |---|---|---|
 | `kv_put{key, sealed, expected_version}` | `MailboxKvPutResponse{success, version}` | writes one blob; `expected_version` 0 is unconditional, otherwise compare-and-swap |
-| `kv_get{key}` | `MailboxKvGetResponse{found, sealed, version}` | reads one blob |
-| `kv_list{prefix, limit, cursor, values}` | `MailboxKvListResponse{items, next_cursor}` | pages the keys under a `"<namespace>/"` prefix, with their blobs when `values` is set |
+| `kv_get{key}` | `MailboxKvGetResponse{found, sealed, version, written_at, sealed_writer}` | reads one blob, with the relay's marks (§4) |
+| `kv_list{prefix, limit, cursor, values}` | `MailboxKvListResponse{items, next_cursor}` | pages the keys under a `"<namespace>/"` prefix, with their blobs and marks when `values` is set |
 | `kv_delete{key}` | `MailboxKvDeleteResponse{success}` | removes one blob; idempotent |
 | `kv_stat{}` | `MailboxKvStatResponse{used_bytes, quota_bytes, count}` | the caller's own usage; `quota_bytes` 0 means no cap |
 
@@ -55,3 +56,43 @@ clients.
 Errors: `CONFLICT` (the compare-and-swap version did not match), `QUOTA_EXCEEDED` (the write
 would pass the account's cap), `NOT_FOUND`, and `UNSUPPORTED` from a relay that does not offer
 storage.
+
+## 3. Names a relay knows
+
+A relay that keeps a device registry lets an enrolled device write some keys without the
+account's signature ([`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md) §3), and it tells them apart by
+name. That makes these names protocol, and a client that keeps this state uses them:
+
+| Key | What a client keeps there |
+|---|---|
+| begins `drafts/` | one row per unsent message |
+| begins `draft-body/` | its text |
+| begins `draft-att/` | its attachments |
+| begins `flags/` | one record per message: read, starred, archived, folder, labels, trashed |
+| is exactly `settings/labels` | the names of the owner's labels and folders |
+
+Every other key stays opaque to a relay, and how a client lays out the rest is its own choice.
+
+## 4. What the relay records about a write
+
+A value is sealed, so a relay can't vouch for anything inside it. Two things about a write it
+can vouch for, and it keeps them beside the entry:
+
+- **`written_at`**: the relay's clock, in Unix seconds, when this version was written. The writer
+  can't set it. A client that acts on how long ago something happened (clearing out trashed mail
+  after a waiting period, say) counts from this and never from a time inside the value. A later
+  write to the same key moves it forward.
+- **`sealed_writer`**: which device signed the write, for a write that carried a device proof.
+  The relay seals the device's 32-byte public key to the owner's X25519 key, in the same sealed
+  form as a value, and keeps no readable copy. Who wrote what is readable only by someone holding
+  the account's key. The relay does see the device key at the moment of the write.
+
+`kv_get` returns both. `kv_list` returns them when `values` is set. `written_at` is `0` on an
+entry written before the relay recorded it, and `sealed_writer` is empty where the write carried
+no device proof.
+
+Both count toward the account's storage: a mark adds a few hundred bytes to an entry.
+
+A relay that records them advertises `kv-write-time` in `PingResponse.capabilities`. Where an
+address has several relays, a write that is copied between them keeps the marks of the relay that
+accepted it, so each answers with the same time.

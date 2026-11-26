@@ -26,6 +26,7 @@ disagree, the implementation and the schemas in `proto/` are authoritative.
 | [`SPEC_EXT_ONION.md`](SPEC_EXT_ONION.md) | onion-routed delivery and the domains and mailboxes that require it | senders that want to hide who writes to whom, and the relays that carry them |
 | [`SPEC_EXT_BRIDGE.md`](SPEC_EXT_BRIDGE.md) | the SMTP↔DMCN bridge: its credential, its signed verdicts on legacy mail, and how senders find it | domains that exchange mail with ordinary email, and readers that want to verify a bridge's verdict |
 | [`SPEC_EXT_STORAGE.md`](SPEC_EXT_STORAGE.md) | personal storage: owner-sealed key-value state on the home relay (contacts, Sent, flags, settings) | clients that sync across devices |
+| [`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md) | the device registry: which devices may open a mailbox, pairing a new one, and what a device may do without the account's signing key | relays that want a copied account key to open nothing by itself, and their clients |
 | [`SPEC_EXT_ROTATION.md`](SPEC_EXT_ROTATION.md) | owner key rotation, device credentials, and the address history record | domains that let account holders re-key without the operator |
 
 Operator and product surfaces (fleet administration, hosting permits, provisioning,
@@ -194,7 +195,7 @@ Four signatures do not follow it, and an implementation has to know them:
 |---|---|
 | `SignedMessage` (whole message, §3) | the canonical plaintext, no context tag |
 | `StoreRequest` / `StoreInit` `sender_signature` (§5) | the 32-byte SHA-256 of the serialised `EncryptedEnvelope`, no context tag |
-| FETCH proof (`FetchProof` / `MailboxOp` `signature`, §5) | the relay's 32-byte challenge nonce as sent, no context tag |
+| FETCH proof (`FetchProof` / `MailboxOp` `signature`, §5) | the relay's 32-byte challenge nonce as sent, no context tag. At a relay that keeps a device registry it may be absent on some operations ([`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md) §3) |
 | `RelayDescriptor` `signature` (§6) | deterministic protobuf of the descriptor without its signature and credential, by the node's libp2p key, no context tag |
 
 ## 3. The message model (client-side, three layers)
@@ -368,7 +369,7 @@ gravestone comments, and must never be reused.
 |---|---|---|
 | `Store` | `StoreResponse` | the sender's signature over the envelope (message-authenticated) |
 | `StoreInit` + body chunks | `StoreResponse` | the same, for envelopes too large for one frame |
-| `FetchInit`, then `MailboxOp` | `FetchChallenge`, then the op's response | a signature over the relay's nonce by the account key |
+| `FetchInit`, then `MailboxOp` | `FetchChallenge`, then the op's response | a signature over the relay's nonce by the account key, and at a relay that keeps a device registry one from an enrolled device ([`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md)) |
 | `GetIdentity` | `GetIdentityResponse` | nothing: a public read of a self-authenticating record |
 | `GetDAR` | `GetDARResponse` | public read |
 | `GetRemoval` | `GetRemovalResponse` | public read |
@@ -418,11 +419,12 @@ than 64 MB).
 Each stream carries one operation, so a client that wants a list and then a body runs the
 challenge twice. Listing does not consume mail; only `delete` removes it.
 
-`MailboxOp` also has fields for an enrolled device's signature over the same nonce. A relay that
-keeps a device registry requires them once a mailbox has enrolled a device; a relay that keeps
-none ignores them. The device credential is defined in
-[`SPEC_EXT_ROTATION.md`](SPEC_EXT_ROTATION.md); how devices are enrolled and removed is not part
-of the open protocol.
+`MailboxOp` also has fields for an enrolled device's signature, which covers the same nonce under
+a tag of its own. A relay that keeps a device registry requires them once a mailbox has held a
+device, and from then on lets a device read and organise the mailbox without the account
+signature. A relay that keeps none ignores the device fields and requires the account signature
+on every operation. The registry, how devices join and leave it, and which operations need which
+signature are in [`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md).
 
 **`REQUIRE_COUNTERSIGN` (`DomainAuthorityRecord` policy bit 0) and reserved local-parts.** On a
 domain that sets the bit, an address is not usable until it carries a valid `address` credential
@@ -457,14 +459,14 @@ implementation can meet these codes:
 | `MAILBOX_FULL` | the recipient's mailbox is at its cap |
 | `NODE_DRAINING` | this node is not accepting new mail; try the next hint |
 | `POLICY_PENDING` | the address is not yet usable under its domain's policy |
-| `AUTH_FAILED` | the FETCH proof does not verify |
+| `AUTH_FAILED` | the FETCH proof does not verify, or is missing where the operation needs it |
 | `MAILBOX_UNAVAILABLE` | this node holds no mailboxes |
 | `NOT_FOUND` | no such message |
 | `UNAUTHORIZED` | the operation needs a credential the caller has not presented |
 | `UNSUPPORTED` | an optional feature this relay does not offer |
 | `STORAGE_FAILED`, `INTERNAL_ERROR` | the relay failed; retry or try the next hint |
 
-Extensions add their own codes (`ONION_*`, `CONFLICT`, `QUOTA_EXCEEDED`). A fleet that closes
+Extensions add their own codes (`ONION_*`, `CONFLICT`, `QUOTA_EXCEEDED`, `DEVICE_*`). A fleet that closes
 accounts answers a STORE that stored nothing because every recipient's account is closed with
 `RECIPIENT_CLOSED`; it is the account's answer, so a sender does not retry it on another hint.
 
@@ -524,10 +526,14 @@ The core does not define extensions. It defines the places where they attach:
   | 6 and up | reserved | |
 
 An implementation that ignores every extension interoperates fully: extensions may add
-capability, never interop requirements. There is one exception, by design. A mailbox or domain
-that requires onion delivery refuses direct STOREs, so a sender that implements only the core
-cannot write to it. A domain that sets `REQUIRE_ONION` is choosing to be reachable only by
-onion-capable senders ([`SPEC_EXT_ONION.md`](SPEC_EXT_ONION.md)).
+capability, never interop requirements. There are two exceptions, both by design. A mailbox or
+domain that requires onion delivery refuses direct STOREs, so a sender that implements only the
+core cannot write to it. A domain that sets `REQUIRE_ONION` is choosing to be reachable only by
+onion-capable senders ([`SPEC_EXT_ONION.md`](SPEC_EXT_ONION.md)). And a relay that keeps a device
+registry stops answering a mailbox on the account key alone once that mailbox has enrolled a
+device, so a client that implements only the core cannot open it
+([`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md)). Mail to that address is unaffected: sending needs
+nothing from this extension.
 
 ## Appendix A. Legacy paths (not required)
 

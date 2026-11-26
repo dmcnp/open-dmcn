@@ -62,8 +62,14 @@ type jwtClaims struct {
 	Jti string `json:"jti"`
 }
 
-// Create issues a signed JWT for the address.
+// Create issues a signed JWT for the address, valid for the store's lifetime.
 func (s *SessionStore) Create(address string) (string, error) {
+	return s.CreateFor(address, s.ttl)
+}
+
+// CreateFor issues a signed JWT for the address that lasts ttl, for a session that must not
+// outlive what it stands for (a device-pairing session ends with its throwaway identity).
+func (s *SessionStore) CreateFor(address string, ttl time.Duration) (string, error) {
 	jti := make([]byte, 16)
 	if _, err := rand.Read(jti); err != nil {
 		return "", fmt.Errorf("webcore: generate jti: %w", err)
@@ -72,7 +78,7 @@ func (s *SessionStore) Create(address string) (string, error) {
 	return s.sign(jwtClaims{
 		Sub: address,
 		Iat: now.Unix(),
-		Exp: now.Add(s.ttl).Unix(),
+		Exp: now.Add(ttl).Unix(),
 		Jti: hex.EncodeToString(jti),
 	})
 }

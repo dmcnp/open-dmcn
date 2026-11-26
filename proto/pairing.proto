@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package dmcn.pairing;
+
+option go_package = "dmcn.dev/open-dmcn/dmcnpb;dmcnpb";
+
+// Device pairing payloads (SPEC_EXT_DEVICES.md §8).
+//
+// Both travel as message attachments, sealed like any other mail, and are parsed by the reader
+// and never re-encoded to check a signature. Only the confirmation code, which is a hash over
+// raw key bytes, has to match between implementations byte for byte.
+
+// CloneRequest is what a new device sends to the account it wants to join, from a throwaway
+// identity. Attachment type application/x-dmcn-clone-request, or
+// application/x-dmcn-clone-request-read when it asks to read and never to send.
+message CloneRequest {
+  bytes ephemeral_ed25519_pub = 1;  // the throwaway identity's keys; the response is sealed
+  bytes ephemeral_x25519_pub = 2;   // to the second
+  bytes device_id = 3;              // 16 bytes, cosmetic
+  string label = 4;                 // the name shown to whoever approves
+  int64 requested_at = 5;           // Unix seconds
+  bytes device_ed25519_pub = 6;     // the new device's own signing key, for the approver to enrol
+}
+
+// CloneResponse carries the account's keys to the new device. Attachment type
+// application/x-dmcn-clone-response, in a message signed by the account key.
+message CloneResponse {
+  string address = 1;
+  bytes ed25519_public = 2;
+  bytes ed25519_private = 3;  // 64 bytes; empty for a read-only pairing
+  bytes x25519_public = 4;
+  bytes x25519_private = 5;
+  bytes device_id = 6;
+  int64 created_at = 7;       // Unix seconds
+}

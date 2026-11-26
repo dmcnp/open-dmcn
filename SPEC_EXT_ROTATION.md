@@ -39,8 +39,9 @@ which rotations are admissible would split record admission.
   provisioned by an admin who already controls enrolment).
 - **`device_recovery_delay_hours`.** How long an unapproved device must wait before it can act
   on a mailbox it joined through recovery, the path an owner takes when every device they had is
-  gone. `0` means the deployment's default; `0xFFFFFFFF` (`DEVICE_RECOVERY_DISABLED`) removes
-  the recovery path. Only a relay that keeps a device registry reads it (§3). The cost runs both
+  gone. `0` means 168 hours; `0xFFFFFFFF` (`DEVICE_RECOVERY_DISABLED`) removes
+  the recovery path. Only a relay that keeps a device registry reads it
+  ([`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md) §4). The cost runs both
   ways. With a recovery path, a stolen account key can eventually take the mailbox, after the
   delay and if nobody vetoes. Without one, an owner who loses every device loses the mailbox,
   short of an operator ceremony.
@@ -58,13 +59,16 @@ Device credentials are used in two places:
 
 - **Rotation** (§4): every transition carries an enrolled device's attestation.
 - **Mailbox access.** `FetchProof` and `MailboxOp` carry an optional `device_ed25519_public_key`
-  and `device_signature` over the same challenge nonce as the account signature (`SPEC_CORE.md`
-  §5). A relay that keeps a device registry requires them once a mailbox has enrolled a device.
-  The account key says whose mailbox it is, and the device key says the request comes from
-  somewhere the owner approved. A key copied out of a backup can only answer the first. A
-  mailbox with no enrolled device is answered on the account signature alone.
+  and `device_signature`. The device signs the challenge nonce under a tag of its own,
+  `dmcn-device-challenge-v1\0`, and not the bare nonce the account key signs. A relay that keeps
+  a device registry requires them once a mailbox has held a device. The account key says whose
+  mailbox it is, and the device key says the request comes from somewhere the owner approved. A
+  key copied out of a backup can only answer the first. A mailbox that has never held a device is
+  answered on the account signature alone. One whose devices have all been removed is not.
 
-How devices are enrolled, approved and removed is not part of the open protocol.
+The registry, how devices are enrolled, approved and removed, and the credential's part in an
+enrolment are in [`SPEC_EXT_DEVICES.md`](SPEC_EXT_DEVICES.md). A device enrols perfectly well
+without a credential. It then gates mailbox access and cannot authorise a rotation.
 
 ## 4. The rotation chain and the history record
 

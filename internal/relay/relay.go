@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,6 +134,9 @@ type Relay struct {
 	// Sent, read/unread+labels, contacts and settings. Values are sealed to the
 	// owner alone, so the relay only ever holds ciphertext. nil ⇒ disabled.
 	personalKv *PersistentKvStore
+	// devices is the device registry (SPEC_EXT_DEVICES.md). nil ⇒ this relay keeps none, and a
+	// mailbox is answered on the account signature alone.
+	devices *DeviceStore
 	// storageQuota is the node-default per-account TOTAL durable-storage cap in bytes
 	// (0 = unbounded): mail (MailboxStore) + personal-KV bytes together, keyed on the
 	// same recipient X25519 hex. It is the free/trial storage floor; a RoleQuota grant
@@ -264,6 +268,7 @@ func New(h host.Host, lookup LookupFunc, opts ...Option) *Relay {
 		senderVerified: cfg.senderVerified,
 
 		personalKv:   cfg.personalKv,
+		devices:      cfg.devices,
 		storageQuota: cfg.storageQuota,
 		replicates:   cfg.replicates,
 		records:      cfg.records,
@@ -302,6 +307,7 @@ type relayOptions struct {
 	senderVerified SenderVerifierFunc
 
 	personalKv   *PersistentKvStore
+	devices      *DeviceStore
 	storageQuota uint64
 	replicates   func(context.Context, string) bool
 	records      *RecordStore
@@ -975,21 +981,30 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 		return
 	}
 
-	// Helper: verify the signed nonce proves control of the recipient identity.
-	verify := func(sig []byte) bool {
-		return crypto.Verify(rec.Ed25519Public, nonce, sig) == nil
+	// The gate: who is asking, and from where (devicegate.go).
+	refuse := func(what string, gerr error) {
+		code, msg := "AUTH_FAILED", ErrAuthFailed.Error()
+		var oe *OpError
+		if errors.As(gerr, &oe) {
+			code, msg = oe.Code, oe.Message
+		}
+		r.log.Warnf("%s refused for %s: %s", what, init.Address, msg)
+		writeResponse(s, errorResponse(code, msg))
 	}
+	rxHex := mailboxKeyHex(rec)
 
 	switch {
 	case authReq.GetFetchProof() != nil:
 		proof := authReq.GetFetchProof()
-		if !verify(proof.Signature) {
-			r.log.Warnf("FETCH auth failed for %s", init.Address)
-			writeResponse(s, errorResponse("AUTH_FAILED", ErrAuthFailed.Error()))
+		// Handing over every pending envelope is the owner's operation, never a device's alone.
+		if _, gerr := r.AuthorizeMailbox(ctx, rec, MailboxProof{
+			Nonce: nonce, Signature: proof.Signature,
+			DevicePublic: proof.DeviceEd25519PublicKey, DeviceSignature: proof.DeviceSignature,
+		}, ClassOwner); gerr != nil {
+			refuse("FETCH", gerr)
 			return
 		}
-		addr := fmt.Sprintf("%x", rec.X25519Public[:])
-		envs, hashes := r.store.Fetch(addr)
+		envs, hashes := r.store.Fetch(rxHex)
 		pbEnvs := make([]*dmcnpb.EncryptedEnvelope, len(envs))
 		pbHashes := make([][]byte, len(hashes))
 		for i, env := range envs {
@@ -1003,14 +1018,22 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 				Fetch: &dmcnpb.FetchResponse{Envelopes: pbEnvs, EnvelopeHashes: pbHashes},
 			},
 		}); err == nil {
-			r.store.MarkFetched(addr, hashes)
+			r.store.MarkFetched(rxHex, hashes)
 		}
 
 	case authReq.GetMailboxOp() != nil:
 		op := authReq.GetMailboxOp()
-		if !verify(op.Signature) {
-			r.log.Warnf("mailbox auth failed for %s", init.Address)
-			writeResponse(s, errorResponse("AUTH_FAILED", ErrAuthFailed.Error()))
+		device, gerr := r.AuthorizeMailbox(ctx, rec, MailboxProof{
+			Nonce: nonce, Signature: op.Signature,
+			DevicePublic: op.DeviceEd25519PublicKey, DeviceSignature: op.DeviceSignature,
+		}, mailboxOpClass(op))
+		if gerr != nil {
+			refuse("mailbox op", gerr)
+			return
+		}
+		// The device ops need a registry and nothing else, so they are answered before the
+		// mailbox check: a relay can gate a mailbox it doesn't store mail for.
+		if r.handleDeviceOp(ctx, s, rxHex, init.Address, op, nonce) {
 			return
 		}
 		if r.mailbox == nil {
@@ -1024,22 +1047,84 @@ func (r *Relay) handleFetch(s network.Stream, init *dmcnpb.FetchInit) {
 			if err := r.accounts.Record(ctx, init.Address); err != nil {
 				r.log.Debugf("account backstop record failed for %s: %v", init.Address, err)
 			}
-			if err := r.accounts.RecordHex(ctx, fmt.Sprintf("%x", rec.X25519Public[:])); err != nil {
+			if err := r.accounts.RecordHex(ctx, rxHex); err != nil {
 				r.log.Debugf("account hex backstop record failed for %s: %v", init.Address, err)
 			}
 		}
-		r.handleMailboxOp(ctx, s, fmt.Sprintf("%x", rec.X25519Public[:]), init.Address, rec, op)
+		r.handleMailboxOp(ctx, s, rxHex, init.Address, rec, op, device)
 
 	default:
 		writeResponse(s, errorResponse("INVALID_REQUEST", "expected fetch proof or mailbox op"))
 	}
 }
 
+// mailboxOpClass is the proof a mailbox operation needs once the mailbox has devices
+// (SPEC_EXT_DEVICES.md §3). Anything not named here needs the account signature as well.
+func mailboxOpClass(op *dmcnpb.MailboxOp) OpClass {
+	switch {
+	case op.GetDeviceEnroll() != nil:
+		return ClassEnroll
+	case op.GetList() != nil, op.GetBody() != nil,
+		op.GetKvGet() != nil, op.GetKvList() != nil, op.GetKvStat() != nil:
+		return ClassDevice
+	case op.GetKvPut() != nil:
+		return KvPutClass(op.GetKvPut().Key)
+	case op.GetKvDelete() != nil:
+		return KvDeleteClass(op.GetKvDelete().Key)
+	default:
+		return ClassOwner
+	}
+}
+
+// handleDeviceOp answers a device registry op, and reports whether op was one.
+func (r *Relay) handleDeviceOp(ctx context.Context, s network.Stream, rxHex, address string, op *dmcnpb.MailboxOp, nonce []byte) bool {
+	fail := func(err error) {
+		var oe *OpError
+		if errors.As(err, &oe) {
+			writeResponse(s, errorResponse(oe.Code, oe.Message))
+			return
+		}
+		writeResponse(s, errorResponse("STORAGE_FAILED", "device operation failed"))
+	}
+	switch {
+	case op.GetDeviceEnroll() != nil:
+		rec, genesis, err := r.DeviceEnroll(ctx, rxHex, address, op.GetDeviceEnroll(), nonce)
+		if err != nil {
+			fail(err)
+			return true
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{Response: &dmcnpb.RelayResponse_MailboxDeviceEnroll{
+			MailboxDeviceEnroll: &dmcnpb.MailboxDeviceEnrollResponse{Device: rec, Genesis: genesis},
+		}})
+	case op.GetDeviceList() != nil:
+		devices, err := r.DeviceList(ctx, rxHex, address)
+		if err != nil {
+			fail(err)
+			return true
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{Response: &dmcnpb.RelayResponse_MailboxDeviceList{
+			MailboxDeviceList: &dmcnpb.MailboxDeviceListResponse{Devices: devices},
+		}})
+	case op.GetDeviceRetire() != nil:
+		rec, err := r.DeviceRetire(ctx, rxHex, address, op.GetDeviceRetire(), nonce)
+		if err != nil {
+			fail(err)
+			return true
+		}
+		writeResponse(s, &dmcnpb.RelayResponse{Response: &dmcnpb.RelayResponse_MailboxDeviceRetire{
+			MailboxDeviceRetire: &dmcnpb.MailboxDeviceRetireResponse{Device: rec},
+		}})
+	default:
+		return false
+	}
+	return true
+}
+
 // handleMailboxOp dispatches a verified mailbox operation against the recipient's
 // durable mailbox (rxHex = hex of the recipient X25519 public key), writing the
 // response(s) directly to the stream. BODY streams a header frame followed by raw
 // body chunks; LIST and DELETE write a single response frame.
-func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, address string, rec *identity.IdentityRecord, op *dmcnpb.MailboxOp) {
+func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, address string, rec *identity.IdentityRecord, op *dmcnpb.MailboxOp, device []byte) {
 	switch {
 	case op.GetList() != nil:
 		lo := op.GetList()
@@ -1109,20 +1194,23 @@ func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, ad
 	// reaches the same operations in-process without opening a stream. One implementation, two
 	// transports — otherwise the quota check exists on one path and not the other.
 	case op.GetKvGet() != nil:
-		sealed, version, found, err := r.KvGet(ctx, rxHex, op.GetKvGet().Key)
+		it, found, err := r.KvGet(ctx, rxHex, op.GetKvGet().Key)
 		if err != nil {
 			writeResponse(s, kvErrorResponse(r, address, "GET", err))
 			return
 		}
 		writeResponse(s, &dmcnpb.RelayResponse{
 			Response: &dmcnpb.RelayResponse_MailboxKvGet{
-				MailboxKvGet: &dmcnpb.MailboxKvGetResponse{Found: found, Sealed: sealed, Version: version},
+				MailboxKvGet: &dmcnpb.MailboxKvGetResponse{
+					Found: found, Sealed: it.Sealed, Version: it.Version,
+					WrittenAt: it.WrittenAt, SealedWriter: it.SealedWriter,
+				},
 			},
 		})
 
 	case op.GetKvPut() != nil:
 		put := op.GetKvPut()
-		version, err := r.KvPut(ctx, rxHex, put.Key, put.Sealed, put.ExpectedVersion)
+		version, err := r.KvPut(ctx, rxHex, put.Key, put.Sealed, put.ExpectedVersion, device)
 		if err != nil {
 			writeResponse(s, kvErrorResponse(r, address, "PUT", err))
 			return
@@ -1142,7 +1230,10 @@ func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, ad
 		}
 		out := make([]*dmcnpb.MailboxKvItem, 0, len(items))
 		for _, it := range items {
-			out = append(out, &dmcnpb.MailboxKvItem{Key: it.Key, Sealed: it.Sealed, Version: it.Version})
+			out = append(out, &dmcnpb.MailboxKvItem{
+				Key: it.Key, Sealed: it.Sealed, Version: it.Version,
+				WrittenAt: it.WrittenAt, SealedWriter: it.SealedWriter,
+			})
 		}
 		writeResponse(s, &dmcnpb.RelayResponse{
 			Response: &dmcnpb.RelayResponse_MailboxKvList{
@@ -1183,12 +1274,12 @@ func (r *Relay) handleMailboxOp(ctx context.Context, s network.Stream, rxHex, ad
 // back to local-only state rather than treating the mailbox as broken.
 var ErrKvUnsupported = errors.New("relay: this relay does not host personal storage")
 
-// KvGet reads one of the owner's sealed blobs.
-func (r *Relay) KvGet(ctx context.Context, rxHex, key string) (sealed []byte, version uint64, found bool, err error) {
+// KvGet reads one of the owner's sealed blobs, with the marks the relay keeps beside it.
+func (r *Relay) KvGet(ctx context.Context, rxHex, key string) (item KvItem, found bool, err error) {
 	if r.personalKv == nil {
-		return nil, 0, false, ErrKvUnsupported
+		return KvItem{}, false, ErrKvUnsupported
 	}
-	return r.personalKv.Get(ctx, rxHex, key)
+	return r.personalKv.GetEntry(ctx, rxHex, key)
 }
 
 // KvPut writes one sealed blob, enforcing the account's storage cap.
@@ -1198,7 +1289,13 @@ func (r *Relay) KvGet(ctx context.Context, rxHex, key string) (sealed []byte, ve
 // write and the new blob added to it, which over-counts an overwrite slightly; that is safe,
 // since it can only refuse sooner. The coupling is worth knowing: a full mailbox blocks personal
 // writes too, and the way out is deleting mail or KV entries.
-func (r *Relay) KvPut(ctx context.Context, rxHex, key string, sealed []byte, expectedVersion uint64) (uint64, error) {
+//
+// device is the active device whose proof authorized the write, or nil. The relay stamps every
+// write with its own clock, and records the device beside the entry sealed to the owner, so
+// who wrote what is readable only by someone holding the account's key. A client that acts on
+// "how long ago" must count from that stamp and never from a time inside the value, which a
+// writer chooses (SPEC_EXT_DEVICES.md §3).
+func (r *Relay) KvPut(ctx context.Context, rxHex, key string, sealed []byte, expectedVersion uint64, device []byte) (uint64, error) {
 	if r.personalKv == nil {
 		return 0, ErrKvUnsupported
 	}
@@ -1211,7 +1308,31 @@ func (r *Relay) KvPut(ctx context.Context, rxHex, key string, sealed []byte, exp
 			return 0, ErrQuotaExceeded
 		}
 	}
-	return r.personalKv.Put(ctx, rxHex, key, sealed, expectedVersion)
+	return r.personalKv.PutBy(ctx, rxHex, key, sealed, expectedVersion, sealWriter(rxHex, device))
+}
+
+// sealWriter seals a device's public key to the mailbox owner. rxHex is the owner's X25519 key,
+// so the relay needs nothing else to do it, and keeps nothing it can read back. A failure
+// leaves the mark off: it must not cost the owner the write.
+func sealWriter(rxHex string, device []byte) []byte {
+	if len(device) == 0 {
+		return nil
+	}
+	raw, err := hex.DecodeString(rxHex)
+	if err != nil || len(raw) != 32 {
+		return nil
+	}
+	var owner [32]byte
+	copy(owner[:], raw)
+	blob, err := message.SealToRecipients(device, [][32]byte{owner})
+	if err != nil {
+		return nil
+	}
+	out, err := json.Marshal(blob)
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // KvList pages the owner's keys under a namespace prefix.
@@ -1327,7 +1448,7 @@ func (r *Relay) handlePing() *dmcnpb.RelayResponse {
 				Version:         r.version,
 				UptimeSeconds:   int64(uptime.Seconds()),
 				StoredEnvelopes: r.store.Count(),
-				Capabilities:    capabilities(),
+				Capabilities:    r.Capabilities(),
 			},
 		},
 	}

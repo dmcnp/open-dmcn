@@ -10,7 +10,7 @@
 //   - an EXISTING account meeting the registry for the first time, which takes the same genesis
 //     arm a new one does — there is no migration mode because an account with no enrolled devices
 //     is simply an account whose first device is about to arrive;
-//   - a device already enrolled, where the attempt costs one round trip and changes nothing.
+//   - a device already enrolled, which finds itself on the list and asks for nothing.
 //
 // What it deliberately does NOT do is start a recovery request when the registry is claimed and
 // this browser is not on it. Recovery admits an unapproved device on a delay that the owner's
@@ -39,6 +39,7 @@ export function DeviceEnroller({ address, keys, onNeedsApproval }: {
       const result = await ensureDeviceEnrolled(signerFor(keys), label);
       if (cancelled) return;
       if (result.state === 'needs-approval') onNeedsApproval?.();
+      // 'no-registry' needs nothing: this server gates a mailbox on the account key alone.
       // 'unavailable' changes nothing on screen — a fleet that cannot be reached right now says
       // nothing about whether this device belongs, and the next app open asks again — but it is
       // said out loud. A device that never enrols is invisible until someone tries to re-key and

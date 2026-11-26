@@ -286,8 +286,15 @@ func main() {
 	// own routing credential (with the domain root), so there is no third party to verify against.
 	authHandler := webapi.NewAuthHandler(sessionStore, registryLookup, log)
 	msgHandler := webapi.NewMessageHandler(storeLocal, registryLookup, newInProcRouter(n), replicates, nil, log)
+	msgHandler.SetSendGate(newSendGate(n, registryLookup))
 	identHandler := webapi.NewIdentityHandler(registryLookup, verifyManaged, requiresOnion, relayHints, log)
 	mailboxHandler := webapi.NewMailboxHandler(newInProcRelay(n, registryLookup), log)
+	// Pairing ships with the registry, never after it: once a mailbox has a device, pairing is
+	// how its owner's next device gets in.
+	pairHandler := webapi.NewPairHandler(sessionStore, func(ctx context.Context, rec *identity.IdentityRecord) error {
+		_, perr := n.PublishIdentity(ctx, rec)
+		return perr
+	}, log)
 
 	// HTTP server + embedded SPA.
 	srv := server.New(server.Config{
@@ -329,7 +336,7 @@ func main() {
 	}
 
 	authMiddleware := webcore.AuthMiddleware(sessionStore)
-	srv.RegisterAPI(authHandler, msgHandler, identHandler, mailboxHandler, regHandler, petHandler, authMiddleware, subFS, frontendConfig)
+	srv.RegisterAPI(authHandler, msgHandler, identHandler, mailboxHandler, regHandler, petHandler, pairHandler, authMiddleware, subFS, frontendConfig)
 
 	go func() {
 		var serr error

@@ -14,6 +14,7 @@ import (
 	"dmcn.dev/open-dmcn/internal/core/identity"
 	"dmcn.dev/open-dmcn/internal/core/message"
 	"dmcn.dev/open-dmcn/internal/node"
+	"dmcn.dev/open-dmcn/internal/relay"
 )
 
 // TestFederation proves the reference daemon federates across domains — the protocol's whole point.
@@ -99,7 +100,7 @@ func TestFederation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entries, _, err := proxy.List(ctx, "bob@b.test", nonce, bobSig, 0, nil)
+	entries, _, err := proxy.List(ctx, "bob@b.test", relay.MailboxProof{Nonce: nonce, Signature: bobSig}, 0, nil)
 	if err != nil {
 		t.Fatalf("list on B: %v", err)
 	}

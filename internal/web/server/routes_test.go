@@ -15,7 +15,7 @@ import (
 func routeSet(t *testing.T, reg *api.RegisterHandler, pet *api.PetitionHandler) func(method, path string) int {
 	t.Helper()
 	s := &Server{mux: http.NewServeMux()}
-	s.RegisterAPI(nil, nil, nil, nil, reg, pet,
+	s.RegisterAPI(nil, nil, nil, nil, reg, pet, nil,
 		func(h http.HandlerFunc) http.HandlerFunc { return h }, nil, FrontendConfig{})
 	return func(method, path string) int {
 		_, pattern := s.mux.Handler(httptest.NewRequest(method, path, nil))
@@ -81,7 +81,7 @@ func TestSignupModeSaysWhatIsRouted(t *testing.T) {
 		{"neither", nil, nil, "closed"},
 	} {
 		s := &Server{mux: http.NewServeMux()}
-		s.RegisterAPI(nil, nil, nil, nil, c.reg, c.pet,
+		s.RegisterAPI(nil, nil, nil, nil, c.reg, c.pet, nil,
 			func(h http.HandlerFunc) http.HandlerFunc { return h }, nil, FrontendConfig{})
 		rec := httptest.NewRecorder()
 		s.mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/signup", nil))

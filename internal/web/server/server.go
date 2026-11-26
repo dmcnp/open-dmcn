@@ -142,18 +142,25 @@ func (s *Server) RegisterAPI(
 	mailbox *api.MailboxHandler,
 	reg *api.RegisterHandler,
 	pet *api.PetitionHandler,
+	pair *api.PairHandler,
 	authMiddleware func(http.HandlerFunc) http.HandlerFunc,
 	frontendFS fs.FS,
 	frontendConfig FrontendConfig,
 ) {
-	// NOTE (open-dmcn): device pairing is omitted (product client behavior). Self-service
-	// registration is served locally here (the daemon is the operator for its own domain).
+	// Self-service registration is served locally here (the daemon is the operator for its own
+	// domain).
 	rateLimiter := webcore.RateLimitMiddleware(20)
 	s.mux.Handle("POST /api/v1/login", rateLimiter(http.HandlerFunc(auth.HandleLogin)))
 	s.mux.Handle("POST /api/v1/login/verify", rateLimiter(http.HandlerFunc(auth.HandleLoginVerify)))
 	s.mux.Handle("POST /api/v1/import/challenge", rateLimiter(http.HandlerFunc(auth.HandleImportChallenge)))
 	s.mux.Handle("POST /api/v1/import", rateLimiter(http.HandlerFunc(auth.HandleImport)))
 	s.mux.Handle("GET /api/v1/relay-hints", rateLimiter(http.HandlerFunc(ident.HandleRelayHints)))
+	// Device pairing (SPEC_EXT_DEVICES.md §8): what a device with no account yet needs to ask to
+	// join one. Open, rate-limited, and restricted to pairing.local addresses by the handler.
+	if pair != nil {
+		s.mux.Handle("POST /api/v1/pair/register", rateLimiter(http.HandlerFunc(pair.HandleRegister)))
+		s.mux.Handle("POST /api/v1/pair/session", rateLimiter(http.HandlerFunc(pair.HandleSession)))
+	}
 	// Registration and petitions are mutually exclusive, and which one is routed is decided
 	// by whether the domain root key is on this machine. Dev mode holds the root and can mint
 	// addresses on demand, so /register exists. A live domain does not, so it does not — the

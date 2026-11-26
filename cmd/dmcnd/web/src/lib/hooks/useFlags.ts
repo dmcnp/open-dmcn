@@ -15,6 +15,12 @@ import { storeKey, useSyncChanges, useSyncLive } from '../sync/useSync';
 
 interface FlagsContextValue {
   flags: Map<string, FlagRecord>;
+  /**
+   * When each flag record was last written, unix ms, by a clock its writer did not choose: the
+   * relay's, or this device's own for a change it has just made. A record with no entry was
+   * written before relays kept the time. What removes mail for good counts from this (lib/trash.ts).
+   */
+  storedAt: Map<string, number>;
   // ready is false until the first load settles. Until then every message reads as unarchived
   // and unread, so a view built on flags waits for it rather than drawing that and taking it back.
   ready: boolean;
@@ -48,6 +54,8 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const storeRef = useRef<FlagStore | null>(null);
   const flagsRef = useRef<Map<string, FlagRecord>>(new Map());
+  const [storedAt, setStoredAt] = useState<Map<string, number>>(new Map());
+  const storedAtRef = useRef<Map<string, number>>(new Map());
   const syncRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -58,11 +66,13 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     const doSync = () => {
-      store.list()
-        .then(map => {
+      store.listTimed()
+        .then(({ flags: map, storedAt: times }) => {
           if (cancelled) return;
           flagsRef.current = map;
           setFlags(map);
+          storedAtRef.current = times;
+          setStoredAt(times);
         })
         .catch(() => { /* transient; keep the last good map */ })
         .finally(() => { if (!cancelled) setReady(true); });
@@ -75,9 +85,11 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       storeRef.current = null;
       flagsRef.current = new Map();
+      storedAtRef.current = new Map();
       syncRef.current = () => {};
       setReady(false);
       setFlags(new Map());
+      setStoredAt(new Map());
     };
   }, [keys, sessionToken, isAuthenticated]);
 
@@ -97,6 +109,12 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     map.set(messageHash, next);
     flagsRef.current = map;
     setFlags(map);
+    // The write has just happened, so this device's clock stands in for the relay's until the
+    // next listing brings the real one. Leaving the old time would count from before the change.
+    const times = new Map(storedAtRef.current);
+    times.set(messageHash, Date.now());
+    storedAtRef.current = times;
+    setStoredAt(times);
   }, []);
 
   const markRead = useCallback(async (messageHash: string) => {
@@ -143,11 +161,15 @@ export function FlagsProvider({ children }: { children: ReactNode }) {
     map.delete(messageHash);
     flagsRef.current = map;
     setFlags(map);
+    const times = new Map(storedAtRef.current);
+    times.delete(messageHash);
+    storedAtRef.current = times;
+    setStoredAt(times);
   }, []);
 
   return createElement(
     FlagsContext.Provider,
-    { value: { flags, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
+    { value: { flags, storedAt, ready, refreshFlags, setFlag, markRead, isRead, isArchived, isStarred, labelsOf, folderOf, trashedAt, isTrashed, trash, restore, addLabel, removeLabel, setFolder, removeFlags } },
     children
   );
 }

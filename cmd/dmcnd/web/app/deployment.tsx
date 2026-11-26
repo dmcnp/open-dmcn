@@ -16,6 +16,7 @@ import { Register } from './pages/Register';
 import { Import } from './pages/Import';
 import { Petition } from './pages/Petition';
 import { verifyClassificationLocal, verifyReceiptLocal } from './lib/crypto/localBridgeVerify';
+import { deviceSurfaces } from '../src/lib/deviceSurfaces';
 
 const linkStyle = { color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 } as const;
 
@@ -61,14 +62,21 @@ export const deployment: Deployment = {
     ),
     inline: <Link to="/register" style={linkStyle}>{PETITION_MODE ? 'ask for a mailbox' : 'create'}</Link>,
   },
-  // No device pairing and no admin console here: both are product surfaces.
-  authRoutes: [{ path: '/import', element: <Import /> }],
+  // The daemon keeps a device registry (SPEC_EXT_DEVICES.md), so this client has pairing, the
+  // device list, and the row that announces a device asking to join. They are the shared
+  // client's own, the same on every server that has a registry.
+  pairing: deviceSurfaces.pairing,
+  authRoutes: [{ path: '/import', element: <Import /> }, deviceSurfaces.authRoute],
   appRoutes: [],
-  // The open protocol carries no control messages — device pairing and countersign
-  // requests are product surfaces — so nothing is hidden from the mail folders here.
+  devices: deviceSurfaces.devices,
+  // A device waiting to join without approval is the one thing here an owner may need to act
+  // on before a date, so it gets the top of the inbox.
+  accountNotice: ({ address }) => <deviceSurfaces.recoveryAlert address={address} />,
   mailFilter: (keys, explicitToken) => new MailFilterClient(keys, explicitToken),
-  internalAttachmentTypes: [],
-  controlSubjects: [],
+  // The pairing messages are the only control messages the open protocol carries.
+  internalAttachmentTypes: deviceSurfaces.internalAttachmentTypes,
+  controlSubjects: deviceSurfaces.controlSubjects,
+  inboxNotices: [deviceSurfaces.inboxNotice],
   verifyClassification: verifyClassificationLocal,
   verifyReceipt: verifyReceiptLocal,
 };

@@ -509,3 +509,61 @@ export async function decodeMailboxBody(data: Uint8Array): Promise<{
   const MailboxBody = root.lookupType('dmcn.relay.MailboxBody');
   return decodeAs(MailboxBody, data);
 }
+
+// --- Device pairing payloads (SPEC_EXT_DEVICES.md §8), carried as attachment bytes ---
+
+export async function encodeCloneRequest(d: {
+  ephemeralEd25519Pub: Uint8Array;
+  ephemeralX25519Pub: Uint8Array;
+  deviceId: Uint8Array;
+  label: string;
+  requestedAt: number;
+  /** The new device's long-lived signing key, for the approver to enrol. Public half only. */
+  deviceEd25519Pub?: Uint8Array;
+}): Promise<Uint8Array> {
+  const root = await getRoot();
+  const T = root.lookupType('dmcn.pairing.CloneRequest');
+  return T.encode(T.create(d)).finish();
+}
+
+export async function decodeCloneRequest(data: Uint8Array): Promise<{
+  ephemeralEd25519Pub: Uint8Array;
+  ephemeralX25519Pub: Uint8Array;
+  deviceId: Uint8Array;
+  label: string;
+  requestedAt: number;
+  /** Empty from a client that predates the device registry. */
+  deviceEd25519Pub?: Uint8Array;
+}> {
+  const root = await getRoot();
+  const T = root.lookupType('dmcn.pairing.CloneRequest');
+  return decodeAs(T, data);
+}
+
+export async function encodeCloneResponse(d: {
+  address: string;
+  ed25519Public: Uint8Array;
+  ed25519Private: Uint8Array;
+  x25519Public: Uint8Array;
+  x25519Private: Uint8Array;
+  deviceId: Uint8Array;
+  createdAt: number;
+}): Promise<Uint8Array> {
+  const root = await getRoot();
+  const T = root.lookupType('dmcn.pairing.CloneResponse');
+  return T.encode(T.create(d)).finish();
+}
+
+export async function decodeCloneResponse(data: Uint8Array): Promise<{
+  address: string;
+  ed25519Public: Uint8Array;
+  ed25519Private: Uint8Array;
+  x25519Public: Uint8Array;
+  x25519Private: Uint8Array;
+  deviceId: Uint8Array;
+  createdAt: number;
+}> {
+  const root = await getRoot();
+  const T = root.lookupType('dmcn.pairing.CloneResponse');
+  return decodeAs(T, data);
+}

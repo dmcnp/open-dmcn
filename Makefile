@@ -91,7 +91,7 @@ dev-web:
 # "regenerate it manually" step to forget.
 PBJS = cd $(WEB) && npx -y -p protobufjs-cli@1.1.3 pbjs -t static-module -w es6 -p ../../../proto
 PBTS = cd $(WEB) && npx -y -p protobufjs-cli@1.1.3 pbts
-CORE_PROTOS = ../../../proto/identity.proto ../../../proto/message.proto ../../../proto/relay.proto ../../../proto/bridge.proto
+CORE_PROTOS = ../../../proto/identity.proto ../../../proto/message.proto ../../../proto/relay.proto ../../../proto/bridge.proto ../../../proto/pairing.proto
 
 proto-web:
 	$(PBJS) -o app/proto/dmcn.js $(CORE_PROTOS)

@@ -41,14 +41,29 @@ export class FlagStore {
 
   // list returns every flag record, keyed by messageHash.
   async list(): Promise<Map<string, FlagRecord>> {
+    return (await this.listTimed()).flags;
+  }
+
+  /**
+   * Every flag record, and beside it when the relay recorded each one (unix ms), for the
+   * records it has a time for.
+   *
+   * The two are kept apart on purpose. A flag record is written by whichever device changed it,
+   * and a device may be allowed to do that without the account's signing key
+   * (SPEC_EXT_DEVICES.md §3), so nothing inside one can be the basis for removing mail. The
+   * relay's time can, because no writer chooses it.
+   */
+  async listTimed(): Promise<{ flags: Map<string, FlagRecord>; storedAt: Map<string, number> }> {
     const entries: StorageEntry<FlagRecord>[] = await this.store.list<FlagRecord>('flags/');
-    const out = new Map<string, FlagRecord>();
+    const flags = new Map<string, FlagRecord>();
+    const storedAt = new Map<string, number>();
     for (const e of entries) {
       // key is "flags/<hash>" — strip the namespace back to the message hash.
       const hash = e.key.startsWith('flags/') ? e.key.slice('flags/'.length) : e.key;
-      out.set(hash, e.value);
+      flags.set(hash, e.value);
+      if (e.writtenAt) storedAt.set(hash, e.writtenAt * 1000);
     }
-    return out;
+    return { flags, storedAt };
   }
 
   // apply merges a delta onto the current record and writes it back. current is the
