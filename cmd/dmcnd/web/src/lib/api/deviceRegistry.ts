@@ -62,25 +62,48 @@ export async function thisDevice(address: string, account: AccountSigner): Promi
   return (await listDevices(account)).find(d => d.public === mine && !d.retired_at) ?? null;
 }
 
-interface ChallengeResp { correlation_id: string; nonce: string }
+interface ChallengeResp { correlation_id: string; nonce: string; server_time?: number }
 
 /**
- * Run one device op: challenge, then complete with both signatures over the nonce.
+ * What a device op carries beyond the gate proof.
  *
- * `authorize` produces the op's own authorization — the approval or retirement — over the same
+ * `authorize` produces the op's own authorization (the approval or retirement) over the same
  * nonce the gate proof covers. Two signatures by the same key over different bytes: one says the
  * request comes from an enrolled device, the other says what that device is asking for.
+ *
+ * `approvedAt` picks the date an enrolment carries, given the server's clock when the server
+ * sent one. An approval is dated by the server's clock where it can be: the relay refuses a date
+ * its own clock disagrees with, and a device's clock is often a few minutes out.
  */
+interface DeviceOpExtras {
+  authorize?: (nonce: Uint8Array, devicePub: Uint8Array, approvedAt?: number) => Promise<Uint8Array>;
+  approvedAt?: (serverTime?: number) => number | undefined;
+}
+
+/** The refusal for an op that needs this device's signature when this browser has no device key. */
+export class NoDeviceKeyError extends Error {
+  constructor() {
+    super('This device is not on the mailbox yet, so it cannot approve or remove another. Reload the page and try again.');
+    this.name = 'NoDeviceKeyError';
+  }
+}
+
+/** Run one device op: challenge, then complete with both signatures over the nonce. */
 async function deviceOp<T>(
   account: AccountSigner,
   challenge: Record<string, unknown>,
-  authorize?: (nonce: Uint8Array, devicePub: Uint8Array) => Promise<Uint8Array>,
-  approvedAt?: number,
+  extras: DeviceOpExtras = {},
 ): Promise<T> {
+  // An op that needs this device's authorization is not sent without it. Sent bare, an approval
+  // is a plain request to enrol the other device, and on a mailbox with no device yet the relay
+  // would grant it: the newcomer becomes the first device and this browser is shut out.
+  const device = await loadDeviceKey(account.address);
+  if (extras.authorize && !device) throw new NoDeviceKeyError();
+
   const ch = await postJSONAs<ChallengeResp>(undefined, '/api/v1/mailbox/challenge', challenge);
   const nonce = fromBase64(ch.nonce);
+  const approvedAt = extras.approvedAt?.(ch.server_time);
 
-  const device = await loadDeviceKey(account.address);
   const body: Record<string, unknown> = {
     correlation_id: ch.correlation_id,
     signature: toBase64(await account.sign(nonce)),
@@ -88,8 +111,8 @@ async function deviceOp<T>(
   if (device) {
     body.device_public = toBase64(device.publicKey);
     body.device_signature = toBase64(await device.sign(deviceChallengeBytes(nonce)));
-    if (authorize) {
-      body.approver_signature = toBase64(await authorize(nonce, device.publicKey));
+    if (extras.authorize) {
+      body.approver_signature = toBase64(await extras.authorize(nonce, device.publicKey, approvedAt));
     }
   }
   if (approvedAt !== undefined) body.approved_at = approvedAt;
@@ -101,7 +124,8 @@ async function deviceOp<T>(
  *
  * `atSeconds` is the moment this device attests the newcomer joined, and becomes its enrolment
  * date — which later decides when it may authorize a key rotation. The relay bounds it: never
- * before this device's own enrolment, never in the future.
+ * before this device's own enrolment, never in the future. So it is used only with a credential
+ * or against a server that sends no clock of its own (see DeviceOpExtras).
  */
 export async function enrolDevice(
   address: string,
@@ -130,12 +154,17 @@ export async function enrolDevice(
       ...(sealedLabel ? { device_label: toBase64(sealedLabel) } : {}),
       ...(credential ? { device_credential: toBase64(credential) } : {}),
     },
-    async (nonce) => {
-      const approver = await loadDeviceKey(address);
-      if (!approver) throw new Error('this device is not enrolled, so it cannot approve another');
-      return approver.sign(deviceApprovalBytes(address, devicePub, nonce, atSeconds));
+    {
+      authorize: async (nonce, _mine, approvedAt) => {
+        const approver = await loadDeviceKey(address);
+        if (!approver) throw new NoDeviceKeyError();
+        return approver.sign(deviceApprovalBytes(address, devicePub, nonce, approvedAt ?? atSeconds));
+      },
+      // A credential's date is the issuer's and the relay holds the approval to it. Without
+      // one, the server's clock dates the approval, and this device's only for a server that
+      // sends none.
+      approvedAt: serverTime => (credential ? atSeconds : serverTime ?? atSeconds),
     },
-    atSeconds,
   );
 }
 
@@ -172,10 +201,12 @@ export async function retireDevice(address: string, account: AccountSigner, devi
   const res = await deviceOp<{ device: DeviceRecord }>(
     account,
     { op: 'device_retire', device_public: toBase64(devicePub) },
-    async (nonce) => {
-      const signer = await loadDeviceKey(address);
-      if (!signer) throw new Error('this device is not enrolled, so it cannot retire another');
-      return signer.sign(deviceRetirementBytes(address, devicePub, nonce));
+    {
+      authorize: async (nonce) => {
+        const signer = await loadDeviceKey(address);
+        if (!signer) throw new NoDeviceKeyError();
+        return signer.sign(deviceRetirementBytes(address, devicePub, nonce));
+      },
     },
   );
   return res.device;
@@ -207,6 +238,20 @@ function refusalCode(err: unknown): string {
   return err instanceof ApiError && err.code ? err.code : '';
 }
 
+/** Whether a refusal says the device is already on the mailbox, which a caller may read as done. */
+export function isAlreadyEnrolled(err: unknown): boolean {
+  if (refusalCode(err) === 'device_already_enrolled') return true;
+  return err instanceof ApiError && err.message.includes('this device is already enrolled');
+}
+
+/** Whether a refusal says this server keeps no device registry at all. */
+export function isNoRegistry(err: unknown): boolean {
+  if (refusalCode(err) === 'unsupported') return true;
+  // The sentences are for a server from before the codes.
+  return err instanceof Error
+    && (err.message.includes('does not host a device registry') || err.message.includes('does not keep a device registry'));
+}
+
 /**
  * Put this browser on the mailbox if it can be, and report what it found.
  *
@@ -236,7 +281,7 @@ export async function ensureDeviceEnrolled(account: AccountSigner, sealedLabel?:
       device_public: toBase64(device.publicKey),
       ...(sealedLabel ? { device_label: toBase64(sealedLabel) } : {}),
       ...(attested ? { device_credential: toBase64(attested.credential) } : {}),
-    }, undefined, attested?.issuedAt);
+    }, { approvedAt: () => attested?.issuedAt });
     return { state: 'enrolled', genesis: res.genesis };
   } catch (err) {
     return classifyEnrolment(err);
@@ -273,7 +318,7 @@ export async function requestRecovery(account: AccountSigner, sealedLabel?: Uint
       recovery: true,
       ...(sealedLabel ? { device_label: toBase64(sealedLabel) } : {}),
       ...(attested ? { device_credential: toBase64(attested.credential) } : {}),
-    }, undefined, attested?.issuedAt);
+    }, { approvedAt: () => attested?.issuedAt });
     const eligibleAt = res.device?.eligible_at ?? 0;
     rememberRecovery(account.address, eligibleAt);
     return { state: 'waiting', eligibleAt };

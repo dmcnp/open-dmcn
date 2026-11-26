@@ -201,6 +201,9 @@ func (s *PersistentKvStore) PutBy(ctx context.Context, ownerHex, key string, sea
 // Inject writes a blob at an exact version, unconditionally — used by the drain
 // handoff to move a record to a new home relay while preserving its version. Unlike
 // Put it does not bump the version or compare-and-swap.
+//
+// It stamps this relay's write time like any other write: a stored entry must never be without
+// one, because a client falls back to a time the writer chose when it is missing.
 func (s *PersistentKvStore) Inject(ctx context.Context, ownerHex, key string, sealed []byte, version uint64) error {
 	k, err := kvKey(ownerHex, key)
 	if err != nil {
@@ -209,7 +212,7 @@ func (s *PersistentKvStore) Inject(ctx context.Context, ownerHex, key string, se
 	if len(sealed) == 0 {
 		return fmt.Errorf("relay: personal kv inject: empty blob")
 	}
-	out, err := json.Marshal(kvRecord{Version: version, Sealed: sealed})
+	out, err := json.Marshal(kvRecord{Version: version, Sealed: sealed, WrittenAt: s.now().Unix()})
 	if err != nil {
 		return fmt.Errorf("relay: personal kv inject: marshal: %w", err)
 	}

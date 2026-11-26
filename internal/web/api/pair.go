@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/mertenvg/logr/v2"
 
@@ -34,6 +35,17 @@ func NewPairHandler(sessions *webcore.SessionStore, publish func(ctx context.Con
 	return &PairHandler{sessions: sessions, publish: publish, log: log}
 }
 
+// maxPairingLifetime is the longest a throwaway pairing record may claim to live. A client sets
+// pairing.EphemeralTTL by its own clock, so the bound is twice that: a clock up to one lifetime
+// fast still passes, and a record can never be parked here for longer than half an hour.
+const maxPairingLifetime = 2 * pairing.EphemeralTTL
+
+// pairingLifetimeOK reports whether a pairing record expires, and soon enough. An unset expiry
+// reads as "never", which is the one thing a throwaway record must not be.
+func pairingLifetimeOK(rec *identity.IdentityRecord, now time.Time) bool {
+	return !rec.ExpiresAt.IsZero() && rec.ExpiresAt.After(now) && !rec.ExpiresAt.After(now.Add(maxPairingLifetime))
+}
+
 type pairRegisterRequest struct {
 	IdentityRecord string `json:"identity_record"` // base64 protobuf of a self-signed IdentityRecord
 }
@@ -57,6 +69,10 @@ func (h *PairHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if !pairing.IsEphemeralAddress(rec.Address) {
 		writeError(w, http.StatusForbidden, "pair register is only for pairing addresses")
+		return
+	}
+	if !pairingLifetimeOK(rec, time.Now()) {
+		writeError(w, http.StatusBadRequest, "a pairing identity must expire within the pairing window")
 		return
 	}
 	if err := h.publish(r.Context(), rec); err != nil {
@@ -84,7 +100,9 @@ func (h *PairHandler) HandleSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "pair session is only for pairing addresses")
 		return
 	}
-	token, err := h.sessions.Create(req.EphemeralAddress)
+	// The session ends with the identity it stands for. A token that outlived the pairing
+	// window would be a day's access to the authenticated endpoints for anyone who asked.
+	token, err := h.sessions.CreateFor(req.EphemeralAddress, pairing.EphemeralTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create pairing session")
 		return

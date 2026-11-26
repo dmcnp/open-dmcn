@@ -185,6 +185,10 @@ type mailboxChallengeRequest struct {
 type mailboxChallengeResponse struct {
 	CorrelationID string `json:"correlation_id"`
 	Nonce         string `json:"nonce"` // base64
+	// This server's clock, in Unix seconds. A device that approves another dates the approval
+	// with it, since the relay refuses a date its own clock disagrees with and a device's
+	// clock is often a few minutes out.
+	ServerTime int64 `json:"server_time"`
 }
 
 type mailboxCompleteRequest struct {
@@ -370,6 +374,7 @@ func (h *MailboxHandler) HandleChallenge(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, mailboxChallengeResponse{
 		CorrelationID: id,
 		Nonce:         base64.StdEncoding.EncodeToString(nonce),
+		ServerTime:    time.Now().Unix(),
 	})
 }
 

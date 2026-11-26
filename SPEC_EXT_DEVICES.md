@@ -167,7 +167,9 @@ A device is **active** when it isn't retired and any `eligible_at` has passed.
 3. the relay's clock.
 
 A relay refuses an `approved_at` that is in the future or earlier than the approver's own enrolment,
-so a chain of approvals is never older than its youngest link. Where an approval and a credential
+so a chain of approvals is never older than its youngest link. A device's clock is often a few
+minutes out, so an approver SHOULD date an approval with a clock its server gives it and not with
+its own. Where an approval and a credential
 are both present, they must agree to within a few minutes.
 
 The credential is optional. Without one a device gates access normally but can't authorise a key
@@ -279,7 +281,9 @@ it speaks through a throwaway identity, and it is the person holding both device
 1. **The newcomer prepares.** It generates its device key and a throwaway identity at
    `pair-<16 hex digits>@pairing.local`, with a self-signed record that names one relay hint and
    expires after 15 minutes. Relays accept a `pairing.local` record without a DAR or routing grant.
-   It confers no standing on any real address.
+   It confers no standing on any real address. A server that publishes these records for
+   newcomers MUST refuse one that never expires or expires more than 30 minutes ahead, and any
+   session it grants the throwaway address MUST NOT outlast 15 minutes.
 2. **It asks.** It sends a message to the account, signed by the throwaway key, with the subject
    `[DMCN] Device pairing request` and a `CloneRequest` attachment of type
    `application/x-dmcn-clone-request`, then shows the confirmation code.

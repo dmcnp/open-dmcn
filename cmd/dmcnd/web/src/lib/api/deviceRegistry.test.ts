@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyEnrolment, classifyRecovery, describeBrowser, deviceStanding, forgetRecovery, isUnapprovedDevice, MAX_DEVICE_LABEL, openDeviceLabel, rememberedRecovery, rememberRecovery, sealDeviceLabel, waitingDevices, type DeviceRecord } from './deviceRegistry';
+import { classifyEnrolment, classifyRecovery, describeBrowser, deviceStanding, forgetRecovery, isAlreadyEnrolled, isNoRegistry, isUnapprovedDevice, MAX_DEVICE_LABEL, openDeviceLabel, rememberedRecovery, rememberRecovery, sealDeviceLabel, waitingDevices, type DeviceRecord } from './deviceRegistry';
 import { toBase64 } from '../crypto/keys';
 import { ApiError } from './bearer';
 import type { WorkingKeys } from '../crypto/workingKeys';
@@ -72,6 +72,20 @@ describe('refusals read by code', () => {
 
   it('knows a mailbox call refused for want of an enrolled device', () => {
     expect(isUnapprovedDevice(refusal(403, 'device_not_enrolled'))).toBe(true);
+  });
+});
+
+describe('answers a caller acts on', () => {
+  it('knows a device that is already on the mailbox, by code or by the older sentence', () => {
+    expect(isAlreadyEnrolled(new ApiError('nope', 409, 'device_already_enrolled'))).toBe(true);
+    expect(isAlreadyEnrolled(new ApiError('this device is already enrolled', 400))).toBe(true);
+    expect(isAlreadyEnrolled(new ApiError('auth failed', 403, 'auth_failed'))).toBe(false);
+  });
+
+  it('knows a server with no registry, so the device list hides and does not report a failure', () => {
+    expect(isNoRegistry(new ApiError('this relay does not keep a device registry', 501, 'unsupported'))).toBe(true);
+    expect(isNoRegistry(new Error('this mailbox does not host a device registry'))).toBe(true);
+    expect(isNoRegistry(new ApiError('could not read the device registry', 502, 'storage_failed'))).toBe(false);
   });
 });
 

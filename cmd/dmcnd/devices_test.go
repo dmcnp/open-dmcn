@@ -98,6 +98,10 @@ func TestDeviceRegistryOverTheWebAPI(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("challenge %v: %d %v", challenge["op"], code, ch)
 		}
+		// A device dates an approval with this, so it has to be the server's clock.
+		if at, _ := ch["server_time"].(float64); time.Now().Unix()-int64(at) < 0 || time.Now().Unix()-int64(at) > 5 {
+			t.Fatalf("challenge server_time = %v, want this server's clock", ch["server_time"])
+		}
 		nonce, _ := base64.StdEncoding.DecodeString(ch["nonce"].(string))
 		body := map[string]any{"correlation_id": ch["correlation_id"]}
 		if account {

@@ -631,3 +631,23 @@ func TestFetchProofNeedsTheAccountKey(t *testing.T) {
 	wantCode(t, fetch(false, true), "AUTH_FAILED")
 	wantCode(t, fetch(true, false), "DEVICE_NOT_ENROLLED")
 }
+
+// An entry that arrives by Inject is stamped like any other. Without a relay time a client
+// counts a soft delete from the time the writer chose, which a device could set in the past.
+func TestKvInjectIsStamped(t *testing.T) {
+	f := newGateFixture(t)
+	ctx := context.Background()
+	at := time.Unix(1_800_000_000, 0)
+	f.r.personalKv.SetClock(func() time.Time { return at })
+
+	if err := f.r.personalKv.Inject(ctx, f.rxHex, "flags/abc", []byte("sealed"), 7); err != nil {
+		t.Fatal(err)
+	}
+	it, found, err := f.r.KvGet(ctx, f.rxHex, "flags/abc")
+	if err != nil || !found {
+		t.Fatalf("get: found=%v err=%v", found, err)
+	}
+	if it.WrittenAt != at.Unix() || it.Version != 7 {
+		t.Fatalf("written_at = %d version = %d, want %d and 7", it.WrittenAt, it.Version, at.Unix())
+	}
+}

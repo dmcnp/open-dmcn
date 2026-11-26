@@ -263,10 +263,10 @@ func boundApprovedAt(atUnix int64, approver *dmcnpb.DeviceRecord, now time.Time)
 	}
 	at := time.Unix(atUnix, 0).UTC()
 	if at.After(now.Add(credentialFutureSkew)) {
-		return "the approval is dated in the future", false
+		return "the approval is dated in the future. Check the clock on the approving device", false
 	}
 	if at.Unix() < approver.EnrolledAt {
-		return "the approval predates the approving device's own enrolment", false
+		return "the approval is dated before the approving device joined. Check the clock on the approving device", false
 	}
 	return "", true
 }

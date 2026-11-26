@@ -9,7 +9,7 @@
 // A removed device can come back only by pairing again, approved from a device that still has
 // access, and it comes back as a new entry: the relay refuses the removed key for good.
 //
-// Product-only, reached through the deployment seam: the reference daemon keeps no device list.
+// Shown wherever the server keeps a device registry, and hidden where it keeps none.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Dialog } from '../ds';
@@ -20,7 +20,7 @@ import { fromBase64, toBase64 } from '../lib/crypto/keys';
 import type { WorkingKeys } from '../lib/crypto/workingKeys';
 import { formatDate } from '../lib/format';
 import {
-  deviceStanding, isUnapprovedDevice, listDevices, openDeviceLabel, retireDevice, signerFor,
+  deviceStanding, isNoRegistry, isUnapprovedDevice, listDevices, openDeviceLabel, retireDevice, signerFor,
   type DeviceRecord, type DeviceStanding,
 } from '../lib/api/deviceRegistry';
 import { orderDevices } from '../lib/devices';
@@ -62,11 +62,10 @@ export function DeviceManager({ address, keys }: { address: string; keys: Workin
       setState({ kind: 'rows', rows: orderDevices(rows) });
     } catch (err) {
       if (isUnapprovedDevice(err)) { setState({ kind: 'unapproved' }); return; }
-      const message = err instanceof Error ? err.message : String(err);
       // A mailbox whose relay keeps no device list has nothing to show here, which is an answer
       // rather than a failure.
-      if (message.includes('does not host a device registry')) { setState({ kind: 'unsupported' }); return; }
-      setState({ kind: 'failed', message });
+      if (isNoRegistry(err)) { setState({ kind: 'unsupported' }); return; }
+      setState({ kind: 'failed', message: err instanceof Error ? err.message : String(err) });
     }
   }, [address, keys]);
 

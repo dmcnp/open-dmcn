@@ -14,7 +14,7 @@ import {
   SUBJECT_REQUEST,
   SUBJECT_APPROVAL,
 } from '../lib/crypto/pairing';
-import { enrolDevice, sealDeviceLabel, signerFor } from '../lib/api/deviceRegistry';
+import { enrolDevice, isAlreadyEnrolled, sealDeviceLabel, signerFor } from '../lib/api/deviceRegistry';
 import { encryptSplit } from '../lib/crypto/split';
 import { encodeSplitEnvelope } from '../lib/crypto/protobuf';
 import { signWithKey } from '../lib/crypto/sign';
@@ -164,7 +164,14 @@ export function DeviceRequests({ onClose }: { onClose: () => void }) {
         // The name the new device gave itself goes on its entry, sealed to this account, so the
         // device list in Privacy & security can say which one it is.
         const label = await sealDeviceLabel(req.label, keys.x25519Public);
-        await enrolDevice(address, signerFor(keys), req.devicePub, now, label);
+        try {
+          await enrolDevice(address, signerFor(keys), req.devicePub, now, label);
+        } catch (err) {
+          // Already on the mailbox means an earlier try got this far and failed at the send
+          // below. Carry on to the send: stopping here would leave the device enrolled and
+          // keyless, with no way to finish.
+          if (!isAlreadyEnrolled(err)) throw err;
+        }
       }
       const att = await cloneResponseAttachment(rawKp, address);
       const envelope = await encryptSplit({
