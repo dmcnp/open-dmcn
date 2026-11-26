@@ -255,9 +255,10 @@ export function isNoRegistry(err: unknown): boolean {
 /**
  * Put this browser on the mailbox if it can be, and report what it found.
  *
- * The attempt IS the probe, and it has to be: knowing whether this device is enrolled would mean
- * listing the registry, and listing is itself gated on being enrolled. So we ask to join, and the
- * relay's answer distinguishes the three states — created it, already on it, or shut out.
+ * It lists the registry first. A device already on the mailbox finds itself there and asks for
+ * nothing more, which is every app open but the first. Any other answer goes on to ask to join:
+ * an empty list is a mailbox with no first device yet, and a refused one is a device that is shut
+ * out, where the relay's answer to the request says so (or admits it, with an attestation).
  *
  * The genesis case is what a fresh registration takes, and equally what an existing account takes
  * the first time it meets the registry. One path, no migration mode: an account with no enrolled
@@ -275,6 +276,17 @@ export function isNoRegistry(err: unknown): boolean {
 export async function ensureDeviceEnrolled(account: AccountSigner, sealedLabel?: Uint8Array): Promise<EnrolmentState> {
   try {
     const device = await getOrCreateDeviceKey(account.address);
+    const mine = toBase64(device.publicKey);
+    try {
+      if ((await listDevices(account)).some(d => d.public === mine && !d.retired_at)) {
+        return { state: 'enrolled', genesis: false };
+      }
+    } catch (err) {
+      // A server with no registry has nothing to join. Every other refusal is left to the
+      // request below, whose answer is the one that tells the states apart.
+      const found = classifyEnrolment(err);
+      if (found.state === 'no-registry') return found;
+    }
     const attested = await attestDevice(account.address, device.publicKey);
     const res = await deviceOp<{ genesis: boolean }>(account, {
       op: 'device_enroll',

@@ -10,7 +10,7 @@
 //   - an EXISTING account meeting the registry for the first time, which takes the same genesis
 //     arm a new one does — there is no migration mode because an account with no enrolled devices
 //     is simply an account whose first device is about to arrive;
-//   - a device already enrolled, where the attempt costs one round trip and changes nothing.
+//   - a device already enrolled, which finds itself on the list and asks for nothing.
 //
 // What it deliberately does NOT do is start a recovery request when the registry is claimed and
 // this browser is not on it. Recovery admits an unapproved device on a delay that the owner's
